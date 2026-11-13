@@ -9,8 +9,10 @@
 // contact legal@dankest.llc.
 
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/routes.js';
+import '../../i18n/locales/en/components.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { validatorLaneChainIds } from '../../registry/actions.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -18,12 +20,15 @@ import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { titleCase } from '../utils/titleCase.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+// The Wallet Form Standard frame (From, main section, Network fee, one action).
+import { FeeSection, FormAction, FormFrame, FormSection, FromSection, summaryAddress, useFormSections } from '../components/formStandard/index.js';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -79,7 +84,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const isDelegate = mode === 'delegate';
-    const verb = isDelegate ? 'Delegate signing key' : 'Revoke delegation';
+    const verb = isDelegate ? 'Delegate Signing Key' : 'Revoke Delegation';
     // Named-action icon for the submit in every label it takes (U63).
     const verbIcon = isDelegate ? <Icon.KeyIcon /> : <Icon.TrashIcon />;
 
@@ -106,6 +111,11 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const submitInFlightRef = useRef(false);
+    // The standard's open state, held above the early returns (the
+    // address picker page) so it survives them; only the main section starts open.
+    const formSections = useFormSections({ from: false, key: true, fee: false });
+    // Counts review presses, so a section holding the error reopens on each.
+    const [validationAttempt, setValidationAttempt] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
@@ -310,6 +320,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
 
     function handleReview(event) {
         event.preventDefault();
+        setValidationAttempt((n) => n + 1); // Reopens the section holding the error.
         if (!fromAddress) {
             setFormError('No source address available.');
             return;
@@ -415,9 +426,9 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                 ? () => { setSubmitError(null); setStage('form'); }
                 : onBack}
             backDisabled={stage === 'submitting'}
-            title={stage === 'review' || stage === 'submitting'
+            title={titleCase(stage === 'review' || stage === 'submitting'
                     ? `Review ${verb.toLowerCase()}`
-                    : verb}
+                    : verb)}
         />
     );
     const wrap = (children) => (
@@ -493,10 +504,8 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                         }
                     >
                         {isWatcherMode
-                            ? `Create unsigned transaction: ${verb.toLowerCase()}`
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: ${verb.toLowerCase()}`
-                                : verb}
+                            ? `Create Unsigned Transaction: ${verb}`
+                            : verb}
                     </Button>
                 )}
             >
@@ -557,9 +566,24 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
     // confirm page, rendered in place of the form (the overlay modal
     // didn't fit small/mobile viewports); form state stays intact behind it.
     if (actionConfirm.open) {
+        // The signing key handed control to, or the one revoked, cut in the
+        // middle; the full key is under Technical details.
+        const delegatedKey = String(actionParams.NEW_SIGNING_PUBKEY || actionParams.SIGNING_PUBKEY || '');
+        const delegationSummary = {
+            verb: isDelegate
+                ? t('components.confirmSummary.verbDelegateSigningKey')
+                : t('components.confirmSummary.verbRevokeDelegation'),
+            ...(delegatedKey.length > 16
+                ? { target: `${delegatedKey.slice(0, 8)}…${delegatedKey.slice(-8)}` }
+                : {}),
+            direction: 'none',
+            chainId,
+            address: fromAddress?.address,
+        };
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={delegationSummary}
                 screenVariant={variant}
                 chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 feeText={feeEstimate?.coinAmount
@@ -584,7 +608,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={chainId}
                 onChainChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
@@ -594,39 +618,71 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
         );
     }
 
+    // The section each form error belongs to. A fee stop opens Network
+    // fee, a source problem opens From, everything else (the key) the main one.
+    const feeStopNow = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+    const feeHasError = Boolean(formError && feeStopNow && formError === feeStopNow.formError);
+    const fromHasError = Boolean(formError && /source address/i.test(formError));
+    const keyHasError = Boolean((formError && !feeHasError && !fromHasError) || prefillError);
+    const sectionErrorKey = (hasError) => (hasError ? validationAttempt + 1 : 0);
+    const pubkeySummary = pubkey.trim() ? summaryAddress(pubkey.trim().toLowerCase()) : 'No key yet';
+
     return wrapForm(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label={verb}
             onSubmit={handleReview}
             status={formError || prefillError ? (
                 <StatusMessage variant="error">{formError || prefillError}</StatusMessage>
             ) : null}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="success"
+            action={(
+                <FormAction
                     loading={actionConfirm.composing}
                     icon={verbIcon}
                     disabled={!fromAddress || actionConfirm.composing}
                 >
-                    {singleEncode ? verb : `Review ${verb.toLowerCase()}`}
-                </Button>
+                    {titleCase(singleEncode ? verb : `Review ${verb.toLowerCase()}`)}
+                </FormAction>
             )}
-        >
-            <NetworkField label="Network" help="The chain the staked address is on. Only networks that support staking are listed, and the From address and the fee are on the network you pick." value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? validatorLaneChainIds(Object.keys(addressesByChain), chainRegistry) : [chainId]} chainRegistry={chainRegistry} />
-            {fromAddress ? (
-                <AddressField
-                    label="From"
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
+            /* The standard order. From (closed) holds Network and the
+               From address; the main section holds the signing key; then the
+               one Network fee row. */
+            from={(
+                <FromSection
+                    {...formSections.bind('from')}
+                    chainId={chainId}
+                    chainIds={addressesByChain ? validatorLaneChainIds(Object.keys(addressesByChain), chainRegistry) : [chainId]}
+                    chainRegistry={chainRegistry}
+                    onNetworkChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
+                    networkHelp="The chain the staked address is on. Only networks that support staking are listed, and the From address and the fee are on the network you pick."
+                    address={fromAddress?.address || null}
+                    addressHelp={t('routes.delegationAction.fromHelp')}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    revealKey={sectionErrorKey(fromHasError)}
+                />
+            )}
+            fee={feeTiers ? (
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeCustomEstimate}
+                    revealKey={sectionErrorKey(feeHasError)}
                 />
             ) : null}
-
+        >
+            <FormSection
+                id="key"
+                title={isDelegate ? 'Delegation' : 'Revocation'}
+                icon={Icon.KeyIcon}
+                {...formSections.bind('key')}
+                revealKey={sectionErrorKey(keyHasError)}
+                summary={pubkeySummary}
+            >
             <Input
                 label={isDelegate ? 'New signing pubkey' : 'Signing pubkey to revoke'}
                 help={isDelegate
@@ -645,20 +701,8 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                 autoCorrect="off"
                 spellCheck={false}
             />
-
-            {feeTiers ? (
-                <FeeSelector
-                    chainId={chainId}
-                    label="Network fee"
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
-            ) : null}
-
-        </FormPage>,
+            </FormSection>
+        </FormFrame>,
     );
 }
 

@@ -11,11 +11,13 @@
 import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
-import { FeesCard } from '../components/FeesCard.jsx';
 import { isFeeBearingAction } from '../../flows/feeBearingActions.js';
+import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { AddressField, AddressText, Button, FeeSelector, FieldNote, FormNotice, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressText, Button, FieldNote, FormNotice, FormPage, Icon, Input, ListPage, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+// The Wallet Form Standard frame.
+import { FeeSection, FormAction, FormFrame, FormSection, FromSection, useFormSections } from '../components/formStandard/index.js';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -34,6 +36,7 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import { titleCase } from '../utils/titleCase.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import {
     estimateNativeSendFee,
@@ -220,6 +223,13 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const [password, setPassword] = useState('');
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
+    // Section open state, held above the picker page, the review
+    // step and the confirm page. The Action section is the main one.
+    const formSections = useFormSections({ from: false, action: true, fee: false });
+    // Which section holds the error Review refused on; each attempt
+    // bumps the counter so that section reopens every time.
+    const [errorAt, setErrorAt] = useState(/** @type {{ section: string | null, attempt: number }} */ ({ section: null, attempt: 0 }));
+    const markError = (section) => setErrorAt((prev) => ({ section, attempt: prev.attempt + 1 }));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     // The active map and the settings read are best-effort: a host without
@@ -449,13 +459,15 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
     function handleReview(event) {
         event.preventDefault();
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        if (feeStop) { setFormError(feeStop.formError); return; }
+        if (feeStop) { setFormError(feeStop.formError); markError('fee'); return; }
         if (!chainId || !fromAddress) {
             setFormError('Pick a source address first.');
+            markError('from');
             return;
         }
         if (!action) {
             setFormError('Pick an action.');
+            markError('action');
             return;
         }
         // A form nobody has typed in has nothing to encode; name the field to fill instead of
@@ -464,18 +476,22 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
             const first = baseFieldName(fields[0]);
             setBlankField(first);
             setFormError(`Enter a value for ${first}.`);
+            markError('action');
             return;
         }
         if (validation && !validation.valid) {
             setFormError('Fix the validation errors below before previewing.');
+            markError('action');
             return;
         }
         // A raw BATCH COMMAND can name ORDER or SWAP legs the picker never offered.
         if (!isActionDataOfferedInBuild({ action, params: actionParams }, { hasDexSurface })) {
             setFormError('Order and swap actions are not available in this build, including as BATCH steps.');
+            markError('action');
             return;
         }
         setFormError(null);
+        setErrorAt((prev) => (prev.section ? { ...prev, section: null } : prev));
         if (singleEncode) { openConfirmScreen(); return; }
         setStage('review');
     }
@@ -636,6 +652,8 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
 
         // Name the action in words on the review stage, as the queued and success copy do.
         const actionLabelLower = actionDisplayLabel(action).toLowerCase() || 'action';
+        // Button labels are Title Case, so the action name is cased the same way.
+        const actionLabelTitle = titleCase(actionLabelLower);
         const header = (
         <PageHeader
             onBack={stage === 'review'
@@ -643,8 +661,8 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 : onBack}
             backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
-                    ? `Review ${actionLabelLower}`
-                    : 'Advanced action'}
+                    ? titleCase(`Review ${actionLabelLower}`)
+                    : 'Advanced Action'}
         />
     );
     const wrap = (children) => (
@@ -661,8 +679,8 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
             <ListPage>
                 <StatusMessage variant="status">
                     This wallet is in signer mode, so Advanced action is unavailable.
-                    Use Sign transaction to sign an unsigned transaction from a watcher wallet,
-                    or switch the mode under Settings, Wallet Mode.
+                    Use Sign transaction to sign an unsigned transaction from a watch-only wallet.
+                    The wallet mode is shown on Wallet Details.
                 </StatusMessage>
             </ListPage>,
         );
@@ -737,7 +755,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                     <Button
                         type="submit"
                         variant="success"
-                        icon={isWatcherMode ? <Icon.DownloadIcon /> : <Icon.KeyIcon />}
+                        icon={isWatcherMode ? <Icon.DownloadIcon /> : isHwSource ? <Icon.SignIcon /> : <Icon.KeyIcon />}
                         loading={stage === 'submitting'}
                         disabled={
                             isWatcherMode
@@ -748,10 +766,8 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                         }
                     >
                         {isWatcherMode
-                            ? `Create unsigned transaction: ${actionLabelLower}`
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: ${actionLabelLower}`
-                                : `Sign: ${actionLabelLower}`}
+                            ? `Create Unsigned Transaction: ${actionLabelTitle}`
+                            : `Sign: ${actionLabelTitle}`}
                     </Button>
                 )}
             >
@@ -805,9 +821,18 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
     // confirm page, rendered in place of the form (the overlay modal
     // didn't fit small/mobile viewports); form state stays intact behind it.
     if (actionConfirm.open) {
+        // Any action kind signs here, so the verb is the chosen action's own
+        // name; its amount, token and recipient come from the host's decode
+        // of the composed bytes, which this raw form cannot state better.
+        const advancedSummary = {
+            verb: titleCase(actionDisplayLabel(action)),
+            chainId,
+            address: fromAddress?.address,
+        };
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={advancedSummary}
                 screenVariant={variant}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
@@ -843,7 +868,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={chainId}
                 onChainChange={handleChainChange}
@@ -857,47 +882,101 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
     }
 
     // stage === 'compose'
+    const errorKey = (section) => (errorAt.section === section ? errorAt.attempt : 0);
+    // The closed summaries. Action names the picked action; the fee
+    // row adds the protocol fee when the action carries one.
+    const actionSummary = action ? actionDisplayLabel(action) : 'Not set';
+    const protocolFee = feeBearingAction ? normalizeProtocolFee(protocolFeeQuote) : null;
+    const protocolSummary = !protocolFee
+        ? undefined
+        : payFeeInNativeCoin
+            ? `protocol fee in ${coinTicker}`
+            : protocolFee.known
+                ? (protocolFee.free ? 'no protocol fee' : (protocolFee.amount ? `${protocolFee.amount} XCHAIN protocol fee` : 'protocol fee'))
+                : (protocolFeePending ? 'protocol fee pending' : undefined);
+    // The Wallet Form Standard. From holds the Network and the From address;
+    // Action holds the picker, format version and raw fields; then the Network
+    // fee row (Fees card for a protocol fee), the status slot and Sign action.
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label="Compose advanced action"
             onSubmit={handleReview}
             status={formError ? (
                 <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="success"
+            action={(
+                <FormAction
                     icon={singleEncode ? <Icon.KeyIcon /> : <Icon.ForwardIcon />}
                     loading={actionConfirm.composing}
                     disabled={actionConfirm.composing || (!!action && formats === null)}
                 >
                     {actionConfirm.composing
-                        ? 'Preparing review…'
-                        : 'Sign action'}
-                </Button>
+                        ? 'Preparing Review…'
+                        : 'Sign Action'}
+                </FormAction>
+            )}
+            from={(
+                <FromSection
+                    {...formSections.bind('from')}
+                    chainId={chainId}
+                    chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])}
+                    chainRegistry={chainRegistry}
+                    onNetworkChange={handleChainChange}
+                    networkHelp="The chain where the raw action is recorded. The available actions, From address, and fees follow this network."
+                    address={fromAddress?.address || null}
+                    addressHelp="The address that signs and pays for this action. Tap the icon to pick another of your addresses."
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    revealKey={errorKey('from')}
+                    // Only when this network has no address at all: the
+                    // default address is picked by an effect after the list
+                    // loads, and a notice on that first render would open
+                    // the section for good.
+                    missing={(addressesByChain[chainId] || []).length === 0 ? (
+                        <FormNotice variant="error">
+                            {t('send.source.noAddress')}
+                        </FormNotice>
+                    ) : null}
+                />
+            )}
+            fee={(
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeCustomEstimate}
+                    revealKey={errorKey('fee')}
+                    protocolSummary={protocolSummary}
+                    // The Fees card only for an action with a protocol fee path.
+                    fees={isFeeBearingAction(action, { newToken: action === 'ISSUE' }) ? ({
+                        quote: protocolFeeQuote,
+                        pending: protocolFeePending,
+                        nativeSwitch: action !== 'BATCH',
+                        children: action !== 'BATCH' ? (
+                            <NativeFeeToggle
+                                checked={payFeeInNativeCoin}
+                                onChange={setPayFeeInNativeCoin}
+                                coinTicker={coinTicker}
+                                mandatory={nativeFeeMandatory}
+                                unverified={action === 'DEPLOY' || action === 'EXECUTE'}
+                            />
+                        ) : null,
+                    }) : undefined}
+                />
             )}
         >
-            <NetworkField label="Network" help="The chain where the raw action is recorded. The available actions, From address, and fees follow this network." value={chainId} onChange={handleChainChange} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-
-            {fromAddress ? (
-                <AddressField
-                    label="From"
-                    help="The address that signs and pays for this action. Tap the icon to pick another of your addresses."
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
-                />
-            ) : (
-                <FormNotice variant="error">
-                    {t('send.source.noAddress')}
-                </FormNotice>
-            )}
-
+            <FormSection
+                id="action"
+                title="Action"
+                icon={Icon.GearIcon}
+                {...formSections.bind('action')}
+                revealKey={errorKey('action')}
+                summary={actionSummary}
+            >
             <Select
                 label="Action"
                 help="Pick any XChain action to compose it from its raw fields. Actions marked (dedicated form available) also have a guided form, which is easier to use."
@@ -998,42 +1077,8 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
             {validation && !validation.valid && validation.errors.length > 0 ? (
                 <FieldNote variant="warning" role="alert" lines={validation.errors.map((err) => formatValidationError(err))} />
             ) : null}
-
-            {isFeeBearingAction(action, { newToken: action === 'ISSUE' }) ? (
-                <FeesCard chainId={chainId} quote={protocolFeeQuote} pending={protocolFeePending} feeSelector={feeTiers ? (
-                    <FeeSelector
-                        chainId={chainId}
-                        label="Network fee"
-                        coinTicker={coinTicker}
-                        tiers={feeTiers}
-                        value={feePick}
-                        onChange={setFeePick}
-                        customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                    />
-                ) : null} nativeSwitch={action !== 'BATCH'}>
-                    {action !== 'BATCH' ? (
-                        <NativeFeeToggle
-                            checked={payFeeInNativeCoin}
-                            onChange={setPayFeeInNativeCoin}
-                            coinTicker={coinTicker}
-                            mandatory={nativeFeeMandatory}
-                            unverified={action === 'DEPLOY' || action === 'EXECUTE'}
-                        />
-                    ) : null}
-                </FeesCard>
-            ) : feeTiers ? (
-                <FeeSelector
-                    chainId={chainId}
-                    label="Network fee"
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
-            ) : null}
-
-        </FormPage>,
+            </FormSection>
+        </FormFrame>,
     );
 }
 

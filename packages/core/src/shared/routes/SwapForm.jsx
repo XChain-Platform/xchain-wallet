@@ -10,7 +10,17 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusNoticeOnAttempt } from '../hooks/useFocusNoticeOnAttempt.js';
-import { AddressField, AddressText, Button, ChainBadge, Checkbox, FeeSelector, FieldNote, FormNotice, FormPage, FormSection, Icon, InfoTip, Input, NetworkField, OptionalPill, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FieldNote, FormNotice, FormPage, Icon, InfoTip, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+// Swap renders through the shared Give/Get standard (Quick and Full views of one state).
+import {
+    GiveGetQuick,
+    OwnershipToggle,
+    RateLine,
+    useGiveGetView,
+} from '../components/giveGet/index.js';
+// The Wallet Form Standard frame (From, Swap, Ownership, Swap Terms, Network fee, action).
+import { FeeSection, FormAction, FormFrame, FormSection, FromSection, joinSummary } from '../components/formStandard/index.js';
+import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -20,6 +30,7 @@ import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { compareDecimalStrings, divideDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { orderGiveParts } from '../utils/confirmSummaryParts.js';
 import { addressValidationError } from '../utils/addressValidation.js';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
@@ -34,9 +45,8 @@ import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { useHideReachabilityNotice } from '../components/hideReachabilityNotice.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
-import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
-import { FeesCard } from '../components/FeesCard.jsx';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/palette.js';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { MAX_MEMO_LENGTH, memoCharacterError, memoLengthError } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
@@ -172,7 +182,15 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     const [blockListIdx, setBlockListIdx] = useState('');
     const [getAddress, setGetAddress] = useState('');
     const [listPickerFor, setListPickerFor] = useState(/** @type {'allow' | 'block' | null} */ (null));
-    const [showAdvanced, setShowAdvanced] = useState(false);
+    // View and section open state live above every early return, so a picker
+    // page or the confirm screen never resets them. From, Ownership, Swap
+    // Terms (options) and Network fee start closed; Swap starts open.
+    const giveGetView = useGiveGetView('swap', {
+        sections: { from: false, swap: true, ownership: false, options: false, fee: false },
+    });
+    // Counts review attempts, so a section holding an error reopens on
+    // every attempt even after the user closed it (the standard's revealKey).
+    const [reviewAttempt, setReviewAttempt] = useState(0);
     const { payFeeInNativeCoin, setPayFeeInNativeCoin, mandatory: nativeFeeMandatory } =
         useNativeFee(chainId);
     const [password, setPassword] = useState('');
@@ -191,6 +209,9 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const submitPendingRef = useRef(false);
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
+    // §20: the active wallet's mode decides which addresses can swap, and a
+    // watch-only wallet takes the encode-only branch.
+    const { walletMode, isWatcherMode } = useWalletMode();
 
     useEffect(() => {
         let cancelled = false;
@@ -207,7 +228,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         ])
             .then(([byChain, active, settings]) => {
                 if (cancelled) return;
-                const signingByChain = signingAddressesByChain(byChain, settings);
+                const signingByChain = signingAddressesByChain(byChain, walletMode);
                 setAddressesByChain(signingByChain);
                 setActiveByChain(active || {});
                 if (!Object.keys(signingByChain)[0]) {
@@ -223,14 +244,20 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
             });
         return () => { cancelled = true; };
-    }, [walletId, messaging]);
+    }, [walletId, messaging, walletMode]);
 
     useEffect(() => {
         if (!chainId || !addressesByChain) return;
         // Default the from-address to the chain's active address (else newest
-        // HD external), matching Send. The user can still override via the
-        // dropdown; that doesn't change these deps, so it isn't clobbered.
-        setFromAddressId(preferredSourceId(addressesByChain[chainId] || [], activeByChain[chainId]));
+        // HD external), matching Send. A pick already on this chain stays: a
+        // From picked on another chain switches the chain first, and this
+        // run must not replace that pick with the new chain's default.
+        const addrs = addressesByChain[chainId] || [];
+        setFromAddressId((current) => (
+            addrs.some((a) => a.id === current)
+                ? current
+                : preferredSourceId(addrs, activeByChain[chainId])
+        ));
     }, [chainId, addressesByChain, activeByChain]);
 
     // Focus password field immediately on entering review so the user can
@@ -340,8 +367,8 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         ? `1 ${giveTick.trim().toUpperCase()} = ${displayedRate} ${getTick.trim().toUpperCase()}`
         : 'Enter both amounts to see the rate';
 
-    // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
-    const { isWatcherMode } = useWalletMode();
+    // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch
+    // (`isWatcherMode` is read above, with the address load).
 
     // Network fee: Low / Normal / Fast / Custom, editable via FeeSelector on
     // the form stage. `feeEstimate` is the estimate for the current pick and
@@ -484,6 +511,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     // and are only reachable after the user confirms on the review screen.
     function handleReview(event) {
         event.preventDefault();
+        setReviewAttempt((n) => n + 1);
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
         if (feeStop) { setFormError(feeStop.formError); return; }
         if (!networkAvailable) return;
@@ -601,8 +629,8 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 ? () => { setStage('form'); setSubmitError(null); }
                 : onBack}
             title={stage === 'review' || stage === 'submitting'
-                ? 'Review swap'
-                : `Swap tokens`}
+                ? 'Review Swap'
+                : `Swap Tokens`}
         />
     );
     const wrap = (children) => (
@@ -676,10 +704,12 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     }
 
     if (!addressesByChain) {
+        // The same frame as the form, so the offline notice keeps its
+        // node when the addresses arrive instead of being drawn twice.
         return wrap(
-            <FormPage label="Swap tokens" status={[offlineNotice]}>
+            <FormFrame label="Swap tokens" status={[offlineNotice]} action={null}>
                 <p className={styles.hint}>Loading wallet…</p>
-            </FormPage>,
+            </FormFrame>,
         );
     }
 
@@ -729,10 +759,10 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                             }
                         >
                             {isWatcherMode
-                                ? 'Create unsigned swap transaction'
+                                ? 'Create Unsigned Swap Transaction'
                                 : hw
-                                    ? `Sign and create swap on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                    : 'Sign and create swap'}
+                                    ? `Sign and Create Swap on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                    : 'Sign and Create Swap'}
                         </Button>
                     </>
                 )}
@@ -817,6 +847,12 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         return (
             <ActionConfirmScreen
                 confirmAction={withFormattedExpiration(actionConfirm.confirmAction)}
+                summary={{
+                    verb: t('palette.tradeSwap.title'),
+                    ...orderGiveParts(swapParams, coinTicker),
+                    chainId,
+                    address: fromAddress?.address,
+                }}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
@@ -842,23 +878,14 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={chainId}
-                onChainChange={(cid) => {
-                    if (cid === chainId) return;
-                    setChainId(cid);
-                    setGiveTick('');
-                    setGiveAmount('');
-                    setGiveOwnership(false);
-                    setGetTick('');
-                    setGetAmount('');
-                    setGetOwnership(false);
-                    setGetAddress('');
-                    setAllowListIdx('');
-                    setBlockListIdx('');
-                    setFormError(null);
-                }}
+                // A picked token holds the swap to its network, as on the
+                // Network field; before that, an address on another chain
+                // moves the swap's Network there first.
+                lockNetwork={Boolean(giveTick.trim() || getTick.trim())}
+                onChainChange={changeChain}
                 onPick={(a) => {
                     setFromAddressId(a.id);
                     setSourcePickerOpen(false);
@@ -876,7 +903,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 chainId={chainId}
                 addresses={addressesByChain?.[chainId] || []}
                 filterType="2"
-                title={listPickerFor === 'allow' ? 'Choose allow-list' : 'Choose block-list'}
+                title={listPickerFor === 'allow' ? 'Choose Allow-List' : 'Choose Block-List'}
                 onSelect={(row) => {
                     if (listPickerFor === 'allow') setAllowListIdx(row.actionIndex); else setBlockListIdx(row.actionIndex);
                     setListPickerFor(null);
@@ -891,9 +918,12 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
             <TokenPicker
                 purpose="send"
                 walletId={walletId}
-                title="Select give token"
-                networkFilter={coinFromChainId(chainId)}
+                title="Select Give Token"
+                // The give picker lists every network the wallet holds
+                // assets on; the picked asset's chain becomes the swap's network
+                // (a new chain clears the chain-scoped values first).
                 onSelect={(sel) => {
+                    if (sel.chainId && sel.chainId !== chainId) changeChain(sel.chainId);
                     setGiveTick(String(sel.tick || '').toUpperCase());
                     setGivePickerOpen(false);
                 }}
@@ -907,9 +937,14 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
             <TokenPicker
                 purpose="receive"
                 walletId={walletId}
-                title="Select get token"
-                networkFilter={coinFromChainId(chainId)}
+                title="Select Get Token"
+                // A swap settles on one chain, so once a give token is
+                // picked the get list holds to its network; with no give token
+                // yet it lists every network and the pick sets the network.
+                networkFilter={giveTick ? coinFromChainId(chainId) : undefined}
+                chainIdFilter={giveTick ? chainId : undefined}
                 onSelect={(sel) => {
+                    if (sel.chainId && sel.chainId !== chainId) changeChain(sel.chainId);
                     setGetTick(String(sel.tick || '').toUpperCase());
                     setGetPickerOpen(false);
                 }}
@@ -918,22 +953,347 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         );
     }
 
+    // The network-change handler the token pickers call when the picked asset
+    // lives on another chain. It clears every chain-scoped value (tokens,
+    // receive address, list IDs), since each names something on one chain.
+    function changeChain(cid) {
+        if (cid === chainId) return;
+        setChainId(cid);
+        setGiveTick('');
+        setGiveAmount('');
+        setGiveOwnership(false);
+        setGetTick('');
+        setGetAmount('');
+        setGetOwnership(false);
+        setGetAddress('');
+        setAllowListIdx('');
+        setBlockListIdx('');
+        setFormError(null);
+    }
+
+    // The same digits-only rule for every amount input, Quick or Full.
+    const amountInput = (setter) => (rawValue) => {
+        const stripped = String(rawValue).replace(/,/g, '');
+        if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+        setter(stripped);
+    };
+
+    // The flip button swaps the whole side (token, amount, ownership).
+    function flipSides() {
+        setGiveTick(getTick);
+        setGetTick(giveTick);
+        setGiveAmount(getAmount);
+        setGetAmount(giveAmount);
+        setGiveOwnership(getOwnership);
+        setGetOwnership(giveOwnership);
+        setFormError(null);
+    }
+
+    const giveTickUpper = giveTick.trim().toUpperCase();
+    const getTickUpper = getTick.trim().toUpperCase();
+    const giveBalanceText = giveBalance != null && giveTick.trim()
+        ? `${formatWithThousands(giveBalance)} ${giveTickUpper} available`
+        : null;
+    const onGiveMax = giveBalance && Number(giveBalance) > 0
+        ? () => setGiveAmount(giveBalance)
+        : undefined;
+
+    // One line naming every non-default term, else "Default terms".
+    const termsParts = [];
+    if (expMode === 'custom') {
+        const ms = Date.parse(expInput.trim());
+        termsParts.push(expInput.trim() && Number.isFinite(ms)
+            ? `Expires ${formatLocalDateTime(Math.floor(ms / 1000))}`
+            : 'Custom expiry');
+    }
+    if (memo.trim()) termsParts.push('Memo');
+    if (getAddress.trim()) termsParts.push('Receive at set');
+    if (allowListIdx) termsParts.push(`Allow-list #${allowListIdx}`);
+    if (blockListIdx) termsParts.push(`Block-list #${blockListIdx}`);
+    // The standard's summaries join their parts with ", ".
+    const termsSummary = termsParts.length ? joinSummary(...termsParts) : 'Default terms';
+
+    const sideSummary = (tick, amount, ownership) => {
+        const upper = tick.trim().toUpperCase();
+        if (!upper) return 'No token yet';
+        if (ownership) return `Ownership of ${upper}`;
+        return amount ? `${formatWithThousands(amount)} ${upper}` : upper;
+    };
+    // The Swap section's closed summary, "100 DANKEST for 5 COOL".
+    const swapSummary = giveTickUpper || getTickUpper
+        ? `${sideSummary(giveTick, giveAmount, giveOwnership)} for ${sideSummary(getTick, getAmount, getOwnership)}`
+        : 'No tokens yet';
+
+    const { view, setView, sections, setSectionOpen } = giveGetView;
+    // Spread onto a standard section; the open state lives in
+    // useGiveGetView above the early returns, so a picker page keeps it.
+    // `main` flags Swap as the form's main section (data-form-main).
+    const bind = (id) => ({ open: Boolean(sections[id]), onOpenChange: (open) => setSectionOpen(id, open), main: id === 'swap' });
+    // A custom-expiry error lives beside its field; while Swap Terms
+    // is closed it joins the status slot too, so Create Swap never fails silently.
+    const expErrorHidden = expError && !sections.options;
+    // Which section holds an error, so each review attempt reopens it.
+    const termsHasError = Boolean(expError
+        || (getAddress.trim() && addressValidationError(getAddress, descriptor))
+        || (allowListIdx && !isPositiveActionIndex(allowListIdx))
+        || (blockListIdx && !isPositiveActionIndex(blockListIdx))
+        || memo.includes('|') || memo.includes(';')
+        || memoLengthError(memo.trim()) || memoCharacterError(memo.trim()));
+    const feeHasError = Boolean(customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate }));
+    const swapHasError = Boolean(validationError || formError) && !termsHasError && !feeHasError;
+    const revealOn = (hasError) => (hasError ? reviewAttempt : 0);
+    // An XCHAIN protocol fee joins the Network fee row's summary; paid
+    // in the coin it is part of the open card's total instead.
+    const protocolFee = normalizeProtocolFee(protocolFeeQuote);
+    const protocolSummary = protocolFee.known && !protocolFee.free && !payFeeInNativeCoin
+        ? `${protocolFee.amount} XCHAIN`
+        : undefined;
+
+    // The ownership switches, built once and shown in whichever view is open.
+    const giveOwnershipToggle = (
+        <OwnershipToggle
+            label="Give this token's ownership instead of an amount"
+            help={`Escrow the token name's ownership record as a single-fill swap instead of giving a token balance. Transfers the entire ownership of ${giveTickUpper || 'this token'} (single-fill, no partial matches).`}
+            checked={giveOwnership}
+            onChange={setGiveOwnership}
+        />
+    );
+    const getOwnershipToggle = (
+        <OwnershipToggle
+            label="Require the matcher to give that token's ownership instead of an amount"
+            help={`Require the matcher to transfer the get token name's ownership record instead of providing a token balance. The matcher must currently own ${getTickUpper || 'this token'}; on match its ownership transfers to you.`}
+            checked={getOwnership}
+            onChange={setGetOwnership}
+        />
+    );
+    const gatedNotice = gatedGiveNotice.gated && !giveOwnership ? (
+        <FormNotice variant="warning" role="alert">
+            {gatedTickWarningCopy(giveTick, 'the swap counterparty')}
+        </FormNotice>
+    ) : null;
+    const rateLine = <RateLine text={rateText} />;
+    const fromHelp = 'The address whose tokens are escrowed for this swap and that receives the token from the matched offer.';
+
+    // The Quick body of the Swap section: the give and get cards, the
+    // flip and the rate. From, Ownership and the terms are standard sections.
+    const quickSwap = (
+        <GiveGetQuick
+            give={{
+                label: 'You give',
+                help: 'The token you put up in this swap. It is held in escrow until the offer is matched, cancelled or expires.',
+                // No network control; the card shows the asset's network read-only.
+                asset: giveTick && chainId ? { chainId, tick: giveTick } : null,
+                assetLabel: 'Give token',
+                onOpenAsset: () => setGivePickerOpen(true),
+                amount: giveAmount,
+                onAmountChange: amountInput(setGiveAmount),
+                amountLabel: 'Give amount',
+                ownership: giveOwnership,
+                ownershipHint: 'Single fill, no partial matches.',
+                balanceText: giveBalanceText,
+                onMax: onGiveMax || null,
+                maxDisabled: !giveBalance,
+                // No From row in the card; From is the standard's first section.
+            }}
+            get={{
+                label: 'You get',
+                help: 'The token you want in return. It is paid to your receive address when someone matches the offer.',
+                asset: getTick && chainId ? { chainId, tick: getTick } : null,
+                assetLabel: 'Get token',
+                onOpenAsset: () => setGetPickerOpen(true),
+                amount: getAmount,
+                onAmountChange: amountInput(setGetAmount),
+                amountLabel: 'Get amount',
+                ownership: getOwnership,
+                ownershipHint: 'The matcher hands over this token name.',
+            }}
+            onFlip={flipSides}
+            notice={gatedNotice}
+            rate={rateLine}
+        />
+    );
+
+    // The Full body of the Swap section: every give and get field in
+    // one open section, then the rate (the standard's Full drawing).
+    const fullSwap = (
+        <>
+                        <TokenField
+                            label="Give token"
+                            help="The token you put up in this swap. It is held in escrow until the offer is matched, cancelled or expires."
+                            value={giveTick && chainId ? { chainId, tick: giveTick } : null}
+                            onOpenPicker={() => setGivePickerOpen(true)}
+                        />
+                        {gatedNotice}
+                        {giveOwnership ? null : (
+                            <AmountField
+                                label="Give amount"
+                                help="How many of the give token to escrow for this swap. The tokens stay escrowed until a match, cancellation, or expiration."
+                                amount={giveAmount}
+                                tick={giveTick}
+                                onAmountFieldChange={amountInput(setGiveAmount)}
+                                onMax={onGiveMax}
+                                maxDisabled={!giveBalance}
+                                balanceText={giveBalanceText}
+                            />
+                        )}
+                        {giveOwnershipToggle}
+                        <TokenField
+                            label="Get token"
+                            help="The token you want in return. It is paid to your receive address when someone matches the offer."
+                            value={getTick && chainId ? { chainId, tick: getTick } : null}
+                            onOpenPicker={() => setGetPickerOpen(true)}
+                        />
+                        {getOwnership ? null : (
+                            <AmountField
+                                label="Get amount"
+                                help="How many of the get token the matcher must provide in exchange for your escrowed tokens."
+                                amount={getAmount}
+                                tick={getTick}
+                                onAmountFieldChange={amountInput(setGetAmount)}
+                            />
+                        )}
+                        {getOwnershipToggle}
+                        {rateLine}
+        </>
+    );
+
+    // The Swap Terms fields, one optional section in both views, so Quick's
+    // terms row expands in place and never switches to Full. The section
+    // carries the Optional tag, so the fields carry none.
+    const termsFields = (
+        <>
+                        <RadioGroup
+                            legend="Expiration"
+                            help="How long this swap stays open for matching. The tokens you give stay escrowed until a match, cancellation, or expiration. Cancel from My swaps or let the offer expire to return the escrow to the source address. Paid transaction fees are not refunded."
+                            name="swap-exp"
+                            value={expMode}
+                            onChange={setExpMode}
+                            options={[
+                                { value: 'default', label: 'Default window' },
+                                { value: 'custom', label: 'Expire at a specific time' },
+                            ]}
+                        />
+                        {expMode === 'custom' ? (
+                            <Input
+                                label="Expires"
+                                type="datetime-local"
+                                help="Wall-clock time the swap offer is valid until. Must be in the future."
+                                value={expInput}
+                                onChange={(e) => setExpInput(e.target.value)}
+                            />
+                        ) : null}
+                        {expError ? <FieldNote variant="error">{expError}</FieldNote> : null}
+                        <Input
+                            id="swap-memo"
+                            label="Memo"
+                            help="A short public note stored with this swap on chain. Anyone can read it."
+                            maxLength={MAX_MEMO_LENGTH}
+                            value={memo}
+                            onChange={(e) => setMemo(e.target.value)}
+                        />
+                        <AddressField
+                            label="Receive at"
+                            help="Address where you receive the get side. Defaults to your source address."
+                            value={getAddress}
+                            onChange={(e) => setGetAddress(e.target.value)}
+                            // Blank means the source address; the Swap Terms
+                            // section carries the Optional tag, so the field
+                            // shows none but stays optional to assistive tech.
+                            aria-required="false"
+                            autoComplete="off"
+                            autoCorrect="off"
+                            spellCheck={false}
+                        />
+                        <div className={styles.choiceGroup}>
+                            <p className={styles.choiceGroupLabel}>
+                                Restrict who can match
+                                <InfoTip aria="About Restrict who can match" label="An allow list limits which addresses can match this swap and a block list shuts addresses out. Both are address lists you published in My Lists." />
+                            </p>
+                            <div className={styles.choiceButtons}>
+                                <Button variant="secondary" size="sm" icon={<Icon.TokenListIcon />} onClick={() => setListPickerFor('allow')}>
+                                    {allowListIdx ? `Allow-List #${allowListIdx}` : 'Set Allow-List'}
+                                </Button>
+                                {allowListIdx ? <Button variant="secondary" size="sm" icon={<Icon.TrashIcon />} onClick={() => setAllowListIdx('')}>Clear</Button> : null}
+                                <Button variant="secondary" size="sm" icon={<Icon.TokenListIcon />} onClick={() => setListPickerFor('block')}>
+                                    {blockListIdx ? `Block-List #${blockListIdx}` : 'Set Block-List'}
+                                </Button>
+                                {blockListIdx ? <Button variant="secondary" size="sm" icon={<Icon.TrashIcon />} onClick={() => setBlockListIdx('')}>Clear</Button> : null}
+                            </div>
+                        </div>
+        </>
+    );
+
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label="Swap tokens"
             onSubmit={handleReview}
-            sectioned
+            data-form-standard="swap"
             inert={actionConfirm.composing ? '' : undefined}
             aria-busy={actionConfirm.composing ? 'true' : undefined}
             onChangeCapture={() => { if (formError) setFormError(null); }}
+            // The Quick | Full switch sits 8px above From.
+            view={view}
+            onViewChange={setView}
+            viewLabel="Swap form view"
+            from={(
+                <FromSection
+                    {...bind('from')}
+                    chainId={chainId}
+                    chainIds={chainIds}
+                    chainRegistry={chainRegistry}
+                    // A picked token decides the network; before one
+                    // is picked the network can still change here.
+                    lockNetwork={Boolean(giveTickUpper || getTickUpper)}
+                    onNetworkChange={changeChain}
+                    networkHelp="The give token decides the network. A swap settles on one network."
+                    address={fromAddress?.address || null}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    addressHelp={fromHelp}
+                    revealKey={revealOn(!fromAddress)}
+                    // Only once the addresses have loaded and this
+                    // network has none, so a slow read never opens From for good.
+                    missing={chainId && !(addressesByChain[chainId] || []).length ? (
+                        <FormNotice variant="error">No signing address on this network.</FormNotice>
+                    ) : null}
+                />
+            )}
+            fee={(
+                <FeeSection
+                    {...bind('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeCustomEstimate}
+                    revealKey={revealOn(feeHasError)}
+                    protocolSummary={protocolSummary}
+                    fees={{
+                        quote: protocolFeeQuote,
+                        pending: protocolFeePending,
+                        nativeFeeProps: {
+                            checked: payFeeInNativeCoin,
+                            onChange: setPayFeeInNativeCoin,
+                            coinTicker,
+                            mandatory: nativeFeeMandatory,
+                        },
+                    }}
+                />
+            )}
             status={[
                 offlineNotice,
-                validationError || formError ? (
+                validationError || formError || expErrorHidden ? (
                     <Fragment key="form-errors">
                         {validationError ? (
                             <StatusMessage variant="error">
                                 {validationError}
+                            </StatusMessage>
+                        ) : null}
+                        {expErrorHidden && !validationError ? (
+                            <StatusMessage variant="error">
+                                {expError}
                             </StatusMessage>
                         ) : null}
                         {formError ? (
@@ -944,241 +1304,57 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     </Fragment>
                 ) : null,
             ]}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="success"
+            action={(
+                <FormAction
                     icon={<Icon.SwapIcon />}
                     loading={actionConfirm.composing}
                     disabled={actionConfirm.composing || !networkAvailable}
                     title={!networkAvailable ? 'Swapping needs a network connection' : undefined}
                 >
                     {actionConfirm.composing
-                        ? 'Preparing swap…'
-                        : 'Create swap'}
-                </Button>
+                        ? 'Preparing Swap…'
+                        : 'Create Swap'}
+                </FormAction>
             )}
         >
+            {/* The main section, open, holds the give and get fields in either view. */}
             <FormSection
-                title="Settlement"
+                id="swap"
+                title="Swap"
+                icon={Icon.SwapIcon}
+                {...bind('swap')}
+                revealKey={revealOn(swapHasError)}
+                summary={swapSummary}
             >
-                <NetworkField
-                    label="Network"
-                    help="The chain this swap offer is recorded on. Both tokens, your source address and the fee are on this network; changing it clears the tokens you picked."
-                    value={chainId}
-                    onChange={(cid) => {
-                        if (cid === chainId) return;
-                        // Tokens, the receive address and list IDs name things on
-                        // one chain; a list ID on another chain is a different list.
-                        setChainId(cid);
-                        setGiveTick('');
-                        setGiveAmount('');
-                        setGiveOwnership(false);
-                        setGetTick('');
-                        setGetAmount('');
-                        setGetOwnership(false);
-                        setGetAddress('');
-                        setAllowListIdx('');
-                        setBlockListIdx('');
-                        setFormError(null);
-                    }}
-                    chainIds={chainIds}
-                    chainRegistry={chainRegistry}
-                />
-
-                {fromAddress ? (
-                    <AddressField
-                        label="From"
-                        help="The address whose tokens are escrowed for this swap and that receives the token from the matched offer."
-                        icon="addresses"
-                        value={fromAddress.address}
-                        readOnly
-                        onChange={() => {}}
-                        onIconClick={() => setSourcePickerOpen(true)}
-                        iconLabel="Choose source address"
-                    />
-                ) : null}
+                {view === 'quick' ? quickSwap : fullSwap}
             </FormSection>
-
-            <FormSection title="You give">
-                <TokenField
-                    label="Give token"
-                    help="The token you put up in this swap. It is held in escrow until the offer is matched, cancelled or expires."
-                    value={giveTick && chainId ? { chainId, tick: giveTick } : null}
-                    onOpenPicker={() => setGivePickerOpen(true)}
-                />
-                {gatedGiveNotice.gated && !giveOwnership ? (
-                    <FormNotice variant="warning" role="alert">
-                        {gatedTickWarningCopy(giveTick, 'the swap counterparty')}
-                    </FormNotice>
-                ) : null}
-                {giveOwnership ? null : (
-                    <AmountField
-                        label="Give amount"
-                        help="How many of the give token to escrow for this swap. The tokens stay escrowed until a match, cancellation, or expiration."
-                        amount={giveAmount}
-                        tick={giveTick}
-                        onAmountFieldChange={(rawValue) => {
-                            const stripped = String(rawValue).replace(/,/g, '');
-                            if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
-                            setGiveAmount(stripped);
-                        }}
-                        onMax={giveBalance && Number(giveBalance) > 0
-                            ? () => setGiveAmount(giveBalance)
-                            : undefined}
-                        maxDisabled={!giveBalance}
-                        balanceText={giveBalance != null && giveTick.trim()
-                            ? `${formatWithThousands(giveBalance)} ${giveTick.trim().toUpperCase()} available`
-                            : null}
-                    />
-                )}
-                <Checkbox
-                    label="Give this token's ownership instead of an amount"
-                    help="Escrow the token name's ownership record as a single-fill swap instead of giving a token balance."
-                    checked={giveOwnership}
-                    onChange={(e) => setGiveOwnership(e.target.checked)}
-                />
-                {giveOwnership ? (
-                    <p className={styles.hintLeft}>
-                        Transfers the entire ownership of {giveTick.trim() ? giveTick.trim().toUpperCase() : 'this token'} (single-fill, no partial matches).
-                    </p>
-                ) : null}
-            </FormSection>
-
-            <FormSection title="You get">
-                <TokenField
-                    label="Get token"
-                    help="The token you want in return. It is paid to your receive address when someone matches the offer."
-                    value={getTick && chainId ? { chainId, tick: getTick } : null}
-                    onOpenPicker={() => setGetPickerOpen(true)}
-                />
-                {getOwnership ? null : (
-                    <AmountField
-                        label="Get amount"
-                        help="How many of the get token the matcher must provide in exchange for your escrowed tokens."
-                        amount={getAmount}
-                        tick={getTick}
-                        onAmountFieldChange={(rawValue) => {
-                            const stripped = String(rawValue).replace(/,/g, '');
-                            if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
-                            setGetAmount(stripped);
-                        }}
-                    />
-                )}
-                <Checkbox
-                    label="Require the matcher to give that token's ownership instead of an amount"
-                    help="Require the matcher to transfer the get token name's ownership record instead of providing a token balance."
-                    checked={getOwnership}
-                    onChange={(e) => setGetOwnership(e.target.checked)}
-                />
-                {getOwnership ? (
-                    <p className={styles.hintLeft}>
-                        The matcher must currently own {getTick.trim() ? getTick.trim().toUpperCase() : 'this token'}; on match its ownership transfers to you.
-                    </p>
-                ) : null}
-            </FormSection>
-
-            <FormSection title="Timing and fees">
-            <RadioGroup
-                legend="Expiration"
-                help="How long this swap stays open for matching. The tokens you give stay escrowed until a match, cancellation, or expiration. Cancel from My swaps or let the offer expire to return the escrow to the source address. Paid transaction fees are not refunded."
-                name="swap-exp"
-                value={expMode}
-                onChange={setExpMode}
-                options={[
-                    { value: 'default', label: 'Default window' },
-                    { value: 'custom', label: 'Expire at a specific time' },
-                ]}
-            />
-            {expMode === 'custom' ? (
-                <Input
-                    label="Expires"
-                    type="datetime-local"
-                    help="Wall-clock time the swap offer is valid until. Must be in the future."
-                    value={expInput}
-                    onChange={(e) => setExpInput(e.target.value)}
-                />
+            {/* Quick keeps both ownership switches in one optional
+                section; Full shows each beside its side's fields. */}
+            {view === 'quick' ? (
+                <FormSection
+                    id="ownership"
+                    title="Ownership"
+                    icon={Icon.KeyIcon}
+                    optional
+                    {...bind('ownership')}
+                    summary={giveOwnership || getOwnership ? 'Single fill' : 'Amounts'}
+                >
+                    {giveOwnershipToggle}
+                    {getOwnershipToggle}
+                </FormSection>
             ) : null}
-            {expError ? <FieldNote variant="error">{expError}</FieldNote> : null}
-
-            <dl className={styles.detailsList}>
-                <DetailRow label="Rate" value={rateText} />
-            </dl>
-
-            <Input
-                id="swap-memo"
-                label="Memo"
+            <FormSection
+                id="options"
+                title="Swap Terms"
+                icon={Icon.FilterIcon}
                 optional
-                help="A short public note stored with this swap on chain. Anyone can read it."
-                maxLength={MAX_MEMO_LENGTH}
-                value={memo}
-                onChange={(e) => setMemo(e.target.value)}
-            />
-
-            <Button
-                variant="link"
-                size="sm"
-                className={styles.advancedToggle}
-                aria-expanded={showAdvanced}
-                aria-controls="swap-advanced-options"
-                onClick={() => setShowAdvanced((v) => !v)}
+                {...bind('options')}
+                revealKey={revealOn(termsHasError)}
+                summary={termsSummary}
             >
-                Advanced options
-                <Icon.ChevronDownIcon
-                    style={{ transform: showAdvanced ? 'rotate(180deg)' : undefined }}
-                />
-            </Button>
-            {showAdvanced ? (
-                <div id="swap-advanced-options" className={styles.advancedOptions}>
-                    <AddressField
-                        label="Receive at"
-                        optional
-                        help="Address where you receive the get side. Defaults to your source address."
-                        value={getAddress}
-                        onChange={(e) => setGetAddress(e.target.value)}
-                        autoComplete="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                    />
-                    <div className={styles.choiceGroup}>
-                        <p className={styles.choiceGroupLabel}>
-                            Restrict who can match <OptionalPill />
-                            <InfoTip aria="About Restrict who can match" label="An allow list limits which addresses can match this swap and a block list shuts addresses out. Both are address lists you published in My Lists." />
-                        </p>
-                        <div className={styles.choiceButtons}>
-                            <Button variant="secondary" size="sm" icon={<Icon.TokenListIcon />} onClick={() => setListPickerFor('allow')}>
-                                {allowListIdx ? `Allow-list #${allowListIdx}` : 'Set allow-list'}
-                            </Button>
-                            {allowListIdx ? <Button variant="secondary" size="sm" icon={<Icon.TrashIcon />} onClick={() => setAllowListIdx('')}>Clear</Button> : null}
-                            <Button variant="secondary" size="sm" icon={<Icon.TokenListIcon />} onClick={() => setListPickerFor('block')}>
-                                {blockListIdx ? `Block-list #${blockListIdx}` : 'Set block-list'}
-                            </Button>
-                            {blockListIdx ? <Button variant="secondary" size="sm" icon={<Icon.TrashIcon />} onClick={() => setBlockListIdx('')}>Clear</Button> : null}
-                        </div>
-                    </div>
-                </div>
-            ) : null}
-
-            <FeesCard chainId={chainId} quote={protocolFeeQuote} pending={protocolFeePending} feeSelector={feeTiers ? (
-                <FeeSelector
-                    chainId={chainId}
-                    label="Network fee"
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
-            ) : null}>
-                <NativeFeeToggle
-                    checked={payFeeInNativeCoin}
-                    onChange={setPayFeeInNativeCoin}
-                    coinTicker={coinTicker}
-                    mandatory={nativeFeeMandatory}
-                />
-            </FeesCard>
+                {termsFields}
             </FormSection>
-        </FormPage>,
+        </FormFrame>,
     );
 }
 

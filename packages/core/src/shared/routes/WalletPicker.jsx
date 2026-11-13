@@ -12,12 +12,15 @@ import { useEffect, useRef, useState } from 'react';
 import { Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { t } from '../../i18n/index.js';
-import '../../i18n/locales/en/walletDetails.js';
 import '../../i18n/locales/en/walletPicker.js';
-import { WalletIdentity } from '../components/WalletIdentity.jsx';
+import '../../i18n/locales/en/settings.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
+// The standard list card, shared with Agent accounts.
+import listStyles from './CoSignerAccountList.module.css';
+import { IdentityAvatar } from '../components/WalletIdentity.jsx';
+import { readWalletTile, tileRadius, walletTileText } from '../utils/walletTile.js';
 
 /**
  * WalletPicker: full-screen list of all wallets in the vault, with
@@ -87,7 +90,17 @@ export function WalletPicker({
 
     const switching = switchingWalletId !== null;
 
-    const header = <PageHeader onBack={onBack} backDisabled={switching} title={t('walletPicker.title')} />;
+    // A plus at the far right of the title line adds a wallet.
+    const header = (
+        <PageHeader
+            onBack={onBack}
+            backDisabled={switching}
+            title={t('walletPicker.title')}
+            trailing={(
+                <Button variant="ghost" size="sm" icon={<Icon.PlusIcon />} onClick={onAddWallet} disabled={switching} aria-label={t('walletPicker.add')} title={t('walletPicker.add')} />
+            )}
+        />
+    );
     const activeWallet = wallets?.find((wallet) => wallet.id === activeWalletId) || null;
     const actions = (
         <div className={pickerStyles.pickerActions}>
@@ -125,69 +138,45 @@ export function WalletPicker({
                 ) : wallets.length === 0 ? (
                     <EmptyState title={t('walletPicker.emptyTitle')} body={t('walletPicker.emptyBody')} />
                 ) : (
-                    // One flush list card with divider lines, rows never boxed apart (U41, U58).
+                    // One list card; a row opens that wallet's page.
                     /* Safari needs an explicit list role because this class removes list styling. */
-                    <ul className={pickerStyles.list} role="list" aria-label={t('walletPicker.title')}>
+                    <ul className={listStyles.list} role="list" aria-label={t('walletPicker.title')}>
                     {wallets.map((w, index) => {
                     const active = w.id === activeWalletId;
-                    const walletName = w.name || 'Unnamed wallet';
                     return (
-                        <li key={`${w.id}:${index}`} className={pickerStyles.rowWrap}>
+                        <li key={`${w.id}:${index}`}>
                             <ListRow
-                                className={`${pickerStyles.listRow} ${active ? pickerStyles.rowCurrent : ''}`}
-                                style={{ width: '100%', paddingInlineEnd: '56px' }}
-                                onClick={() => handleSelect(w.id, active)}
+                                type="button"
+                                onClick={() => (onShowDetails ? onShowDetails(w.id) : handleSelect(w.id, active))}
                                 disabled={switching}
-                                aria-busy={switchingWalletId === w.id ? 'true' : undefined}
                                 aria-current={active ? 'true' : undefined}
-                                title={(
-                                    <span className={`${styles.entryLabel} ${pickerStyles.rowLabel}`}>
-                                        {active ? (
-                                            <span className={pickerStyles.currentMark} aria-hidden="true">
-                                                <Icon.CheckIcon />
-                                            </span>
-                                        ) : null}
-                                        <span className={pickerStyles.rowName}>
-                                            <WalletIdentity wallet={w} active={active} />
+                                leading={<span aria-hidden="true" style={{ '--xc-avatar-shape': tileRadius(readWalletTile(w.id).shape), display: 'inline-flex' }}><IdentityAvatar name={w.name || 'Wallet'} text={walletTileText(w.name)} seed={w.id} context="list" variant="asset" tone={readWalletTile(w.id).colour} src={readWalletTile(w.id).image || null} /></span>}
+                                title={w.name || t('walletPicker.unnamed')}
+                                // The full name stays readable when a long one is cut short.
+                                tooltip={w.name || undefined}
+                                chevron
+                                // The wallet row's lines: name; type and accounts
+                                // (and, for a legacy record still owed its one-time
+                                // passphrase capture, where that happens); Active.
+                                subtitle={(
+                                    <span className={pickerStyles.rowMeta}>
+                                        <span>
+                                            {w.origin === 'demo' ? t('walletPicker.demoPrefix') : ''}
+                                            {w.format === 'counterwallet-legacy' ? t('walletPicker.legacy') : w.format === 'wif-only' ? t('walletPicker.importedKey') : t('walletPicker.bip39')}
+                                            {typeof w.accountCount === 'number' ? ` · ${t('walletPicker.accountCount', { count: w.accountCount })}` : ''}
+                                            {/* A stored passphrase unlocks with the wallet password alone, so
+                                                only a record not yet captured earns the badge. */}
+                                            {w.passphraseEnabled && !w.passphraseStored ? t('walletPicker.passphraseNeeded') : ''}
                                         </span>
+                                        {active ? <span className={pickerStyles.activeBadge}>{t('settings.developer.active')}</span> : null}
                                     </span>
                                 )}
-                                subtitle={w.format ? (
-                                    <span className={styles.entryDescription}>
-                                        {w.origin === 'demo' ? t('walletPicker.demoPrefix') : ''}
-                                        {w.format === 'counterwallet-legacy'
-                                            ? t('walletPicker.legacy')
-                                            : w.format === 'wif-only' ? t('walletPicker.importedKey') : t('walletPicker.bip39')}
-                                        {/* A stored passphrase (passphraseStored) unlocks on the
-                                            password alone, so it earns no badge here; only a legacy
-                                            record still owed its one-time capture does, and the badge
-                                            names the unlock screen as where that happens. */}
-                                        {w.passphraseEnabled && !w.passphraseStored ? t('walletPicker.passphraseNeeded') : ''}
-                                    </span>
-                                ) : null}
                             />
-                            {onShowDetails ? (
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    icon={<Icon.InfoIcon />}
-                                    variant="secondary"
-                                    className={pickerStyles.rowMenuBtn}
-                                    aria-label={t('walletPicker.detailsFor', { wallet: walletName })}
-                                    title={t('walletDetails.title')}
-                                    disabled={switching}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        onShowDetails(w.id);
-                                    }}
-                                />
-                            ) : null}
                         </li>
                     );
                 })}
                     </ul>
                 )}
-                {actions}
             </ListPage>
         </Screen>
     );

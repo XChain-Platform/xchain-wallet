@@ -8,16 +8,23 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useState } from 'react';
-import { Button, EmptyState, Icon, ListPage, ListRow, NetworkField, PageHeader, Screen, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
+import { useEffect, useMemo, useState } from 'react';
+import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, Select, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useChainIdsWithAction } from '../hooks/useSupportedChains.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
-import { safeOutcomeLabel } from '../utils/betOutcomeLabels.js';
-import { neutralizeControlText } from '../utils/textHardening.js';
-import styles from './IssueTokenForm.module.css';
+import { outcomeLabelsOf } from '../utils/betOutcomeLabels.js';
+// The standard title-line filter, the gauge card and the My bets tab body.
+import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
+import { BetMarketCard, betPoolTotal } from '../components/BetMarketCard.jsx';
+import { BetMyBetsPanel, useWalletBets, yourBetText } from '../components/BetMyBetsPanel.jsx';
+// The My markets tab is the oracle console drawn inside this page.
+import { OracleConsole } from './OracleConsole.jsx';
 import local from './BetFeedsList.module.css';
+
+/** The tab ids a caller may open the list on. */
+export const BET_LIST_VIEWS = ['all', 'bets', 'markets'];
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -26,38 +33,6 @@ const chainRegistry = registryLib.defaultRegistry();
 // action needs no edit here and a synced descriptor lands without a restart.
 export function useBetChainIds() {
     return useChainIdsWithAction('BET');
-}
-
-// Feed lifecycle -> pill colour. The wallet shows the STORED status, never a
-// status recomputed from the clock, so what a user sees is what the chain thinks.
-function statusColor(status) {
-    if (status === 'resolved') return { bg: 'color-mix(in srgb, var(--xc-success) 18%, transparent)', fg: 'var(--xc-success)' };
-    if (status === 'cancelled' || status === 'expired') return { bg: 'var(--xc-danger-bg)', fg: 'var(--xc-danger-text)' };
-    if (status === 'resolved_void') return { bg: 'var(--xc-bg-muted)', fg: 'var(--xc-text-muted)' };
-    if (status === 'closed') return { bg: 'var(--xc-warning-bg)', fg: 'var(--xc-warning-text)' };
-    return { bg: 'var(--xc-accent-primary)', fg: 'var(--xc-on-accent)' };
-}
-
-// Plain-language labels: users are not reading protocol enums (wallet audience rule).
-function statusLabel(status) {
-    if (status === 'open') return 'Taking bets';
-    if (status === 'closed') return 'Betting closed';
-    if (status === 'resolved') return 'Settled';
-    if (status === 'resolved_void') return 'Void, refunded';
-    if (status === 'cancelled') return 'Cancelled, refunded';
-    if (status === 'expired') return 'Expired, refunded';
-    if (!status) return 'Unknown';
-    const words = String(status).trim().toLowerCase().replace(/[_-]+/g, ' ');
-    return words.charAt(0).toUpperCase() + words.slice(1);
-}
-
-function StatusPill({ status }) {
-    const c = statusColor(status);
-    return (
-        <span style={{ background: c.bg, color: c.fg, borderRadius: '999px', padding: '0.1rem 0.5rem', fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
-            {statusLabel(status)}
-        </span>
-    );
 }
 
 // How often the market list re-reads the chain while it is on screen. Matches
@@ -72,6 +47,31 @@ function extractRows(resp) {
     return [];
 }
 
+// Search matches the question, the outcomes, the token and the
+// market number.
+function matchesSearch(m, needle) {
+    if (!needle) return true;
+    return [m.label, m.tick, String(m.action_index ?? ''), `#${m.action_index ?? ''}`, ...outcomeLabelsOf(m)]
+        .some((v) => String(v || '').toLowerCase().includes(needle));
+}
+
+// The Sort choices in the filter. Newest keeps the explorer's own
+// order (newest first).
+function sortMarkets(rows, sortBy) {
+    if (sortBy === 'closing') {
+        const at = (m) => {
+            const d = Number(m.deadline);
+            return Number.isFinite(d) && d > 0 ? d : Number.POSITIVE_INFINITY;
+        };
+        return [...rows].sort((a, b) => at(a) - at(b));
+    }
+    if (sortBy === 'pool') {
+        const size = (m) => Number(betPoolTotal(m) ?? 0) || 0;
+        return [...rows].sort((a, b) => size(b) - size(a));
+    }
+    return rows;
+}
+
 /**
  * Betting market browser. Resolves the wallet's BET-capable chains, lists that
  * chain's markets (newest first), and is the entry point into a market's detail
@@ -81,11 +81,14 @@ function extractRows(resp) {
  * @param {string} props.walletId
  * @param {(chainId: string, feedIndex: string | number) => void} props.onOpenMarket
  * @param {(chainId: string) => void} [props.onCreate]
- * @param {() => void} [props.onMyBets]      the bets this wallet has placed, across every address
- * @param {() => void} [props.onMyMarkets]   the oracle console for markets this wallet runs
+ * @param {'all' | 'bets' | 'markets'} [props.view]   The tab to show (the shell keeps it, so
+ *   the My bets and My markets palette entries open the list on their tab)
+ * @param {(view: string) => void} [props.onViewChange]  Told when the user picks a tab
+ * @param {(chainId: string, feedIndex: string | number) => void} [props.onDuplicate]  My markets'
+ *   "Copy to a new market" (a new market pre-filled from this one)
  * @param {() => void} props.onBack
  */
-export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyMarkets, onBack }) {
+export function BetFeedsList({ walletId, onOpenMarket, onCreate, onDuplicate, view: viewProp, onViewChange, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const betChainIds = useBetChainIds();
@@ -93,11 +96,29 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
     const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
     const [noChain, setNoChain] = useState(false);
     const [betChains, setBetChains] = useState(/** @type {string[]} */ ([]));
-    const [openOnly, setOpenOnly] = useState(true);
     const [rows, setRows] = useState(/** @type {any[] | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [addressesReload, setAddressesReload] = useState(0);
     const [feedsReload, setFeedsReload] = useState(0);
+    // The title-line filter (search, Network, Status, Sort) and the
+    // All | My bets | My markets tabs above the list.
+    const [query, setQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState('open');
+    const [sortBy, setSortBy] = useState('newest');
+    // The shell may hold the tab (a `view` prop); otherwise the list does.
+    const [ownView, setOwnView] = useState(BET_LIST_VIEWS.includes(viewProp) ? viewProp : 'all');
+    const view = BET_LIST_VIEWS.includes(viewProp) ? viewProp : ownView;
+    const setView = (next) => {
+        setOwnView(next);
+        onViewChange?.(next);
+    };
+    const openOnly = statusFilter === 'open';
+
+    // The wallet's addresses from the one read below, shared with the
+    // bets loader and the My markets tab so neither asks again.
+    const [addressesByChain, setAddressesByChain] = useState(/** @type {Record<string, any[]> | null} */ (null));
+    // The wallet's bets, read once for the cards' "You bet" chips and the My bets tab.
+    const walletBets = useWalletBets({ byChain: addressesByChain, messaging });
 
     useEffect(() => {
         let cancelled = false;
@@ -106,9 +127,11 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
         setBetChains([]);
         setRows(null);
         setError(null);
+        setAddressesByChain(null);
         messaging.getAddressesByChain(walletId)
             .then((byChain) => {
                 if (cancelled) return;
+                setAddressesByChain(byChain || {});
                 const avail = betChainIds.filter((cid) => Array.isArray(byChain?.[cid]) && byChain[cid].length > 0);
                 setBetChains(avail);
                 if (avail.length > 0) setChainId(avail[0]);
@@ -170,7 +193,79 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
         return () => { cancelled = true; clearInterval(timer); };
     }, [chainId, openOnly, messaging, feedsReload]);
 
-    const header = <PageHeader onBack={onBack} title="Betting" />;
+    // My markets is the oracle console drawn in this page (below), which
+    // reads the markets this wallet's addresses run, with the owner records its
+    // actions sign from.
+
+    const betsByMarket = useMemo(() => {
+        const map = new Map();
+        for (const b of walletBets.rows || []) {
+            const key = `${b.chainId}:${b.feed_action_index}`;
+            if (!map.has(key)) map.set(key, []);
+            map.get(key).push(b);
+        }
+        return map;
+    }, [walletBets.rows]);
+
+    // The title bar holds the filter (search, Network, Status, Sort)
+    // and a plus for Create market at the far right; the icon is lit when any
+    // filter is off its default.
+    const defaultChain = betChains[0] || null;
+    const filterOn = statusFilter !== 'open' || sortBy !== 'newest' || Boolean(defaultChain && chainId && chainId !== defaultChain);
+    const offeredChains = betChains.length ? betChains : (chainId ? [chainId] : []);
+    const header = (
+        <PageHeader
+            onBack={onBack}
+            title="Bet Markets"
+            trailing={chainId ? (
+                <>
+                    <ListFilterMenu
+                        query={query}
+                        onQueryChange={setQuery}
+                        active={filterOn}
+                        label="Filter bet markets"
+                        searchPlaceholder="Search"
+                        searchLabel="Search bet markets"
+                    >
+                        <Select
+                            label="Network"
+                            size="md"
+                            value={chainId}
+                            onChange={(event) => setChainId(event.target.value)}
+                        >
+                            {offeredChains.map((cid) => (
+                                <option key={cid} value={cid}>{chainRegistry.get(cid)?.displayName || cid}</option>
+                            ))}
+                        </Select>
+                        <Select
+                            label="Status"
+                            size="md"
+                            value={statusFilter}
+                            onChange={(event) => setStatusFilter(event.target.value)}
+                        >
+                            <option value="open">Taking bets</option>
+                            <option value="all">All markets</option>
+                        </Select>
+                        <Select
+                            label="Sort"
+                            size="md"
+                            value={sortBy}
+                            onChange={(event) => setSortBy(event.target.value)}
+                        >
+                            <option value="newest">Newest first</option>
+                            <option value="closing">Closing soonest</option>
+                            <option value="pool">Biggest pool</option>
+                        </Select>
+                    </ListFilterMenu>
+                    {onCreate ? (
+                        <Button variant="secondary" icon={<Icon.PlusIcon />} aria-label="Create market" title="Create market" onClick={() => onCreate(chainId)}>
+                            {null}
+                        </Button>
+                    ) : null}
+                </>
+            ) : null}
+        />
+    );
     const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
 
     if (noChain) {
@@ -197,7 +292,7 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
             <ListPage>
                 <StatusMessage
                     variant="error"
-                    recovery={{ label: 'Try again', onAction: () => setAddressesReload((value) => value + 1) }}
+                    recovery={{ label: 'Try Again', onAction: () => setAddressesReload((value) => value + 1) }}
                 >
                     {error}
                 </StatusMessage>
@@ -205,29 +300,91 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
         );
     }
 
-    // This screen is the whole betting family's entry point, so the two personal
-    // views hang off it rather than each needing its own slot in the actions
-    // menu. The actions sit in the actions row like every other list screen's. Every button is secondary: the status filter below says which
-    // side is on with aria-pressed, so nothing here competes as the primary.
-    const actions = onCreate || onMyBets || onMyMarkets ? (
-        <>
-            {onCreate ? (
-                <Button type="button" variant="secondary" icon={<Icon.PlusIcon />} onClick={() => onCreate(chainId)}>
-                    Create market
-                </Button>
-            ) : null}
-            {onMyBets ? <Button type="button" variant="secondary" onClick={onMyBets}>My bets</Button> : null}
-            {onMyMarkets ? <Button type="button" variant="secondary" onClick={onMyMarkets}>My markets</Button> : null}
-        </>
-    ) : null;
+    const needle = query.trim().toLowerCase();
+    const card = (m, marketChainId, yours = false) => (
+        <li key={`${marketChainId}:${String(m.action_index)}`}>
+            <BetMarketCard
+                market={m}
+                onOpen={() => onOpenMarket(marketChainId, m.action_index)}
+                yourBet={yourBetText(betsByMarket.get(`${marketChainId}:${m.action_index}`), m)}
+                yours={yours}
+            />
+        </li>
+    );
+    const noMatches = <EmptyState title="No matching markets" body="Change or clear the filter to see more." titleAs="p" />;
+
+    let body = null;
+    if (view === 'all') {
+        const shown = rows ? sortMarkets(rows.filter((m) => matchesSearch(m, needle)), sortBy) : null;
+        body = (
+            <>
+                {rows && rows.length === 0 ? (
+                    <EmptyState
+                        title="No markets"
+                        body={openOnly ? 'No markets are taking bets on this network right now.' : 'Markets created on this network appear here.'}
+                    />
+                ) : null}
+                {rows && rows.length > 0 && shown.length === 0 ? noMatches : null}
+                {shown && shown.length > 0 ? (
+                    <div className={local.cardArea}>
+                        <ul className={local.marketList} aria-label="Bet markets">
+                            {shown.map((m) => card(m, chainId))}
+                        </ul>
+                    </div>
+                ) : null}
+            </>
+        );
+    } else if (view === 'bets') {
+        body = (
+            <BetMyBetsPanel
+                rows={walletBets.rows}
+                error={walletBets.error}
+                onRetry={walletBets.reload}
+                messaging={messaging}
+                onOpenMarket={onOpenMarket}
+            />
+        );
+    }
+
+    const tabsToolbar = (
+        <div className={`${local.toolbarRow} ${local.toolbarActions}`}>
+            <Tabs
+                aria-label="Bet market views"
+                items={[
+                    { id: 'all', label: <span className={local.tabLabel}><Icon.GridIcon />All</span> },
+                    { id: 'bets', label: <span className={local.tabLabel}><Icon.UserIcon />My bets</span> },
+                    { id: 'markets', label: <span className={local.tabLabel}><Icon.MarketIcon />My markets</span> },
+                ]}
+                value={view}
+                onChange={setView}
+            />
+        </div>
+    );
+
+    // My markets lists the markets this wallet runs as the same gauge cards, each with its
+    // actions (post the result, cancel and refund, edit lists, copy) inline. The console
+    // owns its page while a confirm or unsigned result is open.
+    if (view === 'markets') {
+        return (
+            <OracleConsole
+                walletId={walletId}
+                header={header}
+                toolbar={tabsToolbar}
+                arrange={(list) => sortMarkets(list.filter((m) => matchesSearch(m, needle)), sortBy)}
+                yourBetFor={(m) => yourBetText(betsByMarket.get(`${m.chainId}:${m.action_index}`), m)}
+                onOpenMarket={onOpenMarket}
+                onDuplicate={onDuplicate}
+                onBack={onBack}
+            />
+        );
+    }
 
     return wrap(
         <ListPage
-            actions={actions}
-            notices={error ? (
+            notices={view !== 'all' ? null : (error ? (
                 <StatusMessage
                     variant="error"
-                    recovery={{ label: 'Try again', onAction: () => setFeedsReload((value) => value + 1) }}
+                    recovery={{ label: 'Try Again', onAction: () => setFeedsReload((value) => value + 1) }}
                 >
                     {error}
                 </StatusMessage>
@@ -235,80 +392,10 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                 <div role="status" aria-label="Loading betting markets" aria-busy="true">
                     Loading betting markets…
                 </div>
-            ) : null)}
-            toolbar={(
-                <div className={local.toolbarRow}>
-                    <div className={`${local.toolbarNetwork} ${local.toolbarControl}`}>
-                        <NetworkField
-                            value={chainId}
-                            onChange={setChainId}
-                            chainIds={betChains.length ? betChains : (chainId ? [chainId] : [])}
-                            chainRegistry={chainRegistry}
-                            size="md"
-                        />
-                    </div>
-                    <div className={local.toolbarActions}>
-                        <Tabs
-                            aria-label="Filter betting markets"
-                            items={[
-                                { id: 'open', label: 'Taking bets' },
-                                { id: 'all', label: 'All markets' },
-                            ]}
-                            value={openOnly ? 'open' : 'all'}
-                            onChange={(value) => setOpenOnly(value === 'open')}
-                        />
-                    </div>
-                </div>
-            )}
+            ) : null))}
+            toolbar={tabsToolbar}
         >
-            {rows && rows.length === 0 ? (
-                <EmptyState
-                    title="No markets"
-                    body={openOnly ? 'No markets are taking bets on this network right now.' : 'Markets created on this network appear here.'}
-                />
-            ) : null}
-
-            {rows && rows.length > 0 ? (
-                <ul className={local.marketList}>
-                    {rows.map((m) => {
-                        const id = m.action_index;
-                        // Market text is attacker-authored on-chain data. React
-                        // escapes markup, and the display pass also exposes bidi
-                        // controls instead of letting them reorder this row.
-                        const label = neutralizeControlText(m.label, { maxLength: 100 }) || '(untitled market)';
-                        const outcomes = typeof m.outcomes === 'string' ? m.outcomes.split(',') : [];
-                        return (
-                            <li key={String(id)}>
-                                {/* The shared row, as Governance polls use: rendered through
-                                    Button, the row took its primary fill, and the muted label and
-                                    outcomes were unreadable on it. */}
-                                <ListRow
-                                    type="button"
-                                    onClick={() => onOpenMarket(chainId, id)}
-                                    className={local.marketCard}
-                                    title={(
-                                        <span className={local.marketHeader}>
-                                            <strong>#{String(id)} · {m.tick || 'n/a'}</strong>
-                                            <StatusPill status={m.feed_status} />
-                                        </span>
-                                    )}
-                                    subtitle={(
-                                        <>
-                                            <span className={`${local.marketDetail} ${styles.betLongText}`} style={{ display: 'block' }}>{label}</span>
-                                            {outcomes.length ? (
-                                                <span className={`${local.marketDetail} ${styles.betLongText}`} style={{ display: 'block' }}>
-                                                    {outcomes.slice(0, 4).map((outcome) => safeOutcomeLabel(outcome) || '?').join(' / ')}
-                                                    {outcomes.length > 4 ? ' …' : ''}
-                                                </span>
-                                            ) : null}
-                                        </>
-                                    )}
-                                />
-                            </li>
-                        );
-                    })}
-                </ul>
-            ) : null}
+            {body}
         </ListPage>,
     );
 }

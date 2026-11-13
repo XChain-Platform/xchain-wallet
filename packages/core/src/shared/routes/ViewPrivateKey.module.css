@@ -1,22 +1,3 @@
-.warningTitle {
-    font-size: var(--xc-text-xl);
-    font-weight: 700;
-    color: var(--xc-danger-fg);
-    margin: 0 0 var(--xc-space-3);
-}
-
-.warningList {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    line-height: 1.5;
-    padding-inline-start: var(--xc-space-4);
-    margin: 0 0 var(--xc-space-4);
-}
-
-.warningList li {
-    margin-bottom: var(--xc-space-2);
-}
-
 .paragraph {
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
@@ -49,55 +30,6 @@
     word-break: break-word;
 }
 
-.code {
-    font-family: var(--xc-font-mono);
-    font-size: var(--xc-text-xs);
-    background: var(--xc-surface);
-    /* Two pixels preserve the compact inline-code inset below the spacing scale. */
-    padding: 2px var(--xc-space-1);
-    border-radius: var(--xc-radius-sm);
-    /* A one-pixel hairline defines inline code without changing its geometry. */
-    border: 1px solid var(--xc-border);
-    direction: ltr;
-    unicode-bidi: isolate;
-}
-
-.revealRow {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    margin-bottom: var(--xc-space-3);
-}
-
-.wif {
-    flex: 1;
-    font-family: var(--xc-font-mono);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    padding: var(--xc-space-3);
-    background: var(--xc-surface);
-    /* A one-pixel hairline bounds the revealed key without adding visual weight. */
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
-    word-break: break-all;
-    white-space: pre-wrap;
-    direction: ltr;
-    unicode-bidi: isolate;
-}
-
-.qrRow {
-    display: flex;
-    justify-content: center;
-    margin: var(--xc-space-3) 0;
-}
-
-.copyRow {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    margin-top: var(--xc-space-2);
-}
-
 .clipboardNote {
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
@@ -108,4 +40,15 @@
     gap: var(--xc-space-2);
     justify-content: flex-end;
     margin-top: var(--xc-space-4);
+}
+
+/* The step's button spans the full width like every form's submit
+   button (the warning step and the Close steps alike). */
+.actions.actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.actions.actions > * {
+    width: 100%;
 }

@@ -25,7 +25,6 @@ import {
     Skeleton,
     StatusMessage,
 } from '@xchain-wallet/core/ui';
-import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useWalletSource } from '../hooks/useDemoGuard.jsx';
@@ -49,7 +48,6 @@ import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { StalenessLabel } from '../components/StalenessLabel.jsx';
 import { ActivityRow, actionIconForAction } from '../components/ActivityRow.jsx';
 import { flows as flowsLib } from '@xchain-wallet/core';
-import '../../i18n/locales/en/balances.js';
 import '../../i18n/locales/en/history.js';
 import {
     applyHistoryFilters,
@@ -66,8 +64,10 @@ import { useResponsivePlaceholder } from '../../ui/Input.jsx';
 import { useReachability } from '../hooks/useReachability.js';
 import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
+// The standard list filter, on the title line.
+import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
 import { useHideReachabilityNotice } from '../components/hideReachabilityNotice.js';
-import { BalancesUncheckedState, useBalancesUnchecked } from '../components/BalancesUncheckedState.jsx';
+import { useBalancesUnchecked } from '../components/BalancesUncheckedState.jsx';
 import { useLongOperationStatus } from '../hooks/useLongOperationStatus.js';
 import { isNavigatorOnline, useOnlineStatus } from '../hooks/useOnlineStatus.js';
 import { readHistoryCache, writeHistoryCache } from '../utils/historyCache.js';
@@ -77,6 +77,8 @@ import { Settings } from './Settings.jsx';
 import { hasAvailableChain, NO_CHAINS_BODY, NO_CHAINS_TITLE } from '../utils/chainAvailability.js';
 import styles from './History.module.css';
 import { chainRegistry, peerCacheKey, OFFLINE_ACTION_REASON, DoubleChevron, coinOfChainId, formatTimestamp } from './HistoryShared.jsx';
+// History's filter controls sized for the title-line filter panel.
+import filterPanel from './HistoryFilterPanel.module.css';
 import { EntryRow } from './HistoryEntryRow.jsx';
 
 export { DetailCard, detailTransferDirection, detailActionLabel } from './HistoryDetailCard.jsx';
@@ -298,7 +300,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const { showToast } = useToast();
     const { overall: reachabilityOverall } = useReachability({});
     const networkOffline = reachabilityOverall === 'offline';
-    const { unchecked: balancesUnchecked, recheck: recheckBalances } = useBalancesUnchecked();
+    const { recheck: recheckBalances } = useBalancesUnchecked();
     const { offline: offlineVerdict } = useNetworkOffline({ walletId });
     // Offline is the device report or the probe's verdict that no service
     // answers; either way the reads cannot finish, so the page shows its saved
@@ -373,8 +375,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const [dateFrom, setDateFrom] = useState(() => rememberedView?.dateFrom ?? isoDateDaysAgo(29));
     const [dateTo, setDateTo] = useState(() => rememberedView?.dateTo ?? isoDateDaysAgo(0));
     const [dateError, setDateError] = useState('');
-    const [phoneFiltersOpen, setPhoneFiltersOpen] = useState(false);
-    const [moreFiltersOpen, setMoreFiltersOpen] = useState(Boolean(rememberedView?.moreFiltersOpen));
+    // The filter panel no longer has a More filters toggle; the remembered
+    // value is carried through so a saved view keeps it.
+    const moreFiltersOpen = Boolean(rememberedView?.moreFiltersOpen);
     useEffect(() => {
         writeHistoryViewState(walletId, accountId, {
             initialSearchQuery,
@@ -423,16 +426,14 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // route resolves, ref-flag this so we don't re-select on every
     // re-render or after the user manually navigates away from the row.
     const initialFocusFiredRef = useRef(false);
-    const searchInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    // Holds the title-line filter so the '/' shortcut can reach it.
+    const filterMenuRef = useRef(/** @type {HTMLSpanElement | null} */ (null));
     const timelineRef = useRef(/** @type {HTMLUListElement | null} */ (null));
     const fullSearchPlaceholder = t('history.filters.searchPlaceholder');
     const searchPlaceholder = useResponsivePlaceholder(
         fullSearchPlaceholder,
         t('history.filters.searchLabel'),
     );
-    const searchDescriptionId = searchPlaceholder !== fullSearchPlaceholder
-        ? 'history-search-description'
-        : undefined;
 
     const closeSelectedRow = useCallback(() => {
         if (!selectedKey) return;
@@ -939,7 +940,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             for (const key of [...rememberedMempoolRef.current.keys()]) {
                 if (!liveKeys.has(key)) rememberedMempoolRef.current.delete(key);
             }
-            merged.entries.sort(compareMergedEntries);
+            const sortedAtMs = Date.now();
+            merged.entries.sort((a, b) => compareMergedEntries(a, b, sortedAtMs));
             const fetchedAt = Date.now();
             setEntries(merged.entries);
             setLoadingChains(new Set());
@@ -1117,7 +1119,14 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // button must not have a keyboard path that opens the same action.
     useScreenShortcuts({
         keys: {
-            '/': () => { searchInputRef.current?.focus(); },
+            // The search box lives in the title-line filter, so
+            // '/' focuses it there, opening the filter first when it is shut.
+            '/': () => {
+                const holder = filterMenuRef.current;
+                const input = holder?.querySelector('input[type="search"]');
+                if (input) input.focus();
+                else holder?.querySelector('button[aria-haspopup="dialog"]')?.click();
+            },
             e: () => {
                 if (visibleEntries.length > 0) setExportModalOpen(true);
             },
@@ -1364,7 +1373,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         : HISTORY_PAGE_SIZE;
     const renderedItems = groupedItems.slice(0, visibleItemCount);
     const renderedTimelineItems = useMemo(
-        () => groupHistoryItemsByLocalDay(renderedItems, dayGroupingNowMs)
+        // Sections follow each row's status as of now; the day clock only
+        // moves at midnight, and a send can drop at any time.
+        () => groupHistoryItemsByLocalDay(renderedItems, dayGroupingNowMs, Date.now())
             .flatMap((dayGroup) => [
                 { kind: 'day', key: `day-heading:${dayGroup.key}`, label: dayGroup.label },
                 ...dayGroup.items,
@@ -1629,11 +1640,190 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         rows[next]?.focus();
     };
 
+    // Home's network filter over History's per-chain set. The set
+    // stays the source of truth (remembered across visits, reset by Clear
+    // filters, restored by Undo); a family reads back when the set is exactly
+    // that family's chains, and any other subset reads "All" with the
+    // filter button still showing that a filter is on.
+    const coinOfActiveChain = (cid) => chainRegistry.get(cid)?.coin || coinOfChainId(cid);
+    const historyCoinFamilies = [...new Set(activeChainIds.map(coinOfActiveChain).filter(Boolean))];
+    let historyNetworkFilter = 'all';
+    if (chainFilterActive && enabledChains.size > 0) {
+        const fams = new Set([...enabledChains].map(coinOfActiveChain));
+        if (fams.size === 1) {
+            const [fam] = fams;
+            const famChains = activeChainIds.filter((cid) => coinOfActiveChain(cid) === fam);
+            if (famChains.length === enabledChains.size && famChains.every((cid) => enabledChains.has(cid))) {
+                historyNetworkFilter = fam;
+            }
+        }
+    }
+    const setHistoryNetworkFilter = (fam) => {
+        const next = fam === 'all'
+            ? new Set(activeChainIds)
+            : new Set(activeChainIds.filter((cid) => coinOfActiveChain(cid) === fam));
+        setEnabledChains(next);
+        writeChainSet(historyChainFilterKey(walletId), fam === 'all' ? null : next);
+    };
+    // The standard filter on the title line (search, network, then History's
+    // type, status, date filters and view options), so the page body starts
+    // with the list or the empty state.
+    const filterMenu = (
+        <span ref={filterMenuRef} className={filterPanel.holder}>
+            <ListFilterMenu
+                query={searchQuery}
+                onQueryChange={setSearchQuery}
+                // Lit whenever Clear filters would have something to clear
+                // (the default last-30-days window included), as in the
+                // no-matches empty state.
+                active={filtersActive}
+                label={t('history.filters.label')}
+                searchPlaceholder={searchPlaceholder}
+                searchLabel={t('history.filters.searchLabel')}
+                chainRegistry={activeChainIds.length > 0 ? chainRegistry : null}
+                coinFamilies={historyCoinFamilies}
+                networkFilter={historyNetworkFilter}
+                onNetworkFilterChange={setHistoryNetworkFilter}
+            >
+                <CheckboxPicker
+                    options={ACTION_TYPE_OPTIONS}
+                    selected={actionTypeFilter}
+                    onToggle={toggleSetMember(setActionTypeFilter)}
+                    allLabel={t('history.filters.allActionTypes')}
+                    summaryNoun={t('history.filters.actionType')}
+                    iconForId={actionTypeIcon}
+                    menuHeader={t('history.filters.actionTypes')}
+                />
+                <CheckboxPicker
+                    options={STATUS_OPTIONS}
+                    selected={statusFilter}
+                    onToggle={toggleSetMember(setStatusFilter)}
+                    allLabel={t('history.filters.allStatuses')}
+                    summaryNoun={t('history.filters.status')}
+                    menuHeader={t('history.filters.statusHeader')}
+                />
+                <CheckboxPicker
+                    options={[
+                        { id: 'crosschain', label: 'Cross-chain only' },
+                    ]}
+                    selected={new Set([
+                        ...(crossChainOnly ? ['crosschain'] : []),
+                    ])}
+                    onToggle={(id) => {
+                        if (id === 'crosschain') setCrossChainOnly((v) => !v);
+                    }}
+                    allLabel={t('history.filters.noSpecialFilters')}
+                    summaryNoun={t('history.filters.filter')}
+                    iconForId={specialFilterIcon}
+                    menuHeader={t('history.filters.special')}
+                />
+                {multisigAddress ? (
+                    <Button
+                        variant={multisigOnly ? 'primary' : 'ghost'}
+                        size="sm"
+                        icon={<Icon.MultisigIcon />}
+                        aria-pressed={multisigOnly}
+                        onClick={() => setMultisigOnly((v) => !v)}
+                    >
+                        {t('history.filters.multisigOnly')}
+                    </Button>
+                ) : null}
+                <div className={styles.dateRow}>
+                    <Input
+                        type="date"
+                        aria-label={t('history.filters.fromDate')}
+                        value={dateFrom}
+                        max={dateTo || undefined}
+                        onChange={(ev) => updateDateFrom(ev.target.value)}
+                    />
+                    <span className={styles.dateSep}>→</span>
+                    <Input
+                        type="date"
+                        aria-label={t('history.filters.toDate')}
+                        value={dateTo}
+                        min={dateFrom || undefined}
+                        onChange={(ev) => updateDateTo(ev.target.value)}
+                    />
+                </div>
+                <div className={styles.dateTools}>
+                    <div className={styles.datePresets} role="group" aria-label={t('history.filters.datePresets')}>
+                        <Chip
+                            pressed={activeDatePreset === '7'}
+                            onPressedChange={() => setDatePreset(7)}
+                        >{t('history.filters.last7Days')}</Chip>
+                        <Chip
+                            pressed={activeDatePreset === '30'}
+                            onPressedChange={() => setDatePreset(30)}
+                        >{t('history.filters.last30Days')}</Chip>
+                        <Chip
+                            pressed={activeDatePreset === 'all'}
+                            onPressedChange={() => setDatePreset(null)}
+                        >{t('history.filters.allDates')}</Chip>
+                    </div>
+                    <span className={styles.dateZone}>{t('history.filters.dateZone')}</span>
+                </div>
+                {dateError ? (
+                    <div className={styles.dateError} role="alert">{dateError}</div>
+                ) : null}
+                {dateFrom || dateTo ? (
+                    <div className={styles.activeDateRange}>
+                        <span>{t('history.filters.activeRange', {
+                            from: dateFrom ? formatFilterDate(dateFrom) : t('history.filters.anyDate'),
+                            to: dateTo ? formatFilterDate(dateTo) : t('history.filters.anyDate'),
+                        })}</span>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            icon={<Icon.XIcon />}
+                            onClick={() => setDatePreset(null)}
+                        >
+                            {t('history.filters.clearDateRange')}
+                        </Button>
+                    </div>
+                ) : null}
+                <div className={`${styles.filterFooter} ${filterPanel.viewOptions}`}>
+                    <Chip
+                        className={styles.toolbarControl}
+                        pressed={showFiatInHistory}
+                        onPressedChange={toggleShowFiatInHistory}
+                        disabled={fiatToggleBusy}
+                        aria-busy={fiatToggleBusy}
+                        aria-label={showFiatInHistory
+                            ? undefined
+                            : t('history.filters.showFiatOff')}
+                        title={t('history.filters.fiatHelp')}
+                    >
+                        {showFiatInHistory
+                            ? t('history.filters.fiatCurrency', { currency: fiatCurrency })
+                            : t('history.filters.fiatOff')}
+                    </Chip>
+                    <SegmentedControl
+                        className={styles.toolbarControl}
+                        aria-label={t('history.filters.groupingMode')}
+                        value={groupingMode}
+                        onChange={setGroupingMode}
+                        items={[
+                            { id: 'grouped', label: t('history.filters.grouped') },
+                            { id: 'flat', label: t('history.filters.flat') },
+                        ]}
+                    />
+                </div>
+            </ListFilterMenu>
+        </span>
+    );
     const header = (
         <PageHeader
             onBack={onBack}
             backLabel={t('common.backToHome')}
             title={t('history.title')}
+        />
+    );
+    const filteredHeader = (
+        <PageHeader
+            onBack={onBack}
+            backLabel={t('common.backToHome')}
+            title={t('history.title')}
+            trailing={filterMenu}
         />
     );
     // The page header holds only the title and Back, so Refresh sits in the
@@ -1689,8 +1879,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             ) : null}
         </>
     );
-    const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+    // Only the loaded page (wrap(..., true)) carries the filter.
+    const wrap = (children, withFilter = false) => (
+        <Screen variant={variant} header={withFilter ? filteredHeader : header}>
             {children}
         </Screen>
     );
@@ -1765,9 +1956,6 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // page notice stays out of its way so one state shows one message.
     const offlineWithoutHistory = offlineVerdict && historyLoaded && loadingChains.size === 0
         && entries.length === 0 && visibleEntries.length === 0;
-    const balancesUnavailableEmpty = balancesUnchecked && !offlineVerdict && !crossChainOnly
-        && historyLoaded && loadingChains.size === 0
-        && entries.length === 0 && visibleEntries.length === 0;
 
     return wrap(
         <ListPage
@@ -1787,231 +1975,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     })}
                 </StatusMessage>
             ) : null}
-            actions={balancesUnavailableEmpty ? null : actions}
-            toolbar={entries.length > 0 ? (
-            <>
-                <div className={styles.toolbarTop}>
-                    <div className={styles.phoneFilterToggle}>
-                        <Button
-                            className={styles.toolbarControl}
-                            variant="secondary"
-                            block
-                            icon={<Icon.FilterIcon />}
-                            aria-expanded={phoneFiltersOpen}
-                            aria-controls="history-filter-panel"
-                            onClick={() => setPhoneFiltersOpen((open) => !open)}
-                        >
-                            {t('history.filters.toggle', { count: activeFilterCount })}
-                        </Button>
-                    </div>
-                </div>
-                <div
-                    id="history-filter-panel"
-                    className={`${styles.filterCard} ${phoneFiltersOpen ? styles.filterCardOpen : ''}`}
-                    role="group"
-                    aria-label={t('history.filters.label')}
-                >
-                <div className={styles.searchRow}>
-                    <Input
-                        ref={searchInputRef}
-                        type="search"
-                        enterKeyHint="search"
-                        autoCapitalize="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                        className={styles.searchInput}
-                        placeholder={searchPlaceholder}
-                        aria-label={t('history.filters.searchLabel')}
-                        aria-describedby={searchDescriptionId}
-                        value={searchQuery}
-                        onChange={(ev) => setSearchQuery(ev.target.value)}
-                        autoComplete="off"
-                    />
-                    {searchDescriptionId ? (
-                        <span id={searchDescriptionId} className="sr-only">
-                            {fullSearchPlaceholder}
-                        </span>
-                    ) : null}
-                    {searchQuery ? (
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            icon={<Icon.XIcon />}
-                            aria-label={t('history.filters.clearSearch')}
-                            onClick={() => {
-                                setSearchQuery('');
-                                searchInputRef.current?.focus();
-                            }}
-                        >
-                            {t('common.clear')}
-                        </Button>
-                    ) : null}
-                </div>
-
-                <div className={styles.dateRow}>
-                    <Input
-                        type="date"
-                        aria-label={t('history.filters.fromDate')}
-                        value={dateFrom}
-                        max={dateTo || undefined}
-                        onChange={(ev) => updateDateFrom(ev.target.value)}
-                    />
-                    <span className={styles.dateSep}>→</span>
-                    <Input
-                        type="date"
-                        aria-label={t('history.filters.toDate')}
-                        value={dateTo}
-                        min={dateFrom || undefined}
-                        onChange={(ev) => updateDateTo(ev.target.value)}
-                    />
-                </div>
-                <div className={styles.dateTools}>
-                    <div className={styles.datePresets} role="group" aria-label={t('history.filters.datePresets')}>
-                        <Chip
-                            pressed={activeDatePreset === '7'}
-                            onPressedChange={() => setDatePreset(7)}
-                        >{t('history.filters.last7Days')}</Chip>
-                        <Chip
-                            pressed={activeDatePreset === '30'}
-                            onPressedChange={() => setDatePreset(30)}
-                        >{t('history.filters.last30Days')}</Chip>
-                        <Chip
-                            pressed={activeDatePreset === 'all'}
-                            onPressedChange={() => setDatePreset(null)}
-                        >{t('history.filters.allDates')}</Chip>
-                    </div>
-                    <span className={styles.dateZone}>{t('history.filters.dateZone')}</span>
-                </div>
-                {dateError ? (
-                    <div className={styles.dateError} role="alert">{dateError}</div>
-                ) : null}
-                {dateFrom || dateTo ? (
-                    <div className={styles.activeDateRange}>
-                        <span>{t('history.filters.activeRange', {
-                            from: dateFrom ? formatFilterDate(dateFrom) : t('history.filters.anyDate'),
-                            to: dateTo ? formatFilterDate(dateTo) : t('history.filters.anyDate'),
-                        })}</span>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            icon={<Icon.XIcon />}
-                            onClick={() => setDatePreset(null)}
-                        >
-                            {t('history.filters.clearDateRange')}
-                        </Button>
-                    </div>
-                ) : null}
-
-                <div className={styles.filterFooter}>
-                    <Chip
-                        className={styles.toolbarControl}
-                        pressed={moreFiltersOpen}
-                        onPressedChange={() => setMoreFiltersOpen((v) => !v)}
-                        aria-expanded={moreFiltersOpen}
-                        aria-controls="history-more-filters"
-                    >
-                        <span>{t('history.filters.additionalDetails')}</span>
-                        {moreFiltersOpen
-                            ? <DoubleChevron direction="up" />
-                            : <DoubleChevron direction="down" />}
-                    </Chip>
-                    <Chip
-                        className={styles.toolbarControl}
-                        pressed={showFiatInHistory}
-                        onPressedChange={toggleShowFiatInHistory}
-                        disabled={fiatToggleBusy}
-                        aria-busy={fiatToggleBusy}
-                        aria-label={showFiatInHistory
-                            ? undefined
-                            : t('history.filters.showFiatOff')}
-                        title={t('history.filters.fiatHelp')}
-                    >
-                        {showFiatInHistory
-                            ? t('history.filters.fiatCurrency', { currency: fiatCurrency })
-                            : t('history.filters.fiatOff')}
-                    </Chip>
-                    <SegmentedControl
-                        className={styles.toolbarControl}
-                        aria-label={t('history.filters.groupingMode')}
-                        value={groupingMode}
-                        onChange={setGroupingMode}
-                        items={[
-                            { id: 'grouped', label: t('history.filters.grouped') },
-                            { id: 'flat', label: t('history.filters.flat') },
-                        ]}
-                    />
-                </div>
-
-                {moreFiltersOpen ? (
-                    <div
-                        id="history-more-filters"
-                        className={styles.morePanel}
-                        role="group"
-                        aria-label={t('history.filters.advanced')}
-                    >
-                        <ChainPicker
-                            activeChainIds={activeChainIds}
-                            chainRegistry={chainRegistry}
-                            enabledChains={enabledChains}
-                            onChange={(next) => {
-                                setEnabledChains(next);
-                                writeChainSet(historyChainFilterKey(walletId), next);
-                            }}
-                        />
-
-                        <CheckboxPicker
-                            options={ACTION_TYPE_OPTIONS}
-                            selected={actionTypeFilter}
-                            onToggle={toggleSetMember(setActionTypeFilter)}
-                            allLabel={t('history.filters.allActionTypes')}
-                            summaryNoun={t('history.filters.actionType')}
-                            iconForId={actionTypeIcon}
-                            menuHeader={t('history.filters.actionTypes')}
-                        />
-
-                        <CheckboxPicker
-                            options={STATUS_OPTIONS}
-                            selected={statusFilter}
-                            onToggle={toggleSetMember(setStatusFilter)}
-                            allLabel={t('history.filters.allStatuses')}
-                            summaryNoun={t('history.filters.status')}
-                            menuHeader={t('history.filters.statusHeader')}
-                        />
-
-                        <CheckboxPicker
-                            options={[
-                                { id: 'crosschain', label: 'Cross-chain only' },
-                            ]}
-                            selected={new Set([
-                                ...(crossChainOnly ? ['crosschain'] : []),
-                            ])}
-                            onToggle={(id) => {
-                                if (id === 'crosschain') setCrossChainOnly((v) => !v);
-                            }}
-                            allLabel={t('history.filters.noSpecialFilters')}
-                            summaryNoun={t('history.filters.filter')}
-                            iconForId={specialFilterIcon}
-                            menuHeader={t('history.filters.special')}
-                        />
-
-                        {multisigAddress ? (
-                            <Button
-                                variant={multisigOnly ? 'primary' : 'ghost'}
-                                size="sm"
-                                icon={<Icon.MultisigIcon />}
-                                aria-pressed={multisigOnly}
-                                onClick={() => setMultisigOnly((v) => !v)}
-                            >
-                                {t('history.filters.multisigOnly')}
-                            </Button>
-                        ) : null}
-
-                    </div>
-                ) : null}
-                </div>
-            </>
-        ) : null}
+            actions={actions}
         >
 
             {exportModalOpen ? (
@@ -2057,19 +2021,13 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             setRefreshTick((n) => n + 1);
                         }}
                     />
-                ) : balancesUnchecked && !crossChainOnly && entries.length === 0 ? (
-                    // An empty read while balances could not be checked proves
-                    // nothing, so the page says that once instead of "No
-                    // activity yet", and names no stale balance: the line is
-                    // about activity, which shows once the network answers.
-                    <BalancesUncheckedState
-                        body={t('balances.unchecked.historyBody')}
-                        onRetry={() => {
-                            recheckBalances();
-                            setRefreshTick((n) => n + 1);
-                        }}
-                    />
                 ) : (
+                    // No per-page network error here, degraded services
+                    // included: an empty History reads "No activity yet" and
+                    // the shell's reachability banner reports network trouble.
+                    // The plain empty state is only "No activity yet" with a short
+                    // body and no Start receiving button; the cross-chain-only
+                    // state never has a button either.
                     <EmptyState
                         title={crossChainOnly
                             ? t('history.empty.noCrossChainTitle')
@@ -2077,11 +2035,6 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         body={crossChainOnly
                             ? t('history.empty.noCrossChainBody')
                             : t('history.empty.noActivityBody')}
-                        actionLabel={!crossChainOnly && onReceive
-                            ? t('history.empty.startReceiving')
-                            : undefined}
-                        onAction={!crossChainOnly ? onReceive : undefined}
-                        actionIcon={!crossChainOnly && onReceive ? <Icon.ReceiveIcon /> : undefined}
                     />
                 )
             ) : null}
@@ -2219,6 +2172,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 </div>
             ) : null}
         </ListPage>,
+        true,
     );
 }
 
@@ -2477,7 +2431,9 @@ function CheckboxPicker({ options, selected, onToggle, allLabel, summaryNoun, ic
             : `${selected.size} ${summaryNoun}s`;
 
     return (
-        <div ref={wrapRef} className={styles.chainPickerWrap}>
+        // In the title-line filter panel each picker spans the panel
+        // at control height, like the network picker above it.
+        <div ref={wrapRef} className={`${styles.chainPickerWrap} ${filterPanel.picker}`}>
             <div ref={triggerRef}>
                 <Chip
                     pressed={!isAll}
@@ -2605,137 +2561,6 @@ function chainScopeLabel(enabledChains, activeChainIds) {
     const total = activeChainIds.length;
     if (enabledChains.size === 0 || enabledChains.size === total) return 'all';
     return Array.from(enabledChains).sort().join('+');
-}
-
-/**
- * Custom chain picker: full-width button that opens a popover with
- * each option rendered as its chain logo + display name. Used instead
- * of a native <select> because browsers don't render HTML / images
- * inside <option> elements.
- */
-function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange }) {
-    const [open, setOpen] = useState(false);
-    const wrapRef = useRef(null);
-    const triggerRef = useRef(null);
-    const menuRef = useRef(null);
-
-    const close = () => {
-        setOpen(false);
-        triggerRef.current?.focus();
-    };
-
-    useEffect(() => {
-        if (!open) return undefined;
-        const onClick = (e) => {
-            if (wrapRef.current?.contains(e.target)) return;
-            setOpen(false);
-        };
-        const onKey = (e) => {
-            if (e.key !== 'Escape') return;
-            setOpen(false);
-            triggerRef.current?.focus();
-        };
-        window.addEventListener('mousedown', onClick);
-        window.addEventListener('keydown', onKey);
-        return () => {
-            window.removeEventListener('mousedown', onClick);
-            window.removeEventListener('keydown', onKey);
-        };
-    }, [open]);
-
-    const isAll = enabledChains.size === activeChainIds.length || enabledChains.size === 0;
-    const selectedId = isAll ? null : Array.from(enabledChains)[0];
-    const selectedDesc = selectedId ? chainRegistry.get(selectedId) : null;
-
-    const choose = (id) => {
-        const next = id === 'all'
-            ? new Set(activeChainIds)
-            : new Set([id]);
-        onChange(next);
-        close();
-    };
-
-    return (
-        <div ref={wrapRef} className={styles.chainPickerWrap}>
-            {/* A native trigger retains the ref-driven focus handoff for this rich custom listbox. */}
-            <button
-                ref={triggerRef}
-                type="button"
-                className={styles.chainPickerBtn}
-                aria-label={selectedDesc ? selectedDesc.displayName : t('common.allNetworks')}
-                title={selectedDesc ? selectedDesc.displayName : t('common.allNetworks')}
-                aria-haspopup="listbox"
-                aria-expanded={open}
-                onClick={() => setOpen((v) => !v)}
-                onKeyDown={(event) => {
-                    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-                    event.preventDefault();
-                    if (!open) setOpen(true);
-                    focusListboxOption(menuRef, event.key === 'ArrowUp' ? 'last' : 'selected');
-                }}
-            >
-                <span className={styles.chainPickerLeft}>
-                    {selectedDesc ? (
-                        <img
-                            src={branding.chainIconSmallUrl(selectedDesc.id)}
-                            alt=""
-                            aria-hidden="true"
-                            className={styles.chainPickerIcon}
-                        />
-                    ) : (
-                        <span className={styles.chainPickerAllIcon} aria-hidden="true">⛓</span>
-                    )}
-                </span>
-                <SingleChevron direction="down" />
-            </button>
-            {open ? (
-                <ul
-                    ref={menuRef}
-                    className={styles.chainPickerMenu}
-                    role="listbox"
-                    onKeyDown={(event) => handleListboxKeyDown(event, menuRef, close)}
-                >
-                    <li>
-                        {/* Native options preserve the rich listbox keyboard model. */}
-                        <button
-                            type="button"
-                            role="option"
-                            aria-selected={isAll}
-                            className={`${styles.chainPickerOption} ${isAll ? styles.chainPickerOptionActive : ''}`}
-                            onClick={() => choose('all')}
-                        >
-                            <span className={styles.chainPickerAllIcon} aria-hidden="true">⛓</span>
-                            <span>{t('common.allNetworks')}</span>
-                        </button>
-                    </li>
-                    {activeChainIds.map((cid) => {
-                        const d = chainRegistry.get(cid);
-                        const isSel = selectedId === cid;
-                        return (
-                            <li key={cid}>
-                                {/* Native options preserve the rich listbox keyboard model. */}
-                                <button
-                                    type="button"
-                                    role="option"
-                                    aria-selected={isSel}
-                                    className={`${styles.chainPickerOption} ${isSel ? styles.chainPickerOptionActive : ''}`}
-                                    onClick={() => choose(cid)}
-                                >
-                                    <img
-                                        src={branding.chainIconSmallUrl(cid)}
-                                        alt=""
-                                        aria-hidden="true"
-                                        className={styles.chainPickerIcon}
-                                    />
-                                    <span>{d?.displayName || cid}</span>
-                                </button>
-                            </li>
-                        );
-                    })}
-                </ul>
-            ) : null}
-        </div>
-    );
 }
 
 const EXPORT_CHUNK_SIZE = 250;

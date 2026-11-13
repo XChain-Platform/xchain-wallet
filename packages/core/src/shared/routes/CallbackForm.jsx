@@ -10,13 +10,29 @@
 
 import { t } from '../../i18n/index.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, FeeSelector, FormNotice, FormPage, Icon, InfoTip, Input, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+// Network, From and the fee selector come from the standard FromSection and
+// FeeSection.
+import { AddressText, Button, FormNotice, FormPage, Icon, InfoTip, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+// The Wallet Form Standard frame (From, main section, Memo, Network fee,
+// status slot, one action).
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    useFormSections,
+} from '../components/formStandard/index.js';
+import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
+import { formatCoinBaseUnits } from '../../flows/feesCard.js';
 import {
     registry as registryLib,
     decoder as decoderLib,
     flows as flowsLib,
 } from '@xchain-wallet/core';
 import '../../i18n/locales/en/balances.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/routes.js';
 import '../../i18n/locales/en/send.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -29,15 +45,13 @@ import {
 } from '../../schemas/settings.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import { formatWithThousands } from '../utils/amountFormat.js';
-import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
-import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
-import { FeesCard } from '../components/FeesCard.jsx';
+// The Fees card and its pay-in-native switch render inside FeeSection.
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import {
     estimateNativeSendFee,
@@ -181,6 +195,9 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
     });
 
     const [ticker, setTicker] = useState(initialTick || '');
+    // Network stays an ordinary field even with a preset token. The token
+    // still decides the network: picking one moves Network to its chain, and
+    // moving Network off the token's chain clears the token (handleChainChange).
     const [tickerChainId, setTickerChainId] = useState(
         initialTick && initialChainId ? initialChainId : null,
     );
@@ -193,6 +210,12 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
     const [password, setPassword] = useState('');
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
+    // The standard sections' open state, held above the picker pages
+    // (early returns) so it survives them, and a count of Review presses so
+    // the section holding the refused value reopens on every press.
+    const formSections = useFormSections({ from: false, main: true, memo: false, fee: false });
+    const [reviewAttempt, setReviewAttempt] = useState(0);
+    const [errorSection, setErrorSection] = useState(/** @type {'from' | 'main' | 'memo' | 'fee' | null} */ (null));
 
     // Typed-confirmation gate (CALLBACK force-recalls everything; rides the
     // same typed-word rail as DESTROY / SWEEP).
@@ -520,7 +543,11 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
     }
 
     function guardBeforeSign() {
+        // Each refusal names the section that holds its value, so
+        // that section opens with the message (From, Memo, else the main one).
+        setErrorSection('main');
         if (!chainId || !fromAddress) {
+            setErrorSection('from');
             setFormError('Pick a source address first.');
             return false;
         }
@@ -529,6 +556,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             descriptor.coin,
             descriptor.networkKind,
         )) {
+            setErrorSection('from');
             setFormError('The selected source address is not valid for this network.');
             return false;
         }
@@ -559,11 +587,13 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         }
         const m = trimmedMemo;
         if (m.includes('|') || m.includes(';')) {
+            setErrorSection('memo');
             setFormError('Memo cannot contain "|" or ";".');
             return false;
         }
         // Refuse a memo the indexer would reject before the form composes it.
         if (memoTooLong) {
+            setErrorSection('memo');
             setFormError(memoTooLong);
             return false;
         }
@@ -674,8 +704,11 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
 
     async function handleReview(event) {
         event.preventDefault();
+        // Every press counts, so the section that holds the refused
+        // value opens again even after the user closed it.
+        setReviewAttempt((n) => n + 1);
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        if (feeStop) { setFormError(feeStop.formError); return; }
+        if (feeStop) { setErrorSection('fee'); setFormError(feeStop.formError); return; }
         if (refreshing || !guardBeforeSign()) return;
         setFormError(null);
         setRefreshing(true);
@@ -748,7 +781,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                 ? () => { setSubmitError(null); setStage('form'); }
                 : onBack}
             backDisabled={stage === 'submitting' || refreshing}
-            title={stage === 'review' || stage === 'submitting' ? 'Review callback' : 'Execute callback'}
+            title={stage === 'review' || stage === 'submitting' ? 'Review Callback' : 'Execute Callback'}
         />
     );
     const wrap = (children) => (
@@ -814,6 +847,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                     <Button
                         type="submit"
                         variant={isWatcherMode ? 'primary' : 'danger'}
+                        icon={isWatcherMode || isHwSource ? <Icon.SignIcon /> : <Icon.ReceiveIcon />}
                         loading={stage === 'submitting'}
                         disabled={stage === 'submitting' || !typedConfirmOk || (
                                 isWatcherMode
@@ -825,10 +859,8 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                         }
                     >
                         {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : 'Call back'}
+                            ? 'Create Unsigned Transaction'
+                            : 'Call Back'}
                     </Button>
                 )}
             >
@@ -890,6 +922,13 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         return (
             <ActionConfirmScreen
                 confirmAction={confirmAction}
+                summary={{
+                    verb: t('components.confirmSummary.verbExecuteCallback'),
+                    ...(actionParams.TICK ? { ticker: String(actionParams.TICK).toUpperCase() } : {}),
+                    direction: 'none',
+                    chainId,
+                    address: fromAddress?.address,
+                }}
                 screenVariant={variant}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
@@ -927,11 +966,10 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={chainId}
-                lockNetwork={lockedToken || undefined}
-                {...(!lockedToken ? { onChainChange: handleChainChange } : {})}
+                onChainChange={handleChainChange}
                 onPick={(a) => {
                     setFromAddressId(a.id);
                     setSourcePickerOpen(false);
@@ -947,7 +985,10 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             <TokenPicker
                 purpose="send"
                 walletId={walletId}
-                title="Select token"
+                // CALLBACK recalls a token's supply; the network coin cannot be called back.
+                kindFilter="tokens"
+                kindLocked
+                title="Select Token"
                 onSelect={(selection) => {
                     const nextChainId = String(selection.chainId || chainId || '');
                     setTicker(String(selection.tick || ''));
@@ -961,18 +1002,20 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         );
     }
 
+    // Section helpers. The section holding the last refusal reopens
+    // on every Review press.
+    const errorKey = (id) => (formError && errorSection === id ? reviewAttempt + 1 : 0);
     return wrapForm(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label="Execute callback"
             onSubmit={handleReview}
-            status={formError || issuerEligibility.error ? (
-                <StatusMessage variant="error">{formError || issuerEligibility.error}</StatusMessage>
-            ) : null}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="success"
+            data-form-standard="execute-callback"
+            status={[formError || issuerEligibility.error ? (
+                <StatusMessage key="error" variant="error">{formError || issuerEligibility.error}</StatusMessage>
+            ) : null]}
+            action={(
+                <FormAction
                     icon={<Icon.ContractIcon />}
                     loading={refreshing || confirmAction.composing}
                     disabled={!fromAddress
@@ -983,53 +1026,82 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                         || refreshing
                         || confirmAction.composing}
                 >
-                    Execute callback
-                </Button>
+                    Execute Callback
+                </FormAction>
             )}
-        >
-            {lockedToken && chainId ? (
-                <LockedTokenContext chainId={chainId} tick={ticker} />
-            ) : (
-                <NetworkField
-                    label="Network"
-                    value={chainId}
-                    onChange={handleChainChange}
+            /* From holds the Network and the token owner's address. Network
+               is always the normal field: the Token picker moves it to the
+               token's chain, and a Network change off that chain clears the
+               token. */
+            from={(
+                <FromSection
+                    {...formSections.bind('from')}
+                    chainId={chainId}
                     chainIds={chainsWithAddresses.length
                         ? chainsWithAddresses
                         : (chainId ? [chainId] : [])}
                     chainRegistry={chainRegistry}
+                    onNetworkChange={handleChainChange}
+                    networkHelp={t('routes.callback.networkHelp')}
                     disabled={refreshing}
+                    address={fromAddress?.address || null}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    addressHelp="The token owner's address. Only the owner can run a callback, so this must be the address that owns the token."
+                    missing={(
+                        <FormNotice variant="error">
+                            {t('send.source.noAddress')}
+                        </FormNotice>
+                    )}
+                    revealKey={errorKey('from')}
                 />
             )}
-
-            {fromAddress ? (
-                <AddressField
-                    label="From (token owner)"
-                    help="The token owner's address. Only the owner can run a callback, so this must be the address that owns the token."
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
+            fee={(
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeCustomEstimate}
                     disabled={refreshing}
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
+                    revealKey={errorKey('fee')}
+                    protocolSummary={protocolFeeSummary({
+                        quote: protocolFeeQuote,
+                        pending: protocolFeePending,
+                        payInNative: nativeFee.toggleProps.checked || nativeFee.toggleProps.mandatory,
+                        coinTicker,
+                    })}
+                    fees={{
+                        quote: protocolFeeQuote,
+                        pending: protocolFeePending,
+                        nativeFeeProps: { ...nativeFee.toggleProps, disabled: refreshing },
+                    }}
                 />
-            ) : (
-                <FormNotice variant="error">
-                    {t('send.source.noAddress')}
-                </FormNotice>
             )}
-
-            {lockedToken ? null : (
+        >
+            <FormSection
+                id="main"
+                title="Callback"
+                icon={Icon.ContractIcon}
+                {...formSections.bind('main')}
+                revealKey={errorKey('main')}
+                summary={ticker ? String(ticker).toUpperCase() : null}
+            >
+            {(
                 <TokenField
                     label="Token"
+                    help={t('routes.callback.tokenHelp')}
                     value={ticker && chainId ? { chainId, tick: ticker } : null}
                     onOpenPicker={() => setTokenPickerOpen(true)}
                     disabled={refreshing}
                 />
             )}
 
-            {previewBlock}
+            {/* The callback card sits 8px from the Token field above
+                and the Memo field below, not the form's full gap. */}
+            <div className={callbackStyles.formPreview}>{previewBlock}</div>
             {summaryLoading ? <p className={styles.hint}>Loading holder preview…</p> : null}
             {termsUnread || !configComplete ? null : !blockReached ? (
                 <FormNotice variant="warning" role="alert">
@@ -1037,9 +1109,20 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                         + `${currentHeight != null ? ` (network is at ${currentHeight.toLocaleString('en-US')})` : ''}.`}
                 </FormNotice>
             ) : null}
+            </FormSection>
+            {/* Memo is its own optional section; inside it the field
+                drops its own Optional tag. */}
+            <FormSection
+                id="memo"
+                title="Memo"
+                icon={Icon.MessageIcon}
+                optional
+                {...formSections.bind('memo')}
+                revealKey={errorKey('memo')}
+                summary={trimmedMemo || 'None'}
+            >
             <Input
                 label="Memo"
-                optional
                 maxLength={MAX_MEMO_LENGTH}
                 help={MEMO_HINT}
                 error={memoTooLong || undefined}
@@ -1048,28 +1131,23 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                 autoComplete="off"
                 disabled={refreshing}
             />
-
-            <FeesCard
-                chainId={chainId}
-                quote={protocolFeeQuote}
-                pending={protocolFeePending}
-                feeSelector={feeTiers ? (
-                <FeeSelector
-                    chainId={chainId}
-                    label="Network fee"
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                    disabled={refreshing}
-                />
-                ) : null}
-            >
-                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} disabled={refreshing} />
-            </FeesCard>
-        </FormPage>,
+            </FormSection>
+        </FormFrame>,
     );
+}
+
+// The protocol fee's part of the Network fee row's closed summary,
+// in the unit it will be paid in; nothing while the quote is unknown.
+function protocolFeeSummary({ quote, pending, payInNative, coinTicker }) {
+    if (pending) return undefined;
+    const normalized = normalizeProtocolFee(quote);
+    if (!normalized.known) return undefined;
+    if (normalized.free) return 'no protocol fee';
+    if (payInNative) {
+        const native = formatCoinBaseUnits(quote?.requiredFeeSats);
+        return native ? `${native} ${coinTicker} protocol fee` : undefined;
+    }
+    return normalized.amount ? `${normalized.amount} XCHAIN protocol fee` : undefined;
 }
 
 function DetailRow({ label, value }) {

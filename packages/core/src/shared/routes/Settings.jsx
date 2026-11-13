@@ -9,7 +9,9 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, EmptyState, Icon, Input, ListPage, PageHeader, PageNoticeHostContext, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, PageNoticeHostContext, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+// The standard list card for the grouped landing.
+import groupListStyles from './CoSignerAccountList.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -32,29 +34,34 @@ import { WantReachabilityNotice } from '../components/hideReachabilityNotice.js'
 import { NetworkEndpointsSection } from '../components/settings/NetworkEndpointsSection.jsx';
 import { NetworkSection } from '../components/settings/NetworkSection.jsx';
 import { normalizeActiveNetwork } from '../utils/activeNetworkSwitch.js';
+import { titleCase } from '../utils/titleCase.js';
 import { readBalanceCache } from '../utils/balanceCache.js';
 import '../../i18n/locales/en/desktopUpdate.js';
 import '../../i18n/locales/en/importWallet.js';
 import '../../i18n/locales/en/routes.js';
 import '../../i18n/locales/en/send.js';
 import '../../i18n/locales/en/settings.js';
-import '../../i18n/locales/en/ui.js';
 
 import { NotificationsSection } from '../components/settings/NotificationsSection.jsx';
 import { PrivacySection } from '../components/settings/PrivacySection.jsx';
 import { SafetySection } from '../components/settings/SafetySection.jsx';
 import { ThisWalletSection } from '../components/settings/ThisWalletSection.jsx';
-import { WalletModeSection } from '../components/settings/WalletModeSection.jsx';
 import {
+    CLIPBOARD_AUTO_CLEAR_DEFAULT,
+    FORM_DRAFT_TTL_1H,
+    FORM_DRAFT_TTL_24H,
+    FORM_DRAFT_TTL_7D,
+    FORM_DRAFT_TTL_DEFAULT,
+    FORM_DRAFT_TTL_OFF,
     NUMBER_FORMAT_DEFAULT,
     SMALL_BALANCE_THRESHOLD_DEFAULT,
-    WALLET_MODE_DEFAULT,
+    resolveUndoSendSeconds,
 } from '../../schemas/settings.js';
-import {
-    clearActiveWallet,
-    writeActiveWallet,
-} from '../utils/activeWalletMemory.js';
-import { wipeWalletStorage } from '../utils/wipeWalletStorage.js';
+// Sync reads for the Security rows' current values.
+import { isBiometricRegistered } from '../../flows/biometricUnlock.js';
+import { getPanicModeState, getPanicRemainingMs } from '../../flows/panicMode.js';
+import { isDuressConfigured } from '../../flows/duressPassphrase.js';
+import { handOverAfterActiveWalletRemoved } from '../utils/activeWalletRemoval.js';
 import { writeLastView } from '../utils/lastViewMemory.js';
 import actionStyles from './ActionsMenu.module.css';
 import settingsStyles from './Settings.module.css';
@@ -62,6 +69,8 @@ import { getLocale, t } from '../../i18n/index.js';
 import cardStyles from '../../ui/Card.module.css';
 
 const row = (title, terms = '', target = title) => ({ title, terms, target });
+// Sizes the icon in each settings group row; CSS, not user-facing copy.
+const GROUP_ICON_CSS = '[data-settings-group-icon] svg { width: 24px; height: 24px; }';
 
 // Each time Settings opens it takes a fresh list scroll key, so the shell has
 // no saved offset for it and the list starts at its first row. Closing a
@@ -117,11 +126,6 @@ export const SETTINGS_SEARCH_ROWS = Object.freeze({
         row('Panic mode', 'freeze signing emergency'),
         row('Duress passphrase', 'decoy emergency password'),
         row('Backup reminders', 'recovery reminder'),
-    ],
-    'wallet-mode': [
-        row('Normal', 'full sign broadcast'),
-        row('Watcher (watch-only)', 'unsigned psbt cold storage'),
-        row('Signer (air-gapped)', 'offline psbt cold storage'),
     ],
     backup: [
         row('Export encrypted backup', 'backup file password'),
@@ -248,6 +252,8 @@ export const SETTINGS_SEARCH_ROWS = Object.freeze({
  * @param {() => void} [props.reload]
  */
 export function Settings({
+    // Opens the address list from the Wallets page.
+    onOpenAddresses,
     onBack,
     activeWallet,
     activeAccount,
@@ -265,6 +271,8 @@ export function Settings({
     const variant = screenVariantFor(shell);
     const [query, setQuery] = useState('');
     const [subpageId, setSubpageId] = useState(/** @type {string | null} */ (initialSubpageId || null));
+    // The group page a subpage was opened from, so Back returns to it.
+    const [parentSubpageId, setParentSubpageId] = useState(/** @type {string | null} */ (null));
     const [searchTarget, setSearchTarget] = useState(/** @type {string | null} */ (null));
     const [listScrollKey] = useState(() => `list-${(settingsVisits += 1)}`);
     const [siteCount, setSiteCount] = useState(/** @type {number | null} */ (null));
@@ -284,9 +292,10 @@ export function Settings({
 
     const closeSubpage = useCallback(() => {
         pendingFocusRestore.current = subpageId;
-        setSubpageId(null);
+        setSubpageId(parentSubpageId);
+        setParentSubpageId(null);
         setSearchTarget(null);
-    }, [subpageId]);
+    }, [subpageId, parentSubpageId]);
 
     // A Settings drilldown is nested UI, so Escape and the system Back action
     // close it before the surrounding route.
@@ -319,31 +328,10 @@ export function Settings({
         return () => { alive = false; };
     }, [messaging]);
 
-    const handleWalletRemoved = useCallback(async (removedWalletId) => {
-        clearActiveWallet();
-        try {
-            // Require a fresh list before selecting a replacement wallet.
-            if (typeof messaging?.listWallets !== 'function') {
-                throw new Error('Could not refresh the wallet list.');
-            }
-            const listed = await messaging.listWallets();
-            const wallets = Array.isArray(listed) ? listed : listed?.wallets;
-            // Reject unknown response shapes so an empty-looking result cannot wipe a real vault.
-            if (!Array.isArray(wallets)) {
-                throw new Error('Could not refresh the wallet list.');
-            }
-
-            const nextWallet = wallets.find((wallet) => wallet?.id && wallet.id !== removedWalletId);
-            if (nextWallet) {
-                writeActiveWallet(nextWallet.id);
-            } else {
-                await wipeWalletStorage();
-            }
-        } finally {
-            // Reload even when fallback selection fails so no live screen keeps the removed wallet selected.
-            reload();
-        }
-    }, [messaging, reload]);
+    const handleWalletRemoved = useCallback(
+        (removedWalletId) => handOverAfterActiveWalletRemoved({ messaging, removedWalletId, reload }),
+        [messaging, reload],
+    );
 
     const walletLabel = activeWallet?.name || t('shell.settingsButton.noWallet');
 
@@ -418,15 +406,6 @@ export function Settings({
             kind: 'internal-drill',
             Component: SafetySection,
             summary: safetySummary(settings),
-        },
-        {
-            id: 'wallet-mode',
-            title: t('settings.page.walletMode'),
-            description: t('settings.page.chooseWhetherThisDeviceSigns'),
-            keywords: 'wallet mode full watcher watch only signer air gapped psbt cold storage',
-            kind: 'internal-drill',
-            Component: WalletModeSection,
-            summary: walletModeSummary(settings),
         },
         {
             id: 'backup',
@@ -561,6 +540,136 @@ export function Settings({
         },
     ]), [walletLabel, onOpenWalletPicker, onOpenAccountPicker, onActiveNetworkChange, activeWallet, activeAccount, settings, balancesFetchedAt, siteCount, siteSearchTerms, onNavigateToMint, onNavigateToAdvanced, onNavigateToActionQueue, handleWalletRemoved, reload, variant, desktopUpdate.state, desktopUpdate.message, getLocale()]);
 
+    // The ten Settings groups, each a page built from one or more sections.
+    const settingsGroups = useMemo(() => {
+        const byId = new Map(sections.filter((x) => x.visible !== false && x.Component).map((x) => [x.id, x]));
+        // Wallet password is the password part of the This wallet section.
+        const thisWalletProps = sections.find((x) => x.id === 'this-wallet')?.props || {};
+        byId.set('wallet-password', { id: 'wallet-password', title: 'Wallet password', Component: ThisWalletSection, props: { ...thisWalletProps, only: 'password' } });
+        const g = (id, title, icon, summary, parts) => ({ id, title, icon, summary, parts: parts.map((pid) => byId.get(pid)).filter(Boolean) });
+        return [
+            { label: 'Account', items: [
+                // Wallets is a page of its own (WalletsSettingsPage) with no
+                // sections; wallet mode belongs to each wallet (§20), shown
+                // on Wallet Details, not here.
+                g('g-wallets', 'Wallets', Icon.WalletIcon, 'My Wallets, My Accounts, My Addresses', []),
+                g('g-security', 'Security', Icon.LockIcon, 'Wallet password, auto-lock, biometrics, send checks', ['wallet-password', 'safety']),
+                g('g-backup', 'Backup and Recovery', Icon.SaveIcon, 'Encrypted backup, test restore, reminders, contacts', ['backup', 'contacts']),
+                g('g-privacy', 'Privacy', Icon.EyeOffIcon, 'Tor, change addresses, clipboard, data', ['privacy']),
+            ] },
+            { label: 'Preferences', items: [
+                g('g-appearance', 'Appearance', Icon.PaletteIcon, 'Theme, language, currency, balances', ['appearance', 'display', 'language-region']),
+                g('g-notifications', 'Notifications', Icon.BellIcon, 'Payments, orders, deadlines, quiet hours', ['notifications']),
+                g('g-network', 'Network and Fees', Icon.BroadcastIcon, 'Network, endpoints, fee strategy', ['network', 'network-endpoints', 'fees']),
+            ] },
+            { label: 'More', items: [
+                g('g-sites', 'Connected Sites', Icon.LinkIcon, 'dApp permissions, blocked sites', ['connected-sites']),
+                g('g-donations', 'Donations', Icon.HandshakeIcon, 'Automatic Donation System', ['ads']),
+                g('g-advanced', 'Advanced', Icon.GearIcon, 'Developer mode, shortcuts, logs, about', ['developer', 'keyboard', 'updates', 'about']),
+            ] },
+        ].map((grp) => ({ ...grp, items: grp.items.filter((it) => it.parts.length || it.id === 'g-wallets') }));
+    }, [sections]);
+    // Security, Backup and Recovery and Privacy are labelled lists of rows;
+    // each row opens a page holding just that setting's controls.
+    const rowGroups = useMemo(() => {
+        const thisWalletProps = sections.find((x) => x.id === 'this-wallet')?.props || {};
+        return settingsRowGroups({
+            password: { ...thisWalletProps, only: 'password' },
+            backup: { activeWallet, reload, onExportInTab: onOpenBackupInTab },
+        });
+    }, [sections, activeWallet, reload, onOpenBackupInTab]);
+    const rowSections = useMemo(() => Object.entries(rowGroups).flatMap(([, groups]) => groups.flatMap((grp) => grp.rows)).map((r) => ({
+        id: r.id,
+        title: r.title,
+        kind: 'internal-drill',
+        Component: r.Component,
+        props: r.props,
+    })), [rowGroups]);
+    const groupSections = useMemo(() => settingsGroups.flatMap((grp) => grp.items).map((it) => (rowGroups[it.id] ? {
+        id: it.id,
+        title: it.title,
+        kind: 'internal-drill',
+        Component: SettingsRowGroupsPage,
+        props: {
+            label: it.title,
+            groups: rowGroups[it.id],
+            onOpen: (rowId) => { setSearchTarget(null); setParentSubpageId(it.id); setSubpageId(rowId); },
+        },
+    } : it.id === 'g-wallets' ? {
+        id: it.id,
+        title: it.title,
+        kind: 'internal-drill',
+        Component: WalletsSettingsPage,
+        props: {
+            walletLabel,
+            walletId: activeWallet?.id || '',
+            accountLabel: activeAccount?.name || '',
+            onOpenWalletPicker,
+            onOpenAccountPicker,
+            accountId: activeAccount?.id || '',
+            onOpenAddresses,
+        },
+    } : {
+        id: it.id,
+        title: it.title,
+        kind: 'internal-drill',
+        Component: GroupedSettingsPage,
+        props: { parts: it.parts },
+    })), [settingsGroups, rowGroups, walletLabel, activeWallet, activeAccount, onOpenWalletPicker, onOpenAccountPicker, onOpenAddresses]);
+    // The This wallet section is not listed on its own; its options live on Security, Account Details and Wallet Details.
+    // Wallet Details' Remove wallet opens its removal part here, where the
+    // active-wallet handover after a removal (handleWalletRemoved) lives.
+    // Account Details' Extended public keys opens the export part for the
+    // active account the same way.
+    const allSections = useMemo(() => {
+        const thisWalletProps = sections.find((x) => x.id === 'this-wallet')?.props || {};
+        const removeSection = {
+            id: 'wallet-remove',
+            title: 'Remove wallet',
+            kind: 'internal-drill',
+            Component: ThisWalletSection,
+            props: { ...thisWalletProps, only: 'remove' },
+        };
+        const xpubSection = {
+            id: 'wallet-xpub',
+            title: 'Extended public keys',
+            kind: 'internal-drill',
+            Component: ThisWalletSection,
+            props: { ...thisWalletProps, only: 'xpub' },
+        };
+        return [...sections.filter((x) => x.id !== 'this-wallet'), ...groupSections, ...rowSections, removeSection, xpubSection];
+    }, [sections, groupSections, rowSections]);
+    // Search results work like the menu search: each matching setting is a
+    // row; a group whose own name or summary matches comes first.
+    const groupResults = useMemo(() => {
+        const q = normalizeSearchText(query);
+        if (!q) return [];
+        const terms = q.split(' ');
+        const matches = (text) => {
+            const words = normalizeSearchText(text).split(' ');
+            return terms.every((term) => words.some((w) => searchWordMatches(w, term)));
+        };
+        const groupsHit = [];
+        const rowsHit = [];
+        const seen = new Set();
+        for (const grp of settingsGroups) {
+            for (const it of grp.items) {
+                if (matches(`${it.title} ${it.summary}`)) groupsHit.push({ ...it, key: it.id, match: { title: it.title, target: null }, sub: grp.label });
+                for (const part of it.parts) {
+                    for (const item of (SETTINGS_SEARCH_ROWS[part.id] || [])) {
+                        if (!searchItemMatches(item, terms)) continue;
+                        const key = `${it.id}:${item.title}`;
+                        if (seen.has(key)) continue;
+                        seen.add(key);
+                        rowsHit.push({ ...it, key, match: item, sub: it.title });
+                    }
+                }
+            }
+        }
+        return [...groupsHit, ...rowsHit];
+    }, [query, settingsGroups]);
+
+
     // List-view filter. Hoisted ABOVE the subpage early-return so that
     // both render paths call the same number of hooks; flipping
     // `subpageId` from null to a section id used to drop a useMemo
@@ -587,21 +696,21 @@ export function Settings({
 
     // ─── Subpage view ─────────────────────────────────────────────
 
-    const shownSubpage = sections.find((s) => s.id === subpageId && s.visible !== false);
-    useDocumentTitleSection(shownSubpage?.kind === 'internal-drill' && shownSubpage.Component ? shownSubpage.title : null);
+    const shownSubpage = allSections.find((s) => s.id === subpageId && s.visible !== false);
+    useDocumentTitleSection(shownSubpage?.kind === 'internal-drill' && shownSubpage.Component ? titleCase(shownSubpage.title) : null);
 
     if (subpageId) {
-        const section = sections.find((s) => s.id === subpageId && s.visible !== false);
+        const section = allSections.find((s) => s.id === subpageId && s.visible !== false);
         if (section && section.kind === 'internal-drill' && section.Component) {
             const SectionComponent = section.Component;
             const subpageHeader = (
                 <PageHeader
                     nested
                     onBack={closeSubpage}
-                    backDisabled={section.id === 'this-wallet' && walletManagementBusy}
+                    backDisabled={(section.id === 'this-wallet' || section.id === 'wallet-remove') && walletManagementBusy}
                     backLabel={t('shell.settings.back')}
-                    title={section.title}
-                    trailing={section.id === 'backup' && onOpenBackupInTab ? (
+                    title={titleCase(section.title)}
+                    trailing={(section.id === 'backup' || section.id === 'backup-export') && onOpenBackupInTab ? (
                         <Button
                             variant="ghost"
                             size="sm"
@@ -627,10 +736,10 @@ export function Settings({
                             restoreScroll={false}
                         >
                             <WantReachabilityNotice active={section.id === 'network-endpoints'} />
-                            <SettingsPageTemplate view="subpage" sectionId={section.id}>
+                            <SettingsPageTemplate view="subpage" sectionId={section.id} flat={FLAT_GROUP_PAGES.has(section.id)}>
                                 <SettingsSearchHighlight target={searchTarget}>
                                     <SectionComponent
-                                        key={section.id === 'this-wallet' ? activeWallet?.id || 'none' : section.id}
+                                        key={section.id === 'this-wallet' || section.id === 'wallet-remove' ? `${section.id}:${activeWallet?.id || 'none'}` : section.id}
                                         {...(section.props || {})}
                                     />
                                 </SettingsSearchHighlight>
@@ -661,6 +770,7 @@ export function Settings({
                 <Screen variant={variant} header={header} scrollKey={listScrollKey}>
                     <SettingsPageTemplate
                 view="list"
+                flat
                 notices={desktopUpdate.message ? (
                     <StatusMessage variant={desktopUpdate.variant}>{desktopUpdate.message}</StatusMessage>
                 ) : null}
@@ -680,11 +790,65 @@ export function Settings({
                     </div>
                 )}
             >
-                <div className={settingsStyles.settingsList}>
-                {filtered.length === 0 ? (
+                <div className={settingsStyles.settingsList} style={{ border: 0, background: 'transparent', boxShadow: 'none', padding: 0, borderRadius: 0, overflow: 'visible', display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-2)' }}>
+                {query.trim() && groupResults.length === 0 ? (
                     <EmptyState title={t('settings.page.noMatchingSettings')} body={t('settings.page.noSettingsMatch', { query })} />
                 ) : null}
-                {filtered.map((section) => {
+                {/* With no search typed, the grouped landing shows. */}
+                <style>{GROUP_ICON_CSS}</style>
+                {query.trim() ? null : settingsGroups.map((grp) => (
+                    <div key={grp.label} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)', border: 0, borderTop: 0, boxShadow: 'none', padding: 0, margin: 0 }}>
+                        <div style={{ fontSize: 'var(--xc-text-xs)', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--xc-text-muted)', margin: 'var(--xc-space-2) var(--xc-space-1) 0' }}>{grp.label}</div>
+                        {/* Safari needs an explicit list role because this class removes list styling. */}
+                        <ul className={groupListStyles.list} role="list" aria-label={grp.label} style={{ border: '1px solid var(--xc-border)', borderRadius: 'var(--xc-radius-md)', background: 'var(--xc-surface)', overflow: 'hidden' }}>
+                            {grp.items.map((it) => {
+                                const GroupIcon = it.icon;
+                                return (
+                                    <li
+                                        key={it.id}
+                                        // The row's button is the opener focus returns to
+                                        // when its page closes (Escape or Back).
+                                        ref={(node) => {
+                                            const opener = node?.querySelector('button');
+                                            if (opener) sectionOpenerRefs.current.set(it.id, opener);
+                                            else sectionOpenerRefs.current.delete(it.id);
+                                        }}
+                                    >
+                                        <ListRow
+                                            type="button"
+                                            onClick={() => { setSearchTarget(null); setSubpageId(it.id); }}
+                                            leading={<span className={groupListStyles.rowIcon} aria-hidden="true" data-settings-group-icon="" style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}><GroupIcon /></span>}
+                                            title={it.title}
+                                            subtitle={it.summary}
+                                            chevron
+                                        />
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    </div>
+                ))}
+                {query.trim() && groupResults.length ? (
+                    /* Safari needs an explicit list role because this class removes list styling. */
+                    <ul className={groupListStyles.list} role="list" aria-label={t('settings.page.searchResults')} style={{ border: '1px solid var(--xc-border)', borderRadius: 'var(--xc-radius-md)', background: 'var(--xc-surface)', overflow: 'hidden' }}>
+                        {groupResults.map((it) => {
+                            const GroupIcon = it.icon;
+                            return (
+                                <li key={it.key}>
+                                    <ListRow
+                                        type="button"
+                                        onClick={() => { setSearchTarget(it.match.target || null); setSubpageId(it.id); }}
+                                        leading={<span className={groupListStyles.rowIcon} aria-hidden="true" data-settings-group-icon="" style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}><GroupIcon /></span>}
+                                        title={it.match.title}
+                                        subtitle={it.sub}
+                                        chevron
+                                    />
+                                </li>
+                            );
+                        })}
+                    </ul>
+                ) : null}
+                {true ? null : filtered.map((section) => {
                     const matchedRow = findMatchingSearchRow(section.id, query);
                     if (section.kind === 'external-drill') {
                         if (section.visible === false) return null;
@@ -747,7 +911,7 @@ export function Settings({
     );
 }
 
-function SettingsPageTemplate({ view, children, sectionId, notices, ...props }) {
+function SettingsPageTemplate({ view, children, sectionId, notices, flat = false, ...props }) {
     const [noticeHost, setNoticeHost] = useState(null);
     return (
         <ListPage
@@ -768,6 +932,8 @@ function SettingsPageTemplate({ view, children, sectionId, notices, ...props }) 
                 <div
                     className={settingsStyles.settingsSurface}
                     data-settings-section={sectionId || undefined}
+                    // The grouped landing draws its own cards.
+                    style={flat ? { border: 0, background: 'transparent', boxShadow: 'none', padding: 0, borderRadius: 0 } : undefined}
                 >
                     {children}
                 </div>
@@ -795,7 +961,8 @@ function searchItemMatches(item, terms) {
 }
 
 function searchWordMatches(word, term) {
-    return word === term || word === `${term}s` || `${word}s` === term;
+    // A typed term matches the start of a word, as the menu search does.
+    return word.startsWith(term) || `${word}s` === term;
 }
 
 export function findMatchingSearchRow(sectionId, query) {
@@ -1002,16 +1169,23 @@ function useDesktopUpdateCheck() {
 }
 
 function UpdateCheckPanel({ updateCheck }) {
+    // The result shows beside the button that asked, on the Advanced page
+    // where it lives, as well as on the Settings list.
     return (
-        <Button
-            variant="ghost"
-            size="sm"
-            style={{ alignSelf: 'flex-start' }}
-            onClick={updateCheck.check}
-            disabled={updateCheck.state === 'checking'}
-        >
-            {t('settings.page.checkForUpdates')}
-        </Button>
+        <>
+            <Button
+                variant="ghost"
+                size="sm"
+                style={{ alignSelf: 'flex-start' }}
+                onClick={updateCheck.check}
+                disabled={updateCheck.state === 'checking'}
+            >
+                {t('settings.page.checkForUpdates')}
+            </Button>
+            {updateCheck.message ? (
+                <StatusMessage variant={updateCheck.variant}>{updateCheck.message}</StatusMessage>
+            ) : null}
+        </>
     );
 }
 
@@ -1089,15 +1263,6 @@ function keyboardSummary(settings) {
     return n === 0 ? t('settings.display.defaults') : t('settings.page.customShortcuts', { count: n });
 }
 
-function walletModeSummary(settings) {
-    if (!settings) return '-';
-    const mode = settings.walletMode || WALLET_MODE_DEFAULT;
-    if (mode === 'full') return t('ui.feeSelector.normal');
-    if (mode === 'watcher') return t('settings.page.modeWatcher');
-    if (mode === 'signer') return t('settings.page.modeSigner');
-    return mode;
-}
-
 function feesSummary(settings) {
     if (!settings) return '-';
     const fees = settings.fees || {};
@@ -1135,4 +1300,239 @@ function connectedSitesSummary(siteCount) {
     if (siteCount === null) return '-';
     if (siteCount === 0) return t('send.advanced.none');
     return t('settings.page.siteCount', { count: siteCount });
+}
+
+/**
+ * One Settings group page; a group built from several sections shows each
+ * under its own heading, in order.
+ */
+function GroupedSettingsPage({ parts }) {
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-4)' }}>
+            {parts.map((part) => {
+                const PartComponent = part.Component;
+                return (
+                    <div key={part.id} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-2)' }}>
+                        {parts.length > 1 ? <SectionHeader title={part.title} /> : null}
+                        <PartComponent {...(part.props || {})} />
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
+/**
+ * Settings > Wallets as a list of rows, like the Settings landing.
+ * The wallet count comes from one wallet-list read.
+ */
+function WalletsSettingsPage({ walletLabel, walletId, accountId, onOpenAddresses, accountLabel, onOpenWalletPicker, onOpenAccountPicker }) {
+    const { messaging } = useMessaging();
+    const [walletCount, setWalletCount] = useState(/** @type {number | null} */ (null));
+    useEffect(() => {
+        let cancelled = false;
+        if (typeof messaging?.listWallets !== 'function') return undefined;
+        Promise.resolve(messaging.listWallets()).then((list) => { if (!cancelled) setWalletCount(Array.isArray(list) ? list.length : 0); }).catch(() => {});
+        return () => { cancelled = true; };
+    }, [messaging]);
+    // One account-list read for the active wallet, for the My Accounts count.
+    const [accountCount, setAccountCount] = useState(/** @type {number | null} */ (null));
+    useEffect(() => {
+        let cancelled = false;
+        if (!walletId || typeof messaging?.listAccounts !== 'function') return undefined;
+        Promise.resolve(messaging.listAccounts(walletId)).then((list) => { if (!cancelled) setAccountCount(Array.isArray(list) ? list.length : 0); }).catch(() => {});
+        return () => { cancelled = true; };
+    }, [messaging, walletId]);
+    // One address read for the active account, for the My Addresses count.
+    const [addressCount, setAddressCount] = useState(/** @type {number | null} */ (null));
+    useEffect(() => {
+        let cancelled = false;
+        if (!walletId || typeof messaging?.getAddressesByChain !== 'function') return undefined;
+        // One read: addresses grouped by chain; the count is their total.
+        Promise.resolve(messaging.getAddressesByChain(walletId, accountId || undefined)).then((byChain) => {
+            if (cancelled) return;
+            const lists = Array.isArray(byChain) ? [byChain] : Object.values(byChain || {});
+            setAddressCount(lists.reduce((n, l) => n + (Array.isArray(l) ? l.length : 0), 0));
+        }).catch(() => {});
+        return () => { cancelled = true; };
+    }, [messaging, walletId, accountId]);
+    const rows = [
+        { id: 'wallets', title: 'My Wallets', summary: walletCount === null ? walletLabel : `${walletCount} ${walletCount === 1 ? 'wallet' : 'wallets'} · ${walletLabel} active`, icon: Icon.WalletIcon, onClick: onOpenWalletPicker },
+        { id: 'account', title: 'My Accounts', summary: accountCount === null ? (accountLabel || 'None') : `${accountCount} ${accountCount === 1 ? 'account' : 'accounts'}${accountLabel ? ` · ${accountLabel} active` : ''}`, icon: Icon.UserIcon, onClick: onOpenAccountPicker },
+        { id: 'addresses', title: 'My Addresses', summary: addressCount === null ? (accountLabel ? `In ${accountLabel}` : '') : `${addressCount} ${addressCount === 1 ? 'address' : 'addresses'}${accountLabel ? ` in ${accountLabel}` : ''}`, icon: Icon.ReceiveIcon, onClick: onOpenAddresses },
+        // Wallet mode is not a Settings switch; it belongs to each wallet.
+    ].filter((r) => typeof r.onClick === 'function');
+    return (
+        <>
+            <style>{GROUP_ICON_CSS}</style>
+            {/* Safari needs an explicit list role because this class removes list styling. */}
+            <ul className={groupListStyles.list} role="list" aria-label={t('settings.page.walletsList')} style={{ border: '1px solid var(--xc-border)', borderRadius: 'var(--xc-radius-md)', background: 'var(--xc-surface)', overflow: 'hidden' }}>
+                {rows.map((r) => {
+                    const RowIcon = r.icon;
+                    return (
+                        <li key={r.id}>
+                            <ListRow
+                                type="button"
+                                onClick={r.onClick}
+                                leading={<span className={groupListStyles.rowIcon} aria-hidden="true" data-settings-group-icon="" style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}><RowIcon /></span>}
+                                title={r.title}
+                                subtitle={r.summary}
+                                chevron
+                            />
+                        </li>
+                    );
+                })}
+            </ul>
+        </>
+    );
+}
+
+// Group pages that are lists draw their own cards, so no outer card.
+const FLAT_GROUP_PAGES = new Set(['g-wallets', 'g-security', 'g-backup', 'g-privacy']);
+
+const onOff = (on) => (on ? 'On' : 'Off');
+const groupDigits = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+// A device-state read that cannot run in this shell shows no value.
+const safeRead = (read) => { try { return read(); } catch { return null; } };
+
+function autolockLabel(minutes) {
+    if (minutes === 0) return 'Never';
+    if (!Number.isFinite(minutes)) return '-';
+    if (minutes % 60 === 0) return `After ${minutes / 60} ${minutes === 60 ? 'hour' : 'hours'}`;
+    return `After ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
+}
+
+function formDraftLabel(ms) {
+    const value = Number.isFinite(ms) ? Number(ms) : FORM_DRAFT_TTL_DEFAULT;
+    if (value === FORM_DRAFT_TTL_OFF) return 'Off';
+    if (value === FORM_DRAFT_TTL_1H) return 'Kept 1 hour';
+    if (value === FORM_DRAFT_TTL_24H) return 'Kept 24 hours';
+    if (value === FORM_DRAFT_TTL_7D) return 'Kept 7 days';
+    return 'Custom';
+}
+
+/**
+ * The labelled row groups of the Security, Backup and Recovery and
+ * Privacy pages. Each row names the section component and `only` part its
+ * page renders, and a summary read from settings when the list renders.
+ */
+function settingsRowGroups({ password, backup }) {
+    const row = (id, title, icon, Component, props, summary) => ({ id, title, icon, Component, props, summary });
+    const safety = (only) => ({ only });
+    return {
+        'g-security': [
+            { label: 'Unlocking', rows: [
+                row('security-password', 'Wallet password', Icon.KeyIcon, ThisWalletSection, password, () => 'Change the password that unlocks this wallet'),
+                row('security-autolock', 'Auto-lock', Icon.ClockIcon, SafetySection, safety('autolock'), (st) => (st ? autolockLabel(st.autolockMinutes) : '-')),
+                row('security-biometric', 'Biometric unlock', Icon.UnlockIcon, SafetySection, safety('biometric'), () => {
+                    const on = safeRead(isBiometricRegistered);
+                    return on === null ? '-' : onOff(on);
+                }),
+            ] },
+            { label: 'Sending', rows: [
+                row('security-test-send', 'New-recipient test send', Icon.SendIcon, SafetySection, safety('testSend'), (st) => {
+                    if (!st) return '-';
+                    const raw = String(st.grace?.testSendThresholdSats ?? '').replace(/^0+(?=\d)/, '');
+                    if (!/^\d+$/.test(raw)) return '-';
+                    return raw === '0' ? 'Off' : `Suggested above ${groupDigits(raw)} sats`;
+                }),
+                row('security-lookalike', 'Lookalike address warnings', Icon.EyeIcon, SafetySection, safety('lookalike'), () => 'Always on'),
+                row('security-hold', 'Hold sends before broadcast', Icon.PauseIcon, SafetySection, safety('undoSend'), (st) => {
+                    if (!st) return '-';
+                    return st.grace?.undoSendEnabled === true ? `On, ${resolveUndoSendSeconds(st)} seconds` : 'Off';
+                }),
+            ] },
+            { label: 'Emergency', rows: [
+                row('security-panic', 'Panic mode', Icon.ZapIcon, SafetySection, safety('panic'), () => {
+                    const remaining = safeRead(() => getPanicRemainingMs(getPanicModeState()));
+                    if (remaining === null) return '-';
+                    return remaining > 0 ? 'Active, signing is frozen' : 'Off';
+                }),
+                row('security-duress', 'Duress passphrase', Icon.LockIcon, SafetySection, safety('duress'), () => {
+                    const set = safeRead(isDuressConfigured);
+                    return set === null ? '-' : (set ? 'Set' : 'Not set');
+                }),
+            ] },
+        ],
+        'g-backup': [
+            { label: 'Wallet backup', rows: [
+                row('backup-export', 'Encrypted backup file', Icon.SaveIcon, BackupSection, { ...backup, only: 'export' }, () => 'Save the wallet to a password-protected file'),
+                row('backup-phrase', 'Recovery phrase', Icon.KeyIcon, BackupSection, { ...backup, only: 'phrase' }, () => 'Show the words with your wallet password'),
+                row('backup-test', 'Test backup', Icon.VerifyIcon, BackupSection, { ...backup, only: 'test' }, () => 'Check a recovery phrase against this wallet'),
+                row('backup-reminders', 'Backup reminders', Icon.BellIcon, SafetySection, safety('reminders'), () => 'Automatic'),
+            ] },
+            { label: 'Labels and contacts', rows: [
+                row('backup-publish', 'Publish labels on-chain', Icon.UploadIcon, BackupSection, { ...backup, only: 'publish' }, () => 'Encrypted, readable only by this wallet'),
+                row('backup-restore', 'Check network for backed-up contacts', Icon.DownloadIcon, BackupSection, { ...backup, only: 'restore' }, () => 'Find labels and contacts saved on-chain'),
+                // The address book's file export and import (the Contacts section).
+                row('backup-contacts', 'Export or import contacts', Icon.UsersIcon, ContactsSection, {}, () => 'Save or load the address book as a file'),
+            ] },
+        ],
+        'g-privacy': [
+            { label: 'Network', rows: [
+                row('privacy-tor', 'Tor routing', Icon.BroadcastIcon, PrivacySection, { only: 'tor' }, (st) => {
+                    if (!shellCapabilities().socksProxy) return 'Not available here';
+                    return st ? onOff(st.privacy?.torRouting === true) : '-';
+                }),
+                row('privacy-price-data', 'Coin price data', Icon.LineChartIcon, PrivacySection, { only: 'priceData' }, (st) => (st ? onOff(st.privacy?.priceDataEnabled !== false) : '-')),
+                row('privacy-metadata', 'Token metadata', Icon.TokenIcon, PrivacySection, { only: 'metadata' }, (st) => (st ? onOff(st.privacy?.metadataFetchEnabled !== false) : '-')),
+            ] },
+            { label: 'Addresses and labels', rows: [
+                row('privacy-change-address', 'Change-address rotation', Icon.AddressIcon, PrivacySection, { only: 'changeAddress' }, (st) => (st ? onOff(st.privacy?.changeAddressRotation === true) : '-')),
+                row('privacy-labels', 'Labels survive restore', Icon.BookIcon, PrivacySection, { only: 'labels' }, (st) => (st ? onOff(st.privacy?.labelsSurviveRestore === true) : '-')),
+                row('privacy-hardware', 'Hardware cross-check', Icon.UsbIcon, PrivacySection, { only: 'hardware' }, (st) => (st ? (st.privacy?.alwaysRequireHwExplicitConfirm === true ? 'Always required' : 'Off') : '-')),
+            ] },
+            { label: 'On this device', rows: [
+                row('privacy-blur', 'Blur when the window loses focus', Icon.EyeOffIcon, PrivacySection, { only: 'blur' }, (st) => (st ? onOff(st.privacy?.blurOnBlur === true) : '-')),
+                row('privacy-clipboard', 'Clipboard auto-clear', Icon.PasteIcon, PrivacySection, { only: 'clipboard' }, (st) => {
+                    if (!st) return '-';
+                    const stored = st.privacy?.clipboardAutoClearSeconds;
+                    const seconds = Number.isInteger(stored) ? stored : CLIPBOARD_AUTO_CLEAR_DEFAULT;
+                    return seconds <= 0 ? 'Off' : `After ${seconds} ${seconds === 1 ? 'second' : 'seconds'}`;
+                }),
+                row('privacy-form-drafts', 'Form drafts', Icon.DocumentIcon, PrivacySection, { only: 'formDraft' }, (st) => (st ? formDraftLabel(st.privacy?.formDraftTtlMs) : '-')),
+                row('privacy-haptics', 'Haptic feedback', Icon.ZapIcon, PrivacySection, { only: 'haptics' }, (st) => (st ? onOff(st.privacy?.hapticsEnabled !== false) : '-')),
+            ] },
+            { label: 'Defaults', rows: [
+                row('privacy-reset', 'Reset privacy settings', Icon.RefreshIcon, PrivacySection, { only: 'reset' }, () => 'Restore every privacy control to its default'),
+            ] },
+        ],
+    };
+}
+
+/**
+ * A group page as labelled lists of rows, styled like the Settings
+ * landing. Summaries are read on each render so a value changed on a row's
+ * page shows when Back returns here.
+ */
+function SettingsRowGroupsPage({ label, groups, onOpen }) {
+    const { settings } = useSettings();
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-2)' }} aria-label={label}>
+            <style>{GROUP_ICON_CSS}</style>
+            {groups.map((grp) => (
+                <div key={grp.label} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)', border: 0, borderTop: 0, boxShadow: 'none', padding: 0, margin: 0 }}>
+                    <div style={{ fontSize: 'var(--xc-text-xs)', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--xc-text-muted)', margin: 'var(--xc-space-2) var(--xc-space-1) 0' }}>{grp.label}</div>
+                    {/* Safari needs an explicit list role because this class removes list styling. */}
+                    <ul className={groupListStyles.list} role="list" aria-label={grp.label} style={{ border: '1px solid var(--xc-border)', borderRadius: 'var(--xc-radius-md)', background: 'var(--xc-surface)', overflow: 'hidden' }}>
+                        {grp.rows.map((r) => {
+                            const RowIcon = r.icon;
+                            return (
+                                <li key={r.id}>
+                                    <ListRow
+                                        type="button"
+                                        onClick={() => onOpen(r.id)}
+                                        leading={<span className={groupListStyles.rowIcon} aria-hidden="true" data-settings-group-icon="" style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}><RowIcon /></span>}
+                                        title={r.title}
+                                        subtitle={r.summary(settings)}
+                                        chevron
+                                    />
+                                </li>
+                            );
+                        })}
+                    </ul>
+                </div>
+            ))}
+        </div>
+    );
 }

@@ -54,6 +54,72 @@
     margin-top: var(--xc-space-2);
 }
 
+/* Bet Markets' My markets tab. The gauge cards sit in the list's grid (two
+   columns once wide), each with its oracle actions in a bar directly under it. */
+.cardArea {
+    width: 100%;
+    min-width: 0;
+}
+
+@supports (container-type: inline-size) and (width: 1cqw) {
+    .cardArea {
+        container-type: inline-size;
+    }
+}
+
+.gaugeList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--xc-space-3);
+}
+
+@supports (container-type: inline-size) and (width: 1cqw) {
+    @container (min-width: 760px) {
+        .gaugeList {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+}
+
+.gaugeItem {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.oracleBar {
+    composes: card from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+    box-sizing: border-box;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.oracleBar > .actionRow:empty {
+    display: none;
+}
+
+.pendingBar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.pendingCount {
+    font-weight: 600;
+    color: var(--xc-text);
+}
+
 @media (max-width: 480px) {
     .card {
         margin-top: var(--xc-space-3);

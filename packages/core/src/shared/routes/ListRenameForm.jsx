@@ -10,25 +10,26 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    AddressField,
+    // Network and From come from the standard FromSection.
     Button,
     FormNotice,
     FormPage,
     Icon,
     Input,
-    NetworkField,
     PageHeader,
     Screen,
     StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/routes.js';
+import '../../i18n/locales/en/components.js';
+import { listLabel } from '../utils/listLabel.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
-import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
-import { FeesCard } from '../components/FeesCard.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
 import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
@@ -49,9 +50,38 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { explorerReadFailure } from '../../sdk/explorerErrors.js';
 import styles from './IssueTokenForm.module.css';
+// The form sits in the Wallet Form Standard frame: From, the Rename
+// section, an optional Memo section, the Network fee row, the status slot
+// and the action.
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    joinSummary,
+    useFormSections,
+} from '../components/formStandard/index.js';
+import { formatCoinBaseUnits } from '../../flows/feesCard.js';
+import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const SDK_REASON = "This wallet's SDK cannot build a list rename yet; it arrives with the next SDK update.";
+
+/**
+ * The protocol fee for the closed Network fee summary, in the coin
+ * the Fees card charges it in, or null while it is unknown or free.
+ */
+function protocolFeeSummary({ quote, pending, payInNative, coinTicker }) {
+    if (pending) return null;
+    const fee = normalizeProtocolFee(quote);
+    if (!fee.known || fee.free) return null;
+    if (payInNative) {
+        const native = formatCoinBaseUnits(quote?.requiredFeeSats);
+        return native ? `${native} ${coinTicker}`.trim() : null;
+    }
+    return fee.amount ? `${fee.amount} XCHAIN` : null;
+}
 const TICKER_BY_COIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 const META_ERROR_TEXT = {
     pipe: 'Cannot contain the | character.',
@@ -132,6 +162,11 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const submitInFlightRef = useRef(false);
+    // The standard sections' open state, held above the picker
+    // early return so it survives it; a counter of Rename attempts reopens
+    // the section that holds the error on every attempt.
+    const formSections = useFormSections({ from: false, rename: true, memo: false, fee: false });
+    const [reviewAttempt, setReviewAttempt] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
@@ -280,6 +315,7 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     async function handleReview(event) {
         event.preventDefault();
         if (submitInFlightRef.current) return;
+        setReviewAttempt((n) => n + 1); // Reopens the section holding an error.
         if (!validate()) return;
         submitInFlightRef.current = true;
         setFormError(null);
@@ -315,7 +351,7 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
         }
     }
 
-    const header = <PageHeader onBack={onBack} title="Rename list" />;
+    const header = <PageHeader onBack={onBack} title="Rename List" />;
     const wrap = (children) => (
         <Screen variant={variant} header={header}>{children}</Screen>
     );
@@ -324,6 +360,13 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
         return (
             <ActionConfirmScreen
                 {...lane.confirmProps}
+                summary={{
+                    verb: t('components.confirmSummary.verbRenameList'),
+                    target: listLabel(listActionIndex, detail?.name),
+                    direction: 'none',
+                    chainId,
+                    address: fromAddress?.address,
+                }}
                 walletId={walletId}
                 screenVariant={variant}
                 chainLabel={null}
@@ -402,7 +445,7 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={chainId}
                 lockNetwork
@@ -415,48 +458,95 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
             />
         );
     }
+    // Which section holds the form error, so that section reopens on
+    // every Rename attempt even after the user closed it.
+    const errorSection = !formError ? null
+        : /memo/i.test(formError) ? 'memo'
+            : /signing address/i.test(formError) ? 'from'
+                : 'rename';
+    const sectionErrorKey = (id) => (errorSection === id ? reviewAttempt + 1 : 0);
+    const renameSummary = joinSummary(
+        `List #${listActionIndex}`,
+        trimmedName ? `name ${trimmedName === '-' ? 'cleared' : trimmedName}` : null,
+        trimmedDescription ? `description ${trimmedDescription === '-' ? 'cleared' : 'changed'}` : null,
+    );
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label="Rename list"
             onSubmit={handleReview}
-            status={(sdkSupported === false || formError) ? (
-                <>
-                    {sdkSupported === false ? <StatusMessage variant="error">{SDK_REASON}</StatusMessage> : null}
-                    {formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
-                </>
-            ) : null}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="success"
+            status={[
+                sdkSupported === false ? <StatusMessage key="sdk" variant="error">{SDK_REASON}</StatusMessage> : null,
+                formError ? <StatusMessage key="error" variant="error">{formError}</StatusMessage> : null,
+            ]}
+            action={(
+                <FormAction
                     icon={lane.isWatcherMode ? <Icon.SignIcon /> : <Icon.PencilIcon />}
                     loading={lane.composing}
                     disabled={formDisabled || !fromAddress || lane.composing}
                 >
-                    {lane.isWatcherMode ? 'Create unsigned transaction' : 'Rename list'}
-                </Button>
+                    {lane.isWatcherMode ? 'Create Unsigned Transaction' : 'Rename List'}
+                </FormAction>
+            )}
+            /* From (closed) holds the list's locked network and the
+               signing address, which starts as the owner's. */
+            from={(
+                <FromSection
+                    {...formSections.bind('from')}
+                    chainId={chainId}
+                    chainRegistry={chainRegistry}
+                    lockNetwork
+                    networkHelp={t('routes.listRename.networkHelp')}
+                    address={fromAddress?.address || null}
+                    addressLabel="From"
+                    addressHelp="Only the address that owns this list can rename it. The network refuses a rename signed from any other address."
+                    onOpenPicker={() => setFromPickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    revealKey={sectionErrorKey('from')}
+                />
+            )}
+            /* One Network fee row in FeeSection's fixed-fee mode (no
+               speed picker). A shared list carries the Fees card (network and
+               shared-edit fee, native-fee switch); an unshared rename shows
+               the network fee estimate. */
+            fee={(
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    fixedFee={feeEstimate?.coinAmount ?? null}
+                    etaMinutes={feeEstimate?.etaMinutes}
+                    protocolSummary={alreadyShared ? (protocolFeeSummary({
+                        quote: protocolFeeQuote,
+                        pending: protocolFeePending,
+                        payInNative: nativeFee.toggleProps.checked,
+                        coinTicker,
+                    }) || undefined) : undefined}
+                    fees={alreadyShared ? {
+                        quote: protocolFeeQuote,
+                        pending: protocolFeePending,
+                        tiers: feeEstimate ? { normal: feeEstimate } : undefined,
+                        nativeFeeProps: { ...nativeFee.toggleProps, coinTicker, disabled: formDisabled },
+                    } : undefined}
+                >
+                    {alreadyShared ? (
+                        <p className={styles.hint}>
+                            Renaming this shared list pays the shared-list edit fee.
+                        </p>
+                    ) : (
+                        <p className={styles.hint}>An estimate. The exact fee is set when the rename is built for review.</p>
+                    )}
+                </FeeSection>
             )}
         >
-            <NetworkField
-                label="Network"
-                value={chainId}
-                onChange={() => {}}
-                chainIds={[chainId]}
-                chainRegistry={chainRegistry}
-            />
-
-            <AddressField
-                label="From"
-                icon="addresses"
-                value={fromAddress?.address || ''}
-                readOnly
-                onChange={() => {}}
-                onIconClick={() => setFromPickerOpen(true)}
-                iconLabel="Choose source address"
-                help="Only the address that owns this list can rename it. The network refuses a rename signed from any other address."
-            />
-
+            <FormSection
+                id="rename"
+                title="Rename"
+                icon={Icon.PencilIcon}
+                {...formSections.bind('rename')}
+                revealKey={sectionErrorKey('rename')}
+                summary={renameSummary}
+            >
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>List</dt>
                 <dd className={styles.detailsValue}>#{listActionIndex}</dd>
@@ -514,9 +604,20 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
             >
                 Clear
             </Button>
+            </FormSection>
+
+            {/* Memo is its own optional section, closed until used. */}
+            <FormSection
+                id="memo"
+                title="Memo"
+                icon={Icon.MessageIcon}
+                optional
+                {...formSections.bind('memo')}
+                revealKey={sectionErrorKey('memo')}
+                summary={trimmedMemo || 'None'}
+            >
             <Input
                 label="Memo"
-                optional
                 maxLength={MAX_MEMO_LENGTH}
                 help="A note stored with this rename transaction. It is public on the chain and cannot be changed afterwards."
                 value={memo}
@@ -524,31 +625,7 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                 autoComplete="off"
                 disabled={formDisabled}
             />
-
-            {alreadyShared ? (
-                <p className={styles.hint}>
-                    Renaming this shared list pays the shared-list edit fee.
-                </p>
-            ) : null}
-
-            {alreadyShared ? (
-                <FeesCard
-                    chainId={chainId}
-                    quote={protocolFeeQuote}
-                    pending={protocolFeePending}
-                    feeSelector={null}
-                    tiers={feeEstimate ? { normal: feeEstimate } : undefined}
-                    value={{ mode: 'normal' }}
-                    coinTicker={coinTicker}
-                >
-                    <NativeFeeToggle
-                        {...nativeFee.toggleProps}
-                        coinTicker={coinTicker}
-                        disabled={formDisabled}
-                    />
-                </FeesCard>
-            ) : null}
-
-        </FormPage>,
+            </FormSection>
+        </FormFrame>,
     );
 }

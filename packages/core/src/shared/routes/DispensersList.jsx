@@ -9,13 +9,13 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useWalletSource } from '../hooks/useDemoGuard.jsx';
-import { ListToolbar } from '../components/ListToolbar.jsx';
-import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
+// The standard list filter, on the title line.
+import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
 import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
 import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { coinFromChainId, isAssetImageSourceAllowed, tickerColor } from '../components/BalanceList.jsx';
@@ -83,6 +83,9 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     // contacts / messaging toolbars.
     const [query, setQuery] = useState('');
     const [network, setNetwork] = useState('all');
+    // Status and Sort live in the title-line filter panel.
+    const [statusFilter, setStatusFilter] = useState('all');
+    const [sortBy, setSortBy] = useState('newest');
     // Cancel block times of closing dispensers, keyed `chainId:actionIndex`.
     const [cancelTimes, setCancelTimes] = useState(/** @type {Record<string, number>} */ ({}));
     const [nowMs, setNowMs] = useState(() => Date.now());
@@ -303,6 +306,8 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
         const q = query.trim().toLowerCase();
         return allRows.filter((row) => {
             if (network !== 'all' && coinFromChainId(row.chainId) !== network) return false;
+            // Status narrows by the lifecycle state the row badge shows.
+            if (statusFilter !== 'all' && statusGroup(row) !== statusFilter) return false;
             if (!q) return true;
             const label = row.address ? dispenserLabels[row.address] : undefined;
             return [
@@ -311,28 +316,79 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                 String(row.action_index ?? ''),
             ].some((v) => typeof v === 'string' && v.toLowerCase().includes(q));
         });
-    }, [allRows, query, network, dispenserLabels]);
+    }, [allRows, query, network, statusFilter, dispenserLabels]);
 
-        const header = (
+    // Sort orders the filtered rows (Newest first is the default).
+    const sortedRows = useMemo(() => {
+        const rows = [...visibleRows];
+        const at = (row) => Number(row.block_index || 0);
+        if (sortBy === 'oldest') rows.sort((a, b) => at(a) - at(b));
+        else if (sortBy === 'token') rows.sort((a, b) => String(a.give_tick || '').localeCompare(String(b.give_tick || '')) || (at(b) - at(a)));
+        else rows.sort((a, b) => at(b) - at(a));
+        return rows;
+    }, [visibleRows, sortBy]);
+    const coinFamilies = useMemo(
+        () => [...new Set(chainsWithAddresses.map((cid) => coinFromChainId(cid)))],
+        [chainsWithAddresses],
+    );
+
+    // The title bar holds the filter and New dispenser (plus) icons; the
+    // page body is only the dispenser list.
+    const filterMenu = (
+        <ListFilterMenu
+            query={query}
+            onQueryChange={setQuery}
+            active={statusFilter !== 'all' || sortBy !== 'newest'}
+            label="Filter dispensers"
+            searchPlaceholder="Search"
+            searchLabel="Search dispensers"
+            chainRegistry={chainRegistry}
+            coinFamilies={coinFamilies}
+            networkFilter={network}
+            onNetworkFilterChange={setNetwork}
+        >
+            <Select
+                label="Status"
+                size="md"
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+            >
+                <option value="all">All</option>
+                <option value="open">Open</option>
+                <option value="closing">Closing</option>
+                <option value="soldout">Sold out</option>
+                <option value="limit">Limit reached</option>
+                <option value="closed">Closed</option>
+                <option value="expired">Expired</option>
+            </Select>
+            <Select
+                label="Sort"
+                size="md"
+                value={sortBy}
+                onChange={(event) => setSortBy(event.target.value)}
+            >
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="token">Token A to Z</option>
+            </Select>
+        </ListFilterMenu>
+    );
+    const header = (
         <PageHeader
             onBack={onBack}
             backLabel="Back to home"
-            title="My dispensers"
+            title="My Dispensers"            trailing={(
+                <>
+                    {filterMenu}
+                    {onCreateDispenser ? (
+                        <Button variant="secondary" icon={<Icon.PlusIcon />} aria-label="New dispenser" title="New dispenser" onClick={() => onCreateDispenser()}>
+                            {null}
+                        </Button>
+                    ) : null}
+                </>
+            )}
         />
     );
-    // The page header holds only the title and Back, so Create dispenser
-    // sits in the content's actions row. An empty list offers it from its
-    // EmptyState instead, so the screen never shows it twice.
-    const actionsFor = (emptyOffersCreate = false) => (onCreateDispenser && !emptyOffersCreate ? (
-        <Button
-            type="button"
-            variant="secondary"
-            icon={<Icon.PlusIcon />}
-            onClick={() => onCreateDispenser()}
-        >
-            Create dispenser
-        </Button>
-    ) : null);
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
             {children}
@@ -341,12 +397,12 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
 
     if (addressesError) {
         return wrap(
-            <ListPage actions={actionsFor()}>
+            <ListPage>
                 <StatusMessage
                     variant="error"
                     className={styles.entryDescription}
                     recovery={{
-                        label: 'Try again',
+                        label: 'Try Again',
                         onAction: () => {
                             setAddressesError(null);
                             setAddressesByChain(null);
@@ -361,7 +417,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     }
     if (!addressesByChain) {
         return wrap(
-            <ListPage actions={actionsFor()}>
+            <ListPage>
                 <div role="status" aria-label="Loading dispensers">
                     <Skeleton.List rows={5} />
                 </div>
@@ -370,7 +426,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     }
     if (chainsWithAddresses.length === 0) {
         return wrap(
-            <ListPage actions={actionsFor()}>
+            <ListPage>
                 <EmptyState
                     title="No supported address"
                     body="A supported address is required before dispensers can be created or viewed."
@@ -379,7 +435,6 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
         );
     }
 
-    const emptyOffersCreate = !anyLoading && !hasLoadErrors && allRows.length === 0;
     return wrap(
         <ListPage
             // Offline, the screen's one message is its offline state below.
@@ -388,7 +443,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                     variant="error"
                     className={styles.entryDescription}
                     recovery={{
-                        label: 'Try again',
+                        label: 'Try Again',
                         onAction: () => {
                             setDispensersByChain({});
                             setDispensersReload((value) => value + 1);
@@ -398,17 +453,6 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                     Couldn't load some dispensers. Try again.
                 </StatusMessage>
             ) : null}
-            actions={actionsFor(emptyOffersCreate)}
-            toolbar={(
-                <ListToolbar query={query} onQueryChange={setQuery} searchLabel="Search dispensers">
-                    <NetworkFilterDropdown
-                        value={network}
-                        onChange={setNetwork}
-                        announceNetworkCount
-                        iconOnly
-                    />
-                </ListToolbar>
-            )}
         >
             {offline && allRows.length === 0 ? (
                 <OfflineEmptyState body="Your dispensers load when the connection returns." onRetry={recheck} />
@@ -423,23 +467,15 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                     <EmptyState
                         title="No dispensers yet"
                         body="A dispenser sells a token for coin at a fixed price."
-                        actionLabel={onCreateDispenser ? 'Create dispenser' : undefined}
-                        onAction={onCreateDispenser ? () => onCreateDispenser() : undefined}
                     />
                 ) : (
                     <EmptyState
-                        title="No results for these filters"
-                        body="Reset the filters to see all dispensers."
-                        actionLabel="Reset filters"
-                        onAction={() => {
-                            setQuery('');
-                            setNetwork('all');
-                        }}
+                        title="No matching dispensers"                        body="Change or clear the filter to see more."
                     />
                 )
             ) : (
                 <ul className={local.list}>
-                    {visibleRows.map((row) => (
+                    {sortedRows.map((row) => (
                         <li className={local.listItem} key={`${row.chainId}:${row.action_index}`}>
                             <DispenserRow
                                 row={row}
@@ -457,6 +493,17 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
             )}
         </ListPage>,
     );
+}
+
+// The Status filter's group for a row, from the lifecycle status its badge shows.
+function statusGroup(row) {
+    const status = String(flowsLib.dispenserLiveState(row).status || '');
+    if (status === 'cancelling') return 'closing';
+    if (status === 'empty' || status === 'complete') return 'soldout';
+    if (status === 'max_dispenses_reached') return 'limit';
+    if (status === 'cancelled' || status === 'closed') return 'closed';
+    if (status === 'expired') return 'expired';
+    return status === 'open' ? 'open' : 'other';
 }
 
 function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainClock, onSelect, allowRemoteImages }) {

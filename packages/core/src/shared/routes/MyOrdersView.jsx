@@ -28,10 +28,12 @@
 // Cancel/edit are offered only while an order is open.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, EmptyState, FormNotice, FormPage, Icon, InfoTip, Input, ListPage, OptionalPill, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, Switch } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, EmptyState, FormNotice, FormPage, Icon, InfoTip, Input, ListPage, OptionalPill, PageHeader, Screen, SectionHeader, Select, Skeleton, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
+// The standard list filter, on the title line.
+import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import { MarketLifecycleTimeline } from '../components/MarketLifecycleTimeline.jsx';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -47,6 +49,8 @@ import { isListEditRemoveActive } from '../../flows/protocolActivations.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
 import { formatLocalDateTime } from '../utils/dateTime.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 import L from './ObligationsView.module.css';
 import F from './IssueTokenForm.module.css';
 
@@ -247,6 +251,10 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
     // PC-21: which order's lifecycle timeline is expanded inline (by row key).
     const [timelineKey, setTimelineKey] = useState(/** @type {string | null} */ (null));
     const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000));
+    // The title-line filter's state (search text and Status).
+    const [query, setQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState('all');
+    const [sortBy, setSortBy] = useState('newest');
     const loadRequestId = useRef(0);
     const autopayRequestId = useRef(0);
 
@@ -379,25 +387,58 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
         await loadAutopay();
     }
 
+    // The title bar holds the filter and New order (plus) icons; the
+    // page body is only the order list.
+    const filterMenu = (
+        <ListFilterMenu
+            query={query}
+            onQueryChange={setQuery}
+            active={statusFilter !== 'all' || sortBy !== 'newest'}
+            label="Filter orders"
+            searchPlaceholder="Search"
+            searchLabel="Search orders"
+        >
+            <Select
+                label="Status"
+                size="md"
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+            >
+                <option value="all">All</option>
+                <option value="open">Open</option>
+                <option value="closed">Closed</option>
+            </Select>
+            <Select
+                label="Sort"
+                size="md"
+                value={sortBy}
+                onChange={(event) => setSortBy(event.target.value)}
+            >
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="expiring">Expiring soonest</option>
+            </Select>
+        </ListFilterMenu>
+    );
     const header = (
         <PageHeader
             onBack={onBack}
-            title="My orders"
+            title="My Orders"
+            trailing={(
+                <>
+                    {filterMenu}
+                    {onCreateOrder ? (
+                        <Button variant="secondary" icon={<Icon.PlusIcon />} aria-label="New order" title="New order" onClick={onCreateOrder}>
+                            {null}
+                        </Button>
+                    ) : null}
+                </>
+            )}
         />
     );
-    // The page header holds only the title and Back, so New order sits in
-    // the content's actions row. An empty list offers it from its
-    // EmptyState instead, so the screen never shows it twice.
-    const wrap = (children, { notices, emptyOffersCreate = false } = {}) => (
+    const wrap = (children, { notices } = {}) => (
         <Screen variant={variant} header={header}>
-            <ListPage
-                notices={notices}
-                actions={onCreateOrder && !emptyOffersCreate ? (
-                    <Button variant="secondary" icon={<Icon.PlusIcon />} onClick={onCreateOrder}>
-                        New order
-                    </Button>
-                ) : null}
-            >
+            <ListPage notices={notices}>
                 {children}
             </ListPage>
         </Screen>
@@ -436,7 +477,7 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
                 <StatusMessage
                     variant="error"
                     className={L.hint}
-                    recovery={{ label: 'Try again', onAction: load }}
+                    recovery={{ label: 'Try Again', onAction: load }}
                 >
                     {loadError}
                 </StatusMessage>
@@ -448,10 +489,7 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
             <EmptyState
                 title="No orders yet"
                 body="Orders you place on the DEX show up here across every pair."
-                actionLabel={onCreateOrder ? 'Create an order' : undefined}
-                onAction={onCreateOrder}
             />,
-            { emptyOffersCreate: true },
         );
     }
 
@@ -459,8 +497,29 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
         const status = deriveStatus(it, it.cancelledKeys, nowSec);
         return status === 'open' && cancellingKeys.has(it.key) ? 'cancelling' : status;
     };
-    const openItems = items.filter((it) => statusOf(it) === 'open');
-    const closedItems = items.filter((it) => statusOf(it) !== 'open');
+    // The title-line filter narrows the list by search text and Status.
+    const needle = query.trim().toLowerCase();
+    const matches = (it) => {
+        if (!needle) return true;
+        const row = it.row;
+        const hay = [
+            sideLabel(row.give_tick, row.give_coin, row.give_amount, row.give_ownership),
+            sideLabel(row.get_tick, row.get_coin, row.get_amount, row.get_ownership),
+            row.action_index, it.owner.address, it.chainId, CLOSED_LABELS[statusOf(it)] || statusOf(it),
+        ].join(' ').toLowerCase();
+        return hay.includes(needle);
+    };
+    // Items arrive newest first (highest order ID); Sort reorders both sections.
+    const expiryOf = (it) => {
+        const n = Number(it.fill?.expiration ?? it.row.expiration);
+        return Number.isFinite(n) && n > 0 ? n : Infinity;
+    };
+    const sorted = [...items];
+    if (sortBy === 'oldest') sorted.reverse();
+    else if (sortBy === 'expiring') sorted.sort((a, b) => expiryOf(a) - expiryOf(b));
+    const shown = sorted.filter(matches);
+    const openItems = statusFilter === 'closed' ? [] : shown.filter((it) => statusOf(it) === 'open');
+    const closedItems = statusFilter === 'open' ? [] : shown.filter((it) => statusOf(it) !== 'open');
 
     const renderRow = (it) => {
         const status = statusOf(it);
@@ -510,7 +569,7 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
                         aria-expanded={timelineKey === it.key}
                         onClick={() => setTimelineKey(timelineKey === it.key ? null : it.key)}
                     >
-                        {timelineKey === it.key ? 'Hide timeline' : 'Timeline'}
+                        {timelineKey === it.key ? 'Hide Timeline' : 'Timeline'}
                     </Button>
                     {status === 'open' ? (
                         <>
@@ -533,13 +592,21 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
         );
     };
 
+    // A filter or search with no matches reads as one plain empty state.
+    if (openItems.length === 0 && closedItems.length === 0 && (needle || statusFilter !== 'all')) {
+        return wrap(<EmptyState title="No matching orders" body="Change or clear the filter to see more." titleAs="p" />);
+    }
     return wrap(
         <>
-            <SectionHeader title="Open" />
-            {openItems.length > 0 ? (
-                /* Safari needs an explicit list role because this class removes list styling. */
-                <ul className={L.list} role="list" aria-label="Open orders">{openItems.map(renderRow)}</ul>
-            ) : <EmptyState title="No open orders" body="Open DEX orders appear here." titleAs="p" />}
+            {statusFilter !== 'closed' ? (
+                <>
+                    <SectionHeader title="Open" />
+                    {openItems.length > 0 ? (
+                        /* Safari needs an explicit list role because this class removes list styling. */
+                        <ul className={L.list} role="list" aria-label="Open orders">{openItems.map(renderRow)}</ul>
+                    ) : <EmptyState title="No open orders" body="Open DEX orders appear here." titleAs="p" />}
+                </>
+            ) : null}
             {closedItems.length > 0 ? (
                 <>
                     <SectionHeader title="Closed" />
@@ -699,7 +766,7 @@ function OrderActionPanel({
         }
     }
 
-    const header = <PageHeader onBack={done ? onDone : onBack} title={isCancel ? 'Cancel order' : 'Edit order'} />;
+    const header = <PageHeader onBack={done ? onDone : onBack} title={isCancel ? 'Cancel Order' : 'Edit Order'} />;
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
             {children}
@@ -714,7 +781,7 @@ function OrderActionPanel({
                 chainId={chainId}
                 addresses={chainAddresses}
                 filterType="2"
-                title={listPickerFor === 'allow' ? 'Choose allow-list' : 'Choose block-list'}
+                title={listPickerFor === 'allow' ? 'Choose Allow-List' : 'Choose Block-List'}
                 onSelect={(r) => {
                     if (listPickerFor === 'allow') setAllowListIdx(r.actionIndex); else setBlockListIdx(r.actionIndex);
                     setListPickerFor(null);
@@ -729,6 +796,15 @@ function OrderActionPanel({
             <ActionConfirmScreen
                 {...lane.confirmProps}
                 confirmAction={withFormattedExpiration(lane.confirmProps.confirmAction)}
+                summary={{
+                    verb: isCancel
+                        ? t('components.openOrdersPanel.cancelOrder2')
+                        : t('components.placeOrderPanel.editOrder'),
+                    ...(row.give_tick ? { ticker: String(row.give_tick).toUpperCase() } : {}),
+                    chainId,
+                    direction: 'none',
+                    address: owner?.address,
+                }}
                 screenVariant={variant}
                 chainLabel={null}
                 signerReady={signerReady}
@@ -808,7 +884,7 @@ function OrderActionPanel({
                     loading={submitting || lane.composing}
                     disabled={submitting || lane.composing}
                 >
-                    {lane.isWatcherMode ? 'Create unsigned transaction' : (isCancel ? 'Cancel order' : 'Update order')}
+                    {lane.isWatcherMode ? 'Create Unsigned Transaction' : (isCancel ? 'Cancel Order' : 'Update Order')}
                 </Button>
             )}
         >
@@ -847,16 +923,16 @@ function OrderActionPanel({
                     </p>
                     <div className={F.actions}>
                         <Button variant="secondary" size="sm" icon={<Icon.TokenListIcon />} onClick={() => setListPickerFor('allow')}>
-                            {allowListIdx === '0' ? 'Remove allow list' : (allowListIdx ? `Allow-list #${allowListIdx}` : 'Set allow-list')}
+                            {allowListIdx === '0' ? 'Remove Allow List' : (allowListIdx ? `Allow-List #${allowListIdx}` : 'Set Allow-List')}
                         </Button>
                         <Button variant="secondary" size="sm" icon={<Icon.TokenListIcon />} onClick={() => setListPickerFor('block')}>
-                            {blockListIdx === '0' ? 'Remove block list' : (blockListIdx ? `Block-list #${blockListIdx}` : 'Set block-list')}
+                            {blockListIdx === '0' ? 'Remove Block List' : (blockListIdx ? `Block-List #${blockListIdx}` : 'Set Block-List')}
                         </Button>
                         {canRemoveList && currentAllowList && allowListIdx !== '0' ? (
-                            <Button type="button" variant="secondary" size="sm" icon={<Icon.TrashIcon />} onClick={() => setAllowListIdx('0')}>Remove allow list</Button>
+                            <Button type="button" variant="secondary" size="sm" icon={<Icon.TrashIcon />} onClick={() => setAllowListIdx('0')}>Remove Allow List</Button>
                         ) : null}
                         {canRemoveList && currentBlockList && blockListIdx !== '0' ? (
-                            <Button type="button" variant="secondary" size="sm" icon={<Icon.TrashIcon />} onClick={() => setBlockListIdx('0')}>Remove block list</Button>
+                            <Button type="button" variant="secondary" size="sm" icon={<Icon.TrashIcon />} onClick={() => setBlockListIdx('0')}>Remove Block List</Button>
                         ) : null}
                     </div>
                     <p className={F.hint}>

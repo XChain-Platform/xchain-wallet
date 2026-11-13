@@ -8,15 +8,25 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, Button, FormPage, Icon, Input, ListPage, NetworkField, OptionalPill, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { Children, Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Button, FieldIconButton, Icon, InfoTip, Input, ListPage, OptionalPill, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+// Open a Market uses the shared Quick | Full standard (one form state, two views).
+import { useGiveGetView } from '../components/giveGet/index.js';
+// The Wallet Form Standard frame: From first, sections, one Network fee row, one action.
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    joinSummary,
+} from '../components/formStandard/index.js';
+import bet from './CreateBetFeedForm.module.css';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
-import { FeesCard } from '../components/FeesCard.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { protocolCoinTickerFor } from '../../registry/nativeFee.js';
 import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
@@ -26,12 +36,12 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
-import { coinFromChainId } from '../components/BalanceList.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { useBetChainIds } from './BetFeedsList.jsx';
 import styles from './IssueTokenForm.module.css';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/betCreate.js';
+import '../../i18n/locales/en/components.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import {
     formatWithThousands,
@@ -105,6 +115,43 @@ function unwrap(resp) {
 // eslint-disable-next-line no-control-regex
 const OUTCOME_BAD_CHARS = /[,|;]|[\u0000-\u001f\u007f]/;
 
+// Which Full section holds each validated field. An error on a field Quick
+// hides switches to Full with that section open, so Open Market never fails
+// on a field nobody can see; From and Memo open in place in both views.
+const FIELD_SECTION = {
+    from: 'from',
+    label: 'question',
+    description: 'question',
+    category: 'question',
+    outcomes: 'outcomes',
+    notes: 'outcomes',
+    deadline: 'timing',
+    refund: 'timing',
+    tick: 'money',
+    fee: 'money',
+    min: 'money',
+    criteria: 'oracle',
+    source: 'oracle',
+    lists: 'oracle',
+    memo: 'memo',
+};
+const QUICK_FIELDS = new Set(['label', 'outcomes', 'deadline', 'tick']);
+const BOTH_VIEW_SECTIONS = new Set(['from', 'memo']);
+
+// Outcome dots on the form (light and dark surfaces); the preview card uses
+// the same order.
+const OUTCOME_DOTS = ['#16A34A', '#DC2626', '#9333EA', '#0891B2', '#D97706', '#DB2777', '#4F46E5', '#65A30D'];
+
+// Short date ("Dec 31") for the preview card and the Default Terms chips.
+function shortDate(unix) {
+    if (!unix) return '';
+    try {
+        return new Date(unix * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    } catch {
+        return '';
+    }
+}
+
 /**
  * BET v0: open a betting market (a "feed") as its oracle.
  *
@@ -159,14 +206,13 @@ export function CreateBetFeedForm({
     const [feePct, setFeePct] = useState('');
     const [minAmount, setMinAmount] = useState('');
 
-    const [showDetails, setShowDetails] = useState(false);
+    // The description and who-can-bet toggles are Full sections.
     const [description, setDescription] = useState('');
     const [resolutionCriteria, setResolutionCriteria] = useState('');
     const [source, setSource] = useState('');
     const [category, setCategory] = useState('');
     const [outcomeNotes, setOutcomeNotes] = useState(['', '']);
 
-    const [showAdvanced, setShowAdvanced] = useState(false);
     const [allowList, setAllowList] = useState('');
     const [blockList, setBlockList] = useState('');
     const [memo, setMemo] = useState('');
@@ -179,6 +225,18 @@ export function CreateBetFeedForm({
     const [submitting, setSubmitting] = useState(false);
     const submitLockRef = useRef(false);
     const [duplicated, setDuplicated] = useState(false);
+    // View and section open state live above every early return, so a picker
+    // page or the confirm screen never resets them. Only the main section
+    // starts open (Market in Quick, "question" in Full); the rest start closed.
+    const betView = useGiveGetView('betCreate', {
+        sections: {
+            from: false, market: true, question: true, outcomes: false, timing: false, money: false,
+            oracle: false, memo: false, preview: false, fee: false, terms: false,
+        },
+        // Quick's Default Terms section holds these sections' fields, so an
+        // error on one of them opens that section in place in Quick.
+        quickTerms: { key: 'terms', sections: ['timing', 'money', 'oracle'] },
+    });
 
     // A stable "now" for the cost quote. Refreshed slowly on purpose: the quote
     // is day-granular, and a per-second clock would make the figure jitter while
@@ -396,54 +454,69 @@ export function CreateBetFeedForm({
     // Cheap pre-checks only, phrased for a person. The SDK builder repeats all of
     // them host-side and is the authority; this just avoids a compose round trip
     // to learn that an outcome label has a comma in it.
+    // Each failure also names its field, so submit can bring a field the
+    // current view hides into sight.
     function validate() {
-        if (!fromAddress) return 'No address on this network to create a market from.';
-        if (!label.trim()) return 'Give the market a question or title.';
-        const textSafetyError = actionTextSafetyError(label, 'Title')
-            || cleanOutcomes.map((outcome) => actionTextSafetyError(outcome, 'Outcome')).find(Boolean)
-            || actionTextSafetyError(description, 'Description')
-            || actionTextSafetyError(resolutionCriteria, 'Settlement rule')
-            || actionTextSafetyError(source, 'Result source')
-            || actionTextSafetyError(category, 'Category')
-            || outcomeNotes.map((note) => actionTextSafetyError(note, 'Outcome note')).find(Boolean)
-            || memoLengthError(memo.trim());
-        if (textSafetyError) return textSafetyError;
-        if (label.trim().length > MAX_LABEL) return `The title is ${label.trim().length} characters; the limit is ${MAX_LABEL}.`;
-        if (!tick.trim()) return 'Choose the token bets are placed in. Betting is token-only: the network coin cannot be wagered.';
-        if (cleanOutcomes.length !== outcomes.length) return 'Fill in every outcome, or remove the empty one.';
-        if (cleanOutcomes.length < 2) return 'A market needs at least two outcomes.';
-        if (cleanOutcomes.length > MAX_OUTCOMES) return `A market can have at most ${MAX_OUTCOMES} outcomes.`;
-        if (cleanOutcomes.some((o) => o.length > MAX_OUTCOME_LABEL)) return `Each outcome label must be ${MAX_OUTCOME_LABEL} characters or fewer.`;
-        if (cleanOutcomes.some((o) => OUTCOME_BAD_CHARS.test(o))) return 'Outcome labels cannot contain a comma, a semicolon or a vertical bar.';
-        if (new Set(cleanOutcomes).size !== cleanOutcomes.length) return 'Two outcomes have the same label. Each one must be distinct.';
-        if (!deadlineUnix) return 'Pick when betting closes.';
-        if (deadlineUnix <= nowSec) return 'Betting must close in the future.';
-        if (deadlineUnix - nowSec > MAX_DEADLINE_HORIZON) return 'Betting must close within one year.';
-        if (!refundSeconds) return 'Set how long you have to publish the result.';
+        const fail = (message, field) => ({ message, field });
+        if (!fromAddress) return fail('No address on this network to create a market from.', 'from');
+        if (!label.trim()) return fail('Give the market a question or title.', 'label');
+        const safety = [
+            [actionTextSafetyError(label, 'Title'), 'label'],
+            [cleanOutcomes.map((outcome) => actionTextSafetyError(outcome, 'Outcome')).find(Boolean), 'outcomes'],
+            [actionTextSafetyError(description, 'Description'), 'description'],
+            [actionTextSafetyError(resolutionCriteria, 'Settlement rule'), 'criteria'],
+            [actionTextSafetyError(source, 'Result source'), 'source'],
+            [actionTextSafetyError(category, 'Category'), 'category'],
+            [outcomeNotes.map((note) => actionTextSafetyError(note, 'Outcome note')).find(Boolean), 'notes'],
+            [memoLengthError(memo.trim()), 'memo'],
+        ].find(([message]) => Boolean(message));
+        if (safety) return fail(safety[0], safety[1]);
+        if (label.trim().length > MAX_LABEL) return fail(`The title is ${label.trim().length} characters; the limit is ${MAX_LABEL}.`, 'label');
+        if (!tick.trim()) return fail('Choose the token bets are placed in. Betting is token-only: the network coin cannot be wagered.', 'tick');
+        if (cleanOutcomes.length !== outcomes.length) return fail('Fill in every outcome, or remove the empty one.', 'outcomes');
+        if (cleanOutcomes.length < 2) return fail('A market needs at least two outcomes.', 'outcomes');
+        if (cleanOutcomes.length > MAX_OUTCOMES) return fail(`A market can have at most ${MAX_OUTCOMES} outcomes.`, 'outcomes');
+        if (cleanOutcomes.some((o) => o.length > MAX_OUTCOME_LABEL)) return fail(`Each outcome label must be ${MAX_OUTCOME_LABEL} characters or fewer.`, 'outcomes');
+        if (cleanOutcomes.some((o) => OUTCOME_BAD_CHARS.test(o))) return fail('Outcome labels cannot contain a comma, a semicolon or a vertical bar.', 'outcomes');
+        if (new Set(cleanOutcomes).size !== cleanOutcomes.length) return fail('Two outcomes have the same label. Each one must be distinct.', 'outcomes');
+        if (!deadlineUnix) return fail('Pick when betting closes.', 'deadline');
+        if (deadlineUnix <= nowSec) return fail('Betting must close in the future.', 'deadline');
+        if (deadlineUnix - nowSec > MAX_DEADLINE_HORIZON) return fail('Betting must close within one year.', 'deadline');
+        if (!refundSeconds) return fail('Set how long you have to publish the result.', 'refund');
         if (refundSeconds < MIN_REFUND_WINDOW || refundSeconds > MAX_REFUND_WINDOW) {
-            return 'Time to publish the result must be between one hour and one year.';
+            return fail('Time to publish the result must be between one hour and one year.', 'refund');
         }
         if (feePct.trim()) {
-            if (!/^\d+(\.\d{1,2})?$/.test(feePct.trim())) return 'Your fee must be a number with at most two decimal places, as a percent of the pot.';
-            if (Number(feePct.trim()) > MAX_FEE_PCT) return `Your fee cannot exceed ${MAX_FEE_PCT}% of the pot.`;
+            if (!/^\d+(\.\d{1,2})?$/.test(feePct.trim())) return fail('Your fee must be a number with at most two decimal places, as a percent of the pot.', 'fee');
+            if (Number(feePct.trim()) > MAX_FEE_PCT) return fail(`Your fee cannot exceed ${MAX_FEE_PCT}% of the pot.`, 'fee');
         }
         if (minAmount.trim()) {
             const min = /^(\d+)(?:\.(\d+))?$/.exec(minAmount.trim());
-            if (!min) return 'The minimum bet must be a positive amount.';
-            if ((min[2] || '').length > 18) return 'The minimum bet can have at most 18 decimal places.';
-            if ((min[1].replace(/^0+/, '').length || 1) > 47) return 'The minimum bet is too large.';
-            if (!/[1-9]/.test(`${min[1]}${min[2] || ''}`)) return 'The minimum bet must be a positive amount.';
+            if (!min) return fail('The minimum bet must be a positive amount.', 'min');
+            if ((min[2] || '').length > 18) return fail('The minimum bet can have at most 18 decimal places.', 'min');
+            if ((min[1].replace(/^0+/, '').length || 1) > 47) return fail('The minimum bet is too large.', 'min');
+            if (!/[1-9]/.test(`${min[1]}${min[2] || ''}`)) return fail('The minimum bet must be a positive amount.', 'min');
         }
-        if (allowList.trim() && !/^\d+$/.test(allowList.trim())) return 'The allowed-addresses list must be a list number.';
-        if (blockList.trim() && !/^\d+$/.test(blockList.trim())) return 'The blocked-addresses list must be a list number.';
+        if (allowList.trim() && !/^\d+$/.test(allowList.trim())) return fail('The allowed-addresses list must be a list number.', 'lists');
+        if (blockList.trim() && !/^\d+$/.test(blockList.trim())) return fail('The blocked-addresses list must be a list number.', 'lists');
         if (allowList.trim() && allowList.trim() === blockList.trim()) {
-            return 'The same list is set as both allowed and blocked, so nobody could ever bet. Pick one.';
+            return fail('The same list is set as both allowed and blocked, so nobody could ever bet. Pick one.', 'lists');
         }
-        if (description.trim().length > MAX_DESCRIPTION) return `The description must be ${MAX_DESCRIPTION} characters or fewer.`;
-        if (resolutionCriteria.trim().length > MAX_RESOLUTION_CRITERIA) return `The settlement rule must be ${MAX_RESOLUTION_CRITERIA} characters or fewer.`;
-        if (source.trim().length > MAX_SOURCE) return `The result source must be ${MAX_SOURCE} characters or fewer.`;
-        if (category.trim().length > MAX_CATEGORY) return `The category must be ${MAX_CATEGORY} characters or fewer.`;
+        if (description.trim().length > MAX_DESCRIPTION) return fail(`The description must be ${MAX_DESCRIPTION} characters or fewer.`, 'description');
+        if (resolutionCriteria.trim().length > MAX_RESOLUTION_CRITERIA) return fail(`The settlement rule must be ${MAX_RESOLUTION_CRITERIA} characters or fewer.`, 'criteria');
+        if (source.trim().length > MAX_SOURCE) return fail(`The result source must be ${MAX_SOURCE} characters or fewer.`, 'source');
+        if (category.trim().length > MAX_CATEGORY) return fail(`The category must be ${MAX_CATEGORY} characters or fewer.`, 'category');
         return null;
+    }
+
+    // An error on a field the open view hides switches to Full with
+    // that field's section open; a field already in sight is left alone.
+    function revealField(field) {
+        const section = FIELD_SECTION[field];
+        if (!section) return;
+        if (BOTH_VIEW_SECTIONS.has(section)) { betView.setSectionOpen(section, true); return; }
+        if (betView.view === 'quick' && QUICK_FIELDS.has(field)) { betView.setSectionOpen('market', true); return; }
+        betView.openOptions(section);
     }
 
     // Composes through the SDK's own createMarketParams builder HOST-side. A
@@ -453,7 +526,7 @@ export function CreateBetFeedForm({
     async function submit(event) {
         event?.preventDefault?.();
         const problem = validate();
-        if (problem) { setFormError(problem); return; }
+        if (problem) { setFormError(problem.message); revealField(problem.field); return; }
         if (submitLockRef.current) return;
         submitLockRef.current = true;
         setSubmitting(true);
@@ -505,13 +578,21 @@ export function CreateBetFeedForm({
         }
     }
 
-    const header = <PageHeader onBack={onBack} title="Open a market" />;
+    const header = <PageHeader onBack={onBack} title="Open a Market" />;
     const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
 
     if (actionConfirm.open) {
+        const openMarketSummary = {
+            verb: t('components.confirmSummary.verbOpenMarket'),
+            ...(label.trim() ? { target: label.trim() } : {}),
+            direction: 'none',
+            chainId,
+            address: fromAddress?.address,
+        };
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={openMarketSummary}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
@@ -534,10 +615,13 @@ export function CreateBetFeedForm({
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="Oracle address"
+                title="Oracle Address"
                 walletId={walletId}
                 chainId={chainId}
-                onChainChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
+                // Once an asset is picked it decides the network, so the oracle
+                // address picker stays on it.
+                lockNetwork={Boolean(tick.trim())}
+                onChainChange={tick.trim() ? undefined : (cid) => { setChainId(cid); setFromAddressId(null); }}
                 onPick={(a) => { setFromAddressId(a.id); setSourcePickerOpen(false); }}
                 onBack={() => setSourcePickerOpen(false)}
             />
@@ -549,8 +633,9 @@ export function CreateBetFeedForm({
             <TokenPicker
                 purpose="send"
                 walletId={walletId}
-                title="Token bets are placed in"
-                networkFilter={coinFromChainId(chainId)}
+                title="Select Token"
+                // No network pre-filter: the asset sets the network (the From
+                // section follows it), so the page lists every network.
                 // BET escrows a TOKEN. The native coin is not a legal
                 // wager (the indexer answers `invalid: TICK (unknown)`), so
                 // offering it walked a wallet holding only BTC into composing a
@@ -559,7 +644,30 @@ export function CreateBetFeedForm({
                 // which produced market #1160.
                 kindFilter="tokens"
                 kindLocked
-                onSelect={(sel) => { setTick(String(sel.tick || '').toUpperCase()); setTokenPickerOpen(false); }}
+                onSelect={(sel) => {
+                    // Picking an asset on another network moves the form there;
+                    // a network with no betting markets is refused instead of
+                    // half-switched.
+                    if (sel.chainId && sel.chainId !== chainId) {
+                        if (betChainIds.length > 0 && !betChainIds.includes(sel.chainId)) {
+                            setFormError('Betting markets are not open on that network yet. Pick a token on another network.');
+                            setTokenPickerOpen(false);
+                            return;
+                        }
+                        // The old Network field offered only networks with an
+                        // address; a pick elsewhere would replace the form
+                        // with the no-address page, so it is refused here.
+                        if (!(addressesByChain?.[sel.chainId] || []).length) {
+                            setFormError('This wallet has no address on that network to open a market from. Use Receive to create one first.');
+                            setTokenPickerOpen(false);
+                            return;
+                        }
+                        setChainId(sel.chainId);
+                        setFromAddressId(null);
+                    }
+                    setTick(String(sel.tick || '').toUpperCase());
+                    setTokenPickerOpen(false);
+                }}
                 onBack={() => setTokenPickerOpen(false)}
             />
         );
@@ -660,263 +768,440 @@ export function CreateBetFeedForm({
         );
     })();
 
+    // The Quick and Full views below render the same field state.
+    // Each field is built once and placed in whichever view is open.
+    const { view, setView, sections } = betView;
+    const tickUpper = tick.trim().toUpperCase();
+    const refundUnix = deadlineUnix && refundSeconds ? deadlineUnix + refundSeconds : null;
+    const windowText = windowPreset === 'custom'
+        ? `${windowCustomDays || '?'} days`
+        : (WINDOW_PRESETS.find((p) => p.value === windowPreset)?.label || '').replace(' (default)', '');
+    const outcomeHelp = 'One possible result per row. Exactly one outcome can win: whoever backed it splits the whole pot, and if nobody backed it, everyone is refunded and you earn nothing.';
+    const changeChain = (cid) => { setChainId(cid); setFromAddressId(null); };
+
+    const questionField = (
+        <Input
+            label="Question"
+            help="The question bettors back an outcome of, such as who wins a match. Everything about the market is permanent once it is on the chain: there is no edit. Your only later choices are publishing the winning outcome or cancelling and refunding everyone."
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            autoComplete="off"
+        />
+    );
+
+    const outcomesGroup = (withLabel) => (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-form-gap)' }}>
+            {withLabel ? (
+                <span className={bet.groupLabel}>
+                    <Icon.TokenListIcon aria-hidden="true" />
+                    <span>Outcomes</span>
+                    <InfoTip label={outcomeHelp} aria="About Outcomes" />
+                </span>
+            ) : null}
+            {outcomes.map((o, i) => (
+                <div key={i} className={bet.outcomeRow}>
+                    <span
+                        className={bet.outcomeDot}
+                        style={{ background: OUTCOME_DOTS[i % OUTCOME_DOTS.length] }}
+                        aria-hidden="true"
+                    />
+                    <div className={bet.outcomeField}>
+                        <Input
+                            aria-label={`Outcome ${i + 1}`}
+                            placeholder={`Outcome ${i + 1}`}
+                            value={o}
+                            onChange={(e) => setOutcomeAt(i, e.target.value)}
+                            autoComplete="off"
+                            fieldAction={outcomes.length > 2 ? (
+                                <FieldIconButton
+                                    icon={<Icon.XIcon />}
+                                    label={`Remove outcome ${i + 1}`}
+                                    onClick={() => removeOutcome(i)}
+                                />
+                            ) : null}
+                        />
+                    </div>
+                </div>
+            ))}
+            {outcomes.length < MAX_OUTCOMES ? (
+                <Button type="button" variant="ghost" className={bet.addOutcome} icon={<Icon.PlusIcon />} onClick={addOutcome}>
+                    Add Outcome
+                </Button>
+            ) : null}
+            {withLabel ? null : <p className={bet.groupHint}>{outcomeHelp}</p>}
+        </div>
+    );
+
+    const deadlineField = (fieldLabel) => (
+        <Input
+            label={fieldLabel}
+            help="Bets are taken until this time. After it, you publish the winning outcome."
+            type="datetime-local"
+            value={deadlineInput}
+            onChange={(e) => setDeadlineInput(e.target.value)}
+        />
+    );
+
+    const assetField = (
+        <TokenField
+            // Token, not Asset: the network coin cannot be wagered.
+            label="Token"
+            help="The token bettors stake on this market. Every bet and every payout is in this token. Betting is token-only: the network coin cannot be wagered."
+            value={tick && chainId ? { chainId, tick } : null}
+            onOpenPicker={() => setTokenPickerOpen(true)}
+        />
+    );
+
+    // One chip per defaulted or set term, read from live state.
+    const termChips = [
+        refundUnix ? `Refund by ${shortDate(refundUnix)}` : `${windowText} to publish`,
+        feePct.trim() ? `Oracle fee ${feePct.trim()}%` : 'No oracle fee',
+        minAmount.trim() ? `Min bet ${formatWithThousands(minAmount.trim())}${tickUpper ? ` ${tickUpper}` : ''}` : 'No minimum bet',
+        'You are the oracle',
+        // No network chip; the network shows only in the From section.
+    ];
+    if (description.trim() || resolutionCriteria.trim() || source.trim() || category.trim()) termChips.push('Details added');
+    if (outcomeNotes.some((n) => String(n || '').trim())) termChips.push('Outcome notes');
+    if (allowList.trim()) termChips.push(`Allow-list #${allowList.trim()}`);
+    if (blockList.trim()) termChips.push(`Block-list #${blockList.trim()}`);
+    // The Quick Default Terms section expands in place and reuses the Full
+    // sections' own fields, minus the two Quick already shows above it
+    // (Betting Closes leads Timing, the asset leads Money).
+    const QUICK_TERMS_PARTS = [['timing', 1], ['money', 1], ['oracle', 0]];
+    // Section open state comes from the same Give/Get view state; `main`
+    // flags the main section (Market in Quick, Question in Full).
+    const bind = (id) => ({ open: Boolean(sections[id]), onOpenChange: (open) => betView.setSectionOpen(id, open), main: id === 'market' || id === 'question' });
+    const duplicatedNote = duplicated ? (
+        <p className={styles.hint}>
+            Copied from market #{String(duplicateFeedIndex)}. Pick new dates, then check the terms:
+            the copy is a brand new market, and opening it pays the cost below again. Cancelling a
+            market does not refund what it cost to open.
+        </p>
+    ) : null;
+    const marketSummary = joinSummary(
+        label.trim() || null,
+        `${outcomes.length} outcomes`,
+        deadlineUnix ? `closes ${shortDate(deadlineUnix)}` : null,
+        tickUpper || null,
+    );
+    const quickTermsFields = () => QUICK_TERMS_PARTS.map(([id, skip]) => {
+        const section = Children.toArray(fullView.props.children).find((c) => c?.props?.id === id);
+        return <Fragment key={id}>{Children.toArray(section?.props.children).slice(skip)}</Fragment>;
+    });
+
+    // Built on demand, after fullView, so the terms can reuse its fields.
+    const quickView = () => (
+        <>
+            {/* The main section, open: the market itself. */}
+            <FormSection id="market" title="Market" icon={Icon.MarketIcon} {...bind('market')} summary={marketSummary}>
+                {duplicatedNote}
+                {questionField}
+                {outcomesGroup(true)}
+                {deadlineField('Closes')}
+                {assetField}
+            </FormSection>
+            <FormSection
+                id="terms"
+                title="Default Terms"
+                icon={Icon.FilterIcon}
+                summary={termChips.join(' · ')}
+                {...bind('terms')}
+            >
+                {quickTermsFields()}
+            </FormSection>
+        </>
+    );
+
+    const fullView = (
+        <>
+            {/* The main section of Full, open; the rest start closed. */}
+            <FormSection
+                id="question"
+                title="Market"
+                icon={Icon.MarketIcon}
+                summary={label.trim() || 'Required'}
+                {...bind('question')}
+            >
+                {duplicatedNote}
+                {questionField}
+                <Textarea
+                    label="Description"
+                    optional
+                    help="This rides on the chain with the market, so bettors and every explorer see the same text. Write the settlement rule you will actually follow: it is what people will hold you to, and you cannot change it later."
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    rows={3}
+                />
+                <Input
+                    label="Category"
+                    optional
+                    help="E.g. sports, politics, weather. Used for browsing."
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    autoComplete="off"
+                />
+            </FormSection>
+            <FormSection
+                id="outcomes"
+                title="Outcomes"
+                icon={Icon.TokenListIcon}
+                summary={`${outcomes.length} outcomes`}
+                {...bind('outcomes')}
+            >
+                {outcomesGroup(false)}
+                {cleanOutcomes.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-form-gap)' }}>
+                        <span className={styles.fromLabel}>Notes per outcome <OptionalPill /></span>
+                        {cleanOutcomes.map((o, i) => (
+                            <Input
+                                key={i}
+                                label={o}
+                                help="A note bettors see beside this outcome, such as what counts as this result."
+                                value={outcomeNotes[i] || ''}
+                                onChange={(e) => setOutcomeNoteAt(i, e.target.value)}
+                                autoComplete="off"
+                            />
+                        ))}
+                    </div>
+                ) : null}
+            </FormSection>
+            <FormSection
+                id="timing"
+                title="Timing"
+                icon={Icon.ClockIcon}
+                summary={deadlineUnix ? `Closes ${shortDate(deadlineUnix)}` : 'Not set'}
+                {...bind('timing')}
+            >
+                {deadlineField('Betting Closes')}
+                <Select
+                    label="Time to Publish the Result"
+                    help="How long after betting closes you have to publish the winning outcome. If you publish nothing in this window, everyone is refunded. A longer window costs more, because the cost is measured to this deadline."
+                    hint={refundUnix ? `Past this window everyone is refunded. Refund by ${shortDate(refundUnix)}.` : undefined}
+                    value={windowPreset}
+                    onChange={(e) => setWindowPreset(e.target.value)}
+                >
+                    {WINDOW_PRESETS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+                </Select>
+                {windowPreset === 'custom' ? (
+                    <Input
+                        label="Days to Publish the Result"
+                        help="The number of days after betting closes that you have to publish the winning outcome."
+                        value={windowCustomDays}
+                        onChange={(e) => setWindowCustomDays(e.target.value)}
+                        inputMode="decimal"
+                        autoComplete="off"
+                    />
+                ) : null}
+            </FormSection>
+            <FormSection
+                id="money"
+                title="Money"
+                icon={Icon.CoinsIcon}
+                summary={tickUpper || 'No token yet'}
+                {...bind('money')}
+            >
+                {assetField}
+                <Input
+                    label="Smallest Bet Allowed"
+                    optional
+                    help="Leave empty for no minimum. Useful because payouts round down: a tiny stake can win and still pay nothing."
+                    value={formatWithThousands(minAmount)}
+                    onChange={(e) => {
+                        const raw = e.target.value;
+                        setMinAmount(normalizeLocalizedDecimal(raw) ?? raw);
+                    }}
+                    inputMode="decimal"
+                    autoComplete="off"
+                />
+                <Input
+                    label="Your Fee"
+                    optional
+                    help={`Your share of the pot, such as 1.5 for 1.5%, up to ${MAX_FEE_PCT}%. Paid only when you publish a result; cancelled, void, and expired markets pay nothing.`}
+                    value={formatWithThousands(feePct)}
+                    onChange={(e) => {
+                        const raw = e.target.value;
+                        setFeePct(normalizeLocalizedDecimal(raw) ?? raw);
+                    }}
+                    inputMode="decimal"
+                    autoComplete="off"
+                />
+            </FormSection>
+            <FormSection
+                id="oracle"
+                title="Oracle"
+                icon={Icon.VerifyIcon}
+                summary="You"
+                {...bind('oracle')}
+            >
+                {/* The oracle address is the From address; it lives in the standard
+                    From section above, with this help. */}
+                <Input
+                    label="Where the Result Comes From"
+                    optional
+                    help="A name or address people can check. Nothing here is fetched automatically; it is a note to bettors, not a data feed."
+                    value={source}
+                    onChange={(e) => setSource(e.target.value)}
+                    autoComplete="off"
+                />
+                <Textarea
+                    label="How the Result Will Be Decided"
+                    optional
+                    help="The rule you follow, including what happens in an edge case such as a postponement or a tie."
+                    value={resolutionCriteria}
+                    onChange={(e) => setResolutionCriteria(e.target.value)}
+                    rows={3}
+                />
+                <Input
+                    label="Only These Addresses May Bet"
+                    optional
+                    help="Address list number. Membership is checked when each bet is placed, so later removals do not cancel existing bets."
+                    value={allowList}
+                    onChange={(e) => setAllowList(e.target.value)}
+                    inputMode="numeric"
+                    autoComplete="off"
+                />
+                <Input
+                    label="These Addresses May Not Bet"
+                    optional
+                    help="The number of an on-chain address list. If an address is on both lists, it is blocked."
+                    value={blockList}
+                    onChange={(e) => setBlockList(e.target.value)}
+                    inputMode="numeric"
+                    autoComplete="off"
+                />
+            </FormSection>
+            {/* Network and the From (oracle) address live in the standard From
+                section; Memo is its own closed section in both views. */}
+        </>
+    );
+
+    // How the market will look once open, in the bet market's blue.
+    // No bets exist yet, so every outcome shows an even split.
+    const previewLabels = outcomes.map((o, i) => o.trim() || `Outcome ${i + 1}`);
+    const evenPct = Math.round(100 / Math.max(1, previewLabels.length));
+    // The preview is a closed standard section like every other group.
+    const previewCard = (
+        <FormSection id="preview" title="Preview" icon={Icon.EyeIcon} summary="How it looks once open" {...bind('preview')}>
+            <div className={bet.previewBody}>
+                <div className={bet.preview}>
+                    <p className={bet.previewQuestion}>
+                        {label.trim() || <span className={bet.previewPlaceholder}>Your question shows here</span>}
+                    </p>
+                    <div className={bet.previewMeta}>
+                        <span className={bet.previewMetaItem}>
+                            <Icon.ClockIcon aria-hidden="true" />
+                            {deadlineUnix ? `Closes ${shortDate(deadlineUnix)}` : 'Closing date not set'}
+                        </span>
+                        {refundUnix ? <span>Refund by {shortDate(refundUnix)}</span> : null}
+                    </div>
+                    <ul className={bet.previewOutcomes} aria-label="Outcomes in the preview">
+                        {previewLabels.map((o, i) => (
+                            <li key={i} className={bet.previewOutcome}>
+                                <span className={bet.previewOutcomeLabel} title={o}>{o}</span>
+                                <span className={bet.previewOutcomePct}>{evenPct}%</span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            </div>
+        </FormSection>
+    );
+
+    // The opening cost joins the Network fee row's summary. The form
+    // has no fee speed choice (it composes at the normal rate), so the row
+    // states that estimate rather than offering a selector it would ignore.
+    const openCostText = quote?.free ? 'free to open' : (quote?.fee ? `${quote.fee} XCHAIN to open` : null);
+    const betChainsWithAddresses = (addressesByChain ? Object.keys(addressesByChain) : [chainId])
+        .filter((cid) => betChainIds.length === 0 || betChainIds.includes(cid));
+
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label="Open a market"
             onSubmit={submit}
+            // The Quick | Full switch leads the form, 8px above From.
+            view={view}
+            onViewChange={setView}
+            viewLabel="Open a Market form view"
             status={formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="success"
+            action={(
+                <FormAction
                     icon={isWatcherMode ? <Icon.PlusIcon /> : <Icon.MarketIcon />}
                     loading={submitting || actionConfirm.composing}
                     disabled={submitting || actionConfirm.composing}
                 >
                     {actionConfirm.composing
-                        ? 'Preparing review…'
-                        : isWatcherMode ? 'Create unsigned transaction' : 'Open market'}
-                </Button>
+                        ? 'Preparing Review…'
+                        : isWatcherMode ? 'Create Unsigned Transaction' : 'Open Market'}
+                </FormAction>
+            )}
+            from={(
+                // The standard From section, first in both views. The From
+                // address is the oracle address; once an asset is picked it
+                // decides the network, so the field locks until the picker moves it.
+                <FromSection
+                    {...bind('from')}
+                    chainId={chainId}
+                    chainIds={betChainsWithAddresses}
+                    chainRegistry={chainRegistry}
+                    onNetworkChange={changeChain}
+                    lockNetwork={Boolean(tick.trim())}
+                    networkHelp="The chain the market is created on. It follows the asset bets are placed in; your oracle address and the fees are on this network."
+                    address={fromAddress?.address}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose oracle address"
+                    addressHelp="This address is the market: it is the only one that can publish the result or cancel, it collects your fee, and its record as an oracle is public. It cannot bet on its own market, because an oracle who could bet on the result would decide the result."
+                />
+            )}
+            fee={(
+                /* This form is the one that already quotes its own fee, so
+                   the row states the real answer instead of the chain's rule. Most
+                   markets are free (the first 90 days cost nothing), and on LTC the
+                   row used to promise a coin payment for every one of them. */
+                /* FeeSection's fixed-fee mode: no speed picker, the
+                   network fee figure plus the open cost on one summary. */
+                <FeeSection
+                    {...bind('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    fixedFee={feeEstimate?.coinAmount || null}
+                    etaMinutes={feeEstimate?.etaMinutes}
+                    protocolSummary={openCostText || undefined}
+                    fees={{
+                        quote,
+                        pending: !quote && !quoteFailed,
+                        nativeFeeProps: nativeFee.toggleProps,
+                        tiers: feeEstimate ? { normal: feeEstimate } : null,
+                    }}
+                >
+                    {quoteBlock}
+                </FeeSection>
             )}
         >
-            {duplicated ? (
-                <p className={styles.hint}>
-                    Copied from market #{String(duplicateFeedIndex)}. Pick new dates, then check the terms:
-                    the copy is a brand new market, and opening it pays the cost below again. Cancelling a
-                    market does not refund what it cost to open.
-                </p>
-            ) : null}
+            {view === 'quick' ? quickView() : fullView}
 
-            <NetworkField
-                help="The chain the market is created on. Your oracle address, the token bets are placed in and the fees are on this network."
-                value={chainId}
-                onChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
-                chainIds={(addressesByChain ? Object.keys(addressesByChain) : [chainId])
-                    .filter((cid) => betChainIds.length === 0 || betChainIds.includes(cid))}
-                chainRegistry={chainRegistry}
-            />
-            {fromAddress ? (
-                <AddressField
-                    label="Your oracle address"
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose oracle address"
-                    help="This address is the market: it is the only one that can publish the result or cancel, it collects your fee, and its record as an oracle is public. It cannot bet on its own market, because an oracle who could bet on the result would decide the result."
-                />
-            ) : null}
-
-            <TokenField
-                label="Token bets are placed in"
-                help="The token bettors stake on this market. Every bet and every payout is in this token."
-                value={tick && chainId ? { chainId, tick } : null}
-                onOpenPicker={() => setTokenPickerOpen(true)}
-            />
-
-            <Input
-                label="What is being bet on"
-                help="The question bettors back an outcome of, such as who wins a match. Everything about the market is permanent once it is on the chain: there is no edit. Your only later choices are publishing the winning outcome or cancelling and refunding everyone."
-                value={label}
-                onChange={(e) => setLabel(e.target.value)}
-                autoComplete="off"
-            />
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-form-gap)' }}>
-                <span className={styles.fromLabel}>Possible outcomes</span>
-                {outcomes.map((o, i) => (
-                    <div key={i} className={styles.betOutcomeRow}>
-                        <div className={styles.betOutcomeField}>
-                            <Input
-                                label={`Outcome ${i}`}
-                                help="One possible result. Exactly one outcome can win: whoever backed it splits the whole pot, and if nobody backed it, everyone is refunded and you earn nothing."
-                                value={o}
-                                onChange={(e) => setOutcomeAt(i, e.target.value)}
-                                autoComplete="off"
-                            />
-                        </div>
-                        {outcomes.length > 2 ? (
-                            <Button type="button" variant="ghost" onClick={() => removeOutcome(i)}>Remove</Button>
-                        ) : null}
-                    </div>
-                ))}
-                {outcomes.length < MAX_OUTCOMES ? (
-                    <Button type="button" variant="ghost" onClick={addOutcome}>Add outcome</Button>
-                ) : null}
-            </div>
-
-            <Input
-                label="Betting closes"
-                help="Bets are taken until this time. After it, you publish the winning outcome."
-                type="datetime-local"
-                value={deadlineInput}
-                onChange={(e) => setDeadlineInput(e.target.value)}
-            />
-
-            <Select
-                label="Time to publish the result"
-                help="How long after betting closes you have to publish the winning outcome. If you publish nothing in this window, everyone is refunded. A longer window costs more, because the cost is measured to this deadline."
-                value={windowPreset}
-                onChange={(e) => setWindowPreset(e.target.value)}
+            <FormSection
+                id="memo"
+                title="Memo"
+                icon={Icon.MessageIcon}
+                optional
+                summary={memo.trim() || 'None'}
+                {...bind('memo')}
             >
-                {WINDOW_PRESETS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
-            </Select>
-            {windowPreset === 'custom' ? (
                 <Input
-                    label="Days to publish the result"
-                    help="The number of days after betting closes that you have to publish the winning outcome."
-                    value={windowCustomDays}
-                    onChange={(e) => setWindowCustomDays(e.target.value)}
-                    inputMode="decimal"
+                    label="Memo"
+                    help="A short public note stored with the market transaction."
+                    maxLength={MAX_MEMO_LENGTH}
+                    value={memo}
+                    onChange={(e) => setMemo(e.target.value)}
                     autoComplete="off"
                 />
-            ) : null}
+            </FormSection>
 
-            {quoteBlock}
+            {previewCard}
 
-            {/* This form is the one that already quotes its own fee, so
-                the row states the real answer instead of the chain's rule. Most
-                markets are free (the first 90 days cost nothing), and on LTC the
-                row used to promise a coin payment for every one of them. */}
-            <FeesCard
-                chainId={chainId}
-                quote={quote}
-                pending={!quote && !quoteFailed}
-                feeSelector={null}
-            >
-                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} fee={quote} showHint={false} />
-            </FeesCard>
-
-            <Input
-                label="Your fee"
-                optional
-                help="Your share of the pot, such as 1.5 for 1.5%. Paid only when you publish a result; cancelled, void, and expired markets pay nothing."
-                hint={`Up to ${MAX_FEE_PCT}%.`}
-                value={formatWithThousands(feePct)}
-                onChange={(e) => {
-                    const raw = e.target.value;
-                    setFeePct(normalizeLocalizedDecimal(raw) ?? raw);
-                }}
-                inputMode="decimal"
-                autoComplete="off"
-            />
-
-            <Input
-                label="Smallest bet allowed"
-                optional
-                help="Leave empty for no minimum. Useful because payouts round down: a tiny stake can win and still pay nothing."
-                value={formatWithThousands(minAmount)}
-                onChange={(e) => {
-                    const raw = e.target.value;
-                    setMinAmount(normalizeLocalizedDecimal(raw) ?? raw);
-                }}
-                inputMode="decimal"
-                autoComplete="off"
-            />
-
-            <Button type="button" variant="ghost" onClick={() => setShowDetails((v) => !v)}>
-                {showDetails ? 'Hide market description' : 'Add a description and settlement rules'}
-            </Button>
-            {showDetails ? (
-                <>
-                    <Textarea
-                        label="Description"
-                        optional
-                        help="This rides on the chain with the market, so bettors and every explorer see the same text. Write the settlement rule you will actually follow: it is what people will hold you to, and you cannot change it later."
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                        rows={3}
-                    />
-                    <Textarea
-                        label="How the result will be decided"
-                        optional
-                        help="The rule you follow, including what happens in an edge case such as a postponement or a tie."
-                        value={resolutionCriteria}
-                        onChange={(e) => setResolutionCriteria(e.target.value)}
-                        rows={3}
-                    />
-                    <Input
-                        label="Where the result comes from"
-                        optional
-                        help="A name or address people can check. Nothing here is fetched automatically; it is a note to bettors, not a data feed."
-                        value={source}
-                        onChange={(e) => setSource(e.target.value)}
-                        autoComplete="off"
-                    />
-                    <Input
-                        label="Category"
-                        optional
-                        help="E.g. sports, politics, weather. Used for browsing."
-                        value={category}
-                        onChange={(e) => setCategory(e.target.value)}
-                        autoComplete="off"
-                    />
-                    {cleanOutcomes.length > 0 ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-form-gap)' }}>
-                            <span className={styles.fromLabel}>Notes per outcome <OptionalPill /></span>
-                            {cleanOutcomes.map((o, i) => (
-                                <Input
-                                    key={i}
-                                    label={o}
-                                    help="A note bettors see beside this outcome, such as what counts as this result."
-                                    value={outcomeNotes[i] || ''}
-                                    onChange={(e) => setOutcomeNoteAt(i, e.target.value)}
-                                    autoComplete="off"
-                                />
-                            ))}
-                        </div>
-                    ) : null}
-                </>
-            ) : null}
-
-            <Button type="button" variant="ghost" icon={showAdvanced ? undefined : <Icon.LockIcon />} onClick={() => setShowAdvanced((v) => !v)}>
-                {showAdvanced ? 'Hide who can bet' : 'Restrict who can bet'}
-            </Button>
-            {showAdvanced ? (
-                <>
-                    <Input
-                        label="Only these addresses may bet"
-                        optional
-                        help="Address list number. Membership is checked when each bet is placed, so later removals do not cancel existing bets."
-                        value={allowList}
-                        onChange={(e) => setAllowList(e.target.value)}
-                        inputMode="numeric"
-                        autoComplete="off"
-                    />
-                    <Input
-                        label="These addresses may not bet"
-                        optional
-                        help="The number of an on-chain address list. If an address is on both lists, it is blocked."
-                        value={blockList}
-                        onChange={(e) => setBlockList(e.target.value)}
-                        inputMode="numeric"
-                        autoComplete="off"
-                    />
-                    <Input
-                        label="Memo"
-                        optional
-                        help="A short public note stored with the market transaction."
-                        maxLength={MAX_MEMO_LENGTH}
-                        value={memo}
-                        onChange={(e) => setMemo(e.target.value)}
-                        autoComplete="off"
-                    />
-                </>
-            ) : null}
-
-            {!isWatcherMode && !isHwSource && !signerReady ? (
-                <Input
-                    label="Password"
-                    help="Your wallet password, used to sign this market. It never leaves this device."
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    autoComplete="current-password"
-                />
-            ) : null}
-
-        </FormPage>,
+            {/* No password on the form: the shared confirm screen
+                (ActionConfirmScreen) asks for it whenever the wallet is locked. */}
+        </FormFrame>,
     );
 }

@@ -1,0 +1,145 @@
+/* Styles this screen owns. The blue card, icon tabs, panel and fact rows come
+   from BetFeedDetail.module.css so the two betting pages match. */
+
+/* No reserved band under the figures; as on Home, the card is as tall as its
+   text and range chips, and the chart fills it from behind. */
+.heroStack {
+    min-height: 0;
+}
+
+.heroAddress {
+    margin: 0;
+    font-size: var(--xc-text-xs);
+    color: color-mix(in srgb, var(--xc-on-accent) 85%, transparent);
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+}
+
+/* Actions: equal buttons in one row, however many there are. */
+.actions {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: var(--xc-space-2);
+}
+
+.action.action {
+    min-width: 0;
+    width: 100%;
+    padding-inline: var(--xc-space-2);
+    white-space: nowrap;
+}
+
+/* A group heading inside a tab: an icon, the name and its count. */
+.groupHead {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    margin: var(--xc-space-1) 2px 0;
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    color: var(--xc-text-muted);
+}
+
+.groupIcon {
+    --xc-icon-size: var(--xc-icon-sm);
+    display: inline-flex;
+    flex: 0 0 auto;
+}
+
+/* One market per row inside a single framed list. */
+.marketList {
+    composes: flush from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    list-style: none;
+    overflow: hidden;
+}
+
+.marketItem + .marketItem {
+    border-top: 1px solid var(--xc-border-subtle, rgba(129, 139, 155, 0.35));
+}
+
+.marketRow {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+    padding: var(--xc-space-2) var(--xc-card-pad);
+    border: 0;
+    background: transparent;
+    color: var(--xc-text);
+    font: inherit;
+    text-align: start;
+}
+
+button.marketRow {
+    min-height: var(--xc-tap-min);
+    cursor: pointer;
+}
+
+button.marketRow:hover {
+    background: var(--xc-bg-muted);
+}
+
+button.marketRow:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
+}
+
+.marketTitle {
+    font-size: var(--xc-text-sm);
+    font-weight: 700;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+}
+
+.marketMeta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px var(--xc-space-2);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    min-width: 0;
+}
+
+.chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px var(--xc-space-2);
+    border-radius: 999px;
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.chipOpen { background: var(--xc-success-bg); color: var(--xc-success); }
+.chipPending { background: var(--xc-warning-bg); color: var(--xc-warning-text); }
+.chipSettled { background: var(--xc-info-bg); color: var(--xc-info-text); }
+.chipRefunded { background: var(--xc-bg-muted); color: var(--xc-text-muted); }
+.chipExpired { background: var(--xc-danger-bg); color: var(--xc-danger-text); }
+
+/* A plain-language note on the shared card (the caveat, the dispute rule). */
+.note {
+    composes: card from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    margin: 0;
+    font-size: var(--xc-text-sm);
+}
+
+.note p {
+    margin: 0;
+    color: var(--xc-text-muted);
+}
+
+.factHint {
+    display: block;
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+}

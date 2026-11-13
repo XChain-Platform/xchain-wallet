@@ -10,23 +10,37 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
-    AddressField,
     AddressText,
     Button,
     ChainBadge,
     Checkbox,
-    FeeSelector,
     FormPage,
     Icon,
     InfoTip,
     Input,
     ListPage,
-    NetworkField,
     PageHeader,
     Screen,
-    SectionHeader,
     StatusMessage,
 } from '@xchain-wallet/core/ui';
+// The Wallet Form Standard pieces. Its FormSection is the collapsible one,
+// not the settings block of the same name in core/ui.
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    joinSummary,
+    useFormSections,
+} from '../components/formStandard/index.js';
+import formStandardStyles from '../components/formStandard/formStandard.module.css';
+import { targetBlockSecondsForCoin } from '../utils/blockDateEstimate.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/governance.js';
+import '../../i18n/locales/en/send.js';
+import '../../i18n/locales/en/tokenDetail.js';
+import { PollStatusPill } from './PollStatusPill.jsx';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -55,8 +69,10 @@ import { compareDecimalStrings } from '../utils/amountFormat.js';
 import { OFFER_LIFECYCLE_REFUSAL } from '../../flows/marketExpiry.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import {
+    blocksDurationText,
     latestBallotRows,
-    pollResultPercentages,
+    pollOutcome,
+    pollResultSummary,
     pollRowForDisplay,
     samePollIndex,
 } from './pollDisplay.js';
@@ -85,14 +101,6 @@ function extractPoll(resp) {
     return typeof resp === 'object' ? resp : null;
 }
 
-function statusLabel(status) {
-    if (status === 'failed_quorum') return 'Did not pass';
-    if (status === 'finalized') return 'Decided';
-    if (status === 'open' || !status) return 'Open';
-    const words = String(status).trim().toLowerCase().replace(/[_-]+/g, ' ');
-    return words.charAt(0).toUpperCase() + words.slice(1);
-}
-
 function votePollRef(vote) {
     return vote?.poll_index ?? vote?.poll_action_index ?? vote?.poll_ref;
 }
@@ -104,11 +112,18 @@ function ballotRowText(row, options, isSplit) {
 }
 
 /**
- * VOTE poll detail: the poll definition, its frozen per-option results (once
- * finalized), and, while the poll is open, an inline cast-ballot form (VOTE v1).
- * The ballot editor adapts to tally mode: approval = option checkboxes (capped
- * at max_selections); split = a per-option share input. Signing reuses the same
- * chassis as the authoring forms.
+ * VOTE poll page, results first: the question; the token, network, time
+ * left and status pill; a result card (the outcome once closed, the leading
+ * option and its share, one stacked bar, per-option totals, turnout against
+ * quorum); then one-line sections: Cast your vote (the ballot form, VOTE v1,
+ * on the Form Standard), Rules to pass and Details. The ballot adapts to
+ * tally mode: approval = option checkboxes (capped at max_selections);
+ * split = a per-option share input. Signing goes through the shared confirm
+ * screen like the authoring forms.
+ *
+ * Weight is frozen into the per-option tally only when the poll finalizes,
+ * so an open poll's card says results are counted at close rather than
+ * deriving a weighted tally in the wallet.
  *
  * @param {object} props
  * @param {string} props.walletId
@@ -146,6 +161,14 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const validPollIndex = /^[1-9]\d*$/.test(String(pollIndex ?? '').trim());
+    // Open state of the page's sections, held above the early returns (the
+    // From picker page) so it survives them. Cast your vote is the page's
+    // form and starts open; everything else starts closed.
+    const sections = useFormSections({
+        vote: true, from: false, memo: false, fee: false, rules: false, details: false,
+    });
+    // Counts Vote presses, so the section holding the error reopens on each.
+    const [validationAttempt, setValidationAttempt] = useState(0);
 
     useEffect(() => {
         if (!validPollIndex) {
@@ -271,7 +294,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
-    const { isWatcherMode } = useWalletMode();
+    const { isWatcherMode } = useWalletMode(walletId);
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
@@ -306,7 +329,6 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
     const hasCountdown = Number.isFinite(endBlock) && currentHeight !== null;
     const blocksRemaining = hasCountdown ? endBlock - currentHeight : null;
     const isOpen = pollReportsOpen && (blocksRemaining === null || blocksRemaining >= 0);
-    const resultPercentages = pollResultPercentages(results);
     const walletBallots = useMemo(() => {
         if (!walletVotes || !addressesByChain) return [];
         return (addressesByChain[chainId] || []).map(({ address }) => ({
@@ -475,6 +497,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
 
     function handleReview(event) {
         event.preventDefault();
+        setValidationAttempt((n) => n + 1); // Reopens the section holding the error.
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
         if (feeStop) { setFormError(feeStop.formError); return; }
         if (!fromAddress) { setFormError('No address on this network to vote from.'); return; }
@@ -591,8 +614,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
-                walletId={walletId}
+                title="From Address"                walletId={walletId}
                 chainId={chainId}
                 lockNetwork
                 onPick={(address) => {
@@ -633,21 +655,83 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         );
     }
 
-    const pollInfo = (
+    const outcome = pollOutcome(poll);
+    const tally = pollResultSummary(results, options);
+    const awaitingFinal = pollReportsOpen && blocksRemaining !== null && blocksRemaining < 0;
+    const optionText = (index) => `${index}: ${options[index] ?? ''}`;
+    const timeLeft = blocksDurationText(blocksRemaining, targetBlockSecondsForCoin(descriptor?.coin));
+    let whenText = t('governance.detail.votingClosed');
+    if (isOpen && blocksRemaining === 0) whenText = t('governance.detail.finalBlock');
+    else if (isOpen && timeLeft) whenText = t('governance.detail.closesIn', { time: timeLeft });
+    else if (isOpen) whenText = t('governance.closesAtBlock', { block: String(poll.end_block ?? t('governance.detail.notAvailable')) });
+
+    // Question first, then "TOKEN on Network · Closes in N" with the pill.
+    const pollHead = (
+        <div className={detailStyles.pollHead}>
+            <p className={detailStyles.question}>{poll.question || t('governance.pollNumber', { id: String(pollIndex) })}</p>
+            <div className={detailStyles.metaLine}>
+                <span className={detailStyles.metaText}>
+                    {`${t('governance.pollOnNetwork', {
+                        tick: poll.tick || t('governance.detail.notAvailable'),
+                        network: descriptor?.displayName || chainId,
+                    })} · ${whenText}`}
+                </span>
+                <PollStatusPill
+                    status={poll.poll_status}
+                    outcome={outcome}
+                    label={awaitingFinal ? t('governance.detail.awaitingFinal') : undefined}
+                />
+            </div>
+        </div>
+    );
+
+    // Turnout against the poll's quorum, from the poll row's own counters
+    // (written at finalization); a fraction of supply reads as a percentage.
+    const percentOf = (fraction) => {
+        const n = Number(fraction);
+        return Number.isFinite(n) ? `${Number((n * 100).toFixed(4))}%` : String(fraction);
+    };
+    const flag = (value) => (value === true || String(value) === '1' ? true : value === false || String(value) === '0' ? false : null);
+    const hasQuorum = poll.quorum !== null && poll.quorum !== undefined && poll.quorum !== '';
+    const quorumMet = flag(poll.quorum_met);
+    const turnoutText = joinSummary(
+        poll.total_voters !== null && poll.total_voters !== undefined && poll.total_voters !== ''
+            ? t('governance.detail.turnoutVoters', { count: String(poll.total_voters) })
+            : null,
+        hasQuorum ? t(quorumMet === true ? 'governance.detail.quorumMet' : quorumMet === false ? 'governance.detail.quorumNotMet' : 'governance.detail.quorumNeeded', { quorum: percentOf(poll.quorum) }) : null,
+    );
+    const outcomeText = outcome ? {
+        approved: t('governance.detail.outcome.approved'),
+        rejected: t('governance.detail.outcome.rejected'),
+        no_quorum: t('governance.detail.outcome.noQuorum'),
+        decided: t('governance.detail.outcome.decided'),
+    }[outcome] : null;
+    const winnerKnown = poll.winning_option !== null && poll.winning_option !== undefined && poll.winning_option !== '';
+
+    const detailsList = (
         <dl className={styles.detailsList}>
+            <dt className={styles.detailsLabel}>{t('governance.detail.pollNumber')}</dt>
+            <dd className={styles.detailsValue}>{`#${String(pollIndex)}`}</dd>
             {descriptor ? (
                 <>
-                    <dt className={styles.detailsLabel}>Network</dt>
+                    <dt className={styles.detailsLabel}>{t('send.fields.chain')}</dt>
                     <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
                 </>
             ) : null}
-            <dt className={styles.detailsLabel}>Token</dt>
-            <dd className={styles.detailsValue}>{poll.tick || 'n/a'}</dd>
-            {poll.question ? (<><dt className={styles.detailsLabel}>Question</dt><dd className={styles.detailsValue}>{poll.question}</dd></>) : null}
-            <dt className={styles.detailsLabel}>Status</dt>
-            <dd className={styles.detailsValue}>{pollReportsOpen && blocksRemaining !== null && blocksRemaining < 0
-                ? 'Awaiting finalization'
-                : statusLabel(poll.poll_status)}</dd>
+            <dt className={styles.detailsLabel}>{t('send.fields.token')}</dt>
+            <dd className={styles.detailsValue}>{poll.tick || t('governance.detail.notAvailable')}</dd>
+            {poll.source ? (
+                <>
+                    <dt className={styles.detailsLabel}>{t('governance.detail.creator')}</dt>
+                    <dd className={styles.detailsValue}><AddressText address={String(poll.source)} /></dd>
+                </>
+            ) : null}
+            {poll.block_index !== null && poll.block_index !== undefined && poll.block_index !== '' ? (
+                <>
+                    <dt className={styles.detailsLabel}>{t('governance.detail.createdAt')}</dt>
+                    <dd className={styles.detailsValue}>{String(poll.block_index)}</dd>
+                </>
+            ) : null}
             <dt className={styles.detailsLabel}>Mode</dt>
             <dd className={styles.detailsValue}>{poll.tally_mode || 'approval'} / {poll.weight_mode || 'balance'}</dd>
             <dt className={styles.detailsLabel}>Closes at block</dt>
@@ -670,8 +754,8 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
     );
 
     const voteReceipt = (
-        <div style={{ marginTop: '0.75rem' }}>
-            <SectionHeader title="Your vote" />
+        <div className={detailStyles.receipt}>
+            <p className={detailStyles.cardLabel}>{t('governance.detail.yourVoteLabel')}</p>
             {walletVotes === null ? (
                 <p className={styles.hint}>Loading your vote…</p>
             ) : walletBallots.length ? (
@@ -692,49 +776,69 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         </div>
     );
 
-    // Frozen results are unavailable while voting is open and can be absent
-    // briefly after close while the indexer finalizes the poll.
-    const resultsBlock = (
-        <div style={{ marginTop: '0.75rem' }}>
-            <SectionHeader title="Results" />
-            {results && results.length ? (
-                <ul className={detailStyles.resultList} aria-label="Poll results">
-                    {results.map((r, index) => {
-                        const optionText = `${r.option_index}: ${options[r.option_index] ?? ''}`;
-                        const percentage = resultPercentages[index] || 0;
-                        return (
-                            <li className={detailStyles.resultItem} key={String(r.option_index)}>
-                                <div className={detailStyles.resultHeader}>
-                                    <span className={detailStyles.resultOption}>{optionText}</span>
-                                    <span className={detailStyles.resultValues}>
-                                        <span>{String(r.total_weight ?? '0')} weight</span>
-                                        <span>{percentage}%</span>
-                                        <span>{String(r.voter_count ?? '0')} voter{Number(r.voter_count) === 1 ? '' : 's'}</span>
-                                    </span>
-                                </div>
-                                <div
-                                    className={detailStyles.resultTrack}
-                                    role="progressbar"
-                                    aria-label={`${optionText} weight`}
-                                    aria-valuemin={0}
-                                    aria-valuemax={100}
-                                    aria-valuenow={percentage}
-                                    aria-valuetext={`${String(r.total_weight ?? '0')} weight`}
-                                >
-                                    <div className={detailStyles.resultFill} style={{ width: `${percentage}%` }} />
-                                </div>
+    // The result card. Frozen results are unavailable while voting is open
+    // (weight is set at the close block) and can be absent briefly after
+    // close while the indexer finalizes the poll, so those states say so
+    // instead of showing a tally.
+    const segmentColor = (index) => `color-mix(in srgb, var(--xc-accent-primary) ${Math.max(25, 100 - index * 25)}%, var(--xc-bg-muted))`;
+    // A finalized poll names its winner as the indexer decided it (ties
+    // included); before that the card names the option with the most weight.
+    const winnerEntry = winnerKnown && poll.poll_status === 'finalized'
+        ? tally.entries.find((entry) => entry.optionIndex === Number(poll.winning_option)) || null
+        : null;
+    let leadingText = null;
+    if (winnerEntry) {
+        leadingText = t('governance.detail.winner', { option: optionText(winnerEntry.optionIndex), share: String(winnerEntry.percent) });
+    } else if (tally.leading) {
+        leadingText = t('governance.detail.leading', { option: optionText(tally.leading.optionIndex), share: String(tally.leading.percent) });
+    } else if (tally.tie) {
+        leadingText = t('governance.detail.tied');
+    }
+    const resultCard = (
+        <section className={detailStyles.resultCard} aria-label={t('governance.detail.results')} data-poll-result-card="">
+            {outcomeText ? <p className={detailStyles.outcome} data-poll-outcome={outcome}>{outcomeText}</p> : null}
+            {tally.entries.length ? (
+                <>
+                    {leadingText ? <p className={detailStyles.leading}>{leadingText}</p> : null}
+                    {/* One stacked bar: each option's share of the weight. */}
+                    <div
+                        className={detailStyles.stackedBar}
+                        role="img"
+                        aria-label={tally.entries.map((entry) => `${optionText(entry.optionIndex)} ${entry.percent}%`).join(', ')}
+                    >
+                        {tally.entries.map((entry, index) => (
+                            <span
+                                key={String(entry.optionIndex)}
+                                className={detailStyles.segment}
+                                data-percent={entry.percent}
+                                style={{ width: `${entry.percent}%`, background: segmentColor(index) }}
+                            />
+                        ))}
+                    </div>
+                    <ul className={detailStyles.resultList} aria-label={t('governance.detail.results')}>
+                        {tally.entries.map((entry, index) => (
+                            <li className={detailStyles.resultItem} key={String(entry.optionIndex)}>
+                                <span className={detailStyles.swatch} style={{ background: segmentColor(index) }} aria-hidden="true" />
+                                <span className={detailStyles.resultOption}>{optionText(entry.optionIndex)}</span>
+                                <span className={detailStyles.resultValues}>
+                                    <span>{t('governance.detail.weight', { weight: entry.weight })}</span>
+                                    <span>{`${entry.percent}%`}</span>
+                                    <span>{t(entry.voters === 1 ? 'governance.detail.voter' : 'governance.detail.voters', { count: String(entry.voters) })}</span>
+                                </span>
                             </li>
-                        );
-                    })}
-                </ul>
+                        ))}
+                    </ul>
+                </>
             ) : (
                 <p className={styles.hint}>
                     {isOpen
-                        ? 'Final results appear after voting closes.'
-                        : pollReportsOpen ? 'Final results are being finalized.' : 'No finalized results are available.'}
+                        ? t('governance.detail.countedAtClose')
+                        : pollReportsOpen ? t('governance.detail.finalizing') : t('governance.detail.noResults')}
                 </p>
             )}
-        </div>
+            {turnoutText ? <p className={detailStyles.turnout}>{turnoutText}</p> : null}
+            {voteReceipt}
+        </section>
     );
 
     // The confirm page, rendered in place of the poll while the
@@ -745,6 +849,13 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={{
+                    verb: t('governance.detail.vote'),
+                    target: String(poll?.question || '').trim() || t('governance.pollNumber', { id: String(pollIndex) }),
+                    direction: 'none',
+                    chainId,
+                    address: fromAddress?.address,
+                }}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
                 // Fallback only: the composed PSBT's exact fee wins (§5.2.5).
@@ -783,7 +894,9 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                     <Button type="submit" variant="primary" loading={stage === 'submitting'}
                         icon={isHwSource ? <Icon.SignIcon /> : <Icon.ThumbsUpIcon />}
                         disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}>
-                        {isWatcherMode ? 'Create unsigned transaction' : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Submit vote'}
+                        {isWatcherMode
+                            ? t('governance.action.createUnsigned')
+                            : t('governance.action.submitVote')}
                     </Button>
                 )}
             >
@@ -820,50 +933,100 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         );
     }
 
-    // The ballot form sits below the poll's terms and results. Its demo note and
-    // its error lead the page content instead of the form.
-    // The form stays blocked and keeps its dialog, but the page draws the note.
+    // The ballot form's demo note leads the page; the form stays blocked and
+    // keeps its dialog. Its errors show in the form's status slot just above
+    // the Vote button, as the Form Standard asks.
     const ballotFormGuard = { ...demoGuard, note: null };
-    const pageNotices = (isOpen && demoGuard.blocked) || formError ? (
+    // A poll that closed under an open review takes the form away, so its
+    // refusal ("closed while the review was open") leads the page instead.
+    const pageNotices = (isOpen && demoGuard.blocked) || (!isOpen && formError) ? (
         <>
             {isOpen ? demoGuard.note : null}
-            {formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
+            {!isOpen && formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
         </>
     ) : null;
 
+    // The section each ballot error belongs to, so it reopens on each press.
+    const feeStopNow = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+    const errorSection = (() => {
+        if (!formError) return null;
+        if (feeStopNow && formError === feeStopNow.formError) return 'fee';
+        if (/address/i.test(formError)) return 'from';
+        if (/^Memo/i.test(formError)) return 'memo';
+        return 'vote';
+    })();
+    const sectionErrorKey = (id) => (errorSection && (errorSection === id || id === 'vote') ? validationAttempt + 1 : 0);
+    const ballotSummary = sourceBallot.length
+        ? t('governance.detail.yourVote', { choice: sourceBallot.map((row) => ballotRowText(row, options, isSplit)).join(' · ') })
+        : t('governance.detail.notVoted');
+    const rulesSummary = joinSummary(
+        hasQuorum ? t('governance.detail.quorumShort', { quorum: percentOf(poll.quorum) }) : null,
+        poll.min_voters ? t('governance.detail.voters', { count: String(poll.min_voters) }) : null,
+        poll.min_vote_balance ? t('governance.detail.minBalanceShort', { amount: String(poll.min_vote_balance) }) : null,
+        poll.decide_threshold ? t('governance.detail.earlyDecideShort', { share: percentOf(poll.decide_threshold) }) : null,
+    ) || t('send.advanced.none');
+
     return wrap(
         <ListPage notices={pageNotices}>
-            {pollInfo}
-            {voteReceipt}
-            {resultsBlock}
+            {pollHead}
+            {resultCard}
+            <div className={formStandardStyles.sections} data-xc-preserve-nested-cards="">
             {isOpen ? (
-                <FormPage
+                /* Cast your vote: one line that opens into the ballot form, on
+                   the Form Standard (From, the ballot, Memo, Network fee, Vote). */
+                <FormSection
+                    id="vote"
+                    title={t('governance.detail.castVote')}
+                    icon={Icon.ThumbsUpIcon}
+                    {...sections.bind('vote')}
+                    revealKey={sectionErrorKey('vote')}
+                    summary={ballotSummary}
+                >
+                <FormFrame
                     demoGuard={ballotFormGuard}
                     className={detailStyles.ballotForm}
                     label={sourceBallot.length ? 'Change vote' : 'Vote'}
                     onSubmit={handleReview}
-                    actions={<Button type="submit" variant="primary"
-                        icon={sourceBallot.length ? <Icon.CheckIcon /> : <Icon.ThumbsUpIcon />}
-                        disabled={!fromAddress || options.length === 0}>{sourceBallot.length ? 'Change vote' : 'Vote'}</Button>}
+                    status={formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
+                    action={(
+                        <FormAction
+                            icon={sourceBallot.length ? <Icon.CheckIcon /> : <Icon.ThumbsUpIcon />}
+                            loading={actionConfirm.composing}
+                            disabled={!fromAddress || options.length === 0 || actionConfirm.composing}
+                        >
+                            {sourceBallot.length ? t('governance.detail.changeVote') : t('governance.detail.vote')}
+                        </FormAction>
+                    )}
+                    from={(
+                        <FromSection
+                            {...sections.bind('from')}
+                            chainId={chainId}
+                            chainRegistry={chainRegistry}
+                            lockNetwork
+                            networkHelp={t('governance.detail.networkHelp')}
+                            address={fromAddress?.address || null}
+                            onOpenPicker={() => setSourcePickerOpen(true)}
+                            pickerLabel="Choose voting address"
+                            addressHelp="The address casting this ballot. Its governance-token balance determines this vote's weight."
+                            missing={addressesByChain ? (
+                                <p className={styles.hint}>No address on this network. Use Receive to generate one, then vote.</p>
+                            ) : null}
+                            revealKey={sectionErrorKey('from')}
+                        />
+                    )}
+                    fee={feeTiers ? (
+                        <FeeSection
+                            {...sections.bind('fee')}
+                            chainId={chainId}
+                            coinTicker={coinTicker}
+                            tiers={feeTiers}
+                            value={feePick}
+                            onChange={setFeePick}
+                            customEstimate={feeCustomEstimate}
+                            revealKey={sectionErrorKey('fee')}
+                        />
+                    ) : null}
                 >
-                    <NetworkField
-                        label="Network"
-                        value={chainId}
-                        onChange={() => {}}
-                        chainIds={[chainId]}
-                        chainRegistry={chainRegistry}
-                        disabled
-                    />
-                    <AddressField
-                        label="From"
-                        help="The address casting this ballot. Its governance-token balance determines this vote's weight."
-                        icon="addresses"
-                        value={fromAddress?.address || ''}
-                        readOnly
-                        onChange={() => {}}
-                        onIconClick={() => setSourcePickerOpen(true)}
-                        iconLabel="Choose voting address"
-                    />
                     <div role="group" aria-labelledby={ballotLabelId}>
                         <div className={detailStyles.ballotLabelRow}>
                             <span id={ballotLabelId} className={styles.fromLabel}>{isSplit ? 'Split your weight across options' : `Choose up to ${maxSel} option${maxSel > 1 ? 's' : ''}`}</span>
@@ -895,25 +1058,73 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                         </div>
                     </div>
                     {options.length === 0 ? <p className={styles.hint}>This poll has no voting options.</p> : null}
-                    <Input label="Memo" optional maxLength={MAX_MEMO_LENGTH}
-                        help="An optional note recorded with this ballot. It does not affect the vote or its weight."
-                        value={memo} onChange={(e) => setMemo(e.target.value)} autoComplete="off" />
-                    {feeTiers ? (
-                        <FeeSelector
-                            chainId={chainId}
-                            label="Network fee"
-                            coinTicker={coinTicker}
-                            tiers={feeTiers}
-                            value={feePick}
-                            onChange={setFeePick}
-                            customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                        />
-                    ) : null}
-                    {!fromAddress ? <p className={styles.hint}>No address on this network. Use Receive to generate one, then vote.</p> : null}
-                </FormPage>
+                    {/* An optional section, so the field drops its own Optional tag. */}
+                    <FormSection
+                        id="memo"
+                        title={t('send.memo')}
+                        icon={Icon.MessageIcon}
+                        optional
+                        {...sections.bind('memo')}
+                        revealKey={sectionErrorKey('memo')}
+                        summary={memo.trim() || t('send.advanced.none')}
+                    >
+                        <Input label="Memo" maxLength={MAX_MEMO_LENGTH}
+                            help="An optional note recorded with this ballot. It does not affect the vote or its weight."
+                            value={memo} onChange={(e) => setMemo(e.target.value)} autoComplete="off" />
+                    </FormSection>
+                </FormFrame>
+                </FormSection>
             ) : (
-                <p className={styles.hint} style={{ marginTop: '0.75rem' }}>Voting is closed for this poll.</p>
+                <p className={styles.hint}>Voting is closed for this poll.</p>
             )}
+            <FormSection
+                id="rules"
+                title={t('governance.detail.rules')}
+                icon={Icon.VerifyIcon}
+                {...sections.bind('rules')}
+                summary={rulesSummary}
+            >
+                {rulesSummary === t('send.advanced.none') ? (
+                    <p className={styles.hint}>{t('governance.detail.noRules')}</p>
+                ) : (
+                    <dl className={styles.detailsList}>
+                        {hasQuorum ? (
+                            <>
+                                <dt className={styles.detailsLabel}>{t('governance.detail.quorum')}</dt>
+                                <dd className={styles.detailsValue}>{t('governance.detail.ofSupply', { share: percentOf(poll.quorum) })}</dd>
+                            </>
+                        ) : null}
+                        {poll.min_voters ? (
+                            <>
+                                <dt className={styles.detailsLabel}>{t('governance.detail.minVoters')}</dt>
+                                <dd className={styles.detailsValue}>{String(poll.min_voters)}</dd>
+                            </>
+                        ) : null}
+                        {poll.min_vote_balance ? (
+                            <>
+                                <dt className={styles.detailsLabel}>{t('governance.detail.minBalance')}</dt>
+                                <dd className={styles.detailsValue}>{`${String(poll.min_vote_balance)} ${poll.tick || ''}`.trim()}</dd>
+                            </>
+                        ) : null}
+                        {poll.decide_threshold ? (
+                            <>
+                                <dt className={styles.detailsLabel}>{t('governance.detail.earlyDecide')}</dt>
+                                <dd className={styles.detailsValue}>{t('governance.detail.ofSupply', { share: percentOf(poll.decide_threshold) })}</dd>
+                            </>
+                        ) : null}
+                    </dl>
+                )}
+            </FormSection>
+            <FormSection
+                id="details"
+                title={t('tokenDetail.tabs.details')}
+                icon={Icon.InfoIcon}
+                {...sections.bind('details')}
+                summary={joinSummary(`#${String(pollIndex)}`, t('governance.closesAtBlock', { block: String(poll.end_block ?? t('governance.detail.notAvailable')) }))}
+            >
+                {detailsList}
+            </FormSection>
+            </div>
         </ListPage>,
     );
 }

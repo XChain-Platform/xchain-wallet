@@ -9,13 +9,14 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, EmptyState, Icon, Input, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+// The standard list filter, on the title line.
+import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useWalletSource } from '../hooks/useDemoGuard.jsx';
 import { useSupportedChains } from '../hooks/useSupportedChains.js';
-import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { coinFromChainId, tickerColor } from '../components/BalanceList.jsx';
 import { formatWithThousands } from '../utils/amountFormat.js';
 import {
@@ -126,6 +127,9 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
     // chain without its network kind.
     const [query, setQuery] = useState('');
     const [network, setNetwork] = useState('all');
+    // Status and Sort sit with Search and Network in the title-line filter.
+    const [statusFilter, setStatusFilter] = useState('all');
+    const [sortBy, setSortBy] = useState('newest');
 
     // Offline the explorer reads cannot finish, and each one waits out its
     // client retries before failing, so the page would sit on a skeleton for
@@ -358,36 +362,88 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
         const q = query.trim().toLowerCase();
         return allRows.filter((row) => {
             if (network !== 'all' && coinFromChainId(row.chainId) !== network) return false;
+            if (statusFilter !== 'all' && row.status !== statusFilter) return false;
             if (!q) return true;
             return row.searchHaystack.includes(q);
         });
-    }, [allRows, query, network]);
+    }, [allRows, query, network, statusFilter]);
+
+    // Sort orders the filtered rows (Newest first is the default).
+    const sortedRows = useMemo(() => {
+        const rows = [...visibleRows];
+        const at = (row) => Number(row.blockIndex || 0);
+        if (sortBy === 'oldest') rows.sort((a, b) => at(a) - at(b));
+        else if (sortBy === 'token') rows.sort((a, b) => String(a.asset || '').localeCompare(String(b.asset || '')) || (at(b) - at(a)));
+        return rows;
+    }, [visibleRows, sortBy]);
+    const coinFamilies = useMemo(
+        () => [...new Set(chainsWithAddresses.map((cid) => coinFromChainId(cid)))],
+        [chainsWithAddresses],
+    );
 
     // A second line that two rows share (one owner address under every
     // position) is shown nowhere; the position detail names the address.
     const repeatedSecondLines = useMemo(() => repeatedSecondLinesOf(visibleRows), [visibleRows]);
 
+    // The title bar holds the filter and New stake (plus) icons; the
+    // page body is only the staking list.
+    const filterMenu = (
+        <ListFilterMenu
+            query={query}
+            onQueryChange={setQuery}
+            active={statusFilter !== 'all' || sortBy !== 'newest'}
+            label="Filter staking"
+            searchPlaceholder="Search"
+            searchLabel="Search staking positions"
+            chainRegistry={chainRegistry}
+            coinFamilies={coinFamilies}
+            networkFilter={network}
+            onNetworkFilterChange={setNetwork}
+        >
+            <Select
+                label="Status"
+                size="md"
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+            >
+                <option value="all">All</option>
+                <option value="active">Active</option>
+                <option value="locked">Locked</option>
+                <option value="pending">Pending</option>
+                <option value="cooldown">Cooldown</option>
+            </Select>
+            <Select
+                label="Sort"
+                size="md"
+                value={sortBy}
+                onChange={(event) => setSortBy(event.target.value)}
+            >
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="token">Token A to Z</option>
+            </Select>
+        </ListFilterMenu>
+    );
     const header = (
         <PageHeader
             onBack={onBack}
             backLabel="Back to home"
             title="Staking"
+            trailing={(
+                <>
+                    {filterMenu}
+                    {onNewStake ? (
+                        <Button variant="secondary" icon={<Icon.PlusIcon />} aria-label="New Stake" title="New Stake" onClick={() => onNewStake()}>
+                            {null}
+                        </Button>
+                    ) : null}
+                </>
+            )}
         />
     );
-    // The page header holds only the title and Back, so New stake sits in the
-    // content's actions row as the page's one green main action. An empty
-    // list points at it rather than offering a second (blue) copy.
-    const wrap = (children, { toolbar, notices } = {}) => (
+    const wrap = (children, { notices } = {}) => (
         <Screen variant={variant} header={header}>
-            <ListPage
-                notices={notices}
-                actions={onNewStake ? (
-                    <Button variant="success" icon={<Icon.PlusIcon />} onClick={() => onNewStake()}>
-                        New stake
-                    </Button>
-                ) : null}
-                toolbar={toolbar}
-            >
+            <ListPage notices={notices}>
                 {children}
             </ListPage>
         </Screen>
@@ -400,7 +456,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                     variant="error"
                     className={styles.entryDescription}
                     recovery={{
-                        label: 'Try again',
+                        label: 'Try Again',
                         onAction: () => {
                             setAddressesError(null);
                             setAddressesByChain(null);
@@ -438,33 +494,12 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
         );
     }
 
-    const toolbar = (
-        <div className={local.toolbar}>
-            <div className={local.searchField}>
-                <Input
-                    type="search"
-                    size="md"
-                    enterKeyHint="search"
-                    autoCapitalize="off"
-                    placeholder="Search"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    aria-label="Search staking positions"
-                />
-            </div>
-            <NetworkFilterDropdown size="md" value={network} onChange={setNetwork} />
-        </div>
-    );
-
     const loadErrorNotice = loadErrors.length > 0 ? (
         <StatusMessage
             variant="error"
             className={styles.entryDescription}
             recovery={{
-                label: 'Try again',
+                label: 'Try Again',
                 onAction: () => {
                     setStateByChain({});
                     setStakingReload((value) => value + 1);
@@ -508,6 +543,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                             ? "Staking positions unavailable"
                             : "Nothing staked yet")
                         : "No matching stakes"}
+                    /* The empty state is text only; New stake is in the title bar. */
                     body={allRows.length === 0
                         ? (loadErrors.length > 0
                             ? "No staking positions could be loaded, so try again later."
@@ -517,7 +553,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                 />
             ) : (
                 <div className={local.list} role="list">
-                    {visibleRows.map((row) => (
+                    {sortedRows.map((row) => (
                         <StakeRow
                             key={row.key}
                             row={row}
@@ -539,7 +575,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                 </div>
             )}
         </>,
-        { toolbar, notices: loadErrorNotice },
+        { notices: loadErrorNotice },
     );
 }
 

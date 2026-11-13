@@ -4,24 +4,100 @@
     min-width: 0;
 }
 
-.searchModes {
-    margin-bottom: var(--xc-space-2);
+/* On a wide screen the field, tabs and cards keep one readable column in the middle. */
+.searchForm,
+.browse,
+.resultGroup {
+    max-width: 760px;
+    margin-inline: auto;
 }
 
-.searchModes > div {
-    flex-flow: row wrap;
+/* One large search field with the magnifier as its submit
+   button and an X that clears back to the browse list. */
+.searchField {
+    position: relative;
+    display: flex;
     align-items: center;
-    gap: var(--xc-space-2);
+    width: 100%;
+    min-width: 0;
+}
+
+.searchField > div {
+    flex: 1 1 0;
+    width: 100%;
+    min-width: 0;
     margin-bottom: 0;
 }
 
-/* Top-aligned: the search field carries its hint underneath, so bottom
-   alignment would push the Chain select down beside the hint. */
-.filterRow {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    gap: var(--xc-space-2);
+/* The kit Input rule outranks a bare class, so the size and the padding that
+   clears both buttons are set through the wrapper. */
+.searchField input.searchInput {
+    width: 100%;
+    min-height: 48px;
+    box-sizing: border-box;
+    padding-inline: 44px 44px;
+    border: 1.5px solid var(--xc-accent-primary);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-bg);
+    font-size: var(--xc-text-md);
+    text-overflow: ellipsis;
+}
+
+.searchField input.searchInput::-webkit-search-cancel-button {
+    appearance: none;
+    display: none;
+}
+
+.searchSubmit,
+.searchClear {
+    position: absolute;
+    z-index: calc(var(--xc-z-base) + 1);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--xc-radius-sm);
+    background: transparent;
+    color: var(--xc-text-muted);
+    cursor: pointer;
+}
+
+.searchSubmit {
+    inset-inline-start: 4px;
+    color: var(--xc-accent-primary);
+}
+
+.searchSubmit:disabled {
+    color: var(--xc-text-muted);
+    cursor: default;
+}
+
+.searchClear {
+    inset-inline-end: 4px;
+}
+
+.searchSubmit:focus-visible,
+.searchClear:focus-visible {
+    outline: none;
+    box-shadow: var(--xc-shadow-focus-ring);
+}
+
+/* Forced-colors mode drops the box-shadow ring, so focus gets an outline. */
+@media (forced-colors: active) {
+    .searchSubmit:focus-visible,
+    .searchClear:focus-visible {
+        outline: 2px solid Highlight;
+        outline-offset: 2px;
+    }
+}
+
+.searchSubmit svg,
+.searchClear svg {
+    width: 1.25rem;
+    height: 1.25rem;
 }
 
 .chainSelect {
@@ -31,91 +107,98 @@
     box-sizing: border-box;
 }
 
-.chainControl {
-    flex: 1 1 12rem;
-    min-width: 0;
-}
-
-.queryControl {
-    flex: 2 1 18rem;
-    min-width: 0;
-}
-
-.chainControl > *,
-.queryControl > * {
-    margin-bottom: 0;
-}
-
-.resultGroup {
-    margin-bottom: var(--xc-space-4);
-}
-
-.resultRow {
-    width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--xc-space-2);
-}
-
-/* The kit Button wraps its children in one inline-flex label span, so the
-   column layout has to reach that span too: without it the ticker, the
-   terms and the action number sat side by side and squeezed the terms into
-   a narrow middle column on a phone. */
-.resultRow > span {
+.browse {
     display: flex;
     flex-direction: column;
-    align-items: stretch;
     gap: var(--xc-space-2);
     width: 100%;
     min-width: 0;
-    text-align: start;
+    margin-top: var(--xc-space-3);
 }
 
-.resultFacts {
-    display: flex;
-    flex-direction: column;
+.tabLabel {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     gap: var(--xc-space-1);
+    white-space: nowrap;
+}
+
+.tabLabel svg {
+    flex: 0 0 auto;
+    width: 1rem;
+    height: 1rem;
+}
+
+.panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
     min-width: 0;
 }
 
-.factRow {
-    display: grid;
-    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
-    gap: var(--xc-space-1) var(--xc-space-3);
-    min-width: 0;
-}
-
-.factLabel {
+.rankNote {
     margin: 0;
     color: var(--xc-text-muted);
     font-size: var(--xc-text-xs);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
 }
 
-.factValue {
+.cardList,
+.groupCards {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
     min-width: 0;
-    margin: 0;
-    color: var(--xc-text);
-    font-size: var(--xc-text-sm);
-    overflow-wrap: anywhere;
 }
 
-.numericValue {
-    direction: ltr;
-    unicode-bidi: isolate;
+.group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
 }
 
-.resultMeta {
-    display: block;
-    overflow-wrap: anywhere;
+.groupCards {
+    padding-inline-start: var(--xc-space-3);
+    border-inline-start: 2px solid var(--xc-border);
 }
 
-@media not all and (min-width: 400px) {
-    .factRow {
-        grid-template-columns: minmax(0, 1fr);
-    }
+.resultGroup {
+    margin-top: var(--xc-space-3);
+    margin-bottom: var(--xc-space-2);
+}
+
+.sectionTitle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    white-space: nowrap;
+}
+
+.sectionTitle svg {
+    width: 1rem;
+    height: 1rem;
+}
+
+.sellerAvatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--xc-avatar-size-list, 40px);
+    height: var(--xc-avatar-size-list, 40px);
+    border-radius: var(--xc-avatar-shape, 50%);
+    background: var(--xc-bg-muted);
+    color: var(--xc-accent-primary);
+}
+
+.sellerAvatar svg {
+    width: 1.25rem;
+    height: 1.25rem;
+}
+
+.laneFooter {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    margin-top: var(--xc-space-2);
 }

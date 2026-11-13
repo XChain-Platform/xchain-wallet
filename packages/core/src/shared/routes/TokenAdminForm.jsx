@@ -9,9 +9,24 @@
 // contact legal@dankest.llc.
 
 import { t } from '../../i18n/index.js';
+import { titleCase } from '../utils/titleCase.js';
 import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, Checkbox, FeeSelector, FieldNote, FormErrorSummary, FormNotice, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, StatusMessage, Switch, Textarea } from '@xchain-wallet/core/ui';
+// Network and the fee selector come from the Wallet Form
+// Standard's FromSection and FeeSection.
+import { AddressField, AddressText, Button, ChainBadge, Checkbox, FieldNote, FormErrorSummary, FormNotice, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage, Switch, Textarea } from '@xchain-wallet/core/ui';
+// Every Manage token mode is laid out on the Wallet Form Standard:
+// From (closed), the mode's own section (open: Token and the mode's fields),
+// Network fee, the status slot and the mode's action.
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    useFormSections,
+} from '../components/formStandard/index.js';
+import { selectedNetworkFee } from '../../flows/feesCard.js';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -24,7 +39,7 @@ import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { InfoTip } from '@xchain-wallet/core/ui';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { TickerIcon } from '../components/TickerIcon.jsx';
+// A preset token shows in the standard Token field.
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
@@ -251,6 +266,9 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const [callbackTokenPickerOpen, setCallbackTokenPickerOpen] = useState(false);
     const [contactsPickerOpen, setContactsPickerOpen] = useState(false);
     const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
+    // The standard sections' open state, held above every early
+    // return (pickers, list screens, review). Only the mode's section opens.
+    const formSections = useFormSections({ from: false, main: true, fee: false });
 
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
@@ -376,7 +394,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         && Number.isInteger(callbackTokenInfo?.divisibility)
         ? callbackTokenInfo.divisibility
         : null;
-    // Payout per unit follows the callback token's own format (U61): every
+    // Payout per unit follows the callback token's own format: every
     // edit is checked against its decimal places, and a valid value is padded
     // to them when the callback token changes or the field loses focus.
     const callbackAmountPrecisionError = mode === 'callback-settings' && callbackAmount.trim()
@@ -1181,8 +1199,8 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 : onBack}
             backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
-                    ? `Review ${MODE_LABEL_LOWER[mode]}`
-                    : `${MODE_LABEL[mode]}`}
+                    ? titleCase(`Review ${MODE_LABEL_LOWER[mode]}`)
+                    : titleCase(`${MODE_LABEL[mode]}`)}
         />
     );
     const wrap = (children) => (
@@ -1250,6 +1268,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     <Button
                         type="submit"
                         variant="primary"
+                        icon={<Icon.SignIcon />}
                         loading={stage === 'submitting'}
                         disabled={
                             (mode === 'lock' && !typedConfirmOk) || (
@@ -1262,10 +1281,8 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         }
                     >
                         {isWatcherMode
-                            ? `Create unsigned transaction: ${MODE_LABEL_LOWER[mode]}`
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: ${MODE_LABEL_LOWER[mode]}`
-                                : `Sign: ${MODE_LABEL_LOWER[mode]}`}
+                            ? `Create Unsigned Transaction: ${titleCase(MODE_LABEL_LOWER[mode])}`
+                            : `Sign: ${titleCase(MODE_LABEL_LOWER[mode])}`}
                     </Button>
                 )}
             >
@@ -1340,9 +1357,20 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     // confirm page, rendered in place of the form (the overlay modal
     // didn't fit small/mobile viewports); form state stays intact behind it.
     if (actionConfirm.open) {
+        // Every mode changes the token itself: the token is the hero, the
+        // mode is the action, and a transfer names the new owner.
+        const adminSummary = {
+            verb: titleCase(MODE_SUBMIT_LABEL[mode] || MODE_LABEL[mode] || ''),
+            ticker: String(ticker || '').trim().toUpperCase(),
+            chainId,
+            direction: 'none',
+            address: fromAddress?.address,
+            ...(mode === 'transfer' && transferTo.trim() ? { recipient: transferTo.trim() } : {}),
+        };
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={adminSummary}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
@@ -1376,7 +1404,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={chainId}
                 onChainChange={setChainId}
@@ -1394,7 +1422,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             <TokenPicker
                 purpose="send"
                 walletId={walletId}
-                title="Select token"
+                title="Select Token"
                 onSelect={(sel) => {
                     setTicker(String(sel.tick || ''));
                     if (!lockedToken && sel.chainId) setChainId(sel.chainId);
@@ -1413,7 +1441,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 chainIdFilter={chainId}
                 kindFilter="tokens"
                 kindLocked
-                title="Select callback token"
+                title="Select Callback Token"
                 onSelect={(sel) => {
                     setCallbackTick(String(sel.tick || ''));
                     setCallbackTokenPickerOpen(false);
@@ -1471,7 +1499,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 addresses={addressesByChain?.[chainId] || []}
                 filterType="2"
                 includeUnions
-                title={listPickerFor === 'allow' ? 'Choose allow-list' : 'Choose block-list'}
+                title={listPickerFor === 'allow' ? 'Choose Allow-List' : 'Choose Block-List'}
                 onSelect={(row) => {
                     if (listPickerFor === 'allow') {
                         setAllowListIdx(row.actionIndex);
@@ -1491,8 +1519,29 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         );
     }
 
+    // Which standard section the current error belongs to, so that
+    // section reopens on every attempt; and the closed sections' summaries.
+    const errorSection = (() => {
+        if (!formError) return null;
+        if (/source address/i.test(formError)) return 'from';
+        // A custom fee refusal (the review's fee stop) belongs to Network fee.
+        const feeStopNow = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStopNow && feeStopNow.formError === formError) return 'fee';
+        return 'main';
+    })();
+    const sectionErrorKey = (id) => (errorSection === id
+        ? (id === 'fee' ? `fee-${formError}` : reviewAttempt + 1)
+        : 0);
+    const networkFeeAmount = selectedNetworkFee({ tiers: feeTiers, value: feePick, customEstimate: feeCustomEstimate })
+        || (feeEstimate?.coinAmount != null ? String(feeEstimate.coinAmount) : null);
+    // No source to default to: no funding address on the network (the default
+    // skips dispenser-delegated ones) and none picked by hand.
+    const sourceMissing = Boolean(addressesByChain) && !fromAddress
+        && (addressesByChain[chainId] || []).filter((a) => a.role !== 'dispenser').length === 0;
+    const mainSummary = ticker ? String(ticker).trim().toUpperCase() : null;
+    const ModeIcon = MODE_ACTION_ICON[mode] || Icon.GearIcon;
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label={MODE_LABEL[mode]}
             onSubmit={handleReview}
@@ -1504,12 +1553,12 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     {formError || eligibilityError}
                 </StatusMessage>
             ) : null}
-            actions={(
-                <Button
-                    type="submit"
-                    // The main action is green on every mode, Lock token
-                    // included (U63); the typed LOCK gate carries the warning.
-                    variant="primary"
+            action={(
+                // The main action is green on every mode, Lock token
+                // included; the typed LOCK gate carries the warning.
+                // The standard FormAction: an icon per mode and a verb label.
+                <FormAction
+                    icon={<ModeIcon />}
                     loading={actionConfirm.composing}
                     disabled={!fromAddress || !ticker
                         || tokenInfoPending
@@ -1528,34 +1577,68 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         || (mode === 'lock' && singleEncode && !typedConfirmOk)
                         || actionConfirm.composing}
                 >
-                    {MODE_SUBMIT_LABEL[mode]}
-                </Button>
+                    {titleCase(MODE_SUBMIT_LABEL[mode])}
+                </FormAction>
+            )}
+            from={(
+                // Network and From live in the closed From section.
+                // The token decides the network: a preset token locks it, and
+                // the Token picker lists every chain and moves the form, so
+                // Network locks once a token is set.
+                <FromSection
+                    {...formSections.bind('from')}
+                    revealKey={sectionErrorKey('from')}
+                    chainId={chainId}
+                    chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])}
+                    chainRegistry={chainRegistry}
+                    onNetworkChange={setChainId}
+                    lockNetwork={lockedToken || Boolean(ticker)}
+                    networkHelp={MODE_NETWORK_HELP[mode]}
+                    address={fromAddress?.address || null}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    addressHelp={MODE_FROM_HELP[mode]}
+                    missing={sourceMissing ? (
+                        <FormNotice variant="error">
+                            {t('send.source.noAddress')}
+                        </FormNotice>
+                    ) : null}
+                />
+            )}
+            fee={(
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    revealKey={sectionErrorKey('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeCustomEstimate}
+                    totals={networkFeeAmount ? [
+                        { key: 'network', label: 'Network fee', value: `${networkFeeAmount} ${coinTicker}`.trim() },
+                    ] : []}
+                />
             )}
         >
-            {lockedToken && chainId ? (
-                <TickerIcon chainId={chainId} tick={ticker} size={32} />
-            ) : (
-                <NetworkField label="Network" help={MODE_NETWORK_HELP[mode]} value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-            )}
-
-            {fromAddress ? (
-                <AddressField
-                    label="From"
-                    help={MODE_FROM_HELP[mode]}
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
+            <FormSection
+                id="main"
+                title={MODE_SECTION_TITLE[mode] || titleCase(MODE_LABEL[mode] || '')}
+                icon={ModeIcon}
+                {...formSections.bind('main')}
+                revealKey={sectionErrorKey('main')}
+                summary={mainSummary}
+            >
+            {/* The token always shows as the standard Token field (icon and
+                ticker); a preset token fills it and its picker stays shut. */}
+            {lockedToken ? (
+                <TokenField
+                    label="Token"
+                    help={MODE_TOKEN_HELP[mode]}
+                    value={ticker && chainId ? { chainId, tick: ticker } : null}
+                    disabled
                 />
             ) : (
-                <FormNotice variant="error">
-                    {t('send.source.noAddress')}
-                </FormNotice>
-            )}
-
-            {lockedToken ? null : (
                 <TokenField
                     label="Token"
                     help={MODE_TOKEN_HELP[mode]}
@@ -1605,7 +1688,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         // The same lock switches as the Issue form: a lock icon
                         // once a flag is on (or already locked), an unlock icon
                         // while it is off.
-                        <div role="group" aria-label="Lock flags">
+                        <div role="group" aria-label="Lock flags" className={styles.lockFlagList}>
                             {LOCK_FLAGS.map((f) => {
                                 const isLocked = !!tokenLocks[f.key];
                                 const checked = isLocked || !!lockChecks[f.key];
@@ -1807,11 +1890,11 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                             </span>
                         </div>
                         <Button type="button" variant="ghost" size="sm" icon={<Icon.TokenListIcon />} onClick={() => setListPickerFor('allow')}>
-                            {allowListIdx && allowListIdx !== '0' ? 'Change allow-list' : 'Choose allow-list'}
+                            {allowListIdx && allowListIdx !== '0' ? 'Change Allow-List' : 'Choose Allow-List'}
                         </Button>
                         {listDetachActive && allowListIdx && allowListIdx !== '0' ? (
                             <Button type="button" variant="ghost" size="sm" aria-label="Remove allow-list" onClick={() => { setAllowListIdx('0'); setAllowListCount(null); setAllowListName(null); }}>
-                                Remove list
+                                Remove List
                             </Button>
                         ) : null}
                     </section>
@@ -1831,14 +1914,14 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                             </span>
                         </div>
                         <Button type="button" variant="ghost" size="sm" icon={<Icon.TokenListIcon />} onClick={() => setListPickerFor('block')}>
-                            {blockListIdx && blockListIdx !== '0' ? 'Change block-list' : 'Choose block-list'}
+                            {blockListIdx && blockListIdx !== '0' ? 'Change Block-List' : 'Choose Block-List'}
                         </Button>
                         <Button type="button" variant="ghost" size="sm" icon={<Icon.LinkIcon />} onClick={() => setSharedBlockPickerOpen(true)}>
-                            Use a shared block list
+                            Use a Shared Block List
                         </Button>
                         {listDetachActive && blockListIdx && blockListIdx !== '0' ? (
                             <Button type="button" variant="ghost" size="sm" aria-label="Remove block-list" onClick={() => { blockListTouched.current = true; setBlockListIdx('0'); setBlockListCount(null); setBlockListName(null); setSharedBlockListLabel(null); }}>
-                                Remove list
+                                Remove List
                             </Button>
                         ) : null}
                     </section>
@@ -1911,6 +1994,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     {!bridgeFrozen ? (
                         <Checkbox
                             label="Freeze these settings permanently"
+                            help={t('routes.tokenAdmin.freezeHelp')}
                             checked={bridgeLock}
                             onChange={(e) => setBridgeLock(e.target.checked)}
                         />
@@ -1923,17 +2007,8 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 </>
             ) : null}
 
-            {feeTiers ? (
-                <FeeSelector
-                    chainId={chainId}
-                    label="Network fee"
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
-            ) : null}
+            {/* The fee selector lives in the Network fee section; the typed
+                LOCK gate is last inside the mode's section. */}
             {/*
               * D-165: the typed confirmation for a LOCK, on the path a normal
               * wallet actually takes. It used to live only in the legacy
@@ -1956,8 +2031,8 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     spellCheck={false}
                 />
             ) : null}
-
-        </FormPage>,
+            </FormSection>
+        </FormFrame>,
     );
 }
 
@@ -2089,6 +2164,29 @@ const MODE_LABEL = {
     'callback-settings': 'Callback settings',
     'access-lists': 'Access lists',
     'bridge-settings': 'Bridge settings',
+};
+
+// The title of each mode's main standard section. It
+// names the mode without repeating the action button's own label.
+const MODE_SECTION_TITLE = {
+    lock: 'Locks',
+    description: 'Description',
+    transfer: 'New Owner',
+    'mint-settings': 'Mint Settings',
+    'callback-settings': 'Callback Settings',
+    'access-lists': 'Access Lists',
+    'bridge-settings': 'Bridge Settings',
+};
+
+// The icon of each mode's main section and action button.
+const MODE_ACTION_ICON = {
+    lock: Icon.LockIcon,
+    description: Icon.PencilIcon,
+    transfer: Icon.UserIcon,
+    'mint-settings': Icon.MintIcon,
+    'callback-settings': Icon.CoinsIcon,
+    'access-lists': Icon.TokenListIcon,
+    'bridge-settings': Icon.LinkIcon,
 };
 
 const MODE_SUBMIT_LABEL = {

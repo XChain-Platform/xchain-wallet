@@ -10,7 +10,21 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { t } from '../../i18n/index.js';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FieldNote, FormNotice, FormPage, FormSection, InfoTip, Input, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import '../../i18n/locales/en/components.js';
+// The publishing Network and address and the fee selector come from the
+// standard FromSection and FeeSection, not ui/FormSection (a different,
+// non-collapsible block).
+import { AddressText, Button, ChainBadge, FieldNote, FormNotice, FormPage, Icon, Input, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+// The Wallet Form Standard frame.
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    joinSummary,
+    useFormSections,
+} from '../components/formStandard/index.js';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -178,6 +192,13 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
     const [password, setPassword] = useState('');
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [typedConfirm, setTypedConfirm] = useState('');
+    // The standard sections' open state, held here so it survives
+    // the address picker page and the review. Only Price starts open. Each
+    // Publish attempt bumps the counter, so the section holding the refusal
+    // reopens even after the user closed it.
+    const formSections = useFormSections({ from: false, price: true, feeds: false, usage: false, memo: false, fee: false });
+    const [reviewAttempt, setReviewAttempt] = useState(0);
+    const [feeRefused, setFeeRefused] = useState(false);
 
     const [stage, setStage] = useState(/** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'));
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
@@ -382,7 +403,9 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
 
     function handleReview(event) {
         event.preventDefault();
+        setReviewAttempt((n) => n + 1);
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        setFeeRefused(Boolean(feeStop));
         if (feeStop) { setFormError(feeStop.formError); return; }
         if (!guardBeforeSign()) return;
         setFormError(null);
@@ -439,7 +462,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 ? () => { setSubmitError(null); setStage('form'); }
                 : onBack}
             backDisabled={stage === 'submitting'}
-            title={stage === 'review' || stage === 'submitting' ? 'Review price publish' : 'My oracle'}
+            title={stage === 'review' || stage === 'submitting' ? 'Review Price Publish' : 'My Oracle'}
         />
     );
     // The review always opens at its top instead of inheriting how far the
@@ -492,9 +515,27 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
 
     if (actionConfirm.open) {
         const credsReady = isHwSource ? hwStatus === 'available' : (signerReady || password.length > 0);
+        // The price being published: what is priced, at what value.
+        const pricedAsset = String(actionParams.TICK || actionParams.COIN || '').toUpperCase();
+        const priceSummary = {
+            verb: t('components.confirmSummary.verbPublishPrice'),
+            ...(pricedAsset && actionParams.VALUE
+                ? {
+                    target: t('components.confirmSummary.priceTarget', {
+                        asset: pricedAsset,
+                        value: actionParams.VALUE,
+                        fiat: String(actionParams.FIAT || '').toUpperCase(),
+                    }).trim(),
+                }
+                : {}),
+            direction: 'none',
+            chainId,
+            address: fromAddress?.address,
+        };
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={priceSummary}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
@@ -540,7 +581,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 label="Price publish result"
                 actions={(
                     <>
-                        <Button variant="secondary" onClick={handleBuildAnother}>Publish another</Button>
+                        <Button variant="secondary" onClick={handleBuildAnother}>Publish Another</Button>
                         <Button variant="primary" onClick={onBack}>Done</Button>
                     </>
                 )}
@@ -577,7 +618,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                         loading={stage === 'submitting'}
                         disabled={!typedConfirmOk}
                     >
-                        Create unsigned transaction
+                        Create Unsigned Transaction
                     </Button>
                 )}
             >
@@ -616,7 +657,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="Publishing address"
+                title="Publishing Address"
                 walletId={walletId}
                 chainId={chainId}
                 onChainChange={setChainId}
@@ -634,98 +675,94 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
         ).length;
     };
 
+    // The section a refusal belongs to, so Publish reopens it.
+    const errorSection = !formError ? null
+        : feeRefused ? 'fee'
+            : /memo/i.test(formError) ? 'memo'
+                : /usage fee/i.test(formError) ? 'usage'
+                    : /publishing address/i.test(formError) ? 'from'
+                        : 'price';
+    const revealFor = (id) => (errorSection === id ? reviewAttempt : 0);
+    const noSourceOnChain = !((addressesByChain?.[chainId]) || []).length;
+    // Closed-section summaries.
+    const priceSummary = joinSummary(
+        tick ? `${crossChain ? `${priceCoin}:` : ''}${tick}` : null,
+        value.trim() ? `${value.trim()} ${fiat}` : fiat,
+    ) || null;
+    const feedsSummary = feeds == null ? 'Loading'
+        : feedsError ? 'Could not load'
+            : feeds.length === 0 ? 'None yet'
+                : `${feeds.length} price${feeds.length === 1 ? '' : 's'}`;
+
+    // The standard order: From (closed) holds the publishing network and
+    // address, the oracle's identity; Price (open) holds the priced token,
+    // currency and price; then Published Prices, Usage Fee, Memo and fee.
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label="Publish oracle price"
             onSubmit={handleReview}
-            sectioned
             status={formError ? (
                 <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="primary"
+            action={(
+                <FormAction
+                    icon={<Icon.UploadIcon />}
                     loading={actionConfirm.composing}
                     disabled={actionConfirm.composing}
                 >
-                    {actionConfirm.composing ? 'Preparing review…' : 'Publish price'}
-                </Button>
+                    {actionConfirm.composing ? 'Preparing Review…' : 'Publish Price'}
+                </FormAction>
             )}
-        >
-
-            <FormSection
-                title="Prices"
-                trailing={<InfoTip label={`Dispensers can use an oracle's token price in traditional currency so buyers pay the equivalent in ${priceCoin || 'the chain coin'}. Anyone can publish prices, and the publisher can set a usage fee below.`} />}
-            >
-            {/*
+            /*
               * Pick the PUBLISHING chain: it decides which address signs, pays
               * the fee and becomes the oracle's identity. The priced token's
               * chain is the separate COIN field below, and dispensers on any
               * chain may read this oracle, so the two need not match.
-              */}
-            <NetworkField
-                label="Publishing network"
-                help="The chain your price updates are published on. It decides which address signs and pays the fee, and it becomes your oracle's identity."
-                value={chainId}
-                onChange={setChainId}
-                chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])}
-                chainRegistry={chainRegistry}
-            />
-
-            {fromAddress ? (
-                <AddressField
-                    label="Publishing address"
-                    help="The address that publishes prices. It is your oracle's identity: dispensers that use this oracle read the prices published from this address."
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose publishing address"
+              */
+            from={(
+                <FromSection
+                    {...formSections.bind('from')}
+                    chainId={chainId}
+                    chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])}
+                    chainRegistry={chainRegistry}
+                    onNetworkChange={setChainId}
+                    networkHelp="The chain your price updates are published on. It decides which address signs and pays the fee, and it becomes your oracle's identity."
+                    address={fromAddress?.address || null}
+                    addressLabel="Publishing address"
+                    addressHelp="The address that publishes prices. It is your oracle's identity: dispensers that use this oracle read the prices published from this address."
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose publishing address"
+                    revealKey={revealFor('from')}
+                    missing={noSourceOnChain ? (
+                        <FormNotice variant="error">No address on this network. Use Receive to generate one first.</FormNotice>
+                    ) : null}
                 />
-            ) : (
-                <FormNotice variant="error">No address on this network. Use Receive to generate one first.</FormNotice>
             )}
-
-            {feeds == null ? (
-                <p className={styles.hint}>Loading…</p>
-            ) : feedsError ? (
-                <FieldNote variant="error">{feedsError}</FieldNote>
-            ) : feeds.length === 0 ? (
-                <p className={styles.hint}>
-                    This address has not published any prices yet. The first one you publish starts
-                    pricing 24 hours later.
-                </p>
-            ) : (
-                <ul>
-                    {feeds.map((f) => {
-                        const countdown = activationCountdownText(f.pending?.secondsUntilEffective);
-                        const staleAge = staleAgeText(f.stale?.secondsSinceEffective);
-                        const effectiveQuote = f.live || f.stale;
-                        const count = consumerCountFor(f);
-                        return (
-                            <li key={f.key} className={styles.hint}>
-                                <Button variant="secondary" size="sm" onClick={() => prefillFromFeed(f)}>
-                                    {f.coin && f.coin !== coinTicker ? `${f.coin}:` : ''}{f.tick} in {f.fiat}
-                                </Button>
-                                {': '}
-                                {f.live
-                                    ? `${f.live.value} ${f.fiat} live`
-                                    : f.stale
-                                        ? `${f.stale.value} ${f.fiat} stale (${staleAge})`
-                                        : 'nothing live yet'}
-                                {f.pending
-                                    ? `, ${f.pending.value} ${f.fiat} starts in ${countdown || 'moments'}`
-                                    : ''}
-                                {effectiveQuote?.fee ? ` · fee ${effectiveQuote.fee}` : ''}
-                                {count != null ? ` · ${count} dispenser${count === 1 ? '' : 's'}` : ''}
-                            </li>
-                        );
-                    })}
-                </ul>
+            fee={(
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeCustomEstimate}
+                    revealKey={revealFor('fee')}
+                />
             )}
+        >
+            <FormSection
+                id="price"
+                title="Price"
+                icon={Icon.DollarIcon}
+                {...formSections.bind('price')}
+                revealKey={revealFor('price')}
+                summary={priceSummary}
+            >
+            {/* The priced token's network stays a network field here,
+                beside the ticker: it is the PRICE action's COIN, not the
+                publishing network, which lives in From. */}
             <NetworkField
                 label="Priced token network"
                 help="The network the priced token lives on. It can differ from the publishing network."
@@ -736,6 +773,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 }}
                 chainIds={priceChainIds}
                 chainRegistry={chainRegistry}
+                notSource
             />
             {crossChain ? (
                 <p className={styles.hint}>
@@ -783,38 +821,95 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                     First price for {tick} in {fiat}. It will not price anything for 24 hours.
                 </p>
             ) : null}
-            <Input
-                label="Usage fee"
-                optional
-                help="Fraction charged when someone opens a dispenser with this oracle. For example, 0.01 means 1%. The fee scales with escrow. Leave blank for none."
-                inputMode="decimal"
-                value={fee}
-                onChange={(e) => setFee(e.target.value)}
-                autoComplete="off"
-            />
-            <Input
-                label="Memo"
-                optional
-                maxLength={MAX_MEMO_LENGTH}
-                help="A short note recorded on-chain with this price publication."
-                value={memo}
-                onChange={(e) => setMemo(e.target.value)}
-                autoComplete="off"
-            />
-
-            {feeTiers ? (
-                <FeeSelector
-                    chainId={chainId}
-                    label="Network fee"
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
-            ) : null}
             </FormSection>
-        </FormPage>,
+
+            {/* The prices this address already publishes, each a
+                button that fills Price with its values, in a closed section. */}
+            <FormSection
+                id="feeds"
+                title="Published Prices"
+                icon={Icon.LineChartIcon}
+                {...formSections.bind('feeds')}
+                summary={feedsSummary}
+            >
+            {feeds == null ? (
+                <p className={styles.hint}>Loading…</p>
+            ) : feedsError ? (
+                <FieldNote variant="error">{feedsError}</FieldNote>
+            ) : feeds.length === 0 ? (
+                <p className={styles.hint}>
+                    This address has not published any prices yet. The first one you publish starts
+                    pricing 24 hours later.
+                </p>
+            ) : (
+                <ul>
+                    {feeds.map((f) => {
+                        const countdown = activationCountdownText(f.pending?.secondsUntilEffective);
+                        const staleAge = staleAgeText(f.stale?.secondsSinceEffective);
+                        const effectiveQuote = f.live || f.stale;
+                        const count = consumerCountFor(f);
+                        return (
+                            <li key={f.key} className={styles.hint}>
+                                <Button variant="secondary" size="sm" icon={<Icon.DollarIcon />} onClick={() => prefillFromFeed(f)}>
+                                    {f.coin && f.coin !== coinTicker ? `${f.coin}:` : ''}{f.tick} in {f.fiat}
+                                </Button>
+                                {': '}
+                                {f.live
+                                    ? `${f.live.value} ${f.fiat} live`
+                                    : f.stale
+                                        ? `${f.stale.value} ${f.fiat} stale (${staleAge})`
+                                        : 'nothing live yet'}
+                                {f.pending
+                                    ? `, ${f.pending.value} ${f.fiat} starts in ${countdown || 'moments'}`
+                                    : ''}
+                                {effectiveQuote?.fee ? ` · fee ${effectiveQuote.fee}` : ''}
+                                {count != null ? ` · ${count} dispenser${count === 1 ? '' : 's'}` : ''}
+                            </li>
+                        );
+                    })}
+                </ul>
+            )}
+            </FormSection>
+
+            {/* The usage fee is the oracle's own charge, separate
+                from the Network fee row; an optional section of its own. */}
+            <FormSection
+                id="usage"
+                title="Usage Fee"
+                icon={Icon.CoinsIcon}
+                optional
+                {...formSections.bind('usage')}
+                revealKey={revealFor('usage')}
+                summary={fee.trim() || 'None'}
+            >
+                <Input
+                    label="Usage fee"
+                    help="Fraction charged when someone opens a dispenser with this oracle. For example, 0.01 means 1%. The fee scales with escrow. Leave blank for none."
+                    inputMode="decimal"
+                    value={fee}
+                    onChange={(e) => setFee(e.target.value)}
+                    autoComplete="off"
+                />
+            </FormSection>
+            <FormSection
+                id="memo"
+                title="Memo"
+                icon={Icon.MessageIcon}
+                optional
+                {...formSections.bind('memo')}
+                revealKey={revealFor('memo')}
+                summary={memo.trim() || 'None'}
+            >
+                <Input
+                    label="Memo"
+                    maxLength={MAX_MEMO_LENGTH}
+                    help="A short note recorded on-chain with this price publication."
+                    value={memo}
+                    onChange={(e) => setMemo(e.target.value)}
+                    autoComplete="off"
+                />
+            </FormSection>
+        </FormFrame>,
     );
 }
 

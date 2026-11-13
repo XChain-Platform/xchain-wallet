@@ -9,7 +9,12 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { Button, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, Icon, ListPage, ListRow, PageHeader, Screen, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
+// The standard list card and row icon.
+import listStyles from './CoSignerAccountList.module.css';
+import homeTabsStyles from '../components/HomeTabs.module.css';
+import { IdentityAvatar } from '../components/WalletIdentity.jsx';
+import { readWalletTile, tileRadius, walletTileText } from '../utils/walletTile.js';
 import { isDemoWallet, getDemoWalletExpiry } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { exitDemoWallet } from '../utils/demoGraduation.js';
@@ -20,8 +25,12 @@ import '../../i18n/locales/en/accountPicker.js';
 import '../../i18n/locales/en/addressDiscovery.js';
 import '../../i18n/locales/en/history.js';
 import '../../i18n/locales/en/renameWallet.js';
+import '../../i18n/locales/en/routes.js';
+import '../../i18n/locales/en/settings.js';
 import '../../i18n/locales/en/walletDetails.js';
+import '../../i18n/locales/en/walletPicker.js';
 import { walletOriginLabel } from '../utils/walletOriginLabel.js';
+import { walletModeLabel } from '../components/WalletModeField.jsx';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
 import { pendingMigrationSweeps } from '../../flows/migrationSweeps.js';
@@ -45,8 +54,13 @@ export { isVaultEmpty } from '../utils/demoGraduation.js';
  * @param {(wallet: any) => void} [props.onRename]   navigates to RenameWalletForm scoped to this wallet
  * @param {() => void} [props.onMigrateToBip39]      shown only when format === 'counterwallet-legacy'; navigates to the §40.13 migration wizard scoped to this wallet
  * @param {() => void} [props.onExited]              fires after a successful demo wipe so the host can refresh App state
+ * @param {(wallet: any) => void} [props.onExportBackup]  opens the Export Backup page for this wallet
+ * @param {(wallet: any) => void} [props.onRemoveWallet]  opens the Remove Wallet page for this wallet
  */
-export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, onExited }) {
+export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, onExited, activeWalletId, onMakeActive, onOpenSettings, onShowRecoveryPhrase, onExportBackup, onRemoveWallet }) {
+    // The page opens on its Actions tab.
+    const [tab, setTab] = useState('actions');
+    const [madeActive, setMadeActive] = useState(false);
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
@@ -196,95 +210,83 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
         && wallet.format !== 'wif-only'
         && typeof messaging.discoverAddresses === 'function';
 
+    const isActive = madeActive || wallet.id === activeWalletId;
+    const walletModeText = walletModeLabel(wallet.walletMode);
+    const typeShort = wallet.format === 'counterwallet-legacy' ? 'Legacy' : wallet.format === 'wif-only' ? 'Imported key' : 'BIP39';
+    const accountsText = accountCount === null ? '…' : `${accountCount} ${accountCount === 1 ? 'account' : 'accounts'}`;
+    const actionRow = (key, label, IconC, onClick, extra = {}) => (
+        <li key={key}>
+            <ListRow
+                type="button"
+                onClick={onClick}
+                disabled={exitBusy || extra.disabled}
+                leading={<span className={listStyles.rowIcon} aria-hidden="true" style={extra.danger ? { color: 'var(--xc-danger)' } : undefined}><IconC /></span>}
+                title={extra.danger ? <span style={{ color: 'var(--xc-danger)' }}>{label}</span> : label}
+                chevron
+            />
+        </li>
+    );
+    const toSettings = () => (typeof onOpenSettings === 'function' ? onOpenSettings() : undefined);
+
     return (
         <Screen variant={variant} header={header}>
-            <ListPage>
+            {/* 8px between every block on this page. */}
+            <ListPage style={{ '--xc-section-gap': 'var(--xc-space-2)', gap: 'var(--xc-space-2)' }}>
                 {discoveryError ? <StatusMessage variant="error">{discoveryError}</StatusMessage> : null}
                 {discoveryRun > 0 ? <AddressDiscoveryNotice key={discoveryRun} /> : null}
-                <dl className={pickerStyles.detailList}>
-                    <Row label={t('walletDetails.name')} value={wallet.name || 'Unnamed wallet'} />
-                    <Row label={t('walletDetails.type')} value={formatLabel} />
-                    <Row label={t('walletDetails.origin')} value={originLabel} />
-                    <Row
-                        label={t('walletDetails.passphrase')}
-                        value={!wallet.passphraseEnabled
-                            ? 'Disabled'
-                            : wallet.passphraseStored
-                                ? 'Stored'
-                                : 'Needs its passphrase once. Lock the wallet; the unlock screen will ask for it.'}
-                    />
-                    <Row label={t('accountPicker.title')} value={accountCount === null ? '…' : String(accountCount)} />
-                    <Row label={t('walletDetails.created')} value={createdLabel} />
-                    {isDemo ? (
-                        <Row
-                            label={t('history.filters.statusHeader')}
-                            value={
-                                <span>
-                                    {t('walletDetails.demoWallet')}
-                                    {formatDemoExpiry(demoExpiry) ? ` · ${formatDemoExpiry(demoExpiry)}` : ''}
+                {/* The identity card is three lines: name; type and
+                    accounts; Active or Not active. */}
+                <div className={listStyles.list} style={{ display: 'flex', flexDirection: 'row', justifyContent: 'flex-start', textAlign: 'start', gap: 'var(--xc-space-3)', alignItems: 'center', padding: 'var(--xc-space-3)' }}>
+                    <span aria-hidden="true" style={{ '--xc-avatar-shape': tileRadius(readWalletTile(wallet.id).shape), display: 'inline-flex' }}><IdentityAvatar name={wallet.name || 'Wallet'} text={walletTileText(wallet.name)} seed={wallet.id} context="list" variant="asset" tone={readWalletTile(wallet.id).colour} src={readWalletTile(wallet.id).image || null} /></span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+                        <strong style={{ fontSize: 'var(--xc-text-md, 1rem)', overflowWrap: 'anywhere' }}>{wallet.name || t('walletPicker.unnamed')}</strong>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--xc-space-2)', flexWrap: 'wrap', color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
+                            <span>{typeShort} · {accountsText}</span>
+                            {isActive ? (
+                                <span style={{
+                                    fontSize: 'var(--xc-text-xs)',
+                                    fontWeight: 700,
+                                    padding: '1px 8px',
+                                    borderRadius: '999px',
+                                    background: 'var(--xc-success-bg, #e3f6ea)',
+                                    color: 'var(--xc-success, green)',
+                                }}>
+                                    {t('settings.developer.active')}
                                 </span>
-                            }
-                        />
-                    ) : null}
-                    <Row label={t('walletDetails.id')} value={<code className={pickerStyles.code}>{wallet.id}</code>} />
-                </dl>
-                {wallet.format === 'counterwallet-legacy' && onMigrateToBip39 ? (
-                    <div>
-                        <Button
-                            type="button"
-                            variant="primary"
-                            block
-                            onClick={onMigrateToBip39}
-                            disabled={exitBusy}
-                            icon={<Icon.MigrateIcon />}
-                        >
-                            {pendingMigrationSweeps(wallet.id)
-                                ? t('walletDetails.continueMigration')
-                                : t('walletDetails.upgradeRecovery')}
-                        </Button>
+                            ) : null}
+                        </span>
                     </div>
-                ) : null}
-                {onRename ? (
-                    <div>
-                        <Button
-                            type="button"
-                            variant="primary"
-                            block
-                            onClick={() => onRename(wallet)}
-                            disabled={exitBusy}
-                            icon={<Icon.PencilIcon />}
-                        >
-                            {t('renameWallet.title')}
-                        </Button>
-                    </div>
-                ) : null}
-                {canCheckAddresses ? (
-                    <div>
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            block
-                            onClick={handleCheckAddresses}
-                            disabled={exitBusy || discoveryStarting}
-                            icon={<Icon.SearchIcon />}
-                        >
-                            {t('addressDiscovery.action')}
-                        </Button>
-                    </div>
-                ) : null}
-                {isDemo ? (
-                    <div>
-                        <Button
-                            type="button"
-                            variant="danger"
-                            block
-                            onClick={() => { setExitError(null); setExitConfirmOpen(true); }}
-                        >
-                            {t('walletDetails.exitDemo')}
-                        </Button>
-                        {exitError && !exitConfirmOpen ? (
-                            <StatusMessage variant="error">{exitError}</StatusMessage>
-                        ) : null}
+                </div>
+                <Tabs
+                    items={[
+                        { id: 'actions', label: (<span className={homeTabsStyles.tabWithIcon}><span className={homeTabsStyles.tabIcon} aria-hidden="true"><Icon.ZapIcon /></span>{t('routes.manageToken.actions')}</span>) },
+                        { id: 'details', label: (<span className={homeTabsStyles.tabWithIcon}><span className={homeTabsStyles.tabIcon} aria-hidden="true"><Icon.InfoIcon /></span>{t('components.reachabilityLine.details')}</span>) },
+                    ]}
+                    value={tab}
+                    onChange={setTab}
+                />
+                {tab === 'actions' ? (
+                    <>
+                        {/* Safari needs an explicit list role because this class removes list styling. */}
+                        <ul className={listStyles.list} role="list" aria-label={t('walletDetails.actionsList')}>
+                            {!isActive && typeof onMakeActive === 'function'
+                                ? actionRow('active', 'Set as active wallet', Icon.CheckIcon, () => { onMakeActive(wallet); setMadeActive(true); })
+                                : null}
+                            {onRename ? actionRow('rename', t('renameWallet.title'), Icon.PencilIcon, () => onRename(wallet)) : null}
+                            {wallet.format !== 'wif-only' ? actionRow('phrase', 'Show recovery phrase', Icon.KeyIcon, () => (typeof onShowRecoveryPhrase === 'function' ? onShowRecoveryPhrase(wallet) : toSettings())) : null}
+                            {actionRow('backup', t('walletDetails.exportBackupAction'), Icon.DownloadIcon || Icon.CopyIcon, () => (typeof onExportBackup === 'function' ? onExportBackup(wallet) : toSettings()))}
+                            {canCheckAddresses ? actionRow('discover', t('addressDiscovery.action'), Icon.SearchIcon, handleCheckAddresses, { disabled: discoveryStarting }) : null}
+                            {wallet.format === 'counterwallet-legacy' && onMigrateToBip39
+                                ? actionRow('migrate', pendingMigrationSweeps(wallet.id) ? t('walletDetails.continueMigration') : t('walletDetails.upgradeRecovery'), Icon.MigrateIcon, onMigrateToBip39)
+                                : null}
+                        </ul>
+                        {/* Safari needs an explicit list role because this class removes list styling. */}
+                        <ul className={listStyles.list} role="list" aria-label={t('send.recipient.remove')}>
+                            {isDemo
+                                ? actionRow('exit-demo', t('walletDetails.exitDemo'), Icon.TrashIcon, () => { setExitError(null); setExitConfirmOpen(true); }, { danger: true })
+                                : actionRow('remove', 'Remove wallet', Icon.TrashIcon, () => (typeof onRemoveWallet === 'function' ? onRemoveWallet(wallet) : toSettings()), { danger: true })}
+                        </ul>
+                        {exitError && !exitConfirmOpen ? <StatusMessage variant="error">{exitError}</StatusMessage> : null}
                         {exitConfirmOpen ? (
                             <DemoExitConfirm
                                 busy={exitBusy}
@@ -293,8 +295,33 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                                 onCancel={() => { setExitConfirmOpen(false); setExitError(null); }}
                             />
                         ) : null}
-                    </div>
-                ) : null}
+                    </>
+                ) : (
+                    <dl className={pickerStyles.detailList}>
+                        <Row label={t('walletDetails.name')} value={wallet.name || t('walletPicker.unnamed')} />
+                        <Row label={t('walletDetails.type')} value={formatLabel} />
+                        {/* The wallet's own mode (§20), read-only; chosen at create, import or pair. */}
+                        <Row label={t('walletDetails.walletMode')} value={walletModeText} />
+                        <Row label={t('walletDetails.origin')} value={originLabel} />
+                        <Row
+                            label={t('walletDetails.passphrase')}
+                            value={!wallet.passphraseEnabled
+                                ? 'Disabled'
+                                : wallet.passphraseStored
+                                    ? 'Stored'
+                                    : 'Needs its passphrase once. Lock the wallet; the unlock screen will ask for it.'}
+                        />
+                        <Row label={t('accountPicker.title')} value={accountCount === null ? '…' : String(accountCount)} />
+                        <Row label={t('walletDetails.created')} value={createdLabel} />
+                        {isDemo ? (
+                            <Row
+                                label={t('history.filters.statusHeader')}
+                                value={<span>{t('walletDetails.demoWallet')}{formatDemoExpiry(demoExpiry) ? ` · ${formatDemoExpiry(demoExpiry)}` : ''}</span>}
+                            />
+                        ) : null}
+                        <Row label={t('walletDetails.id')} value={<code className={pickerStyles.code}>{wallet.id}</code>} />
+                    </dl>
+                )}
             </ListPage>
         </Screen>
     );
@@ -323,4 +350,12 @@ function Row({ label, value }) {
             <dd className={pickerStyles.detailValue}>{value}</dd>
         </div>
     );
+}
+
+// The wallet tile's name, spelled so the tile always shows two
+// initials (a one-word name gives its first two letters).
+function tileName(name) {
+    const clean = String(name || 'Wallet').trim() || 'Wallet';
+    const words = clean.split(/\s+/);
+    return words.length > 1 ? clean : `${clean[0]} ${clean[1] || ''}`.trim();
 }

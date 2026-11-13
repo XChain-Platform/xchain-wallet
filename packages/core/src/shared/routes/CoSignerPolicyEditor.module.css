@@ -1,19 +1,27 @@
-.fieldset {
-    min-width: 0;
-    margin: 0;
-    padding: 0;
-    border: 0;
-}
-
-.fieldset + .fieldset {
-    padding-top: var(--xc-section-gap);
-    border-top: 1px solid var(--xc-border);
-}
-
 .legend {
     display: inline-flex;
     align-items: center;
     gap: var(--xc-space-1);
     padding: 0 var(--xc-space-2);
     font-weight: 600;
+}
+
+/* A limit, threshold, recipient or output row stacks its fields at
+   the full width of the section card; Remove sits at the row's right. */
+.policyRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--xc-space-2);
+    padding-block-end: var(--xc-space-2);
+    border-block-end: 1px solid var(--xc-border);
+}
+
+.policyRow > * {
+    min-width: 0;
+    width: 100%;
+}
+
+.policyRow > button {
+    width: auto;
+    justify-self: end;
 }

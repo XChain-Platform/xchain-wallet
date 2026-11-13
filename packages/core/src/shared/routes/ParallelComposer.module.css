@@ -1,9 +1,7 @@
-.acknowledgement {
-    align-items: flex-start;
-}
-
-.acknowledgement input {
-    margin-top: 0.15rem;
+/* Add Action sits under the last row section, at its leading edge. */
+.addRow {
+    display: flex;
+    justify-content: flex-start;
 }
 
 .rowStatus {

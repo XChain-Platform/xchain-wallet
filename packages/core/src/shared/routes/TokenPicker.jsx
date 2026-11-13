@@ -9,7 +9,8 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
+import { EmptyState, Icon, IconSelect, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import {
     BalanceList,
@@ -19,7 +20,6 @@ import {
     sortByChainThenAsset,
     coinFromChainId,
 } from '../components/BalanceList.jsx';
-import { NetworkFilter } from '../components/NetworkFilter.jsx';
 import { BalancesUncheckedState, useBalancesUnchecked } from '../components/BalancesUncheckedState.jsx';
 import { bridgeDisplayTick } from './BridgeTick.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -159,19 +159,6 @@ export function TokenPicker({
     const kindFilter = kindFilterProp ?? kindFilterLocal;
     const setKindFilter = onKindFilterChangeProp ?? setKindFilterLocal;
     const [rovingOption, setRovingOption] = useState(null);
-
-    // Open with the caret in the search box (xchain-wallet#57): a user who
-    // starts typing a ticker straight away otherwise types into the page, and
-    // the global `g`-leader shortcuts took "MGRTEST" as `g r` and left the form
-    // for Receive. Skipped on a touch screen, where focusing would raise the
-    // keyboard over the list the user came to scroll.
-    const searchRef = useRef(/** @type {HTMLInputElement | null} */ (null));
-    useEffect(() => {
-        const coarse = typeof window !== 'undefined'
-            && typeof window.matchMedia === 'function'
-            && window.matchMedia('(pointer: coarse)').matches;
-        if (!coarse) searchRef.current?.focus();
-    }, []);
 
     useEffect(() => {
         let cancelled = false;
@@ -354,10 +341,11 @@ export function TokenPicker({
             next = next.filter((r) => {
                 const tick = String(r.tick || '').toLowerCase();
                 const name = String(r.displayName || '').toLowerCase();
-                const assetId = `${r.chainId || ''}:${r.tick || ''}`.toLowerCase();
+                // The chain id is matched only when the query is a chain:tick pair, so "bitcoin" does not match every row on the bitcoin chain.
+                const assetId = tokenQueryTrim.includes(':') ? `${r.chainId || ''}:${r.tick || ''}`.toLowerCase() : '';
                 return tick.includes(tokenQueryTrim)
                     || name.includes(tokenQueryTrim)
-                    || assetId.includes(tokenQueryTrim);
+                    || (assetId !== '' && assetId.includes(tokenQueryTrim));
             });
         }
         // A bridged copy is stored origin-rooted ('BTC.PEPECASH') and must not
@@ -554,10 +542,6 @@ export function TokenPicker({
         if (event.key === 'Enter') result.click();
         else result.focus();
     };
-    const clearSearch = () => {
-        setTokenQuery('');
-        searchRef.current?.focus();
-    };
 
     const headerTitle = title ?? (isReceive ? 'Receive' : 'Send');
     const headerBackLabel = backLabel ?? 'Back to home';
@@ -568,6 +552,41 @@ export function TokenPicker({
             onBack={onBack}
             backLabel={headerBackLabel}
             title={headerTitle}
+            // The standard filter on the title line holds the search,
+            // the network and the coin or token choice; the list fills the page.
+            trailing={(
+                <ListFilterMenu
+                    query={tokenQuery}
+                    onQueryChange={setTokenQuery}
+                    active={!kindLocked && Boolean(kindFilter) && kindFilter !== 'all'}
+                    label="Filter coins and tokens"
+                    searchPlaceholder="Search coins or tokens..."
+                    searchLabel="Search coins or tokens"
+                    // Home's network picker, from the shared filter.
+                    chainRegistry={chainRegistry}
+                    coinFamilies={coinFamilies}
+                    networkFilter={networkFilter}
+                    onNetworkFilterChange={setNetworkFilter}
+                    // Enter picks the top row and the arrows move into the list (xchain-wallet#57).
+                    onSearchKeyDown={handleSearchKeyDown}
+                    resultsId={balances !== null ? 'xc-token-picker-results' : undefined}
+                >
+                    {/* A pinned kindFilter is a protocol constraint, so no kind choice is offered. */}
+                    {kindLocked ? null : (
+                        <IconSelect
+                            size="md"
+                            aria-label="Asset kind"
+                            value={kindFilter || 'all'}
+                            onChange={(value) => setKindFilter(value)}
+                            options={[
+                                { value: 'all', label: 'Coins and tokens', icon: <Icon.TokenListIcon /> },
+                                { value: 'coins', label: 'Coins', icon: <Icon.CoinsIcon /> },
+                                { value: 'tokens', label: 'Tokens', icon: <Icon.TokenIcon /> },
+                            ]}
+                        />
+                    )}
+                </ListFilterMenu>
+            )}
         />
     );
 
@@ -606,70 +625,14 @@ export function TokenPicker({
                 : 'Sendable coin and token balances appear here after funds are received.')
             : 'Balances on this network appear here after this wallet receives funds.');
 
-    const KIND_OPTIONS = [
-        { id: 'all',    label: 'All' },
-        { id: 'coins',  label: 'Coins' },
-        { id: 'tokens', label: 'Tokens' },
-    ];
-
-    const toolbar = (
-        <>
-            <div className={styles.searchField} style={{ display: 'flex', flex: '1 1 160px', minWidth: 0, gap: 'var(--xc-space-1)' }}>
-                <Input
-                    ref={searchRef}
-                    type="search"
-                    enterKeyHint="search"
-                    className={styles.search}
-                    placeholder="Search"
-                    value={tokenQuery}
-                    onChange={(e) => setTokenQuery(e.target.value)}
-                    onKeyDown={handleSearchKeyDown}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="characters"
-                    spellCheck={false}
-                    aria-label="Search coins or tokens"
-                    aria-controls={balances !== null ? 'xc-token-picker-results' : undefined}
-                />
-                {tokenQuery ? (
-                    <Button type="button" size="sm" variant="ghost" icon={null} onClick={clearSearch} aria-label="Clear token search">
-                        <Icon.XIcon />
-                    </Button>
-                ) : null}
-            </div>
-            <div className={styles.networkFilter}>
-                <NetworkFilter
-                    chainRegistry={chainRegistry}
-                    coinFamilies={coinFamilies}
-                    value={networkFilter}
-                    onChange={setNetworkFilter}
-                />
-            </div>
-            {/* A caller that pins `kindFilter` is stating a
-                protocol constraint, not a default. Rendering the segments
-                anyway would offer a choice the action cannot honour, and
-                the segments would appear dead because the pinned prop wins
-                over the local state they set. */}
-            <Tabs
-                items={KIND_OPTIONS}
-                value={kindFilter || 'all'}
-                onChange={setKindFilter}
-                aria-label="Asset kind"
-                hidden={kindLocked}
-                style={kindLocked
-                    ? { display: 'none' }
-                    : { flex: '0 0 auto', width: 'auto' }}
-            />
-        </>
-    );
-
     const body = (
-        <ListPageComponent toolbar={toolbar} onKeyDown={handlePickerKeyDown} onFocus={handlePickerFocus}>
+        // No toolbar above the list; its controls live in the filter.
+        <ListPageComponent toolbar={null} onKeyDown={handlePickerKeyDown} onFocus={handlePickerFocus}>
             {loadError ? (
                 <StatusMessage
                     variant="error"
                     className={styles.error}
-                    recovery={{ label: 'Try again', onAction: () => setBalanceReload((value) => value + 1) }}
+                    recovery={{ label: 'Try Again', onAction: () => setBalanceReload((value) => value + 1) }}
                 >
                     {loadError}
                 </StatusMessage>
@@ -693,7 +656,8 @@ export function TokenPicker({
                             getRowActionLabel={tokenSelectionLabel}
                             hiddenKeys={hiddenSet}
                             pinnedKeys={pinnedSet}
-                            onTogglePin={handleTogglePin}
+                            // A plain list to pick from; pinning stays on Home.
+                            onTogglePin={undefined}
                             hideSmallBalances={settings?.privacy?.hideSmallBalances === true}
                             smallBalanceThreshold={settings?.smallBalanceThreshold || 'dust'}
                             allowRemoteImages={allowRemoteImages}
@@ -719,7 +683,8 @@ export function TokenPicker({
                         <EmptyState
                             title={emptyTitle}
                             body={emptyBody}
-                            actionLabel={filtersActive ? 'Reset filters' : undefined}
+                            actionLabel={filtersActive ? 'Reset Filters' : undefined}
+                            actionIcon={<Icon.RefreshIcon />}
                             onAction={filtersActive ? resetFilters : undefined}
                         />
                     ) : null}
@@ -735,7 +700,7 @@ export function TokenPicker({
                                 <StatusMessage
                                     variant="error"
                                     className={styles.error}
-                                    recovery={{ label: 'Try again', onAction: () => setPlatformReload((value) => value + 1) }}
+                                    recovery={{ label: 'Try Again', onAction: () => setPlatformReload((value) => value + 1) }}
                                 >
                                     {platformError}
                                 </StatusMessage>

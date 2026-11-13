@@ -8,8 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import issueSectionStyles from './IssueTokenForm.module.css';
 import { useEffect, useId, useState } from 'react';
-import { AddressText, Button, CopyButton, Icon, ListPage, PageHeader, Screen, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
+import { AddressText, Button, CopyButton, Icon, ListPage, PageHeader, Screen, SectionHeader, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
@@ -24,6 +25,10 @@ import {
     TagIcon,
 } from '../components/manageTokenIcons.jsx';
 import styles from './ManageToken.module.css';
+// The coin page's tile grid, equal-width tabs and tab icons.
+import tokenDetailStyles from './TokenDetail.module.css';
+import homeTabsStyles from '../components/HomeTabs.module.css';
+import { QuickActionTile } from '../../ui/QuickActionTile.jsx';
 import { formatTokenQuantity } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
 import { UNKNOWN_TOKEN_ISSUER_MESSAGE } from '../utils/tokenIssuerEligibility.js';
@@ -92,6 +97,7 @@ export function ManageToken({
     onAirdrop,
     onBroadcast,
     onBindController,
+    onUnbindController,
     onIssuerResolved,
 }) {
     const { messaging, shell } = useMessaging();
@@ -193,6 +199,7 @@ export function ManageToken({
         onAirdrop,
         onBroadcast,
         onBindController,
+        onUnbindController,
     });
     const panelId = `${approvedTabsId}-panel`;
     const header = (
@@ -206,23 +213,34 @@ export function ManageToken({
     return (
         <Screen variant={variant} header={header}>
             <ListPage className={styles.approvedBody}>
+                {/* The one notice for a token that changed hands after My
+                    tokens listed it; every owner action is locked until it refreshes. */}
+                {owner && isOwner === false ? (
+                    <StatusMessage variant="warning" role="status">
+                        {t('routes.manageToken.ownerChanged', { tick })}
+                    </StatusMessage>
+                ) : null}
                 {assetInfo && !assetInfo.loadError && !owner ? (
                     <StatusMessage variant="warning" role="status">
                         {UNKNOWN_TOKEN_ISSUER_MESSAGE}
                     </StatusMessage>
                 ) : null}
+                {/* An outlined card with the token's icon centred over
+                    its name and description; the icon's chain badge names the network. */}
                 <section className={styles.approvedHero} aria-label={t('routes.manageToken.tokenIdentity')}>
-                    <TickerIcon chainId={chainId} tick={tick} context="list" />
+                    <span className={styles.approvedHeroIcon}><TickerIcon chainId={chainId} tick={tick} context="list" /></span>
                     <div className={styles.approvedHeroText}>
                         <h2 className={styles.approvedHeroName}>{displayName}</h2>
                         {description ? <p className={styles.approvedHeroDescription}>{description}</p> : null}
                     </div>
                 </section>
+                {/* Tab icons and equal widths, as on the coin page. */}
                 <Tabs
                     id={approvedTabsId}
+                    className={tokenDetailStyles.detailTabs}
                     items={[
-                        { id: 'actions', label: t('routes.manageToken.actions') },
-                        { id: 'details', label: t('components.reachabilityLine.details') },
+                        { id: 'actions', label: (<span className={homeTabsStyles.tabWithIcon}><span className={homeTabsStyles.tabIcon} aria-hidden="true"><Icon.ZapIcon /></span>{t('routes.manageToken.actions')}</span>) },
+                        { id: 'details', label: (<span className={homeTabsStyles.tabWithIcon}><span className={homeTabsStyles.tabIcon} aria-hidden="true"><Icon.InfoIcon /></span>{t('components.reachabilityLine.details')}</span>) },
                     ]}
                     value={approvedActiveTab}
                     onChange={setApprovedActiveTab}
@@ -236,20 +254,36 @@ export function ManageToken({
                     className={styles.approvedTabPanel}
                 >
                     {approvedActiveTab === 'actions' ? (
-                        <div className={styles.approvedActionGrid} aria-label={t('routes.manageToken.actions')}>
-                            {actions.map((action) => (
-                                <Button
-                                    key={action.id}
-                                    type="button"
-                                    variant={action.danger ? 'danger' : 'secondary'}
-                                    className={styles.approvedActionTile}
-                                    icon={<action.Icon />}
-                                    onClick={action.onSelect}
-                                    disabled={action.disabled}
-                                    title={action.disabled ? action.disabledReason : undefined}
-                                >
-                                    {action.label}
-                                </Button>
+                        /* The actions in five groups by purpose, each under a short heading
+                           and A to Z inside, on the coin page's tiles. Destroy keeps the
+                           danger colour on its icon and label only. */
+                        <div className={styles.actionGroups}>
+                            {groupManageActions(actions).map((group) => (
+                                /* A one-line section like the Issue form's; tapping it shows the tiles. */
+                                <ManageGroupSection key={group.id} group={group}>
+                                    <div className={tokenDetailStyles.assetActionGrid} role="group" aria-label={group.title}>
+                                        {group.actions.map((action) => (
+                                            <QuickActionTile
+                                                key={action.id}
+                                                square
+                                                className={action.danger ? styles.dangerTile : undefined}
+                                                data-action-id={action.id}
+                                                icon={<action.Icon />}
+                                                onClick={action.onSelect}
+                                                disabled={action.disabled}
+                                                title={action.disabled ? action.disabledReason : undefined}
+                                            >
+                                                {action.label}
+                                            </QuickActionTile>
+                                        ))}
+                                    </div>
+                                    {/* Why a tile is locked, printed under its group (a
+                                        hover title never shows on a phone). One line per reason;
+                                        tiles that share a reason share its line. */}
+                                    {lockedReasons(group.actions, ownerBlockedReason).map((line) => (
+                                        <p key={line} className={styles.lockedReason}>{line}</p>
+                                    ))}
+                                </ManageGroupSection>
                             ))}
                         </div>
                     ) : (
@@ -317,6 +351,7 @@ function approvedManageActions(options) {
         { id: 'broadcast', label: t('routes.manageToken.broadcast'), Icon: Icon.BroadcastIcon, ...ownerAction(options.onBroadcast) },
         { id: 'transfer', label: t('routes.manageToken.transfer'), Icon: Icon.HandshakeIcon, ...ownerAction(options.onTransferOwnership) },
         { id: 'controller', label: t('routes.manageToken.controller'), Icon: Icon.LinkIcon, ...ownerAction(options.onBindController) },
+        { id: 'controller-unbind', label: t('routes.manageToken.unbindController'), Icon: Icon.UnlinkIcon, ...ownerAction(options.onUnbindController) },
         { id: 'callback-settings', label: t('routes.manageToken.callbackSettings'), Icon: Icon.GearIcon, ...ownerAction(options.onCallbackSettings) },
         {
             id: 'execute-callback', label: t('routes.manageToken.executeCallback'), Icon: LightningIcon,
@@ -420,4 +455,78 @@ function ApprovedLockRow({ label, locked }) {
 
 function approvedFormatQuantity(value, divisibility) {
     return value != null ? formatTokenQuantity(value, divisibility) : '-';
+}
+
+// One collapsible group, drawn with the Issue form's section styles:
+// icon, title, the action names while closed, a chevron. Supply starts open.
+function ManageGroupSection({ group, children }) {
+    const [open, setOpen] = useState(group.id === 'supply');
+    const GroupIcon = group.icon || Icon.MoreIcon;
+    const panelId = `manage-group-${group.id}`;
+    const summary = group.actions.map((action) => action.label).join(', ');
+    return (
+        <section className={issueSectionStyles.optionalSection} aria-label={group.title}>
+            <Button
+                type="button"
+                variant="rowAction"
+                icon={null}
+                className={issueSectionStyles.sectionHeader}
+                aria-expanded={open}
+                aria-controls={panelId}
+                onClick={() => setOpen((value) => !value)}
+            >
+                <span className={issueSectionStyles.sectionIcon} aria-hidden="true"><GroupIcon /></span>
+                <span className={issueSectionStyles.sectionTitle}>{group.title}</span>
+                {!open ? <span className={issueSectionStyles.sectionSummary}>{summary}</span> : null}
+                <span
+                    className={`${issueSectionStyles.sectionChevron} ${open ? `${issueSectionStyles.sectionChevronOpen} ${issueSectionStyles.sectionChevronTrailing}` : ''}`}
+                    aria-hidden="true"
+                >
+                    <Icon.ChevronDownIcon />
+                </span>
+            </Button>
+            <div id={panelId} className={issueSectionStyles.sectionBody} hidden={!open}>
+                {children}
+            </div>
+        </section>
+    );
+}
+
+// Manage token's action groups, in page order. Any action not named
+// here lands in a last "More" group so nothing is ever dropped.
+const MANAGE_ACTION_GROUPS = [
+    { id: 'supply', title: 'Supply', icon: Icon.CoinsIcon, ids: ['destroy', 'issue-subtoken', 'lock-settings', 'mint', 'mint-settings'] },
+    { id: 'distribute', title: 'Distribute', icon: Icon.SendIcon, ids: ['airdrop', 'broadcast', 'dispenser', 'dividend'] },
+    { id: 'page', title: 'Token page', icon: Icon.ImageIcon, ids: ['artwork', 'description', 'gated-content', 'official-list'] },
+    { id: 'ownership', title: 'Ownership', icon: Icon.KeyIcon, ids: ['controller', 'controller-unbind', 'sell-name', 'transfer'] },
+    { id: 'rules', title: 'Rules and automation', icon: Icon.GearIcon, ids: ['access-lists', 'bridge', 'callback-settings', 'execute-callback', 'pause-token', 'shared-block-list'] },
+];
+
+function groupManageActions(actions) {
+    const byLabel = (a, b) => String(a.label).localeCompare(String(b.label));
+    const named = new Set(MANAGE_ACTION_GROUPS.flatMap((group) => group.ids));
+    const groups = MANAGE_ACTION_GROUPS
+        .map((group) => ({ ...group, actions: actions.filter((action) => group.ids.includes(action.id)).sort(byLabel) }));
+    const rest = actions.filter((action) => !named.has(action.id)).sort(byLabel);
+    if (rest.length) groups.push({ id: 'more', title: 'More', actions: rest });
+    return groups.filter((group) => group.actions.length > 0);
+}
+
+// One line per distinct reason a group's tiles are locked, naming the tiles it
+// covers. The owner-only reason is left out: the page is reached only from My
+// tokens, so that lock means the token changed hands, and one notice at the
+// top of the page says so instead of a line in every group.
+function lockedReasons(actions, ownerBlockedReason) {
+    const byReason = new Map();
+    for (const action of actions) {
+        if (!action.disabled || !action.disabledReason) continue;
+        if (action.disabledReason === ownerBlockedReason) continue;
+        const labels = byReason.get(action.disabledReason) || [];
+        labels.push(action.label);
+        byReason.set(action.disabledReason, labels);
+    }
+    return [...byReason].map(([reason, labels]) => {
+        const text = reason.charAt(0).toLowerCase() + reason.slice(1);
+        return `${labels.join(', ')}: ${text}`;
+    });
 }

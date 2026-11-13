@@ -9,8 +9,12 @@
 // contact legal@dankest.llc.
 
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/routes.js';
+import '../../i18n/locales/en/components.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FormPage, Icon, Input, ListPage, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+// The Wallet Form Standard frame (From, main section, Network fee, one action).
+import { FeeSection, FormAction, FormFrame, FormSection, FromSection, useFormSections } from '../components/formStandard/index.js';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { validatorLaneChainIds } from '../../registry/actions.js';
 import { isDemoWallet, synthesizeDemoStaking } from '@xchain-wallet/core/flows';
@@ -26,6 +30,7 @@ import {
     roundDecimalString,
 } from '../utils/amountFormat.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { titleCase } from '../utils/titleCase.js';
 import { coinToFiatExact, fiatToCoin } from '../../flows/priceLookup.js';
 import { useTickFiatRate } from '../hooks/useFiatRate.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -129,8 +134,8 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, ini
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const isUnstake = mode === 'unstake';
-    const verb = isUnstake ? 'Unstake' : 'Claim rewards';
-    // Named-action icon for the submit in every label it takes (U63).
+    const verb = isUnstake ? 'Unstake' : 'Claim Rewards';
+    // Named-action icon for the submit in every label it takes.
     const verbIcon = isUnstake ? <Icon.UnlinkIcon /> : <Icon.StakeIcon />;
 
     const [addressesByChain, setAddressesByChain] = useState(
@@ -154,6 +159,11 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, ini
     const [reviewRequest, setReviewRequest] = useState(
         /** @type {{ params: Record<string, string>, full: boolean, availableAmt: string } | null} */ (null),
     );
+    // The standard's open state, held above the early returns (the
+    // address picker page) so it survives them; only the main section starts open.
+    const formSections = useFormSections({ from: false, main: true, fee: false });
+    // Counts review presses, so a section holding the error reopens on each.
+    const [validationAttempt, setValidationAttempt] = useState(0);
 
     useEffect(() => {
         setChainId(initialChainId);
@@ -520,10 +530,8 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, ini
 
     // The legacy absent-AMOUNT bytes mean "everything", so they are sent only
     // when the entered amount EQUALS a known total. Any other valid amount is
-    // sent as AMOUNT, even if the total is unknown, and an amount that does
-    // not parse yields no params at all: an entered amount must never become
-    // a claim or unstake of everything (2026-09-30 on testnet: 1 typed while
-    // the total read "Loading…", COLLECT|0 paid 130).
+    // sent as AMOUNT (even with the total unknown); an unparseable one yields
+    // no params, so a typed amount never becomes a claim or unstake of everything.
     const totalKnown = availableAmt != null;
     const {
         params: actionParams, amountValid, isWholeAmount, normalizedAmount,
@@ -533,6 +541,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, ini
     );
     function handleReview(event) {
         event.preventDefault();
+        setValidationAttempt((n) => n + 1); // Reopens the section holding the error.
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
         if (feeStop) { setFormError(feeStop.formError); return; }
         if (!fromAddress) {
@@ -676,9 +685,9 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, ini
         <PageHeader
             onBack={stage === 'review' ? leaveReview : onBack}
             backDisabled={stage === 'submitting' || actionConfirm.composing}
-            title={stage === 'review' || stage === 'submitting'
+            title={titleCase(stage === 'review' || stage === 'submitting'
                     ? `Review ${verb.toLowerCase()}`
-                    : verb}
+                    : verb)}
         />
     );
     const wrap = (children) => (
@@ -766,10 +775,8 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, ini
                         }
                     >
                         {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : verb}
+                            ? 'Create Unsigned Transaction'
+                            : verb}
                     </Button>
                 )}
             >
@@ -843,9 +850,24 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, ini
     // confirm page, rendered in place of the form (the overlay modal
     // didn't fit small/mobile viewports); form state stays intact behind it.
     if (actionConfirm.open) {
+        // Unstaking and claiming bring XCHAIN back to the signer; without an
+        // AMOUNT on the wire the whole known balance is what comes back.
+        const returnedAmount = (reviewRequest?.params || actionParams)?.AMOUNT
+            || (isWholeAmount && availableAmt != null ? String(availableAmt) : '');
+        const stakingSummary = {
+            verb: isUnstake
+                ? t('components.confirmSummary.verbUnstake')
+                : t('components.confirmSummary.verbClaimRewards'),
+            ticker: STAKING_TICK,
+            ...(returnedAmount ? { amount: returnedAmount } : {}),
+            direction: 'in',
+            chainId,
+            address: fromAddress?.address,
+        };
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={stakingSummary}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
@@ -871,7 +893,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, ini
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={chainId}
                 onChainChange={(cid) => { setChainId(cid); setFromAddressId(null); setFormError(null); }}
@@ -881,8 +903,17 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, ini
         );
     }
 
+    // The section each form error belongs to. A fee stop opens Network
+    // fee, a source problem opens From, everything else (amount, key) the main one.
+    const feeStopNow = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+    const feeHasError = Boolean(formError && feeStopNow && formError === feeStopNow.formError);
+    const fromHasError = Boolean(formError && /source address/i.test(formError));
+    const mainHasError = Boolean((formError && !feeHasError && !fromHasError) || positionsError);
+    const sectionErrorKey = (hasError) => (hasError ? validationAttempt + 1 : 0);
+    const mainSummary = effectiveAmount ? formatWithThousands(String(effectiveAmount)) : 'No amount yet';
+
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label={`${verb} staking`}
             onSubmit={handleReview}
@@ -891,38 +922,54 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, ini
             ) : positionsError ? (
                 <StatusMessage variant="error">{positionsError}</StatusMessage>
             ) : null}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="success"
+            action={(
+                <FormAction
                     loading={actionConfirm.composing}
                     icon={verbIcon}
                     disabled={!fromAddress || actionConfirm.composing || !totalKnown}
                 >
-                    {singleEncode ? verb : `Review ${verb.toLowerCase()}`}
-                </Button>
+                    {titleCase(singleEncode ? verb : `Review ${verb.toLowerCase()}`)}
+                </FormAction>
             )}
-        >
-            <NetworkField
-                label="Network"
-                help="The chain your stake is on. Only networks that support staking are listed, and the From address and the fee are on the network you pick."
-                value={chainId}
-                onChange={(cid) => { setChainId(cid); setFromAddressId(null); setFormError(null); }}
-                chainIds={addressesByChain ? validatorLaneChainIds(Object.keys(addressesByChain), chainRegistry) : [chainId]}
-                chainRegistry={chainRegistry}
-            />
-            {fromAddress ? (
-                <AddressField
-                    label="From"
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
+            /* The standard order: From (Network and address), the main section
+               (amount and, to unstake, the signing key), then the Network fee row. */
+            from={(
+                <FromSection
+                    {...formSections.bind('from')}
+                    chainId={chainId}
+                    chainIds={addressesByChain ? validatorLaneChainIds(Object.keys(addressesByChain), chainRegistry) : [chainId]}
+                    chainRegistry={chainRegistry}
+                    onNetworkChange={(cid) => { setChainId(cid); setFromAddressId(null); setFormError(null); }}
+                    networkHelp="The chain your stake is on. Only networks that support staking are listed, and the From address and the fee are on the network you pick."
+                    address={fromAddress?.address || null}
+                    addressHelp={t('routes.stakingAction.fromHelp')}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    revealKey={sectionErrorKey(fromHasError)}
+                />
+            )}
+            fee={feeTiers ? (
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeCustomEstimate}
+                    revealKey={sectionErrorKey(feeHasError)}
                 />
             ) : null}
-
+        >
+            <FormSection
+                id="main"
+                title={isUnstake ? 'Unstaking' : 'Rewards'} /* Nouns, so the header never shares the action button's name. */
+                icon={isUnstake ? Icon.UnlinkIcon : Icon.StakeIcon}
+                {...formSections.bind('main')}
+                revealKey={sectionErrorKey(mainHasError)}
+                summary={mainSummary}
+                summaryUnit={effectiveAmount ? STAKING_TICK : undefined}
+            >
             <AmountField
                 label="Amount"
                 help={isUnstake
@@ -980,19 +1027,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, ini
                     />
                 </>
             ) : null}
-
-            {feeTiers ? (
-                <FeeSelector
-                    chainId={chainId}
-                    label="Network fee"
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
-            ) : null}
-
-        </FormPage>,
+            </FormSection>
+        </FormFrame>,
     );
 }

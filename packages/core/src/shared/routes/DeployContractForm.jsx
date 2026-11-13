@@ -10,9 +10,12 @@
 
 import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FieldNote, FormNotice, FormPage, Icon, InfoTip, Input, ListPage, NetworkField, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+// Network, From and the fee selector render inside the standard
+// FromSection and FeeSection.
+import { AddressText, Button, ChainBadge, FieldNote, FormNotice, FormPage, Icon, InfoTip, Input, ListPage, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import '../../i18n/locales/en/send.js';
+import '../../i18n/locales/en/components.js';
 import { normalizeConstructorParams } from '../../flows/deployChunked.js';
 import { DEPLOY_ARGUMENT_WORDS, deployActionFit, variadicSizeMessage } from '../../flows/variadicActionSize.js';
 import { indexerWaitMessage } from '../../flows/deployLegWait.js';
@@ -23,7 +26,7 @@ import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
-import { FeesCard } from '../components/FeesCard.jsx';
+// The Fees card renders inside the standard FeeSection.
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { protocolCoinTickerFor } from '../../registry/nativeFee.js';
 import {
@@ -53,6 +56,17 @@ import { ConfirmModal } from '../components/ConfirmModal.jsx';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
+// Publish contract is laid out on the Wallet Form Standard frame.
+import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    joinSummary,
+    useFormSections,
+} from '../components/formStandard/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -275,6 +289,17 @@ export function DeployContractForm({ walletId, onBack }) {
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    // The standard section a Publish refusal belongs to, and a counter
+    // bumped on every attempt, so that section reopens each time.
+    const [formErrorSection, setFormErrorSection] = useState(/** @type {string | null} */ (null));
+    const [reviewAttempt, setReviewAttempt] = useState(0);
+    // Open state held above the picker and review early returns.
+    // From starts closed, Contract open, the rest closed.
+    const formSections = useFormSections({ from: false, contract: true, constructor: false, staking: false, fee: false });
+    const failIn = (section, message) => {
+        setFormError(message);
+        setFormErrorSection(section);
+    };
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [toolBusy, setToolBusy] = useState(/** @type {string | null} */ (null));
     const confirmDialog = useConfirmModal();
@@ -638,6 +663,7 @@ export function DeployContractForm({ walletId, onBack }) {
                                 <Button
                                     type="button"
                                     className={styles.validationLink}
+                                    icon={<Icon.ArrowRightIcon />}
                                     onClick={() => moveToCodeLine(entry.line)}
                                 >
                                     {content}
@@ -731,27 +757,30 @@ export function DeployContractForm({ walletId, onBack }) {
 
     function handleReview(event) {
         event.preventDefault();
+        // Each attempt may reopen the section holding the refusal;
+        // failIn names it (From, Contract, Constructor, Staking or the fee).
+        setReviewAttempt((n) => n + 1);
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        if (feeStop) { setFormError(feeStop.formError); return; }
+        if (feeStop) { failIn('fee', feeStop.formError); return; }
         if (!chainId || !fromAddress) {
-            setFormError('No address available to publish from on this network.');
+            failIn('from', 'No address available to publish from on this network.');
             return;
         }
         if (!code.trim()) {
-            setFormError('Contract source is required.');
+            failIn('contract', 'Contract source is required.');
             return;
         }
         const gas = effectiveGasLimit;
         if (!/^\d+$/.test(gas) || !/[1-9]/.test(gas)) {
-            setFormError('Gas limit must be a positive whole number. Tap "Suggest gas" for a heuristic estimate.');
+            failIn('contract', 'Gas limit must be a positive whole number. Tap "Suggest Gas" for a heuristic estimate.');
             return;
         }
         if (validation?.ok === false) {
-            setFormError('Fix the syntax error before previewing (see Validate code).');
+            failIn('contract', 'Fix the syntax error before previewing (see Validate Code).');
             return;
         }
         if (metaAbsent) {
-            setFormError('This contract exports no meta.name and meta.description, so the network '
+            failIn('contract', 'This contract exports no meta.name and meta.description, so the network '
                 + `would reject the publication (${CONTRACT_META_REQUIRED}) after you paid for it. `
                 + 'Add a meta block to the source and try again.');
             return;
@@ -762,11 +791,11 @@ export function DeployContractForm({ walletId, onBack }) {
             // Digits only: Number() also reads "1e3", "1.0" and "0x10" as whole
             // numbers, and the encoder is handed the text as typed.
             if (!/^\d+$/.test(cooldownText) || !Number.isInteger(cb) || cb < 1 || cb > 100000) {
-                setFormError('Cooldown blocks must be an integer between 1 and 100000.');
+                failIn('staking', 'Cooldown blocks must be an integer between 1 and 100000.');
                 return;
             }
         } else if (slashDestination.trim() !== '') {
-            setFormError('Slash destination requires a cooldown duration (otherwise the contract is not stakeable).');
+            failIn('staking', 'Slash destination requires a cooldown duration (otherwise the contract is not stakeable).');
             return;
         }
         const slashTo = slashDestination.trim();
@@ -775,20 +804,20 @@ export function DeployContractForm({ walletId, onBack }) {
             descriptor.coin,
             descriptor.networkKind,
         )) {
-            setFormError(`Slash destination must be BURN or a valid address for ${descriptor.displayName || 'this network'}.`);
+            failIn('staking', `Slash destination must be BURN or a valid address for ${descriptor.displayName || 'this network'}.`);
             return;
         }
         const constructorParts = String(constructorParams).split('|').map((part) => part.trim());
         if (constructorParams.trim() && constructorParts.some((part) => part === '')) {
-            setFormError('Constructor arguments cannot be blank between "|" separators.');
+            failIn('constructor', 'Constructor arguments cannot be blank between "|" separators.');
             return;
         }
         if (constructorParts.some((part) => part.includes(';'))) {
-            setFormError('Constructor arguments cannot contain ";".');
+            failIn('constructor', 'Constructor arguments cannot contain ";".');
             return;
         }
         if (cooldownBlocks.trim() !== '' && constructorParts.filter(Boolean).length > 1) {
-            setFormError('A stake-enabled contract accepts one constructor argument. Pack multiple values into one argument or remove the staking settings.');
+            failIn('constructor', 'A stake-enabled contract accepts one constructor argument. Pack multiple values into one argument or remove the staking settings.');
             return;
         }
         // The deploy's action ends in a repeating constructor-argument field, which
@@ -800,9 +829,10 @@ export function DeployContractForm({ walletId, onBack }) {
                 gasLimit: String(gasLimit || suggestedGas || ''),
                 constructorParams: normalizeConstructorParams(constructorParams),
             }), DEPLOY_ARGUMENT_WORDS);
-            if (tooLarge) { setFormError(tooLarge); return; }
+            if (tooLarge) { failIn(constructorParams.trim() ? 'constructor' : 'contract', tooLarge); return; }
         }
         setFormError(null);
+        setFormErrorSection(null);
         // The PLAN decides the lane, not just the wallet mode. `openConfirmScreen`
         // composes ONE `{ action: 'DEPLOY' }` and never consults `plan`, so routing
         // a chunked source there attempted a single-shot deploy of a source this
@@ -1040,8 +1070,8 @@ export function DeployContractForm({ walletId, onBack }) {
                 : onBack}
             backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
-                    ? 'Review publish'
-                    : 'Publish contract'}
+                    ? 'Review Publish'
+                    : 'Publish Contract'}
         />
     );
     // The review always opens at its top instead of inheriting how far the
@@ -1118,6 +1148,7 @@ export function DeployContractForm({ walletId, onBack }) {
                     <Button
                         type="submit"
                         variant="primary"
+                        icon={isHwSource ? <Icon.SignIcon /> : <Icon.UploadIcon />}
                         loading={stage === 'submitting'}
                         disabled={stage === 'submitting' || (
                             isWatcherMode
@@ -1125,11 +1156,7 @@ export function DeployContractForm({ walletId, onBack }) {
                                 : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)
                         )}
                     >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : 'Publish'}
+                        {isWatcherMode ? 'Create Unsigned Transaction' : 'Publish'}
                     </Button>
                 )}
             >
@@ -1270,6 +1297,12 @@ export function DeployContractForm({ walletId, onBack }) {
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={{
+                    verb: t('components.confirmSummary.verbDeployContract'),
+                    direction: 'none',
+                    chainId,
+                    address: fromAddress?.address,
+                }}
                 screenVariant={variant}
                 chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 feeText={feeEstimate?.coinAmount
@@ -1294,7 +1327,7 @@ export function DeployContractForm({ walletId, onBack }) {
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={chainId}
                 onChainChange={setChainId}
@@ -1304,18 +1337,35 @@ export function DeployContractForm({ walletId, onBack }) {
         );
     }
 
+    // Reveal keys and closed summaries of the standard sections.
+    const sectionErrorKey = (section) => (formError && formErrorSection === section && reviewAttempt > 0 ? reviewAttempt : 0);
+    const contractSummary = joinSummary(
+        metaName || (code.trim() ? 'Custom source' : 'No source yet'),
+        effectiveGasLimit ? `gas ${effectiveGasLimit}` : null,
+    );
+    const stakingSummary = cooldownBlocks.trim()
+        ? joinSummary(`${cooldownBlocks.trim()} blocks cooldown`, `slash to ${slashDestination.trim() || 'BURN'}`)
+        : 'Off';
+    const protocolFee = normalizeProtocolFee(protocolFeeQuote);
+    const protocolSummary = nativeFee.payFeeInNativeCoin
+        ? `protocol fee in ${coinTicker}`
+        : protocolFee.known
+            ? (protocolFee.free ? 'no protocol fee' : (protocolFee.amount ? `${protocolFee.amount} XCHAIN protocol fee` : 'protocol fee'))
+            : (protocolFeePending ? 'protocol fee pending' : undefined);
+    const chainRecords = addressesByChain && chainId ? (addressesByChain[chainId] || []) : null;
+
     return wrap(
         <>
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label="Publish contract"
             onSubmit={handleReview}
             status={[
-                formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null,
+                formError ? <StatusMessage key="form" variant="error">{formError}</StatusMessage> : null,
                 // PC-38: resume an interrupted chunked deploy. Those chunks are
                 // already on chain and already paid for; restarting re-pays.
                 resumable.length > 0 ? (
-                    <StatusMessage variant="warning" role={null}>
+                    <StatusMessage key="resume" variant="warning" role={null}>
                         {resumable.map((r) => {
                             // Count a chunk as SENT on its txid, not only on
                             // its action_index. The index is written after the
@@ -1356,7 +1406,7 @@ export function DeployContractForm({ walletId, onBack }) {
                                                 setResumeFieldsFrom(r.assembleParams && typeof r.assembleParams === 'object' ? r.id : null);
                                             }}
                                         >
-                                            Resume publishing
+                                            Resume Publishing
                                         </Button>
                                         <Button
                                             type="button"
@@ -1374,36 +1424,69 @@ export function DeployContractForm({ walletId, onBack }) {
                     </StatusMessage>
                 ) : null,
             ]}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="success"
+            action={(
+                <FormAction
                     icon={<Icon.UploadIcon />}
                     loading={actionConfirm.composing}
                     disabled={actionConfirm.composing}
                 >
-                    Publish contract
-                </Button>
+                    Publish Contract
+                </FormAction>
+            )}
+            from={(
+                <FromSection
+                    {...formSections.bind('from')}
+                    chainId={chainId}
+                    chainIds={deployChainsWithAddresses.length ? deployChainsWithAddresses : (chainId ? [chainId] : [])}
+                    chainRegistry={chainRegistry}
+                    onNetworkChange={setChainId}
+                    networkHelp="The chain the contract is published on. The From address, the publishing fee and the network fee are on this network."
+                    address={fromAddress?.address || null}
+                    addressLabel="From"
+                    addressHelp="The address that publishes the contract, pays the network and publishing fees, and becomes its owner."
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    revealKey={sectionErrorKey('from')}
+                    // Only once this network's addresses are known to be
+                    // empty, so the moment before the source resolves does not
+                    // open From for good.
+                    missing={chainRecords && chainRecords.length === 0 ? (
+                        <FormNotice variant="error">
+                            {t('send.source.noAddress')}
+                        </FormNotice>
+                    ) : null}
+                />
+            )}
+            fee={(
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeCustomEstimate}
+                    revealKey={sectionErrorKey('fee')}
+                    protocolSummary={protocolSummary}
+                    fees={{
+                        quote: protocolFeeQuote,
+                        pending: protocolFeePending,
+                        children: <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} unverified />,
+                    }}
+                />
             )}
         >
-            <NetworkField label="Network" help="The chain the contract is published on. The From address, the publishing fee and the network fee are on this network." value={chainId} onChange={setChainId} chainIds={deployChainsWithAddresses.length ? deployChainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-
-            {fromAddress ? (
-                <AddressField
-                    label="From"
-                    help="The address that publishes the contract, pays the network and publishing fees, and becomes its owner."
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
-                />
-            ) : (
-                <FormNotice variant="error">
-                    {t('send.source.noAddress')}
-                </FormNotice>
-            )}
+            {/* The main section holds the contract itself: its
+                identity, templates, source, the helper tools and their
+                results, and the gas limit. */}
+            <FormSection
+                id="contract"
+                title="Contract"
+                icon={Icon.ContractIcon}
+                {...formSections.bind('contract')}
+                revealKey={sectionErrorKey('contract')}
+                summary={contractSummary}
+            >
 
             {/* Contract identity, READ-ONLY, off the source below. Nothing is
                 rendered when the installed SDK or this shell cannot answer:
@@ -1508,7 +1591,7 @@ export function DeployContractForm({ walletId, onBack }) {
                     loading={validationBusy}
                     disabled={!code.trim() || validationBusy || toolBusy !== null}
                 >
-                    Validate code
+                    Validate Code
                 </Button>
                 <Button
                     type="button"
@@ -1518,7 +1601,7 @@ export function DeployContractForm({ walletId, onBack }) {
                     loading={sizeBusy}
                     disabled={!code.trim() || sizeBusy || toolBusy !== null}
                 >
-                    Estimate size
+                    Estimate Size
                 </Button>
                 <Button
                     type="button"
@@ -1528,7 +1611,7 @@ export function DeployContractForm({ walletId, onBack }) {
                     loading={gasBusy}
                     disabled={!code.trim() || gasBusy || toolBusy !== null}
                 >
-                    Suggest gas
+                    Suggest Gas
                 </Button>
             </div>
 
@@ -1601,10 +1684,21 @@ export function DeployContractForm({ walletId, onBack }) {
                 onChange={(e) => { setGasLimit(e.target.value); setFormError(null); }}
                 autoComplete="off"
             />
+            </FormSection>
 
+            {/* Constructor arguments and the staking settings are optional
+                closed sections; the sections carry the Optional tags. */}
+            <FormSection
+                id="constructor"
+                title="Constructor"
+                icon={Icon.PencilIcon}
+                optional
+                {...formSections.bind('constructor')}
+                revealKey={sectionErrorKey('constructor')}
+                summary={constructorParams.trim() || 'None'}
+            >
             <Input
                 label="Constructor params"
-                optional
                 help="Values passed to the contract when it is created. Separate them with |."
                 hint={assembleLocked ? RESUME_FIELD_HINT : undefined}
                 disabled={assembleLocked}
@@ -1613,10 +1707,19 @@ export function DeployContractForm({ walletId, onBack }) {
                 className={contractStyles.monospaceInput}
                 autoComplete="off"
             />
+            </FormSection>
 
+            <FormSection
+                id="staking"
+                title="Staking"
+                icon={Icon.StakeIcon}
+                optional
+                {...formSections.bind('staking')}
+                revealKey={sectionErrorKey('staking')}
+                summary={stakingSummary}
+            >
             <Input
                 label="Cooldown blocks"
-                optional
                 help="Enables contract staking and sets the blocks between unstaking and token release. Leave blank to disable staking."
                 hint={assembleLocked ? RESUME_FIELD_HINT : '1–100000 blocks.'}
                 disabled={assembleLocked}
@@ -1628,7 +1731,6 @@ export function DeployContractForm({ walletId, onBack }) {
 
             <Input
                 label="Slash destination"
-                optional
                 help="Address that receives slashed tokens. Enter BURN or leave blank to destroy them. Cannot change after deployment."
                 hint={assembleLocked ? RESUME_FIELD_HINT : undefined}
                 disabled={assembleLocked}
@@ -1640,22 +1742,8 @@ export function DeployContractForm({ walletId, onBack }) {
                 autoCorrect="off"
                 spellCheck={false}
             />
-
-            <FeesCard chainId={chainId} quote={protocolFeeQuote} pending={protocolFeePending} feeSelector={feeTiers ? (
-                <FeeSelector
-                    chainId={chainId}
-                    label="Network fee"
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
-            ) : null}>
-                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} unverified />
-            </FeesCard>
-
-        </FormPage>
+            </FormSection>
+        </FormFrame>
         {confirmDialog.request ? (
             <ConfirmModal
                 {...confirmDialog.request}

@@ -39,6 +39,8 @@ import { neutralizeControlText } from '../utils/textHardening.js';
 import { messageTextForDisplay } from '../utils/messageTextSafety.js';
 import styles from './IssueTokenForm.module.css';
 import local from './MessagingInbox.module.css';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -587,7 +589,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
             icon={<Icon.PlusIcon />}
             onClick={() => onCompose()}
         >
-            New conversation
+            New Conversation
         </Button>
     ) : null);
 
@@ -604,7 +606,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                     <StatusMessage
                         variant="error"
                         recovery={{
-                            label: 'Try again',
+                            label: 'Try Again',
                             onAction: () => {
                                 setLoadError(null);
                                 setAddressesByChain(null);
@@ -692,7 +694,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                             loading={stage === 'submitting'}
                             disabled={password.length === 0}
                         >
-                            Unlock inbox
+                            Unlock Inbox
                         </Button>
                     )}
                 >
@@ -721,6 +723,13 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         return (
             <ActionConfirmScreen
                 {...shareLane.confirmProps}
+                summary={{
+                    verb: t('components.confirmSummary.verbShareKey'),
+                    direction: 'none',
+                    chainId: shareTarget.record.chainId,
+                    address: shareTarget.record.address,
+                    ...(shareTarget.request?.from ? { recipient: shareTarget.request.from } : {}),
+                }}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || shareTarget.record.chainId}
                 signerReady={signerReady}
@@ -910,7 +919,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                 <EmptyState
                     title="No messages yet"
                     body="Messages sent to or from this account's addresses show up here."
-                    actionLabel={onCompose ? 'New message' : undefined}
+                    actionLabel={onCompose ? 'New Message' : undefined}
                     onAction={onCompose ? () => onCompose() : undefined}
                 />
             ) : visibleConversations.length === 0 ? (
@@ -1152,7 +1161,7 @@ function SessionRequestRow({
                         </Button>
                     ) : null}
                     <Button variant="success" icon={<Icon.KeyIcon />} onClick={onShare} loading={stage === 'sending'} disabled={demoGuard.blocked || shareBusy}>
-                        Share my key
+                        Share My Key
                     </Button>
                 </div>
             )}

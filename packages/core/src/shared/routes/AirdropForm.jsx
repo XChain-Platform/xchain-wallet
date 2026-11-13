@@ -10,13 +10,29 @@
 
 import { t } from '../../i18n/index.js';
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, CopyButton, EmptyState, FeeSelector, FieldNote, FormNotice, FormPage, Icon, Input, ListPage, ListRow, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+// Network, From, the fee selector and the Fees card come from
+// the standard FromSection and FeeSection.
+import { AddressText, Button, CopyButton, EmptyState, FieldNote, FormNotice, FormPage, Icon, Input, ListPage, ListRow, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+// The compose stage sits on the Wallet Form Standard frame.
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    joinSummary,
+    useFormSections,
+} from '../components/formStandard/index.js';
+import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
+import { formatCoinBaseUnits } from '../../flows/feesCard.js';
 import {
     registry as registryLib,
     decoder as decoderLib,
     airdrop as airdropLib,
     schemas as schemasLib,
 } from '@xchain-wallet/core';
+import '../../i18n/locales/en/airdrop.js';
+import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/send.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -38,11 +54,10 @@ import {
     multiplyDecimal,
     exceedsBalance,
 } from '../utils/dividendPerUnit.js';
-import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { TokenField } from '../components/TokenField.jsx';
+import { FileField } from '../components/FileField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
-import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
-import { FeesCard } from '../components/FeesCard.jsx';
+// The Fees card and its pay-in-native switch render inside FeeSection.
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -205,6 +220,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     const [importedRecipientEntries, setImportedRecipientEntries] = useState(
         /** @type {{ text: string, entries: Array<{ value: string, line: number }> } | null} */ (null),
     );
+    // The name of the recipients file loaded into the box, shown in its field.
+    const [recipientsFileName, setRecipientsFileName] = useState('');
     const [showInvalid, setShowInvalid] = useState(false);
 
     // 'holders' mode: type/pick tokens -> new TICK list (TYPE=1). Same
@@ -265,6 +282,12 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     const [indexReadError, setIndexReadError] = useState(/** @type {string | null} */ (null));
     const [hydrated, setHydrated] = useState(false);
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    // Section open state, held above the early returns so it survives the
+    // pickers and review. A refusal names its section and bumps the counter,
+    // so that section reopens even after being closed.
+    const formSections = useFormSections({ from: false, airdrop: true, memo: false, fee: false });
+    const [errorSection, setErrorSection] = useState(/** @type {'from' | 'airdrop' | 'memo' | 'fee' | null} */ (null));
+    const [reviewAttempt, setReviewAttempt] = useState(0);
 
     // The active map and the settings read are best-effort: a host without
     // `getActiveAddresses` / `getSettings`, or one whose call fails, still
@@ -989,11 +1012,20 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         accept: ['.csv', '.txt', 'text/csv', 'text/plain'],
         readAs: 'text',
         onError: (msg) => setFormError(msg),
-        onFile: ({ content }) => {
+        onFile: ({ file, content }) => {
             const text = typeof content === 'string' ? content : '';
             applyImportedRecipients(text);
+            setRecipientsFileName(file?.name || '');
         },
     });
+
+    // Removing the file takes its addresses out of the box only while the
+    // box still holds exactly what the file loaded; typed edits stay.
+    function clearRecipientsFile() {
+        if (importedRecipientEntries && pasteText === importedRecipientEntries.text) setPasteText('');
+        setImportedRecipientEntries(null);
+        setRecipientsFileName('');
+    }
 
     // PC-11: the single compose-stage submit handler for all three
     // source modes. 'existing' skips straight to 'review-airdrop' (no
@@ -1001,9 +1033,14 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // 'review-list' first, exactly as the pre-PC-11 flow did.
     function handleComposeSubmit(event) {
         event.preventDefault();
+        // Each attempt bumps the counter; a refusal belongs to the
+        // Airdrop section unless it names From, Memo or the fee.
+        setReviewAttempt((n) => n + 1);
+        setErrorSection('airdrop');
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        if (feeStop) { setFormError(feeStop.formError); return; }
+        if (feeStop) { setErrorSection('fee'); setFormError(feeStop.formError); return; }
         if (!chainId || !fromAddress) {
+            setErrorSection('from');
             setFormError('Pick a source address first.');
             return;
         }
@@ -1057,11 +1094,12 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             return;
         }
         if (memo && /[|;]/.test(memo)) {
+            setErrorSection('memo');
             setFormError('Memo cannot contain | or ; characters.');
             return;
         }
         const memoError = memoLengthError(memo.trim());
-        if (memoError) { setFormError(memoError); return; }
+        if (memoError) { setErrorSection('memo'); setFormError(memoError); return; }
         if (sourceMode === 'existing') {
             if (!listActionIndex) {
                 setFormError('Choose an existing list first.');
@@ -1440,11 +1478,11 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     const header = (
         <PageHeader
             onBack={headerBack}
-            title={stage === 'review-list' ? (sourceMode === 'holders' ? 'Review token list' : 'Review address list')
-                    : stage === 'wait-index' ? 'Waiting for list to be indexed'
-                        : stage === 'review-airdrop' ? 'Review airdrop'
-                            : stage === 'done' ? 'Airdrop complete'
-                                : `Airdrop tokens`}
+            title={stage === 'review-list' ? (sourceMode === 'holders' ? t('airdrop.title.reviewTokenList') : t('airdrop.title.reviewAddressList'))
+                    : stage === 'wait-index' ? t('airdrop.title.waitingForIndex')
+                        : stage === 'review-airdrop' ? t('airdrop.reviewAirdrop')
+                            : stage === 'done' ? t('airdrop.title.complete')
+                                : t('airdrop.title.compose')}
         />
     );
     // A review always opens at its top instead of inheriting how far the
@@ -1496,9 +1534,22 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // confirm page, rendered in place of the review stage (the overlay
     // modal didn't fit small/mobile viewports); flow state stays intact.
     if (actionConfirm.open) {
+        // The recipient list goes out first; the airdrop then sends the
+        // token, its total when the recipient count is known.
+        const listLeg = stage === 'review-list';
+        const airdropTick = String(airdropParams.TICK || '').toUpperCase();
+        const airdropSummary = {
+            verb: listLeg ? t('components.confirmSummary.verbCreateList') : t('airdrop.section.airdrop'),
+            ...(airdropTick ? { ticker: airdropTick } : {}),
+            ...(!listLeg && airdropTick && totalDistribution ? { amount: String(totalDistribution) } : {}),
+            direction: listLeg ? 'none' : 'out',
+            chainId,
+            address: fromAddress?.address,
+        };
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={airdropSummary}
                 screenVariant={variant}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
@@ -1868,7 +1919,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title={t('send.fromAddress')}
                 walletId={walletId}
                 chainId={chainId}
                 onChainChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
@@ -1886,7 +1937,10 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             <TokenPicker
                 purpose="send"
                 walletId={walletId}
-                title="Select token"
+                // AIRDROP moves token supply; the network coin is not a token.
+                kindFilter="tokens"
+                kindLocked
+                title={t('airdrop.picker.selectToken')}
                 onSelect={(sel) => {
                     setToken(String(sel.tick || ''));
                     // Picking a token on ANOTHER chain re-targets the whole
@@ -1895,7 +1949,9 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     // fromAddressId is set, so a stale id from the old chain
                     // survives and resolves to nothing on the new one. See the
                     // NetworkField below for what that looks like on screen.
-                    if (!lockedToken && sel.chainId) {
+                    // The Token field is live with a preset token
+                    // too, so a pick on another chain re-targets the form.
+                    if (sel.chainId) {
                         if (sel.chainId !== chainId) setFromAddressId(null);
                         setChainId(sel.chainId);
                     }
@@ -1911,7 +1967,10 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             <TokenPicker
                 purpose="receive"
                 walletId={walletId}
-                title="Add a token"
+                // A holder list names tokens; nobody holds the network coin on the token ledger.
+                kindFilter="tokens"
+                kindLocked
+                title={t('airdrop.picker.addToken')}
                 onSelect={(sel) => {
                     const t = String(sel.tick || '');
                     if (t) setTicksText((prev) => (prev.trim() ? `${prev}\n${t}` : t));
@@ -1940,64 +1999,113 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     }
 
     // stage === 'compose'
+    // A section holding the last refusal gets a key that changes on
+    // every attempt, so it reopens even after being closed.
+    const sectionErrorKey = (id) => (errorSection === id && formError ? reviewAttempt : 0);
+    const recipientsSummary = sourceMode === 'existing'
+        ? (listActionIndex ? t('airdrop.summary.existingList') : null)
+        : sourceMode === 'holders'
+            ? (memberTicks.length ? t('airdrop.summary.holders', { count: memberTicks.length }) : null)
+            : (recipients.valid.length ? t('airdrop.summary.addresses', { count: recipients.valid.length }) : null);
+    const airdropSummary = joinSummary(
+        amountPer && token ? t('airdrop.summary.each', { amount: amountPer, tick: token.trim() }) : (token.trim() || null),
+        recipientsSummary,
+    );
+    // The protocol fee joins the Network fee row's summary; nothing while unknown.
+    const protocolSummary = (() => {
+        if (protocolFeePending) return undefined;
+        const fee = normalizeProtocolFee(protocolFeeQuote);
+        if (!fee.known || fee.free) return undefined;
+        if (nativeFee.flag) {
+            const native = formatCoinBaseUnits(protocolFeeQuote?.requiredFeeSats);
+            return native ? t('airdrop.summary.protocolFeeNative', { amount: native, coin: coinTicker }) : undefined;
+        }
+        return fee.amount ? t('airdrop.summary.protocolFeeXchain', { amount: fee.amount }) : undefined;
+    })();
+    const fundingAddresses = (addressesByChain[chainId] || []).filter((a) => a.role !== 'dispenser');
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label="Token airdrop"
             onSubmit={handleComposeSubmit}
             status={formError ? (
                 <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="success"
+            action={(
+                <FormAction
                     icon={<Icon.UsersIcon />}
                     disabled={Boolean(amountValidationError)
                         || (sourceMode === 'paste' && (recipientsPending || listFit !== null))}
                 >
-                    {sourceMode === 'existing' ? 'Review airdrop' : 'Review recipients'}
-                </Button>
+                    {sourceMode === 'existing' ? t('airdrop.reviewAirdrop') : t('airdrop.action.reviewRecipients')}
+                </FormAction>
+            )}
+            /* The standard order: From (closed), Airdrop (open: token, amount,
+               recipients), Memo (closed), then the Network fee row. A picked
+               token decides the network; a pick on another chain moves the form. */
+            from={(
+                <FromSection
+                    {...formSections.bind('from')}
+                    chainId={chainId}
+                    chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])}
+                    chainRegistry={chainRegistry}
+                    // Clearing the source address with the chain is load-
+                    // bearing, not tidiness: the default effect above returns
+                    // early while fromAddressId is set (so an explicit pick is
+                    // not clobbered by an unrelated address refresh), which
+                    // means a chain switch leaves an id belonging to the OLD
+                    // chain. It resolves to nothing on the new one, and the
+                    // form then renders "No address on this chain. Use Receive
+                    // to generate one first." over a wallet that has plenty.
+                    // Same shape as ListCreateForm / ControllerBindForm, which
+                    // have always reset here.
+                    onNetworkChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
+                    lockNetwork={Boolean(token.trim())}
+                    networkHelp={t('airdrop.from.networkHelp')}
+                    address={fromAddress?.address || null}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel={t('send.source.choose')}
+                    addressHelp={t('airdrop.from.addressHelp')}
+                    revealKey={sectionErrorKey('from')}
+                    // Only when this network truly has no funding address: the
+                    // default source resolves in an effect after the list lands.
+                    missing={fundingAddresses.length === 0 ? (
+                        <FormNotice variant="error">
+                            {t('send.source.noAddress')}
+                        </FormNotice>
+                    ) : null}
+                />
+            )}
+            fee={(
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeCustomEstimate}
+                    revealKey={sectionErrorKey('fee')}
+                    protocolSummary={protocolSummary}
+                    fees={{
+                        quote: protocolFeeQuote,
+                        pending: protocolFeePending,
+                        nativeFeeProps: nativeFee.toggleProps,
+                    }}
+                />
             )}
         >
-            {lockedToken && chainId ? (
-                <LockedTokenContext chainId={chainId} tick={token} label="Token to drop" />
-            ) : (
-                <>
-                    {/* Clearing the source address with the chain is load-
-                        bearing, not tidiness: the default effect above returns
-                        early while fromAddressId is set (so an explicit pick is
-                        not clobbered by an unrelated address refresh), which
-                        means a chain switch leaves an id belonging to the OLD
-                        chain. It resolves to nothing on the new one, and the
-                        form then renders "No address on this chain. Use Receive
-                        to generate one first." over a wallet that has plenty -
-                        with no source picker on screen to fix it with, because
-                        that control only renders when an address IS resolved.
-                        Same shape as ListCreateForm / ControllerBindForm, which
-                        have always reset here. */}
-                    <NetworkField label="Network" help="The chain the airdrop is recorded on. Your From address, token, recipients, and fees are on this network." value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-                </>
-            )}
-
-            {fromAddress ? (
-                <AddressField
-                    label="From"
-                    help="The address that sends the airdrop. It must hold the token and pays the fees."
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
-                />
-            ) : (
-                <FormNotice variant="error">
-                    {t('send.source.noAddress')}
-                </FormNotice>
-            )}
-
-            {lockedToken ? null : (
+            <FormSection
+                id="airdrop"
+                title={t('airdrop.section.airdrop')}
+                icon={Icon.UsersIcon}
+                {...formSections.bind('airdrop')}
+                revealKey={sectionErrorKey('airdrop')}
+                summary={airdropSummary || null}
+            >
+            {/* Always the standard Token field, even when the token arrives
+                already chosen; the preset token simply fills it. */}
+            {(
                 <TokenField
                     label="Token to drop"
                     help="The token sent to every recipient. Only tokens available to send from this wallet are listed."
@@ -2086,24 +2194,18 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             autoComplete="off"
                         />
                     </div>
-                    {/* The browser's own file control sat in a grey box of
-                        its own; it now opens from an outlined button, the
-                        same pattern Publish file uses. */}
-                    <div>
-                        <Input
-                            {...recipientsDrop.pickerProps}
-                            aria-label="Upload CSV of addresses"
-                            autoComplete="off"
-                        />
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            onClick={recipientsDrop.openFilePicker}
-                        >
-                            Upload a CSV or text file
-                        </Button>
-                    </div>
+                    {/* The standard file field; the drop-zone hook keeps its
+                        size cap, type check and read for both the dialog and
+                        a drop on the field. */}
+                    <FileField
+                        label={t('airdrop.file.label')}
+                        help={t('airdrop.file.help')}
+                        optional
+                        inputLabel={t('airdrop.file.inputLabel')}
+                        fileName={recipientsFileName}
+                        drop={recipientsDrop}
+                        onClear={clearRecipientsFile}
+                    />
 
                     {pasteText.trim() ? (
                         <p className={styles.hint}>
@@ -2320,37 +2422,29 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     Retry holder counts
                 </Button>
             ) : null}
+            </FormSection>
 
-            <Input
-                label="Memo"
+            {/* Memo is its own optional section, closed; the field carries no
+                Optional tag of its own. */}
+            <FormSection
+                id="memo"
+                title={t('send.memo')}
+                icon={Icon.MessageIcon}
                 optional
-                maxLength={MAX_MEMO_LENGTH}
-                help={MEMO_HINT}
-                value={memo}
-                onChange={(e) => setMemo(e.target.value)}
-                autoComplete="off"
-            />
-
-            <FeesCard
-                chainId={chainId}
-                quote={protocolFeeQuote}
-                pending={protocolFeePending}
-                feeSelector={feeTiers ? (
-                <FeeSelector
-                    chainId={chainId}
-                    label="Network fee"
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
-                ) : null}
+                {...formSections.bind('memo')}
+                revealKey={sectionErrorKey('memo')}
+                summary={memo.trim() ? memo.trim() : t('send.advanced.none')}
             >
-                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
-            </FeesCard>
-
-        </FormPage>,
+                <Input
+                    label={t('send.memo')}
+                    maxLength={MAX_MEMO_LENGTH}
+                    help={MEMO_HINT}
+                    value={memo}
+                    onChange={(e) => setMemo(e.target.value)}
+                    autoComplete="off"
+                />
+            </FormSection>
+        </FormFrame>,
     );
 }
 
@@ -2494,7 +2588,7 @@ function ExistingListPickerScreen({ variant, messaging, chainId, addresses, onSe
         return () => clearTimeout(timer);
     }, [rows, loadAttempt]);
 
-    const header = <PageHeader onBack={onBack} title="Choose a list" />;
+    const header = <PageHeader onBack={onBack} title={t('airdrop.picker.chooseList')} />;
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
             <ListPage>{children}</ListPage>

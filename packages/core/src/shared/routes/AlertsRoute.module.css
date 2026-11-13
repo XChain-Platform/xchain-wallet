@@ -9,86 +9,79 @@
 
 .badge {
     position: absolute;
-    inset-block-start: calc(-1 * var(--xc-space-2));
-    inset-inline-end: calc(-1 * var(--xc-space-2));
+    /* One pixel down and in from the corner, so the count clears the bar's
+       divider above it with the header's tighter 6px spacing. */
+    inset-block-start: calc(1px - var(--xc-space-2));
+    inset-inline-end: calc(1px - var(--xc-space-2));
     min-width: var(--xc-icon-md);
     height: var(--xc-icon-md);
     padding-inline: var(--xc-space-1);
     border-radius: var(--xc-radius-pill);
-    background: var(--xc-accent-primary);
-    color: var(--xc-on-accent);
+    /* The same red count as the app bar bell, so every unread count reads alike. */
+    background: var(--xc-danger);
+    color: var(--xc-on-danger);
     border: 2px solid var(--xc-surface);
-    font-size: 10px;
+    font-size: var(--xc-text-xs);
     font-weight: 700;
     line-height: var(--xc-icon-xs);
     text-align: center;
     box-sizing: border-box;
 }
 
-.filters {
+/* The same gap as the app bar's buttons above, so the two rows line up. */
+.headerActions {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+}
+
+.typeGroup {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.typeLegend {
+    display: block;
     width: 100%;
+    margin-block-end: var(--xc-label-gap);
+    padding: 0;
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+}
+
+.typeOptions {
     display: flex;
-    align-items: stretch;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+}
+
+.typeDivider {
+    height: 1px;
+    margin-block: var(--xc-space-1);
+    background: var(--xc-border);
+}
+
+.filterDot {
+    flex: 0 0 auto;
+    width: var(--xc-space-2);
+    height: var(--xc-space-2);
+    margin-inline: calc((var(--xc-icon-md) - var(--xc-space-2)) / 2);
+    border-radius: 50%;
+    background: var(--xc-accent-primary);
+}
+
+.typeOption {
+    display: inline-flex;
+    align-items: center;
     gap: var(--xc-space-2);
 }
 
-.searchWrap,
-.typeWrap {
-    position: relative;
-    display: flex;
-    align-items: center;
-    min-width: 0;
-}
-
-.searchWrap {
-    flex: 1 1 auto;
-}
-
-.searchWrap > svg,
-.typeWrap > svg {
-    position: absolute;
-    z-index: var(--xc-z-base);
-    inset-inline-start: var(--xc-space-3);
-    width: var(--xc-icon-md);
-    height: var(--xc-icon-md);
-    color: var(--xc-text-muted);
-    pointer-events: none;
-}
-
-.searchWrap > :not(svg):first-of-type {
-    flex: 1 1 auto;
-    width: 100%;
-}
-
-.searchWrap .searchInput {
-    padding-inline-start: calc(var(--xc-space-3) + var(--xc-icon-xl));
-    padding-inline-end: calc(var(--xc-space-3) + var(--xc-icon-xl));
-}
-
-.clearSearch {
-    position: absolute;
-    inset-inline-end: var(--xc-space-1);
-}
-
-.typeWrap {
-    flex: 0 1 11.25rem;
-}
-
-.typeWrap > :not(svg) {
-    width: 100%;
-}
-
-.typeWrap .typeSelect {
-    padding-inline-start: calc(var(--xc-space-3) + var(--xc-icon-xl));
-}
-
-.typeWrapActive .typeSelect {
-    border-color: var(--xc-accent-primary);
-    color: var(--xc-accent-text);
-}
-
 .matchCount {
-    margin: 0 0 var(--xc-space-2);
+    margin: 0;
+    min-height: 1em;
     color: var(--xc-text-muted);
     font-size: var(--xc-text-sm);
 }
@@ -134,6 +127,9 @@
     padding: var(--xc-space-3) 0;
     color: inherit;
     text-align: start;
+    /* Button sets 600 for its labels; a row reads at body weight so only an
+       unread title stands out in bold. */
+    font-weight: 400;
 }
 
 .rowButton > span {
@@ -210,6 +206,7 @@
 .title {
     color: var(--xc-text);
     font-size: var(--xc-text-sm);
+    font-weight: 500;
     overflow-wrap: anywhere;
 }
 
@@ -224,18 +221,22 @@
     overflow-wrap: anywhere;
 }
 
+/* The time sits top right with the unread dot just after it on the same
+   line, not alone in the row's bottom corner. */
 .meta {
-    align-self: stretch;
+    align-self: start;
     min-width: 3rem;
     display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    justify-content: space-between;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--xc-space-1);
     color: var(--xc-text-muted);
     font-size: var(--xc-text-xs);
 }
 
 .unreadDot {
+    flex: 0 0 auto;
     width: var(--xc-space-2);
     height: var(--xc-space-2);
     border-radius: 50%;
@@ -253,10 +254,6 @@
 }
 
 @media (max-width: 480px) {
-    .typeWrap {
-        flex-basis: 8.25rem;
-    }
-
     .rowGrid {
         gap: var(--xc-space-2);
     }

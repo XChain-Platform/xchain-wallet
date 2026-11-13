@@ -9,7 +9,9 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { AddressText, Button, ChainBadge, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, EmptyState, Icon, ListPage, PageHeader, Screen, Select, SectionHeader, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
+// The standard title-line filter, as Bet Markets uses it.
+import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useWalletSource } from '../hooks/useDemoGuard.jsx';
@@ -90,6 +92,8 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
         /** @type {string} */ ('all'),
     );
     const [searchQuery, setSearchQuery] = useState('');
+    // The All | Mine | Interactions tabs above the list.
+    const [view, setView] = useState('all');
 
     /** @typedef {{ loading: boolean, rows: any[], error: string | null }} LoadState */
     const [myByChain, setMyByChain] = useState(
@@ -329,11 +333,42 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
         return () => { cancelled = true; };
     }, [activeChains, messaging, contractsReload, offline]);
 
-        const header = (
+    // The title bar holds the filter (search, Network) and a plus for
+    // Publish contract at the far right; the body is just the list.
+    const header = (
         <PageHeader
             onBack={onBack}
             backLabel="Back to home"
             title="Contracts"
+            trailing={addressesByChain && !addressesError && vmChainsWithAddresses.length > 0 ? (
+                <>
+                    <ListFilterMenu
+                        query={searchQuery}
+                        onQueryChange={setSearchQuery}
+                        active={chainFilter !== 'all'}
+                        label="Filter contracts"
+                        searchPlaceholder="Search"
+                        searchLabel="Search contracts"
+                    >
+                        <Select
+                            label="Network"
+                            size="md"
+                            value={chainFilter}
+                            onChange={(event) => setChainFilter(event.target.value)}
+                        >
+                            <option value="all">All networks</option>
+                            {vmChainsWithAddresses.map((cid) => (
+                                <option key={cid} value={cid}>{chainRegistry.get(cid)?.displayName || cid}</option>
+                            ))}
+                        </Select>
+                    </ListFilterMenu>
+                    {onDeploy ? (
+                        <Button variant="secondary" icon={<Icon.PlusIcon />} aria-label="Publish contract" title="Publish contract" onClick={onDeploy}>
+                            {null}
+                        </Button>
+                    ) : null}
+                </>
+            ) : null}
         />
     );
     const wrap = (children, toolbar, notices) => (
@@ -348,7 +383,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                 variant="error"
                 className={styles.entryDescription}
                 recovery={{
-                    label: 'Try again',
+                    label: 'Try Again',
                     onAction: () => {
                         setAddressesError(null);
                         setAddressesByChain(null);
@@ -376,29 +411,20 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
         );
     }
 
+    // Icon tabs directly above the list.
     const toolbar = (
-        <>
-            <div className={contractStyles.toolbarSearch}>
-                <Input
-                    type="search"
-                    size="sm"
-                    placeholder="Filter by name or number"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    aria-label="Filter contracts"
-                />
-            </div>
-            <ChainFilterBar
-                chains={vmChainsWithAddresses}
-                value={chainFilter}
-                onChange={setChainFilter}
+        <div className={contractStyles.tabsRow}>
+            <Tabs
+                aria-label="Contract views"
+                items={[
+                    { id: 'all', label: <span className={contractStyles.tabLabel}><Icon.GridIcon />All</span> },
+                    { id: 'mine', label: <span className={contractStyles.tabLabel}><Icon.UserIcon />Mine</span> },
+                    { id: 'interactions', label: <span className={contractStyles.tabLabel}><Icon.DollarIcon />Interactions</span> },
+                ]}
+                value={view}
+                onChange={setView}
             />
-            {onDeploy ? (
-                <Button variant="success" size="sm" className={contractStyles.toolbarControl} icon={<Icon.PlusIcon />} onClick={onDeploy}>
-                    Publish contract
-                </Button>
-            ) : null}
-        </>
+        </div>
     );
 
     // Offline with nothing loaded, the page says so once in place of three
@@ -420,28 +446,18 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
         <StatusMessage
             variant="error"
             className={styles.entryDescription}
-            recovery={{ label: 'Try again', onAction: retryContracts }}
+            recovery={{ label: 'Try Again', onAction: retryContracts }}
         >
             Couldn't load contracts. Try again.
         </StatusMessage>
     ) : null;
-    const allSectionsEmpty = activeChains.length > 0
-        && [myByChain, interactionsByChain, browseByChain].every((statesByChain) => (
-            activeChains.every((cid) => {
-                const state = statesByChain[cid];
-                return state && !state.loading && !state.error && state.rows.length === 0;
-            })
-        ));
-
-    return wrap(
-        allSectionsEmpty ? (
-            <EmptyState
-                title="No contracts yet"
-                body="Published and indexed contracts appear here after one is created."
-            />
-        ) : <>
+    // One list at a time, picked by the tab above it. Interactions is
+    // the wallet's deposits and withdrawals (funded); calls that move no funds
+    // are not readable by address, so the tab says so under the list.
+    let tabBody;
+    if (view === 'mine') {
+        tabBody = (
             <ChainSection
-                title="My contracts (published by me)"
                 chains={activeChains}
                 statesByChain={myByChain}
                 searchQuery={searchQuery}
@@ -450,8 +466,10 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                 onOpenContract={onOpenContract}
                 renderRow={(row, cid) => <ContractRow row={row} chainId={cid} />}
             />
+        );
+    } else if (view === 'interactions') {
+        tabBody = (
             <ChainSection
-                title="My interactions (deposits / withdrawals)"
                 chains={activeChains}
                 statesByChain={interactionsByChain}
                 searchQuery={searchQuery}
@@ -469,20 +487,22 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                     here yet. Open a contract to see its call history.
                 </p>
             </ChainSection>
+        );
+    } else {
+        tabBody = (
             <ChainSection
-                title="Browse all contracts"
                 chains={activeChains}
                 statesByChain={browseByChain}
                 searchQuery={searchQuery}
-                emptyTitle="No indexed contracts"
-                emptyText="Indexed contracts appear here after contract data loads."
+                emptyTitle="No contracts yet"
+                emptyText="Published and indexed contracts appear here after one is created."
                 onOpenContract={onOpenContract}
                 renderRow={(row, cid) => <ContractRow row={row} chainId={cid} />}
             />
-        </>,
-        toolbar,
-        loadFailedNotice,
-    );
+        );
+    }
+
+    return wrap(tabBody, toolbar, loadFailedNotice);
 }
 
 /**
@@ -499,7 +519,7 @@ function settledEmpty(chains) {
 function Section({ title, children }) {
     return (
         <section>
-            <SectionHeader title={title} />
+            {title ? <SectionHeader title={title} /> : null}
             {children}
         </section>
     );
@@ -551,44 +571,6 @@ function ChainSection({
     );
 }
 
-function ChainFilterBar({ chains, value, onChange }) {
-    return (
-        <div role="tablist" aria-label="Network filter" className={contractStyles.chainFilters}>
-            <Button
-                type="button"
-                variant={value === 'all' ? 'primary' : 'secondary'}
-                size="sm"
-                className={contractStyles.toolbarControl}
-                icon={<Icon.FilterIcon />}
-                role="tab"
-                aria-selected={value === 'all'}
-                onClick={() => onChange('all')}
-            >
-                All
-            </Button>
-            {chains.map((cid) => {
-                const d = chainRegistry.get(cid);
-                if (!d) return null;
-                return (
-                    <Button
-                        type="button"
-                        variant={value === cid ? 'primary' : 'secondary'}
-                        size="sm"
-                        className={contractStyles.toolbarControl}
-                        role="tab"
-                        key={cid}
-                        aria-selected={value === cid}
-                        aria-label={d?.displayName || cid}
-                        onClick={() => onChange(cid)}
-                    >
-                        <ChainBadge descriptor={d} size="sm" />
-                    </Button>
-                );
-            })}
-        </div>
-    );
-}
-
 /** One chain's rows or its loading skeleton. A failed read is the page's notice. */
 function ChainGroup({
     descriptor,
@@ -616,6 +598,7 @@ function ChainGroup({
                             key={String(rowKey(row)) + ':' + i}
                             type="button"
                             className={`${styles.entry} ${contractStyles.contractRow}`}
+                            icon={<Icon.ArrowRightIcon />}
                             aria-label={`Open ${contractDisplayLabel(row, { chainId, actionIndex: rowKey(row) })}`}
                             onClick={() => onOpenContract(chainId, String(rowKey(row)))}
                         >

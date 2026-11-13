@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, EmptyState, FormNotice, Icon, InfoTip, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -20,9 +20,14 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { outcomeLabelsOf, safeOutcomeLabel } from '../utils/betOutcomeLabels.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import styles from './IssueTokenForm.module.css';
 import consoleStyles from './OracleConsole.module.css';
+// Bet Markets' My markets tab draws this console's markets as the
+// list's gauge cards, each with its oracle actions under it.
+import { BetMarketCard } from '../components/BetMarketCard.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -79,8 +84,15 @@ function countdownLabel(targetSec, nowSec) {
  * @param {(chainId: string, feedIndex: string | number) => void} [props.onOpenMarket]
  * @param {(chainId: string, feedIndex: string | number) => void} [props.onDuplicate]  open a new market pre-filled from this one
  * @param {() => void} props.onBack
+ * @param {import('react').ReactNode} [props.header]   Set by Bet Markets' My markets tab, which
+ *   draws the console inside its own page (title line and tabs); the cards are then the gauge cards.
+ * @param {import('react').ReactNode} [props.toolbar]  That tab's All | My bets | My markets row
+ * @param {(rows: any[]) => any[]} [props.arrange]     The list's search and sort, applied to the markets
+ * @param {(market: any) => string | null} [props.yourBetFor]  The card's "You bet" chip
  */
-export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, onBack }) {
+export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, onBack, header: headerOverride, toolbar: toolbarOverride, arrange, yourBetFor }) {
+    // Embedded in Bet Markets' My markets tab when the host passes its own header.
+    const embedded = Boolean(headerOverride);
     const { messaging, shell } = useMessaging();
     const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
@@ -284,7 +296,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
         }
     }
 
-    const header = <PageHeader onBack={onBack} title="My markets" />;
+    const header = headerOverride || <PageHeader onBack={onBack} title="My Markets" />;
     const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
 
     // Every oracle mutation goes through the same
@@ -297,9 +309,25 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
     // will actually broadcast rather than the row that was clicked.
     if (actionConfirm.open) {
         const cid = active?.chainId;
+        // The market the oracle acts on, by its title, else its number.
+        const marketName = neutralizeControlText(active?.label, { maxLength: 80 });
+        const marketSummary = {
+            verb: active?.mode === 'resolve'
+                ? t('components.confirmSummary.verbResolveMarket')
+                : active?.mode === 'cancel'
+                    ? t('components.confirmSummary.verbCancelMarket')
+                    : t('components.confirmSummary.verbEditMarket'),
+            ...(marketName || active?.action_index != null
+                ? { target: marketName || t('components.confirmSummary.marketTarget', { index: String(active.action_index) }) }
+                : {}),
+            direction: 'none',
+            chainId: cid,
+            address: fromAddress?.address,
+        };
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={marketSummary}
                 screenVariant={variant}
                 chainLabel={chainRegistry.get(cid)?.displayName || cid}
                 signerReady={signerReady}
@@ -333,6 +361,18 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
         );
     }
 
+    const refreshButton = (
+        <Button type="button" variant="ghost" size="sm" icon={<Icon.RefreshIcon />} disabled={refreshing} onClick={() => load(true)}>
+            {refreshing ? 'Refreshing Markets…' : 'Refresh Markets'}
+        </Button>
+    );
+    // In the tab, the list's search and sort apply, and the count of
+    // markets waiting on this wallet's result leads the list.
+    const shownRows = embedded && rows && typeof arrange === 'function' ? arrange(rows) : rows;
+    const pendingResults = (rows || []).filter((f) => f.feed_status === 'closed' && Number(f.expire_at) > nowSec).length;
+    const Outer = embedded ? 'ul' : 'div';
+    const wrapList = (node) => (embedded ? <div className={consoleStyles.cardArea}>{node}</div> : node);
+
     return wrap(
         <ListPage notices={demoGuard.note || error || formError ? (
             <>
@@ -340,11 +380,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                 {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
                 {formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
             </>
-        ) : null} toolbar={(
-            <Button type="button" variant="ghost" size="sm" icon={<Icon.RefreshIcon />} disabled={refreshing} onClick={() => load(true)}>
-                {refreshing ? 'Refreshing markets…' : 'Refresh markets'}
-            </Button>
-        )}>
+        ) : null} toolbar={embedded ? toolbarOverride : refreshButton}>
             {demoGuard.dialog}
             {!rows ? <p>Loading your markets…</p> : null}
             {rows && rows.length === 0 && !error ? (
@@ -352,6 +388,19 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                     title="No markets yet"
                     body="Betting markets created by this wallet appear here."
                 />
+            ) : null}
+            {embedded && rows && rows.length > 0 ? (
+                <div className={consoleStyles.pendingBar}>
+                    <span className={pendingResults > 0 ? consoleStyles.pendingCount : styles.hint} data-testid="oracle-pending-results">
+                        {pendingResults > 0
+                            ? `${pendingResults} result${pendingResults === 1 ? '' : 's'} to post`
+                            : 'No results waiting on you'}
+                    </span>
+                    {refreshButton}
+                </div>
+            ) : null}
+            {embedded && rows && rows.length > 0 && shownRows.length === 0 ? (
+                <EmptyState title="No matching markets" body="Change or clear the filter to see more." titleAs="p" />
             ) : null}
             {result ? (
                 <div className={styles.listCard} data-testid="oracle-result">
@@ -378,8 +427,8 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                     )}
                 </div>
             ) : null}
-            {rows && rows.length > 0 ? <div className={consoleStyles.marketList}>
-                {rows.map((f) => {
+            {shownRows && shownRows.length > 0 ? wrapList(<Outer className={embedded ? consoleStyles.gaugeList : consoleStyles.marketList} aria-label={embedded ? 'Your bet markets' : undefined}>
+                {shownRows.map((f) => {
                     const key = `${f.chainId}:${f.action_index}`;
                     const labels = outcomesOf(f);
                     // Resolve is legal only once betting has closed and before the
@@ -389,15 +438,31 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                     const canEdit = f.feed_status === 'open'
                         && String(f.source || '') === String(f.owner?.address || '');
                     const isActive = active && `${active.chainId}:${active.action_index}` === key;
+                    // In the tab each market is the list's gauge card (which
+                    // opens the market) with this console's actions in a bar under it.
+                    const Item = embedded ? 'li' : 'div';
+                    const Bar = embedded ? 'div' : Fragment;
+                    const barProps = embedded ? { className: consoleStyles.oracleBar } : {};
                     return (
-                        <div key={key} className={`${styles.listCard} ${consoleStyles.card}`}>
-                            <div className={consoleStyles.marketHeader}>
-                                <strong className={consoleStyles.marketTitle}>
-                                    Market number: #{String(f.action_index)};{' '}
-                                    {neutralizeControlText(f.label, { maxLength: 250 }) || 'Untitled market'}
-                                </strong>
-                                <span className={styles.hint}>Market status: {marketStatusLabel(f.feed_status)}</span>
-                            </div>
+                        <Item key={key} className={embedded ? consoleStyles.gaugeItem : `${styles.listCard} ${consoleStyles.card}`}>
+                            {embedded ? (
+                                <BetMarketCard
+                                    market={f}
+                                    onOpen={() => onOpenMarket?.(f.chainId, f.action_index)}
+                                    yourBet={typeof yourBetFor === 'function' ? yourBetFor(f) : null}
+                                    yours
+                                />
+                            ) : null}
+                            <Bar {...barProps}>
+                            {embedded ? null : (
+                                <div className={consoleStyles.marketHeader}>
+                                    <strong className={consoleStyles.marketTitle}>
+                                        Market number: #{String(f.action_index)};{' '}
+                                        {neutralizeControlText(f.label, { maxLength: 250 }) || 'Untitled market'}
+                                    </strong>
+                                    <span className={styles.hint}>Market status: {marketStatusLabel(f.feed_status)}</span>
+                                </div>
+                            )}
                             {/* Only while those two clocks still mean something. A
                                 terminal market kept counting down to a close that
                                 cannot happen and a refund that already did:
@@ -405,21 +470,29 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                 if unresolved", printed beside the word `cancelled`. */}
                             {canCancel ? (
                                 <div className={styles.hint}>
-                                    Betting closes {countdownLabel(f.deadline, nowSec)}; refunds everyone {countdownLabel(f.expire_at, nowSec)} if unresolved
+                                    {embedded && f.feed_status === 'closed'
+                                        ? (canResolve
+                                            ? `Waiting for your result; refunds everyone ${countdownLabel(f.expire_at, nowSec)} if unresolved`
+                                            : 'Waiting for your result; the refund window has ended')
+                                        : `Betting closes ${countdownLabel(f.deadline, nowSec)}; refunds everyone ${countdownLabel(f.expire_at, nowSec)} if unresolved`}
                                 </div>
                             ) : null}
                             <div className={`${styles.actions} ${consoleStyles.actionRow}`}>
-                                {onOpenMarket ? (
-                                    <Button variant="ghost" size="md" onClick={() => onOpenMarket(f.chainId, f.action_index)}>View market</Button>
+                                {onOpenMarket && !embedded ? (
+                                    <Button variant="ghost" size="md" onClick={() => onOpenMarket(f.chainId, f.action_index)}>View Market</Button>
                                 ) : null}
                                 {/* Terms stay immutable. This path copies them into a new market. */}
-                                {onDuplicate ? (
-                                    <Button variant="ghost" size="md" onClick={() => onDuplicate(f.chainId, f.action_index)}>Copy to a new market</Button>
+                                {onDuplicate && !embedded ? (
+                                    <Button variant="ghost" size="md" onClick={() => onDuplicate(f.chainId, f.action_index)}>Copy to a New Market</Button>
                                 ) : null}
                             </div>
 
-                            {(canResolve || canCancel || canEdit) ? (
+                            {(canResolve || canCancel || canEdit || (embedded && onDuplicate)) ? (
                                 <div className={`${styles.actions} ${consoleStyles.actionRow}`}>
+                                    {/* In the tab, Copy sits in the one action row. */}
+                                    {embedded && onDuplicate ? (
+                                        <Button variant="ghost" size="md" onClick={() => onDuplicate(f.chainId, f.action_index)}>Copy to a New Market</Button>
+                                    ) : null}
                                     {canEdit ? (
                                         <Button
                                             variant="ghost"
@@ -431,14 +504,14 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                                 setBlockList('');
                                             }}
                                         >
-                                            Edit lists
+                                            Edit Lists
                                         </Button>
                                     ) : null}
                                     {canCancel ? (
-                                        <Button variant="danger" size="md" onClick={() => { setActive({ ...f, mode: 'cancel' }); setOutcome(null); }}>Cancel and refund</Button>
+                                        <Button variant="danger" size="md" onClick={() => { setActive({ ...f, mode: 'cancel' }); setOutcome(null); }}>Cancel and Refund</Button>
                                     ) : null}
                                     {canResolve ? (
-                                        <Button variant="primary" size="md" icon={<Icon.CheckIcon />} onClick={() => { setActive({ ...f, mode: 'resolve' }); setOutcome(null); }}>Resolve</Button>
+                                        <Button variant="primary" size="md" icon={<Icon.CheckIcon />} onClick={() => { setActive({ ...f, mode: 'resolve' }); setOutcome(null); }}>{embedded ? 'Post Result' : 'Resolve'}</Button>
                                     ) : null}
                                 </div>
                             ) : null}
@@ -475,7 +548,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                             blockList: blockList.trim(),
                                         })}
                                     >
-                                        {isWatcherMode ? 'Create unsigned transaction' : 'Update lists'}
+                                        {isWatcherMode ? 'Create Unsigned Transaction' : 'Update Lists'}
                                     </Button>
                                 </div>
                             ) : null}
@@ -518,7 +591,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                             feedActionIndex: f.action_index, outcome, outcomes: labels,
                                         })}
                                     >
-                                        {isWatcherMode ? 'Create unsigned transaction' : 'Publish result'}
+                                        {isWatcherMode ? 'Create Unsigned Transaction' : 'Publish Result'}
                                     </Button>
                                 </div>
                             ) : null}
@@ -541,14 +614,15 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                             feedActionIndex: f.action_index,
                                         })}
                                     >
-                                        {isWatcherMode ? 'Create unsigned transaction' : 'Cancel market'}
+                                        {isWatcherMode ? 'Create Unsigned Transaction' : 'Cancel Market'}
                                     </Button>
                                 </div>
                             ) : null}
-                        </div>
+                            </Bar>
+                        </Item>
                     );
                 })}
-            </div> : null}
+            </Outer>) : null}
             {rows && rows.length > 0 ? <p className={styles.hint}>
                 Your record as an oracle is public and tied to this address. Leaving a market unresolved
                 refunds everyone, but it stays visible to anyone deciding whether to bet with you again.

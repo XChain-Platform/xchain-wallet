@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, Button, EmptyState, FormPage, Icon, InfoTip, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { AddressField, Button, EmptyState, FormPage, Icon, InfoTip, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
 import { decoder as decoderLib, registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -44,6 +44,11 @@ import { neutralizeControlText } from '../utils/textHardening.js';
 import { formatLocalDateTime } from '../utils/dateTime.js';
 import styles from './IssueTokenForm.module.css';
 import local from './BetFeedDetail.module.css';
+// The blue market card (Home's card layout) and the icon tab labels.
+import { BetMarketHero, OUTCOME_COLORS } from './BetMarketHero.jsx';
+import homeTabsStyles from '../components/HomeTabs.module.css';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -232,6 +237,13 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
     const submitLockRef = useRef(false);
     const [settledSplit, setSettledSplit] = useState(/** @type {any[] | null} */ (null));
     const [settledPartial, setSettledPartial] = useState(false);
+    // The market's bet rows, read once for the card's chart, the
+    // Activity and My Bets tabs and a terminal split rebuild.
+    const [feedBets, setFeedBets] = useState(/** @type {any[] | null} */ (null));
+    const [feedBetsFailed, setFeedBetsFailed] = useState(false);
+    // Icon tabs under the card; Details opens first.
+    const [tab, setTab] = useState('details');
+    const tabsId = useId();
 
     const reload = useCallback(() => {
         setFeed(null);
@@ -255,21 +267,27 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
     // or incomplete explorer can return an empty terminal split, so rebuild that
     // one case from its bet rows. A non-empty aggregate stays authoritative and
     // avoids replacing a complete total with the bounded compatibility read.
+    //
+    // The same read serves every market, because the card's chart, Activity
+    // and My Bets all draw from the market's bet rows.
     useEffect(() => {
         let cancelled = false;
         setSettledSplit(null);
         setSettledPartial(false);
-        if (!feed || isLiveFeedStatus(feed.feed_status)) return undefined;
+        setFeedBets(null);
+        setFeedBetsFailed(false);
+        if (!feed) return undefined;
         const explorerPools = Array.isArray(feed.pools) ? feed.pools : [];
-        if (explorerPools.length > 0) {
-            setSettledSplit(explorerPools);
-            return undefined;
-        }
-        if (typeof messaging.bets !== 'function') return undefined;
+        const terminal = !isLiveFeedStatus(feed.feed_status);
+        if (terminal && explorerPools.length > 0) setSettledSplit(explorerPools);
+        const rebuildSplit = terminal && explorerPools.length === 0;
+        if (typeof messaging.bets !== 'function') { setFeedBets([]); return undefined; }
         messaging.bets({ chainId, query: String(feedIndex), type: 'feed', opts: { limit: SETTLED_BET_LIMIT } })
             .then((resp) => {
                 if (cancelled) return;
                 const rows = Array.isArray(resp) ? resp : (resp?.data || []);
+                setFeedBets(rows);
+                if (!rebuildSplit) return;
                 // A page-sized answer means there may be more, and a total that
                 // silently omits bets is worse than one that admits its bound:
                 // this screen is where someone checks what a market did.
@@ -278,7 +296,12 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
             })
             // Falling back to the explorer rows keeps the screen readable; an
             // empty aggregate shows zeros rather than a guessed total.
-            .catch(() => { if (!cancelled) setSettledSplit(null); });
+            .catch(() => {
+                if (cancelled) return;
+                setFeedBets([]);
+                setFeedBetsFailed(true);
+                if (rebuildSplit) setSettledSplit(null);
+            });
         return () => { cancelled = true; };
     }, [feed, chainId, feedIndex, messaging]);
 
@@ -547,6 +570,21 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
         document.querySelector('main [role="alert"]')?.scrollIntoView?.({ block: 'nearest' });
     }, [formError]);
 
+    // The bet's receipt leads the page (above the card), so a phone
+    // that placed the bet from the foot of the Bet tab is taken to it.
+    useEffect(() => {
+        if (!result) return;
+        document.querySelector('[data-testid="bet-result"]')?.scrollIntoView?.({ block: 'nearest' });
+    }, [result]);
+
+    // My Bets is this wallet's own rows from the market's bet read.
+    const myBets = useMemo(() => {
+        const mine = new Set((addressesByChain?.[chainId] || []).map((a) => String(a.address)));
+        return (Array.isArray(feedBets) ? feedBets : [])
+            .filter((b) => mine.has(String(b?.source)))
+            .sort((a, b) => Number(b?.action_index || 0) - Number(a?.action_index || 0));
+    }, [feedBets, addressesByChain, chainId]);
+
     const header = <PageHeader onBack={onBack} title="Market" />;
     const wrap = (children, notices) => (
         <Screen variant={variant} header={header}>
@@ -563,9 +601,22 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
     // The intent is decoded from the params the HOST composed, never from the
     // form state: a place-bet and a resolve differ on the wire only by AMOUNT.
     if (actionConfirm.open) {
+        // The stake leaves the signer on the chosen outcome.
+        const betTick = String(feed?.tick || '').trim().toUpperCase();
+        const betAmount = String(amount).trim();
+        const betOutcome = Array.isArray(outcomeLabels) && outcome != null ? outcomeLabels[Number(outcome)] : null;
+        const betSummary = {
+            verb: t('components.confirmSummary.verbPlaceBet'),
+            ...(betTick && betAmount ? { amount: betAmount, ticker: betTick } : {}),
+            ...(betOutcome ? { target: neutralizeControlText(betOutcome, { maxLength: 80 }) } : {}),
+            direction: 'out',
+            chainId,
+            address: fromAddress?.address,
+        };
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={betSummary}
                 screenVariant={variant}
                 chainLabel={chainRegistry.get(chainId)?.displayName || chainId}
                 signerReady={signerReady}
@@ -593,7 +644,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={chainId}
                 lockNetwork
@@ -634,6 +685,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
     const byOutcome = {};
     for (const p of pools) byOutcome[Number(p.outcome)] = p;
     const total = sumDecimalStrings(pools.map((pool) => pool.pool || '0'));
+    const betCount = pools.reduce((n, p) => n + Number(p.bet_count || 0), 0);
     const timeline = Array.isArray(feed.timeline) ? feed.timeline : [];
     const hasWinningOutcome = feed.winning_outcome !== undefined
         && feed.winning_outcome !== null
@@ -646,16 +698,59 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
         .some((address) => String(address.address) === String(feed.source));
     const resolveWindowOpen = feed.feed_status === 'closed'
         && Number(feed.expire_at) > Math.floor(Date.now() / 1000);
+    const tick = feed.tick ? String(feed.tick).toUpperCase() : '';
+    const withTick = (value) => `${formatWithThousands(trimAmountTail(value ?? 0) || '0')}${tick ? ` ${tick}` : ''}`;
+    const shareOf = (i) => {
+        const p = byOutcome[i];
+        if (!p || compareDecimalStrings(total, '0') !== 1) return null;
+        return `${roundDecimalString(divideDecimalStrings(multiplyDecimalStrings(p.pool || '0', '100'), total, 1), 1)}%`;
+    };
 
     // The place-bet form is only on the page for an open market this wallet does
     // not run. Its demo note and its error lead the page content: the form sits
     // below the market's terms, and a notice there is easy to miss.
     const showsBetForm = feed.feed_status === 'open'
         && !(fromAddress && feed.source === fromAddress.address);
-    const pageNotices = (showsBetForm && demoGuard.blocked) || formError ? (
+
+    // The outcome of a bet OUTLIVES the form that started it, so it is
+    // reported apart from the form. A submit ends with reload(), and a market
+    // that closed while the user sat on the confirm screen comes back
+    // `closed` - which unmounts the place-bet form and, when the receipt lived
+    // inside it, took both the txid and the error line with it. The user was
+    // left on a market page that said nothing at all, unable to tell a wallet
+    // that refused from a bet that was broadcast and paid for. By this point
+    // the money is spent either way, so the txid is owed whatever the market's
+    // status has become. It leads the page with the other notices, so
+    // it stays on screen whichever tab is open.
+    const resultCard = result ? (
+        <div className={styles.listCard} data-testid="bet-result">
+            <p className={styles.summary}>
+                {/* leg (a): a queued result is SIGNED and not broadcast, so
+                    "Bet placed" would claim the one thing that has not happened. */}
+                {result?.queued
+                    ? 'Signed, but your bet could not reach the network just now. It is waiting in '
+                      + 'the queued-transactions banner and only goes out when you broadcast it from '
+                      + 'there; the wallet reminds you when the network is back. Do not place it again.'
+                    : feed.feed_status === 'open'
+                        ? 'Bet placed.'
+                        : 'Bet sent, but betting closed while you were confirming it. A bet is judged '
+                          + 'by the block it lands in, so the network will most likely reject this one. '
+                          + 'The network fee and the protocol fee are spent either way.'}
+            </p>
+            {result?.queued ? null : (
+                <dl className={styles.detailsList}>
+                    <dt className={styles.detailsLabel}>Transaction ID</dt>
+                    <dd className={styles.detailsValue}>{String(result?.txid || result?.tx_hash || 'n/a')}</dd>
+                </dl>
+            )}
+        </div>
+    ) : null;
+
+    const pageNotices = (showsBetForm && demoGuard.blocked) || formError || resultCard ? (
         <>
             {showsBetForm ? demoGuard.note : null}
             {formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
+            {resultCard}
         </>
     ) : null;
 
@@ -672,43 +767,128 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
         />
     ) : null;
 
-    return wrap(
-        <>
-            <SectionHeader
-                title={neutralizeControlText(feed.label, { maxLength: 250 }) || '(untitled market)'}
-                description={`#${String(feed.action_index)} · ${feed.tick || 'n/a'} · ${statusLabel(feed.feed_status)}`}
-            />
+    // 25, 50 and 75 percent of the source address's stake balance,
+    // rounded down to the token's decimals; Max is the whole balance.
+    const stakeDivisibility = stakeTokenInfo?.divisibility ?? stakeBalanceDivisibility;
+    const portionOf = (percent) => {
+        if (stakeBalance === null) return null;
+        if (percent === 100) return stakeBalance;
+        const raw = multiplyDecimalStrings(stakeBalance, String(percent / 100));
+        if (raw === null) return null;
+        const places = stakeDivisibility !== null && stakeDivisibility !== undefined && Number.isInteger(Number(stakeDivisibility))
+            ? Number(stakeDivisibility)
+            : 8;
+        const [whole, frac = ''] = String(raw).split('.');
+        return trimAmountTail(places > 0 ? `${whole}.${frac.slice(0, places).padEnd(places, '0')}` : whole) || '0';
+    };
+    const pickPortion = (percent) => {
+        const value = portionOf(percent);
+        if (value === null) return;
+        setAmount(value);
+        setFormError(null);
+    };
 
-            <div className={styles.listCard}>
-                <div><strong>Betting closes</strong>: {fmtTime(feed.deadline)}</div>
-                <div><strong>Refunds if unresolved by</strong>: {fmtTime(feed.expire_at)}</div>
-                <div><strong>Oracle fee</strong>: {feed.fee ?? '0'}% of the pot</div>
-                {feed.min_amount ? <div><strong>Minimum bet</strong>: {String(feed.min_amount)}</div> : null}
-                {feed.source ? (
-                    <div>
-                        <strong>Run by</strong>:{' '}
-                        {onOpenOracle
-                            ? (
-                                <Button
-                                    type="button"
-                                    variant="link"
-                                    size="sm"
-                                    icon={<Icon.AddressIcon />}
-                                    onClick={() => onOpenOracle(chainId, feed.source)}
-                                >
-                                    {feed.source}
-                                </Button>
-                            )
-                            : feed.source}
-                    </div>
-                ) : null}
-                {(feed.allow_list || feed.block_list) ? (
-                    <div className={styles.hint}>
-                        This market is restricted to a list of addresses. If you are blocked, your bet is
-                        rejected and nothing is taken from your balance.
-                    </div>
-                ) : null}
-            </div>
+    const iconFor = (label, i) => {
+        if (/^yes$/i.test(String(label))) return <Icon.CheckIcon />;
+        if (/^no$/i.test(String(label))) return <Icon.XIcon />;
+        return (
+            <svg className={local.outcomeSwatch} viewBox="0 0 12 12" aria-hidden="true">
+                <circle cx="6" cy="6" r="5" fill={OUTCOME_COLORS[i % OUTCOME_COLORS.length] === '#FFFFFF' ? 'currentColor' : OUTCOME_COLORS[i % OUTCOME_COLORS.length]} />
+            </svg>
+        );
+    };
+
+    // The four section tabs, each an icon and a short word, so no
+    // label wraps at 360px.
+    const tabLabel = (IconGlyph, text) => (
+        <span className={homeTabsStyles.tabWithIcon}>
+            <span className={homeTabsStyles.tabIcon} aria-hidden="true"><IconGlyph /></span>
+            {text}
+        </span>
+    );
+    const tabItems = [
+        { id: 'bet', label: tabLabel(Icon.ZapIcon, 'Bet') },
+        { id: 'details', label: tabLabel(Icon.InfoIcon, 'Details') },
+        { id: 'activity', label: tabLabel(Icon.HistoryIcon, 'Activity') },
+        { id: 'mine', label: tabLabel(Icon.UserIcon, 'My Bets') },
+    ];
+
+    // One bet per row in Activity and My Bets.
+    const betRow = (b, { showSource }) => {
+        const i = Number(b?.outcome);
+        const label = Number.isInteger(i) ? (safeOutcomeLabel(outcomes[i]) || `Outcome ${i}`) : 'Unknown outcome';
+        const rejected = !isAcceptedBet(b);
+        const status = rejected ? 'Rejected' : (b?.bet_status ? String(b.bet_status).replace(/_/g, ' ') : '');
+        return (
+            <li key={String(b?.action_index ?? b?.tx_hash)} className={local.betRow}>
+                <span className={local.betRowMain}>
+                    <span className={local.betRowOutcome}>{label}</span>
+                    <span className={local.betRowAmount}>{withTick(b?.amount)}</span>
+                </span>
+                <span className={local.betRowMeta}>
+                    {showSource && b?.source ? <span className={local.betRowSource}>{String(b.source)}</span> : null}
+                    <span>{b?.timestamp ? fmtTime(b.timestamp) : `block ${String(b?.block_index ?? 'n/a')}`}</span>
+                    {status ? <span className={rejected ? local.betRowRejected : undefined}>{status}</span> : null}
+                </span>
+            </li>
+        );
+    };
+    const recentBets = (Array.isArray(feedBets) ? feedBets : [])
+        .slice()
+        .sort((a, b) => Number(b?.action_index || 0) - Number(a?.action_index || 0));
+    const betsPartialNote = Array.isArray(feedBets) && feedBets.length >= SETTLED_BET_LIMIT ? (
+        <p className={styles.hint}>
+            This market took more than {SETTLED_BET_LIMIT} bets; only {SETTLED_BET_LIMIT} were read.
+        </p>
+    ) : null;
+    // What this wallet holds on each side, under the Place bet button.
+    const heldByOutcome = new Map();
+    for (const b of myBets) {
+        if (!isAcceptedBet(b) || (b?.bet_status && b.bet_status !== 'open')) continue;
+        const i = Number(b?.outcome);
+        const amountText = String(b?.amount ?? '').trim();
+        if (!Number.isInteger(i) || !/^\d{1,47}(\.\d{1,18})?$/.test(amountText)) continue;
+        heldByOutcome.set(i, sumDecimalStrings([heldByOutcome.get(i) || '0', amountText]));
+    }
+
+    // Details lists the market facts one per row (label, value).
+    const factRow = (label, value) => (
+        <div className={local.factRow}>
+            <dt className={local.factLabel}>{label}</dt>
+            <dd className={local.factValue}>{value}</dd>
+        </div>
+    );
+
+    const detailsPanel = (
+        <>
+            <dl className={local.facts}>
+                {factRow('Betting closes', fmtTime(feed.deadline))}
+                {factRow('Resolution source', 'Reported by the market oracle')}
+                {feed.source ? factRow('Run by', onOpenOracle ? (
+                    <Button
+                        type="button"
+                        variant="link"
+                        size="sm"
+                        icon={<Icon.AddressIcon />}
+                        className={local.factLink}
+                        onClick={() => onOpenOracle(chainId, feed.source)}
+                    >
+                        {feed.source}
+                    </Button>
+                ) : <span className={local.factAddress}>{feed.source}</span>) : null}
+                {factRow('Pool', withTick(total))}
+                {factRow('Bets placed', String(betCount))}
+                {feed.min_amount ? factRow('Minimum bet', withTick(String(feed.min_amount))) : null}
+                {factRow('Oracle fee', `${feed.fee ?? '0'}% of the pot`)}
+                {factRow('Refunds if unresolved by', fmtTime(feed.expire_at))}
+                {factRow('Market', `#${String(feed.action_index)}`)}
+            </dl>
+            {(feed.allow_list || feed.block_list) ? (
+                <p className={styles.hint}>
+                    This market is restricted to a list of addresses. If you are blocked, your bet is
+                    rejected and nothing is taken from your balance.
+                </p>
+            ) : null}
 
             {feed.feed_status === 'closed' ? (
                 <div className={styles.listCard} data-testid="bet-settlement">
@@ -719,7 +899,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                             : 'The resolution window has ended. The protocol refunds every bet automatically when the network records the expiry; bettors do not submit a claim.'}
                     </p>
                     {resolveWindowOpen && ownsMarket && onSettleMarket ? (
-                        <Button variant="primary" icon={<Icon.CheckIcon />} onClick={onSettleMarket}>Settle this market</Button>
+                        <Button variant="primary" icon={<Icon.CheckIcon />} onClick={onSettleMarket}>Settle This Market</Button>
                     ) : null}
                 </div>
             ) : null}
@@ -755,7 +935,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
 
             <SectionHeader as="h3" title={live ? 'Current split' : 'Final split'} />
             {outcomes.length === 0 ? <EmptyState title="No outcomes recorded" body="Settled market outcomes appear here." titleAs="p" /> : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                <div className={local.splitList} style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                     {outcomes.map((label, i) => {
                         const p = byOutcome[i] || { pool: 0, bet_count: 0 };
                         // "no bets yet" only reads as true while betting can
@@ -816,185 +996,240 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                     </>
                 )}
             </p>
+        </>
+    );
 
-            {/* Place-bet flow. Hidden outright when it could only produce a rejected
-                transaction: a closed market takes no bets, and the feed's own source
-                may not bet on its own market (§6 format 2). Showing a doomed form and
-                letting the chain refuse it would cost the user a fee for nothing. */}
-            {feed.feed_status === 'open' ? (
-                fromAddress && feed.source === fromAddress.address ? (
-                    <>
-                        {fromField}
-                        <p className={styles.hint}>
-                            You run this market, so you cannot bet on it. That rule exists because an oracle
-                            who could bet on its own result would decide the result.
-                        </p>
-                    </>
-                ) : (
-                    <>
-                        <SectionHeader as="h3" title="Place a bet" />
-                        <FormPage
-                            label="Place a bet"
-                            onSubmit={(event) => event.preventDefault()}
-                            actions={(
-                                <Button
-                                    variant="success"
-                                    icon={isWatcherMode ? <Icon.PlusIcon /> : <Icon.TokenIcon />}
-                                    loading={submitting || actionConfirm.composing}
-                                    disabled={demoGuard.blocked || submitting || actionConfirm.composing}
-                                    onClick={placeBet}
-                                >
-                                    {actionConfirm.composing
-                                        ? 'Preparing review…'
-                                        : isWatcherMode ? 'Create unsigned transaction' : 'Place bet'}
-                                </Button>
-                            )}
+    // Place-bet flow. Hidden outright when it could only produce a rejected
+    // transaction: a closed market takes no bets, and the feed's own source
+    // may not bet on its own market (§6 format 2). Showing a doomed form and
+    // letting the chain refuse it would cost the user a fee for nothing.
+    const betPanel = feed.feed_status === 'open' ? (
+        fromAddress && feed.source === fromAddress.address ? (
+            <>
+                {fromField}
+                <p className={styles.hint}>
+                    You run this market, so you cannot bet on it. That rule exists because an oracle
+                    who could bet on its own result would decide the result.
+                </p>
+            </>
+        ) : (
+            <>
+                <SectionHeader as="h3" title="Place a bet" />
+                <FormPage
+                    label="Place a bet"
+                    onSubmit={(event) => event.preventDefault()}
+                    // Full width, a bolt icon, no ticker in the label.
+                    actions={(
+                        <Button
+                            variant="success"
+                            block
+                            className={local.placeButton}
+                            icon={isWatcherMode ? <Icon.PlusIcon /> : <Icon.ZapIcon />}
+                            loading={submitting || actionConfirm.composing}
+                            disabled={demoGuard.blocked || submitting || actionConfirm.composing}
+                            onClick={placeBet}
                         >
-                            {/* aria-pressed, because which outcome is selected decides which
-                                side of the bet the money lands on and the only other signal
-                                is the button's background colour. A screen reader announced
-                                two identical "Yes" / "No" buttons with no selected state. */}
-                            {fromField}
-                            <div id={`bet-outcome-label-${String(feed.action_index)}`} className={local.groupLabel}>
-                                Outcome to back
-                                <InfoTip aria="About Outcome to back" label="Pick the result you think will happen. Everyone backing the winning outcome splits the whole pot, minus the oracle's fee." />
-                            </div>
-                            <div role="group" aria-label="Outcome to back" aria-describedby={`bet-outcome-label-${String(feed.action_index)}`} className={styles.betWagerChoices}>
-                                {outcomes.map((label, i) => {
-                                    const outcomeText = safeOutcomeLabel(label) || `Outcome ${i}`;
-                                    return (
-                                        <Button
-                                            key={i}
-                                            style={{ whiteSpace: 'normal', overflowWrap: 'anywhere', textAlign: 'center' }}
-                                            icon={<Icon.CheckIcon />}
-                                            variant={outcome === i ? 'primary' : 'ghost'}
-                                            aria-pressed={outcome === i}
-                                            onClick={() => setOutcome(i)}
-                                        >
-                                            {outcomeText}
-                                        </Button>
-                                    );
-                                })}
-                            </div>
-                            <AmountField
-                                label="Stake"
-                                help="How much to bet. A stake buys a share of the pot that every later bet re-divides, and payouts round down. Once confirmed, a bet cannot be cancelled or moved to another outcome."
-                                amount={amount}
-                                tick={feed.tick || ''}
-                                divisibility={stakeTokenInfo?.divisibility ?? stakeBalanceDivisibility}
-                                onAmountFieldChange={(rawValue) => {
-                                    setAmount(String(rawValue).replace(/,/g, ''));
-                                    setFormError(null);
-                                }}
-                                onValidationError={(fieldError) => {
-                                    setAmountPrecisionError(fieldError?.startsWith('Enter a valid decimal amount')
-                                        ? 'Enter a positive bet amount using digits and an optional decimal point.'
-                                        : fieldError);
-                                }}
-                                onMax={stakeBalance !== null
-                                    ? () => { setAmount(stakeBalance); setFormError(null); }
-                                    : undefined}
-                                maxDisabled={stakeBalance === null}
-                                balanceText={stakeBalance !== null && feed.tick
-                                    ? `${formatWithThousands(stakeBalance)} ${String(feed.tick).toUpperCase()} available`
-                                    : null}
-                            />
-                            {/* The one number the decision turns on. A parimutuel stake has no
-                                price the user can reason about on their own: it buys a share of a
-                                pot that every later bet re-divides, so the pool split above is not
-                                an answer to "what would I win". Payout, profit and odds all come
-                                back from the same SDK call that settlement's arithmetic follows.
-                                Zero is called out in words because it is the case the abstract
-                                rounding warning below is really about. */}
-                            {projected ? (
-                                <div className={styles.hint} data-testid="bet-projection">
-                                    {compareDecimalStrings(projected.payout, '0') === 1 ? (
-                                        <p>
-                                            If <strong>{safeOutcomeLabel(outcomes[outcome]) || `outcome ${outcome}`}</strong> wins, this
-                                            stake pays about{' '}
-                                            <strong>{trimAmountTail(projected.payout)}{feed.tick ? ` ${feed.tick}` : ''}</strong>
-                                            {projected.profit !== undefined ? (
-                                                compareDecimalStrings(projected.profit, '0') === -1
-                                                    ? <>, which is {trimZeros(projected.profit).replace('-', '')} less than you staked</>
-                                                    : <>, a profit of {trimZeros(projected.profit)}</>
-                                            ) : null}
+                            {actionConfirm.composing
+                                ? 'Preparing Review…'
+                                : isWatcherMode ? 'Create Unsigned Transaction' : 'Place Bet'}
+                        </Button>
+                    )}
+                >
+                    {fromField}
+                    {/* aria-pressed, because which outcome is selected decides which
+                        side of the bet the money lands on and the only other signal
+                        is the button's background colour. A screen reader announced
+                        two identical "Yes" / "No" buttons with no selected state.
+                        Drawn as one segmented control, each side with its
+                        icon and current share, directly above the stake. */}
+                    <div id={`bet-outcome-label-${String(feed.action_index)}`} className={local.groupLabel}>
+                        Outcome to back
+                        <InfoTip aria="About Outcome to back" label="Pick the result you think will happen. Everyone backing the winning outcome splits the whole pot, minus the oracle's fee." />
+                    </div>
+                    <div role="group" aria-label="Outcome to back" aria-describedby={`bet-outcome-label-${String(feed.action_index)}`} className={local.outcomeSegments}>
+                        {outcomes.map((label, i) => {
+                            const outcomeText = safeOutcomeLabel(label) || `Outcome ${i}`;
+                            const share = shareOf(i);
+                            return (
+                                <Button
+                                    key={i}
+                                    type="button"
+                                    variant="ghost"
+                                    className={`${local.outcomeSegment} ${outcome === i ? local.outcomeSegmentActive : ''} ${/^yes$/i.test(String(label)) ? local.outcomeYes : /^no$/i.test(String(label)) ? local.outcomeNo : ''}`}
+                                    icon={iconFor(label, i)}
+                                    aria-label={outcomeText}
+                                    aria-pressed={outcome === i}
+                                    onClick={() => setOutcome(i)}
+                                >
+                                    {/* The share is drawn from a data attribute so the
+                                        button's text stays the outcome's own label. */}
+                                    <span className={local.outcomeText}>
+                                        <span className={local.outcomeName}>{outcomeText}</span>
+                                        {share ? <span className={local.outcomeShare} data-share={share} aria-hidden="true" /> : null}
+                                    </span>
+                                </Button>
+                            );
+                        })}
+                    </div>
+                    <AmountField
+                        label="Stake"
+                        help="How much to bet. A stake buys a share of the pot that every later bet re-divides, and payouts round down. Once confirmed, a bet cannot be cancelled or moved to another outcome."
+                        amount={amount}
+                        tick={feed.tick || ''}
+                        divisibility={stakeDivisibility}
+                        onAmountFieldChange={(rawValue) => {
+                            setAmount(String(rawValue).replace(/,/g, ''));
+                            setFormError(null);
+                        }}
+                        onValidationError={(fieldError) => {
+                            setAmountPrecisionError(fieldError?.startsWith('Enter a valid decimal amount')
+                                ? 'Enter a positive bet amount using digits and an optional decimal point.'
+                                : fieldError);
+                        }}
+                        onMax={stakeBalance !== null
+                            ? () => { setAmount(stakeBalance); setFormError(null); }
+                            : undefined}
+                        maxDisabled={stakeBalance === null}
+                        balanceText={stakeBalance !== null && feed.tick
+                            ? `${formatWithThousands(stakeBalance)} ${String(feed.tick).toUpperCase()} available`
+                            : null}
+                    />
+                    <div className={local.portions} role="group" aria-label="Quick amounts">
+                        {[25, 50, 75, 100].map((percent) => {
+                            const value = portionOf(percent);
+                            const active = value !== null && amount !== '' && compareDecimalStrings(String(amount), value) === 0;
+                            return (
+                                <Button
+                                    key={percent}
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className={`${local.portion} ${active ? local.portionActive : ''}`}
+                                    aria-pressed={active}
+                                    disabled={value === null}
+                                    onClick={() => pickPortion(percent)}
+                                >
+                                    {percent === 100 ? 'Max' : `${percent}%`}
+                                </Button>
+                            );
+                        })}
+                    </div>
+                    {/* The one number the decision turns on. A parimutuel stake has no
+                        price the user can reason about on their own: it buys a share of a
+                        pot that every later bet re-divides, so the pool split above is not
+                        an answer to "what would I win". Payout, profit and odds all come
+                        back from the same SDK call that settlement's arithmetic follows.
+                        Zero is called out in words because it is the case the abstract
+                        rounding warning below is really about. */}
+                    {projected ? (
+                        <div className={local.payout} data-testid="bet-projection">
+                            {compareDecimalStrings(projected.payout, '0') === 1 ? (
+                                <dl className={local.payoutList}>
+                                    <div className={local.payoutRow}>
+                                        <dt>Potential payout</dt>
+                                        <dd className={local.payoutValue}>{trimAmountTail(projected.payout)}{feed.tick ? ` ${feed.tick}` : ''}</dd>
+                                    </div>
+                                    <div className={local.payoutRow}>
+                                        <dt>If <strong>{safeOutcomeLabel(outcomes[outcome]) || `outcome ${outcome}`}</strong> wins</dt>
+                                        <dd>
                                             {projected.impliedOdds !== undefined
-                                                ? <> ({trimZeros(projected.impliedOdds)}x your stake)</>
-                                                : null}.
-                                        </p>
-                                    ) : (
-                                        <p>
-                                            At the current split this stake would win and still pay{' '}
-                                            <strong>nothing</strong>, because payouts round down. Stake more, or
-                                            wait for the pot to move.
-                                        </p>
-                                    )}
-                                    <p>
-                                        That is the split as it stands right now, not a locked-in price: every
-                                        later bet moves it, in either direction.
-                                    </p>
-                                </div>
-                            ) : null}
-                            <FeesCard
-                                chainId={chainId}
-                                quote={protocolFeeQuote}
-                                pending={protocolFeePending}
-                                feeSelector={null}
-                                tiers={feeEstimate ? { normal: feeEstimate } : undefined}
-                                value={{ mode: 'normal' }}
-                                coinTicker={coinTicker}
-                            >
-                                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
-                            </FeesCard>
-                            {!isWatcherMode && !isHwSource && !signerReady ? (
-                                <Input
-                                    label="Password"
-                                    help="Your wallet password, used to sign this bet. It never leaves this device."
-                                    type="password"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    autoComplete="current-password"
-                                />
-                            ) : null}
-                        </FormPage>
-                    </>
+                                                ? `${trimZeros(projected.impliedOdds)}x your stake`
+                                                : 'pays out'}
+                                        </dd>
+                                    </div>
+                                    {projected.profit !== undefined ? (
+                                        <div className={local.payoutRow}>
+                                            <dt>Profit</dt>
+                                            <dd>
+                                                {compareDecimalStrings(projected.profit, '0') === -1
+                                                    ? `${trimZeros(projected.profit).replace('-', '')} less than you staked`
+                                                    : `a profit of ${trimZeros(projected.profit)}`}
+                                            </dd>
+                                        </div>
+                                    ) : null}
+                                    <div className={local.payoutRow}>
+                                        <dt>Oracle fee</dt>
+                                        <dd>{feed.fee ?? '0'}% of the pot</dd>
+                                    </div>
+                                </dl>
+                            ) : (
+                                <p>
+                                    At the current split this stake would win and still pay{' '}
+                                    <strong>nothing</strong>, because payouts round down. Stake more, or
+                                    wait for the pot to move.
+                                </p>
+                            )}
+                            <p className={styles.hint}>
+                                That is the split as it stands right now, not a locked-in price: every
+                                later bet moves it, in either direction.
+                            </p>
+                        </div>
+                    ) : null}
+                    <FeesCard
+                        chainId={chainId}
+                        quote={protocolFeeQuote}
+                        pending={protocolFeePending}
+                        feeSelector={null}
+                        tiers={feeEstimate ? { normal: feeEstimate } : undefined}
+                        value={{ mode: 'normal' }}
+                        coinTicker={coinTicker}
+                    >
+                        <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
+                    </FeesCard>
+                    {!isWatcherMode && !isHwSource && !signerReady ? (
+                        <Input
+                            label="Password"
+                            help="Your wallet password, used to sign this bet. It never leaves this device."
+                            type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            autoComplete="current-password"
+                        />
+                    ) : null}
+                </FormPage>
+                {heldByOutcome.size > 0 ? (
+                    <p className={local.heldLine}>
+                        <span className={local.heldIcon} aria-hidden="true"><Icon.TokenIcon /></span>
+                        <span>
+                            You hold{' '}
+                            {[...heldByOutcome.entries()].map(([i, held], n) => (
+                                <span key={i}>
+                                    {n > 0 ? ', ' : ''}
+                                    <strong>{withTick(held)}</strong> on {safeOutcomeLabel(outcomes[i]) || `Outcome ${i}`}
+                                </span>
+                            ))}
+                        </span>
+                    </p>
+                ) : null}
+            </>
+        )
+    ) : (
+        <EmptyState
+            title="Betting is closed"
+            body={`This market no longer takes bets (${statusLabel(feed.feed_status).toLowerCase()}).`}
+            titleAs="p"
+        />
+    );
+
+    // Activity is the market's recent bets, then its status history.
+    const activityPanel = (
+        <>
+            <SectionHeader as="h3" title="Recent bets" />
+            {feedBets === null ? <p className={styles.hint}>Loading bets…</p> : null}
+            {feedBetsFailed ? <StatusMessage variant="error">Could not load this market's bets.</StatusMessage> : null}
+            {feedBets !== null && !feedBetsFailed && recentBets.length === 0 ? (
+                betCount > 0 ? (
+                    // The pools count bets the bet read did not list, so the
+                    // empty list says that instead of claiming none exist.
+                    <EmptyState title="No bet rows returned" body={`The market counts ${betCount} bet${betCount === 1 ? '' : 's'}, but the explorer listed none of them.`} titleAs="p" />
+                ) : (
+                    <EmptyState title={live ? 'No bets yet' : 'No bets'} body="Bets on this market appear here as they are placed." titleAs="p" />
                 )
             ) : null}
-
-            {/* The outcome of a bet OUTLIVES the form that started it, so it is
-                reported here rather than inside the card above. A submit ends with
-                reload(), and a market that closed while the user sat on the confirm
-                screen comes back `closed` - which unmounts the whole place-bet card
-                and, when the receipt lived inside it, took both the txid and the
-                error line with it. The user was left on a market page that said
-                nothing at all, unable to tell a wallet that refused from a bet that
-                was broadcast and paid for. By this point the money is spent either
-                way, so the txid is owed whatever the market's status has become. */}
-            {demoGuard.dialog}
-            {result ? (
-                <div className={styles.listCard} data-testid="bet-result">
-                    <p className={styles.summary}>
-                        {/* leg (a): a queued result is SIGNED and not broadcast, so
-                            "Bet placed" would claim the one thing that has not happened. */}
-                        {result?.queued
-                            ? 'Signed, but your bet could not reach the network just now. It is waiting in '
-                              + 'the queued-transactions banner and only goes out when you broadcast it from '
-                              + 'there; the wallet reminds you when the network is back. Do not place it again.'
-                            : feed.feed_status === 'open'
-                                ? 'Bet placed.'
-                                : 'Bet sent, but betting closed while you were confirming it. A bet is judged '
-                                  + 'by the block it lands in, so the network will most likely reject this one. '
-                                  + 'The network fee and the protocol fee are spent either way.'}
-                    </p>
-                    {result?.queued ? null : (
-                        <dl className={styles.detailsList}>
-                            <dt className={styles.detailsLabel}>Transaction ID</dt>
-                            <dd className={styles.detailsValue}>{String(result?.txid || result?.tx_hash || 'n/a')}</dd>
-                        </dl>
-                    )}
-                </div>
+            {recentBets.length > 0 ? (
+                <ul className={local.betList}>{recentBets.map((b) => betRow(b, { showSource: true }))}</ul>
             ) : null}
-
+            {betsPartialNote}
             <SectionHeader as="h3" title="History" />
             {timeline.length === 0 ? <EmptyState title="No history yet" body="Market updates appear here as they happen." titleAs="p" /> : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
@@ -1009,7 +1244,60 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                     ))}
                 </div>
             )}
+        </>
+    );
 
+    // My Bets is this wallet's rows from the same bet read.
+    const myBetsPanel = (
+        <>
+            {feedBets === null ? <p className={styles.hint}>Loading your bets…</p> : null}
+            {feedBetsFailed ? <StatusMessage variant="error">Could not load your bets on this market.</StatusMessage> : null}
+            {feedBets !== null && !feedBetsFailed && myBets.length === 0 ? (
+                <EmptyState title="No bets from this wallet" body="Bets you place on this market from this wallet's addresses appear here." titleAs="p" />
+            ) : null}
+            {myBets.length > 0 ? (
+                <ul className={local.betList}>{myBets.map((b) => betRow(b, { showSource: false }))}</ul>
+            ) : null}
+            {betsPartialNote}
+        </>
+    );
+
+    // The blue card, then the tabs; only the chosen tab's panel shows.
+    return wrap(
+        <>
+            <BetMarketHero
+                feed={feed}
+                outcomes={outcomes}
+                pools={pools}
+                total={total}
+                betCount={betCount}
+                bets={feedBets}
+                statusText={statusLabel(feed.feed_status)}
+                live={live}
+            />
+
+            <Tabs
+                id={tabsId}
+                items={tabItems}
+                value={tab}
+                onChange={setTab}
+                panelId={`${tabsId}-panel`}
+                aria-label="Market sections"
+                className={local.sectionTabs}
+            />
+            <div
+                id={`${tabsId}-panel`}
+                role="tabpanel"
+                aria-labelledby={`${tabsId}-tab-${tab}`}
+                className={local.panel}
+            >
+                {tab === 'bet' ? betPanel : null}
+                {tab === 'details' ? detailsPanel : null}
+                {tab === 'activity' ? activityPanel : null}
+                {tab === 'mine' ? myBetsPanel : null}
+            </div>
+
+            {demoGuard.dialog}
         </>,
         pageNotices,
     );

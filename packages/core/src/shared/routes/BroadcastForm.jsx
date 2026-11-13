@@ -10,12 +10,25 @@
 
 import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, CopyButton, FeeSelector, FormNotice, FormPage, Icon, NetworkField, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+// Network, From and the fee selector come from the standard
+// FromSection and FeeSection.
+import { AddressText, Button, CopyButton, FormNotice, FormPage, Icon, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+// Broadcast sits on the Wallet Form Standard frame.
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    useFormSections,
+} from '../components/formStandard/index.js';
 import {
     registry as registryLib,
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import '../../i18n/locales/en/send.js';
+import '../../i18n/locales/en/routes.js';
+import { neutralizeControlText } from '../utils/textHardening.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -85,6 +98,15 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
     const [message, setMessage] = useState('');
     const [password, setPassword] = useState('');
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
+    // The standard sections' open state, held above the early
+    // returns so it survives the From picker. From closed, Message open,
+    // Network fee closed.
+    const formSections = useFormSections({ from: false, message: true, fee: false });
+    // Which section a Broadcast-attempt refusal belongs to, and a
+    // counter that changes on every attempt so that section reopens even
+    // after the user closed it.
+    const [errorSection, setErrorSection] = useState(/** @type {'from' | 'message' | 'fee' | null} */ (null));
+    const [reviewAttempt, setReviewAttempt] = useState(0);
 
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
@@ -223,27 +245,34 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
 
     function handleReview(event) {
         event.preventDefault();
+        // Each attempt bumps the counter; a refusal names its section.
+        setReviewAttempt((n) => n + 1);
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        if (feeStop) { setFormError(feeStop.formError); return; }
+        if (feeStop) { setErrorSection('fee'); setFormError(feeStop.formError); return; }
         if (!chainId || !fromAddress) {
+            setErrorSection('from');
             setFormError('Pick a source address first.');
             return;
         }
         if (!message.trim()) {
+            setErrorSection('message');
             setFormError(null);
             setMessageError('Message is required.');
             return;
         }
         // Refuse text the indexer would reject before the form asks the host to compose it.
         if (messageLengthError) {
+            setErrorSection('message');
             setFormError(messageLengthError);
             return;
         }
         // Refuse protocol separators with a field-level explanation.
         if (RESERVED_DELIMITERS.test(message)) {
+            setErrorSection('message');
             setFormError('Remove any | or ; characters: the network reserves them as separators and will reject the broadcast.');
             return;
         }
+        setErrorSection(null);
         setFormError(null);
         if (singleEncode) { openConfirmScreen(); return; }
         setStage('review');
@@ -403,7 +432,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
             onBack={onBack}
             backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
-                ? 'Review broadcast'
+                ? 'Review Broadcast'
                 : 'Broadcast'}
         />
     );
@@ -471,7 +500,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                     <>
                         <p className={styles.successLabel}>Transaction ID</p>
                         <code className={styles.txid}>{txid}</code>
-                        <CopyButton value={txid} label="Copy transaction ID" />
+                        <CopyButton value={txid} label="Copy Transaction ID" />
                         {explorerUrl ? (
                             <a href={explorerUrl} target="_blank" rel="noopener noreferrer">
                                 View on explorer <span aria-hidden="true">↗</span>
@@ -482,7 +511,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                     <p className={styles.hint}>The broadcast completed without a transaction ID.</p>
                 )}
                 <div className={styles.actions}>
-                    <Button type="button" onClick={handleBuildAnother}>Broadcast another</Button>
+                    <Button type="button" onClick={handleBuildAnother}>Broadcast Another</Button>
                     <Button type="button" variant="primary" onClick={onDone || onBack}>Done</Button>
                 </div>
             </FormPage>,
@@ -502,6 +531,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                     <Button
                         type="submit"
                         variant="primary"
+                        icon={<Icon.SignIcon />}
                         loading={stage === 'submitting'}
                         disabled={
                             isWatcherMode
@@ -511,11 +541,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                                     : (!signerReady && password.length === 0)
                         }
                     >
-                        {isWatcherMode
-                            ? 'Broadcast'
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : 'Sign'}
+                        {isWatcherMode ? 'Broadcast' : 'Sign'}
                     </Button>
                 )}
             >
@@ -567,9 +593,19 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
     // confirm page, rendered in place of the form (the overlay modal
     // didn't fit small/mobile viewports); form state stays intact behind it.
     if (actionConfirm.open) {
+        // The message itself, cut short; the full text is under Technical details.
+        const broadcastText = neutralizeControlText(String(actionParams.MESSAGE || '').trim(), { maxLength: 80 });
+        const broadcastSummary = {
+            verb: t('routes.manageToken.broadcast'),
+            ...(broadcastText ? { target: broadcastText } : {}),
+            direction: 'none',
+            chainId,
+            address: fromAddress?.address,
+        };
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={broadcastSummary}
                 screenVariant={variant}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
@@ -594,7 +630,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={chainId}
                 onChainChange={setChainId}
@@ -607,18 +643,22 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
         );
     }
 
+    // A section holding the last refusal gets a key that changes on
+    // every attempt, so it reopens even after being closed.
+    const sectionErrorKey = (id) => (errorSection === id && (formError || messageError) ? reviewAttempt : 0);
+    const messageSummary = message.trim()
+        ? (message.trim().length > 40 ? `${message.trim().slice(0, 40)}...` : message.trim())
+        : null;
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label="Broadcast"
             onSubmit={handleReview}
             status={formError ? (
                 <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="success"
+            action={(
+                <FormAction
                     icon={<Icon.BroadcastIcon />}
                     loading={actionConfirm.composing}
                     disabled={!fromAddress
@@ -626,28 +666,55 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                         || actionConfirm.composing}
                 >
                     Broadcast
-                </Button>
+                </FormAction>
+            )}
+            /* The standard order. From (closed) holds Network and the
+               From address; Message (open) is the form's own field; then the
+               Network fee row. */
+            from={(
+                <FromSection
+                    {...formSections.bind('from')}
+                    chainId={chainId}
+                    chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])}
+                    chainRegistry={chainRegistry}
+                    onNetworkChange={setChainId}
+                    networkHelp="The chain where the message is recorded. Your From address and the network fee are on this network."
+                    address={fromAddress?.address || null}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    addressHelp="The address that signs and pays for this message. The message is recorded on-chain as coming from this address."
+                    revealKey={sectionErrorKey('from')}
+                    // The default source resolves in an effect after the
+                    // address list lands, so the notice (which opens From) is
+                    // passed only when this network truly has no funding address.
+                    missing={!(addressesByChain[chainId] || []).some((a) => a.role !== 'dispenser') ? (
+                        <FormNotice variant="error">
+                            {t('send.source.noAddress')}
+                        </FormNotice>
+                    ) : null}
+                />
+            )}
+            fee={(
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeCustomEstimate}
+                    revealKey={sectionErrorKey('fee')}
+                />
             )}
         >
-            <NetworkField label="Network" help="The chain where the message is recorded. Your From address and the network fee are on this network." value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-
-            {fromAddress ? (
-                <AddressField
-                    label="From"
-                    help="The address that signs and pays for this message. The message is recorded on-chain as coming from this address."
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
-                />
-            ) : (
-                <FormNotice variant="error">
-                    {t('send.source.noAddress')}
-                </FormNotice>
-            )}
-
+            <FormSection
+                id="message"
+                title="Message"
+                icon={Icon.BroadcastIcon}
+                {...formSections.bind('message')}
+                revealKey={sectionErrorKey('message')}
+                summary={messageSummary}
+            >
             <Textarea
                 label="Message"
                 help="Plain text recorded on-chain with this transaction. Anyone can read it, and it cannot be edited or removed later."
@@ -664,19 +731,8 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                 autoComplete="off"
                 autoCapitalize="sentences"
             />
-
-            {feeTiers ? (
-                <FeeSelector
-                    chainId={chainId}
-                    label="Network fee"
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
-            ) : null}
-        </FormPage>,
+            </FormSection>
+        </FormFrame>,
     );
 }
 

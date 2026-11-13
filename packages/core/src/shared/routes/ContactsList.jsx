@@ -646,7 +646,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 }
             }}
             title={mode === 'edit'
-                ? (active ? 'Edit Contact' : 'New contact')
+                ? (active ? 'Edit Contact' : 'New Contact')
                 : mode === 'detail' ? 'View Contact' : 'Contacts'}
         />
     );
@@ -1075,7 +1075,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 <EmptyState
                     title="No results for these filters"
                     body="Reset the filters to see all contacts."
-                    actionLabel="Reset filters"
+                    actionLabel="Reset Filters"
                     onAction={() => {
                         setQuery('');
                         setNetworkFilter('all');

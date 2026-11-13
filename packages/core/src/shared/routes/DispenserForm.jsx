@@ -19,12 +19,10 @@ import {
     Button,
     Input,
     ChainBadge,
-    NetworkField,
     AddressText,
     Icon,
     InfoTip,
     StatusMessage,
-    FeeSelector,
     AddressField,
     FormErrorSummary,
     Select,
@@ -35,8 +33,29 @@ import {
     registry as registryLib,
     decoder as decoderLib,
 } from '@xchain-wallet/core';
+// Dispenser renders through the shared Give/Get standard (Quick and Full views of one state).
+import {
+    GiveGetQuick,
+    RateLine,
+    useGiveGetView,
+} from '../components/giveGet/index.js';
+// And the Wallet Form Standard frame: From first, the Dispenser
+// section open, Dispenser terms closed, one Network fee row, one action.
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    joinSummary,
+} from '../components/formStandard/index.js';
+import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
+import { formatCoinBaseUnits } from '../../flows/feesCard.js';
+import { coinFromChainId } from '../components/BalanceList.jsx';
+import { tickerForDescriptor } from '../../registry/coinTicker.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/dispenserForm.js';
 import '../../i18n/locales/en/send.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -55,11 +74,11 @@ import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import {
     compareDecimalStrings,
     decimalQuotientFloor,
+    divideDecimalStrings,
     formatWithThousands,
     normalizeLocalizedDecimal,
     tokenAmountPrecisionError,
 } from '../utils/amountFormat.js';
-import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
@@ -68,8 +87,6 @@ import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { getActiveNetwork } from '../../flows/effectiveNetwork.js';
 import styles from './IssueTokenForm.module.css';
-import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
-import { FeesCard } from '../components/FeesCard.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
@@ -175,6 +192,40 @@ const DISPENSER_DRAFT_TEXT_FIELDS = [
     'getTick', 'getTokenAmount', 'expInput', 'allowListIdx', 'blockListIdx', 'outsideAddress',
 ];
 
+// The field a Create refusal names, by its copy. One reader for the
+// error summary and for the effect that opens the field's Give/Get section.
+function dispenserErrorTargetFor(formError) {
+    const text = formError || '';
+    if (/give amount/i.test(text)) return { id: 'dispenser-give', label: 'Give amount' };
+    if (/Escrow/i.test(text)) return { id: 'dispenser-escrow', label: 'Escrow amount' };
+    if (/positive token amount/i.test(text)) return { id: 'dispenser-payment-amount', label: 'Payment amount' };
+    if (/Payment token|token buyers pay/i.test(text)) return { id: 'dispenser-payment-token', label: 'Payment token' };
+    if (/trigger price/i.test(text)) return { id: 'dispenser-trigger-price', label: 'Trigger price' };
+    if (/Oracle address/i.test(text)) return { id: 'dispenser-oracle', label: 'Oracle address' };
+    if (/Fiat amount/i.test(text)) return { id: 'dispenser-fiat-amount', label: 'Fiat amount' };
+    if (/fiat currency/i.test(text)) return { id: 'dispenser-fiat-code', label: 'Fiat currency' };
+    if (/Expiration/i.test(text)) return { id: 'dispenser-expiration', label: 'Expiration' };
+    if (/dispenser address/i.test(text)) return { id: 'dispenser-address', label: 'Dispenser address' };
+    if (/Token ticker/i.test(text)) return { id: 'dispenser-token', label: 'Token' };
+    return undefined;
+}
+
+// Which standard section holds each field the error summary links
+// to: the Dispenser section (give and get terms) or Dispenser terms.
+const DISPENSER_ERROR_SECTION = {
+    'dispenser-token': 'dispenser',
+    'dispenser-give': 'dispenser',
+    'dispenser-escrow': 'dispenser',
+    'dispenser-payment-token': 'dispenser',
+    'dispenser-payment-amount': 'dispenser',
+    'dispenser-trigger-price': 'dispenser',
+    'dispenser-oracle': 'options',
+    'dispenser-fiat-amount': 'options',
+    'dispenser-fiat-code': 'options',
+    'dispenser-expiration': 'options',
+    'dispenser-address': 'options',
+};
+
 function hasDispenserDraft(values, initialTick) {
     if (!values || typeof values !== 'object') return false;
     const ticker = String(values.ticker ?? '').trim();
@@ -263,7 +314,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     const [oracleAddress, setOracleAddress] = useState(reopen?.oracleAddress || '');
     const [fiatCode, setFiatCode] = useState(reopen?.fiatCode || '');
     const [fiatAmount, setFiatAmount] = useState(reopen?.fiatAmount || '');
-    // Fiat and oracle terms live under Advanced; a reopen that carries them
+    // Fiat and oracle terms live under Dispenser terms (Preview); a reopen that carries them
     // opens it, or the prefilled pricing would be invisible.
     const [showAdvanced, setShowAdvanced] = useState(Boolean(reopen?.fiatCode || reopen?.oracleAddress));
     // PC-20: the rest of the DISPENSER v0 field set. payWith 'token' opens
@@ -323,6 +374,20 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     // changes.
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const manualSourceRef = useRef(false);
+    // "Buyers pay with" is the Get side's asset picker page (native coin or
+    // any token on this chain).
+    const [payPickerOpen, setPayPickerOpen] = useState(false);
+    // The Quick | Full view and section open state live above every early
+    // return, so pickers and the confirm screen never reset them. Only
+    // Dispenser starts open (terms too, on a reopen with fiat or oracle terms).
+    const giveGetView = useGiveGetView('dispenser', {
+        sections: {
+            from: false,
+            dispenser: true,
+            options: Boolean(reopen?.fiatCode || reopen?.oracleAddress),
+            fee: false,
+        },
+    });
 
     // Network fee: Low / Normal / Fast / Custom via FeeSelector. Mirrors
     // SwapForm / ComposeMessage; `feePerKb` prices the broadcast.
@@ -368,6 +433,24 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         expMode, expInput, allowListIdx, blockListIdx, addressMode,
         existingAddressId, outsideAddress, feePick, payFeeInNativeCoin,
     ]);
+
+    // A Create refusal links to its field by id. The Quick cards
+    // mount none of those ids but the escrow's, so a refusal naming any other
+    // field opens Full with that field's section open; in Full a closed
+    // section opens. Either way the summary's link lands on a visible field.
+    useEffect(() => {
+        if (!formError || !validationAttempt) return;
+        const target = dispenserErrorTargetFor(formError);
+        const section = target ? DISPENSER_ERROR_SECTION[target.id] : null;
+        if (!section) return;
+        if (giveGetView.view === 'quick') {
+            // The escrow sits in the Quick card, so its section opens in place.
+            if (target.id === 'dispenser-escrow') giveGetView.setSectionOpen('dispenser', true);
+            else giveGetView.openOptions(section);
+        } else if (!giveGetView.sections[section]) {
+            giveGetView.setSectionOpen(section, true);
+        }
+    }, [formError, validationAttempt]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Cluster P FOLLOWUP 5: form-draft persistence. Persists every
     // user-visible composition field (chain / source / give terms /
@@ -430,6 +513,9 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         if (typeof v.fiatCode === 'string') setFiatCode(v.fiatCode);
         if (typeof v.fiatAmount === 'string') setFiatAmount(v.fiatAmount);
         if (typeof v.showAdvanced === 'boolean') setShowAdvanced(v.showAdvanced);
+        // A draft that had fiat or oracle terms open reopens the
+        // Dispenser terms section, where those fields live.
+        if (v.showAdvanced === true) giveGetView.setSectionOpen('options', true);
         if (v.payWith === 'coin' || v.payWith === 'token') setPayWith(v.payWith);
         if (typeof v.getTick === 'string') setGetTick(v.getTick);
         if (typeof v.getTokenAmount === 'string') setGetTokenAmount(v.getTokenAmount);
@@ -950,7 +1036,8 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     async function handleReview(event) {
         event.preventDefault();
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        if (feeStop) { setFormError(feeStop.formError); return; }
+        // A refused custom fee opens the Network fee section that holds it.
+        if (feeStop) { setFormError(feeStop.formError); giveGetView.setSectionOpen('fee', true); return; }
         setValidationAttempt((attempt) => attempt + 1);
         if (reviewInFlightRef.current || derivingGetAddress || actionConfirm.composing) return;
         if (!chainId || !fromAddress) {
@@ -1023,19 +1110,19 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             if (paymentPrecisionError) { setFormError(paymentPrecisionError); return; }
         } else {
             if (!oracle && !fa && !trig) {
-                setFormError('Set a trigger price, or enable fiat / oracle pricing under Advanced.');
+                setFormError('Set a trigger price, or enable fiat / oracle pricing under Dispenser terms.');
                 return;
             }
             if (oracle) {
                 const oracleFormatError = outsideAddressError(oracle, descriptor);
                 if (oracleFormatError) { setFormError(`Oracle address: ${oracleFormatError}`); return; }
                 if (!fiatCode) {
-                    setFormError('Oracle pricing needs a fiat currency. Pick one under Advanced.');
+                    setFormError('Oracle pricing needs a fiat currency. Pick one under Dispenser terms.');
                     return;
                 }
             }
             if (fa && !fiatCode) {
-                setFormError('Fiat pricing needs a fiat currency. Pick one under Advanced.');
+                setFormError('Fiat pricing needs a fiat currency. Pick one under Dispenser terms.');
                 return;
             }
             if (fiatCode && !oracle && !fa) {
@@ -1307,8 +1394,8 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 ? () => { setSubmitError(null); setStage('form'); }
                 : leaveGuard.guardedOnBack}
             title={stage === 'review' || stage === 'submitting'
-                    ? 'Review dispenser'
-                    : 'Create dispenser'}
+                    ? 'Review Dispenser'
+                    : 'Create Dispenser'}
         />
     );
     const wrap = (children) => (
@@ -1386,6 +1473,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     <Button
                         type="submit"
                         variant="primary"
+                        icon={<Icon.SignIcon />}
                         loading={stage === 'submitting'}
                         disabled={
                             stage === 'submitting'
@@ -1394,11 +1482,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                                 : (!signerReady && password.length === 0)))
                         }
                     >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : hw
-                                ? `Sign on ${sourceAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : 'Sign'}
+                        {isWatcherMode ? 'Create Unsigned Transaction' : 'Sign'}
                     </Button>
                 )}
             >
@@ -1485,11 +1569,12 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="Dispenser address"
+                title="Dispenser Address"
                 walletId={walletId}
                 accountId={activeAccountId}
                 chainId={chainId}
-                onChainChange={setChainId}
+                // The dispenser address lives on the token's network.
+                lockNetwork
                 pickerActions={[{
                     key: 'new-dispenser-address',
                     label: pickerGenerating ? 'Generating…' : 'New dispenser address',
@@ -1546,10 +1631,12 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 purpose="send"
                 walletId={walletId}
                 accountId={activeAccountId}
-                title="Select token"
+                title="Select Token"
                 onSelect={(sel) => {
                     setTicker(String(sel.tick || ''));
-                    if (!lockedToken && sel.chainId) setChainId(sel.chainId);
+                    // The Token field is live with a preset token too, so a
+                    // pick on another chain re-targets the form.
+                    if (sel.chainId) setChainId(sel.chainId);
                     setTokenPickerOpen(false);
                 }}
                 onBack={() => setTokenPickerOpen(false)}
@@ -1557,12 +1644,48 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         );
     }
 
+    // The "Buyers pay with" asset picker page, scoped to this dispenser's
+    // chain (dispensers do not cross chains); it lists the native coin and
+    // discoverable tokens. The coin is the coin lane; a token is the token lane.
+    if (payPickerOpen) {
+        return (
+            <TokenPicker
+                purpose="receive"
+                walletId={walletId}
+                accountId={activeAccountId}
+                title="Buyers Pay With"
+                networkFilter={coinFromChainId(chainId)}
+                chainIdFilter={chainId}
+                onSelect={(sel) => {
+                    if (sel.kind === 'native') {
+                        setPayWith('coin');
+                    } else {
+                        setPayWith('token');
+                        setGetTick(String(sel.tick || ''));
+                    }
+                    setPayPickerOpen(false);
+                }}
+                onBack={() => setPayPickerOpen(false)}
+            />
+        );
+    }
+
     // confirm page, rendered in place of the form (the overlay modal
     // didn't fit small/mobile viewports); form state stays intact behind it.
     if (actionConfirm.open) {
+        // Opening a dispenser moves its escrow out of the signing address.
+        const openSummary = {
+            verb: t('components.confirmSummary.verbOpenDispenser'),
+            ...(actionParams.GIVE_ESCROW && actionParams.GIVE_TICK
+                ? { amount: actionParams.GIVE_ESCROW, ticker: actionParams.GIVE_TICK.toUpperCase(), direction: 'out' }
+                : { direction: 'none' }),
+            chainId,
+            address: fromAddress?.address,
+        };
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={openSummary}
                 screenVariant={variant}
                 chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 feeText={feeEstimate?.coinAmount
@@ -1602,7 +1725,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 chainId={chainId}
                 addresses={addressesByChain?.[chainId] || []}
                 filterType="2"
-                title={listPickerFor === 'allow' ? 'Choose allow-list' : 'Choose block-list'}
+                title={listPickerFor === 'allow' ? 'Choose Allow-List' : 'Choose Block-List'}
                 onSelect={(row) => {
                     if (listPickerFor === 'allow') setAllowListIdx(row.actionIndex); else setBlockListIdx(row.actionIndex);
                     setListPickerFor(null);
@@ -1616,11 +1739,12 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="Source address"
+                title="Source Address"
                 walletId={walletId}
                 accountId={activeAccountId}
                 chainId={chainId}
-                onChainChange={setChainId}
+                // From follows the token's network; pick another address on it.
+                lockNetwork
                 onPick={(a) => {
                     manualSourceRef.current = true;
                     setFromAddressId(a.id);
@@ -1643,375 +1767,522 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         </StatusMessage>
     ) : null;
 
-    let dispenserErrorTarget;
-    if (/give amount/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-give', label: 'Give amount' };
-    else if (/Escrow/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-escrow', label: 'Escrow amount' };
-    else if (/positive token amount/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-payment-amount', label: 'Payment amount' };
-    else if (/Payment token|token buyers pay/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-payment-token', label: 'Payment token' };
-    else if (/trigger price/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-trigger-price', label: 'Trigger price' };
-    else if (/Oracle address/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-oracle', label: 'Oracle address' };
-    else if (/Fiat amount/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-fiat-amount', label: 'Fiat amount' };
-    else if (/fiat currency/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-fiat-code', label: 'Fiat currency' };
-    else if (/Expiration/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-expiration', label: 'Expiration' };
-    else if (/dispenser address/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-address', label: 'Dispenser address' };
-    else if (/Token ticker/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-token', label: 'Token' };
+    // The same field-by-copy reader the section-opening effect uses.
+    const dispenserErrorTarget = dispenserErrorTargetFor(formError);
     const dispenserErrors = formError
         ? [{ ...dispenserErrorTarget, message: formError }]
         : [];
 
+    // Every field below is built once and placed in whichever view
+    // (Quick or Full) is open; the values live in this form's state, so they
+    // survive a view switch.
+    const { view, setView, sections } = giveGetView;
+    const tickTrim = ticker.trim();
+    const nativeTick = tickerForDescriptor(descriptor) || coinTicker;
+    const oracleLane = payWith === 'coin' && Boolean(oracleAddress.trim());
+    const sourceBalanceText = sourceTickBalance != null && tickTrim
+        ? `${formatWithThousands(sourceTickBalance)} ${tickTrim} available`
+        : null;
+    const onGiveMax = sourceTickBalance && Number(sourceTickBalance) > 0
+        ? () => setGiveAmount(sourceTickBalance)
+        : undefined;
+    const onEscrowMax = sourceTickBalance && Number(sourceTickBalance) > 0
+        ? () => setEscrow(sourceTickBalance)
+        : undefined;
+    // The per-field input rules, shared by both views.
+    const tokenAmountInput = (setter) => (rawValue) => {
+        const stripped = String(rawValue).replace(/,/g, '');
+        if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+        setter(stripped);
+    };
+    const priceInput = (setter) => (rawValue) => setter(normalizeLocalizedDecimal(rawValue) ?? rawValue);
+    const fillsHint = fillsEstimate !== null && fillsEstimate !== undefined && giveAmount.trim() && escrow.trim()
+        ? `Enough for ${formatWithThousands(String(fillsEstimate))} fills. The dispenser closes when it runs out.`
+        : undefined;
+    const fromHelp = 'The address that funds the escrow, pays the network fee and signs the dispenser.';
+    const payWithHelp = "Buyers pay in the network's native coin, or in another token you name.";
+    const payAsset = payWith === 'coin'
+        ? (chainId && nativeTick ? { chainId, tick: nativeTick } : null)
+        : (getTick.trim() && chainId ? { chainId, tick: getTick.trim() } : null);
+    const payTickUpper = payWith === 'coin' ? (coinTicker || 'coin') : (getTick.trim().toUpperCase() || 'TOKEN');
+    const priceAmount = payWith === 'coin' ? triggerPrice : getTokenAmount;
+
+    // "1 GIVE = n PAY" from the per-fill amounts, or the pricing mode
+    // when an oracle or a fiat amount sets the price.
+    let rateText;
+    if (oracleLane) {
+        rateText = `Oracle priced${fiatCode ? ` in ${fiatCode}` : ''} at each fill`;
+    } else if (payWith === 'coin' && fiatCode && fiatAmount.trim()) {
+        rateText = `${fiatAmount.trim()} ${fiatCode} per fill`;
+    } else {
+        const rate = divideDecimalStrings(priceAmount, giveAmount, 8);
+        const displayedRate = rate === '0' && isPositiveDecimal(priceAmount) && isPositiveDecimal(giveAmount)
+            ? '< 0.00000001'
+            : rate;
+        rateText = displayedRate && tickTrim
+            ? `1 ${tickTrim.toUpperCase()} = ${displayedRate} ${payTickUpper}`
+            : 'Enter both amounts to see the rate';
+    }
+    const rateLine = <RateLine text={rateText} />;
+
+    // One line naming every non-default term, else the defaults.
+    const termsParts = [];
+    termsParts.push({
+        new: 'New dispenser address',
+        current: 'Opens on From',
+        existing: 'Existing address',
+        other: 'Another address',
+    }[addressMode] || 'New dispenser address');
+    if (payWith === 'coin' && oracleAddress.trim()) termsParts.push(`Oracle${fiatCode ? ` ${fiatCode}` : ''}`);
+    else if (payWith === 'coin' && fiatCode) termsParts.push(`Priced in ${fiatCode}`);
+    if (expMode === 'custom') {
+        const unix = localInputToUnix(expInput.trim());
+        termsParts.push(expInput.trim() && unix ? `Expires ${expInput.trim().replace('T', ' ')}` : 'Custom expiry');
+    }
+    if (allowListIdx) termsParts.push(`Allow-list #${allowListIdx}`);
+    if (blockListIdx) termsParts.push(`Block-list #${blockListIdx}`);
+    const termsSummary = termsParts.join(' · ');
+    // The fee summary comes from the standard Network fee section.
+
+    const noSourceNotice = fromAddress ? null : (
+        <FormNotice variant="error">
+            {t('send.source.noAddress')}
+        </FormNotice>
+    );
+    const gatedNotice = gatedGiveNotice.gated ? (
+        <FormNotice variant="warning" role="alert">
+            {gatedTickWarningCopy(ticker, 'buyers dispensed this token')}
+        </FormNotice>
+    ) : null;
+    // The price problem sits under the price fields, with its one-click fix as a link action in the note.
+    const priceNote = (
+        <FieldNote
+            variant="error"
+            action={priceNotes.bundle ? (
+                <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    icon={<Icon.CheckIcon />}
+                    onClick={() => {
+                        setGiveAmount(priceNotes.bundle.giveAmount);
+                        setTriggerPrice(priceNotes.bundle.getAmount);
+                    }}
+                >
+                    {`Sell ${priceNotes.bundle.giveAmount} Per Fill at ${priceNotes.bundle.getAmount} ${coinTicker}`}
+                </Button>
+            ) : null}
+        >
+            {priceNotes.block}
+        </FieldNote>
+    );
+    const oracleNote = (
+        <FieldNote variant="info" role="status">
+            The oracle sets the native coin price when each fill occurs.
+        </FieldNote>
+    );
+    // The pre-flight verdict for an outside address, beside the field it
+    // judges, so a refusal is seen before Create.
+    const outsideVerdictNotes = (
+        <>
+            {outsideVerdictLoading ? (
+                <FieldNote variant="info" role="status">
+                    Checking whether this address accepts your dispenser…
+                </FieldNote>
+            ) : null}
+            {addressMode === 'other' && outsideVerdict ? (
+                <FieldNote variant={outsideVerdict.allowed ? 'info' : 'error'} role={outsideVerdict.allowed ? 'status' : 'alert'}>
+                    <span data-testid="outside-address-verdict" data-verdict={outsideVerdict.kind}>
+                        {outsideVerdict.message}
+                    </span>
+                </FieldNote>
+            ) : null}
+        </>
+    );
+    // In the Quick card the give line above already shows the
+    // balance, so the escrow field leaves its own copy out there.
+    const escrowField = (withBalance) => (
+        <AmountField
+            id="dispenser-escrow"
+            label="Escrow amount"
+            help="How much of the token is locked in the dispenser for buyers to draw from. The dispenser closes when it runs out."
+            amount={escrow}
+            tick={ticker}
+            divisibility={giveTokenInfo?.divisibility}
+            onAmountFieldChange={tokenAmountInput(setEscrow)}
+            onMax={onEscrowMax}
+            maxDisabled={!sourceTickBalance}
+            balanceText={withBalance ? sourceBalanceText : null}
+            hint={fillsHint}
+        />
+    );
+
+    // The Quick cards, built on demand inside the Dispenser section.
+    const quickView = () => (
+        <GiveGetQuick
+            give={{
+                label: 'You give per fill',
+                help: t('dispenserForm.tokenHelp'),
+                // No network control; the token picker lists every network
+                // and the card shows the token's network read-only.
+                asset: tickTrim && chainId ? { chainId, tick: ticker } : null,
+                assetLabel: 'Token',
+                onOpenAsset: () => setTokenPickerOpen(true),
+                amount: giveAmount,
+                onAmountChange: tokenAmountInput(setGiveAmount),
+                amountLabel: t('dispenserForm.giveAmountPerFill'),
+                balanceText: sourceBalanceText,
+                onMax: onGiveMax || null,
+                maxDisabled: !sourceTickBalance,
+                // The escrow is part of what you give, so it sits in
+                // the give card; Quick can create a dispenser on its own.
+                extra: escrowField(false),
+                // From is the standard From section above, not a row here.
+            }}
+            get={{
+                label: 'You get per fill',
+                help: payWithHelp,
+                asset: payAsset,
+                assetLabel: 'Buyers pay with',
+                assetPlaceholder: t('send.selectAsset'),
+                onOpenAsset: () => setPayPickerOpen(true),
+                // With an oracle the price is set at each fill, so the price
+                // input stays empty and the whole card is held (GiveGetQuick has
+                // no read-only amount); clear the oracle under Dispenser terms.
+                amount: oracleLane ? '' : priceAmount,
+                onAmountChange: priceInput(payWith === 'coin' ? setTriggerPrice : setGetTokenAmount),
+                amountLabel: payWith === 'coin' ? 'Trigger price' : t('dispenserForm.paymentAmountPerFill'),
+                disabled: oracleLane,
+                footNote: oracleLane
+                    ? 'The oracle sets the native coin price when each fill occurs.'
+                    : 'Buyers send this to the dispenser address.',
+            }}
+            notice={(
+                // The no-source notice sits in the From section; the
+                // address verdict and the allow-list warning sit in Dispenser
+                // terms while it is open and in the status slot while closed.
+                <>
+                    {gatedNotice}
+                    {priceNote}
+                </>
+            )}
+            rate={rateLine}
+            // Dispenser terms and the fee are standard sections below.
+            terms={null}
+        />
+    );
+
+    // Full's Dispenser section: the give fields, then the get fields
+    // (no Network field and no From here; the From section holds both).
+    const fullDispenserFields = (
+                    <>
+                        <TokenField
+                            id="dispenser-token"
+                            label="Token"
+                            help={t('dispenserForm.tokenHelp')}
+                            value={ticker && chainId ? { chainId, tick: ticker } : null}
+                            onOpenPicker={() => setTokenPickerOpen(true)}
+                        />
+                        {gatedNotice}
+                        <AmountField
+                            id="dispenser-give"
+                            label={t('dispenserForm.giveAmountPerFill')}
+                            help="Tokens sent to the buyer every time the dispenser is triggered."
+                            amount={giveAmount}
+                            tick={ticker}
+                            divisibility={giveTokenInfo?.divisibility}
+                            onAmountFieldChange={tokenAmountInput(setGiveAmount)}
+                            onMax={onGiveMax}
+                            maxDisabled={!sourceTickBalance}
+                            balanceText={sourceBalanceText}
+                        />
+                        {escrowField(true)}
+                        <TokenField
+                            id="dispenser-payment-token"
+                            label="Buyers pay with"
+                            // The coin or a token: an asset picker.
+                            placeholder={t('send.selectAsset')}
+                            help={payWithHelp}
+                            value={payAsset}
+                            onOpenPicker={() => setPayPickerOpen(true)}
+                        />
+                        {payWith === 'token' ? (
+                            <Input
+                                id="dispenser-payment-amount"
+                                label={t('dispenserForm.paymentAmountPerFill')}
+                                help="Amount of the payment token buyers send per fill."
+                                inputMode="decimal"
+                                value={getTokenAmount}
+                                onChange={(e) => priceInput(setGetTokenAmount)(e.target.value)}
+                                autoComplete="off"
+                            />
+                        ) : oracleLane ? oracleNote : (
+                            <Input
+                                id="dispenser-trigger-price"
+                                label={`Trigger price${coinTicker ? ` (${coinTicker})` : ''}`}
+                                help={`Native ${coinTicker || 'coin'} amount buyers send per fill.`}
+                                inputMode="decimal"
+                                value={triggerPrice}
+                                onChange={(e) => priceInput(setTriggerPrice)(e.target.value)}
+                                autoComplete="off"
+                            />
+                        )}
+                        {priceNote}
+                    </>
+    );
+
+    // The address verdict and the D-161 allow-list warning can hold
+    // Create, so they stay in sight while the Dispenser terms section that
+    // holds their fields is closed: the status slot just above the action.
+    const closedTermsNotes = !sections.options && ((addressMode === 'other' && (outsideVerdictLoading || outsideVerdict)) || allowListWarningNode) ? (
+        <>
+            {addressMode === 'other' ? outsideVerdictNotes : null}
+            {allowListWarningNode}
+        </>
+    ) : null;
+
+    // Dispenser terms, one body for both views (Quick expands it in place).
+    const termsBody = (
+                    <>
+                        {fromAddress ? (
+                            <>
+                                {/* Dispenser address: where the dispenser opens (GET_ADDRESS). */}
+                                {addressMode === 'other' ? (
+                                    <AddressField
+                                        id="dispenser-address"
+                                        label="Dispenser address"
+                                        help="The address the dispenser opens on: buyers send payment here. A new address keeps this dispenser apart from your other funds."
+                                        icon="addresses"
+                                        value={outsideAddress}
+                                        placeholder="Any address on the active network"
+                                        onChange={(e) => setOutsideAddress(e.target.value)}
+                                        error={outsideFormatError || undefined}
+                                        onIconClick={() => setAddressPickerOpen(true)}
+                                        iconLabel="Change dispenser address"
+                                    />
+                                ) : (
+                                    // A new address does not exist until preview, so the
+                                    // field says so as a placeholder; as a value the
+                                    // sentence went through the address shortener and
+                                    // read "New di…eview)".
+                                    <AddressField
+                                        label="Dispenser address"
+                                        help="The address the dispenser opens on: buyers send payment here. A new address keeps this dispenser apart from your other funds."
+                                        icon="addresses"
+                                        value={addressMode === 'new'
+                                            ? ''
+                                            : (addressMode === 'existing' && existingAddress
+                                                ? existingAddress.address
+                                                : fromAddress.address)}
+                                        placeholder={addressMode === 'new' ? 'New address, made at preview' : undefined}
+                                        readOnly
+                                        onChange={() => {}}
+                                        onIconClick={() => setAddressPickerOpen(true)}
+                                        iconLabel="Change dispenser address"
+                                    />
+                                )}
+                                {/* Shown above this section (between) while it is closed. */}
+                                {sections.options ? outsideVerdictNotes : null}
+                            </>
+                        ) : null}
+
+                        {/* Fiat and oracle pricing price the coin lane only, so
+                            they show while buyers pay with the coin. */}
+                        {payWith === 'coin' ? (
+                            <>
+                                <Select
+                                    id="dispenser-fiat-code"
+                                    label="Priced in fiat"
+                                    optional
+                                    help="Price each fill in a fiat currency instead of a fixed coin amount; validators convert it at the current rate."
+                                    value={fiatCode}
+                                    onChange={(e) => setFiatCode(e.target.value)}
+                                >
+                                    {/* Native options supply Select choices because the kit has no option primitive. */}
+                                    <option value="">(none, coin-paid)</option>
+                                    {FIAT_CODES.map((c) => (
+                                        /* Native options supply Select choices because the kit has no option primitive. */
+                                        <option key={c} value={c}>{c}</option>
+                                    ))}
+                                </Select>
+                                <Input
+                                    id="dispenser-fiat-amount"
+                                    label="Fiat amount"
+                                    placeholder="12.34"
+                                    help="Validator-priced fiat dispenser. Leave blank if using a user oracle."
+                                    inputMode="decimal"
+                                    value={fiatAmount}
+                                    onChange={(e) => priceInput(setFiatAmount)(e.target.value)}
+                                    autoComplete="off"
+                                />
+                                <FieldNote variant="info" role="status">{priceNotes.fiatWarning}</FieldNote>
+                                <AddressField
+                                    id="dispenser-oracle"
+                                    label="Oracle address"
+                                    optional
+                                    help="Oracle address used for fiat pricing. If it charges a usage fee, you pay it now based on the escrow amount. Enter the full address."
+                                    value={oracleAddress}
+                                    onChange={(e) => setOracleAddress(e.target.value)}
+                                    autoComplete="off"
+                                    autoCapitalize="off"
+                                    autoCorrect="off"
+                                    spellCheck={false}
+                                />
+                            </>
+                        ) : null}
+
+                        <RadioGroup
+                            legend="Expiration"
+                            help="By default the dispenser stays open for the network's standard window. Pick a time to close it sooner or later."
+                            name="disp-exp"
+                            value={expMode}
+                            onChange={setExpMode}
+                            options={[
+                                { value: 'default', label: 'Default window' },
+                                { value: 'custom', label: 'Expire at a specific time' },
+                            ]}
+                        />
+                        {expMode === 'custom' ? (
+                            <Input
+                                id="dispenser-expiration"
+                                label="Expires"
+                                type="datetime-local"
+                                help="The date and time the dispenser closes. It must be in the future."
+                                value={expInput}
+                                onChange={(e) => setExpInput(e.target.value)}
+                            />
+                        ) : null}
+
+                        {/* Clear carries the trash icon, as on Swap (every button has an icon). */}
+                        <div className={styles.choiceGroup}>
+                            <p className={styles.choiceGroupLabel}>Restrict who can buy <OptionalPill /> <InfoTip aria="About restricting buyers" label="An allow-list lets only the listed addresses buy. A block-list refuses the listed addresses." /></p>
+                            <div className={styles.choiceButtons}>
+                                <Button variant="secondary" size="sm" icon={<Icon.TokenListIcon />} onClick={() => setListPickerFor('allow')}>
+                                    {allowListIdx ? `Allow-List #${allowListIdx}` : 'Set Allow-List'}
+                                </Button>
+                                {allowListIdx ? <Button variant="secondary" size="sm" icon={<Icon.TrashIcon />} onClick={() => setAllowListIdx('')}>Clear</Button> : null}
+                                <Button variant="secondary" size="sm" icon={<Icon.TokenListIcon />} onClick={() => setListPickerFor('block')}>
+                                    {blockListIdx ? `Block-List #${blockListIdx}` : 'Set Block-List'}
+                                </Button>
+                                {blockListIdx ? <Button variant="secondary" size="sm" icon={<Icon.TrashIcon />} onClick={() => setBlockListIdx('')}>Clear</Button> : null}
+                            </div>
+                        </div>
+
+                        {/* D-161: "Restrict who can buy" is the reading that causes the
+                            mistake - the chain checks this dispenser's own address against
+                            the same list. Rendered beside the control that caused it rather
+                            than at review, so the fix (pick another list, or clear it) is
+                            one click away from the warning. While this
+                            section is closed it shows above it instead. */}
+                        {sections.options ? allowListWarningNode : null}
+                    </>
+    );
+
+    // Form Standard open state comes from the same Give/Get view state;
+    // `main` flags Dispenser as the main section (data-form-main).
+    const bind = (id) => ({ open: Boolean(sections[id]), onOpenChange: (open) => giveGetView.setSectionOpen(id, open), main: id === 'dispenser' });
+    const dispenserSummary = joinSummary(
+        tickTrim
+            ? `${giveAmount.trim() ? `${formatWithThousands(giveAmount.trim())} ` : ''}${tickTrim.toUpperCase()} per fill`
+            : 'No token yet',
+        oracleLane
+            ? `oracle priced${fiatCode ? ` in ${fiatCode}` : ''}`
+            : (priceAmount.trim() ? `for ${priceAmount.trim()} ${payTickUpper}` : null),
+    ).replace(', for ', ' for ');
+    const payInNative = payFeeInNativeCoin || nativeFeeMandatory;
+
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label="Create dispenser"
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}
-            status={[<FormErrorSummary key="errors" errors={dispenserErrors} focusKey={validationAttempt} />, draftBanner]}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="success"
-                    icon={<Icon.TokenIcon />}
+            // The Quick | Full switch leads the form, 8px above From;
+            // both views render the same state.
+            view={view}
+            onViewChange={setView}
+            viewLabel="Dispenser form view"
+            status={[<FormErrorSummary key="errors" errors={dispenserErrors} focusKey={validationAttempt} />, draftBanner, closedTermsNotes]}
+            action={(
+                <FormAction
+                    icon={<Icon.PlusIcon />}
                     loading={derivingGetAddress || actionConfirm.composing}
                     disabled={derivingGetAddress || actionConfirm.composing || outsideBlocked}
                 >
-                    Create dispenser
-                </Button>
+                    Create Dispenser
+                </FormAction>
             )}
-        >
-            {lockedToken && chainId ? (
-                <LockedTokenContext chainId={chainId} tick={ticker} />
-            ) : (
-                <NetworkField label="Network" help={t('dispenserForm.networkHelp')} value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-            )}
-
-            {fromAddress ? (
-                <>
-                    {/* From: which address funds the escrow and signs the action. */}
-                    <AddressField
-                        label="From"
-                        help="The address that funds the escrow, pays the network fee and signs the dispenser."
-                        icon="addresses"
-                        value={fromAddress.address}
-                        readOnly
-                        onChange={() => {}}
-                        onIconClick={() => setSourcePickerOpen(true)}
-                        iconLabel="Choose source address"
-                    />
-
-                    {/* Dispenser address: where the dispenser opens (GET_ADDRESS). */}
-                    {addressMode === 'other' ? (
-                        <AddressField
-                            id="dispenser-address"
-                            label="Dispenser address"
-                            help="The address the dispenser opens on: buyers send payment here. A new address keeps this dispenser apart from your other funds."
-                            icon="addresses"
-                            value={outsideAddress}
-                            placeholder="Any address on the active network"
-                            onChange={(e) => setOutsideAddress(e.target.value)}
-                            error={outsideFormatError || undefined}
-                            onIconClick={() => setAddressPickerOpen(true)}
-                            iconLabel="Change dispenser address"
-                        />
-                    ) : (
-                        // A new address does not exist until preview, so the
-                        // field says so as a placeholder; as a value the
-                        // sentence went through the address shortener and
-                        // read "New di…eview)".
-                        <AddressField
-                            label="Dispenser address"
-                            help="The address the dispenser opens on: buyers send payment here. A new address keeps this dispenser apart from your other funds."
-                            icon="addresses"
-                            value={addressMode === 'new'
-                                ? ''
-                                : (addressMode === 'existing' && existingAddress
-                                    ? existingAddress.address
-                                    : fromAddress.address)}
-                            placeholder={addressMode === 'new' ? 'New address, made at preview' : undefined}
-                            readOnly
-                            onChange={() => {}}
-                            onIconClick={() => setAddressPickerOpen(true)}
-                            iconLabel="Change dispenser address"
-                        />
-                    )}
-                    {/* The pre-flight verdict for an outside address, beside the
-                        field it judges, so a refusal is seen before Create. */}
-                    {outsideVerdictLoading ? (
-                        <FieldNote variant="info" role="status">
-                            Checking whether this address accepts your dispenser…
-                        </FieldNote>
-                    ) : null}
-                    {addressMode === 'other' && outsideVerdict ? (
-                        <FieldNote variant={outsideVerdict.allowed ? 'info' : 'error'} role={outsideVerdict.allowed ? 'status' : 'alert'}>
-                            <span data-testid="outside-address-verdict" data-verdict={outsideVerdict.kind}>
-                                {outsideVerdict.message}
-                            </span>
-                        </FieldNote>
-                    ) : null}
-
-                </>
-            ) : (
-                <FormNotice variant="error">
-                    {t('send.source.noAddress')}
-                </FormNotice>
-            )}
-
-            {lockedToken ? null : (
-                <TokenField
-                    id="dispenser-token"
-                    label="Token"
-                    help={t('dispenserForm.tokenHelp')}
-                    value={ticker && chainId ? { chainId, tick: ticker } : null}
-                    onOpenPicker={() => setTokenPickerOpen(true)}
-                />
-            )}
-            {gatedGiveNotice.gated ? (
-                <FormNotice variant="warning" role="alert">
-                    {gatedTickWarningCopy(ticker, 'buyers dispensed this token')}
-                </FormNotice>
-            ) : null}
-            <AmountField
-                id="dispenser-give"
-                label={t('dispenserForm.giveAmountPerFill')}
-                help="Tokens sent to the buyer every time the dispenser is triggered."
-                amount={giveAmount}
-                tick={ticker}
-                divisibility={giveTokenInfo?.divisibility}
-                onAmountFieldChange={(rawValue) => {
-                    const stripped = String(rawValue).replace(/,/g, '');
-                    if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
-                    setGiveAmount(stripped);
-                }}
-                onMax={sourceTickBalance && Number(sourceTickBalance) > 0
-                    ? () => setGiveAmount(sourceTickBalance)
-                    : undefined}
-                maxDisabled={!sourceTickBalance}
-                balanceText={sourceTickBalance != null && ticker.trim()
-                    ? `${formatWithThousands(sourceTickBalance)} ${ticker.trim()} available`
-                    : null}
-            />
-            <AmountField
-                id="dispenser-escrow"
-                label="Escrow amount"
-                help="How much of the token is locked in the dispenser for buyers to draw from. The dispenser closes when it runs out."
-                amount={escrow}
-                tick={ticker}
-                divisibility={giveTokenInfo?.divisibility}
-                onAmountFieldChange={(rawValue) => {
-                    const stripped = String(rawValue).replace(/,/g, '');
-                    if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
-                    setEscrow(stripped);
-                }}
-                onMax={sourceTickBalance && Number(sourceTickBalance) > 0
-                    ? () => setEscrow(sourceTickBalance)
-                    : undefined}
-                maxDisabled={!sourceTickBalance}
-                balanceText={sourceTickBalance != null && ticker.trim()
-                    ? `${formatWithThousands(sourceTickBalance)} ${ticker.trim()} available`
-                    : null}
-            />
-            <RadioGroup
-                legend="Buyers pay with"
-                help="Buyers pay in the network's native coin, or in another token you name."
-                name="disp-pay"
-                value={payWith}
-                onChange={setPayWith}
-                options={[
-                    { value: 'coin', label: `Native ${coinTicker || 'coin'}` },
-                    { value: 'token', label: 'A token' },
-                ]}
-            />
-            {payWith === 'token' ? (
-                <>
-                    <Input
-                        id="dispenser-payment-token"
-                        label="Payment token"
-                        help="Ticker buyers pay with (a token, not the native coin)."
-                        value={getTick}
-                        onChange={(e) => setGetTick(e.target.value)}
-                        autoComplete="off"
-                        autoCapitalize="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                    />
-                    <Input
-                        id="dispenser-payment-amount"
-                        label={t('dispenserForm.paymentAmountPerFill')}
-                        help="Amount of the payment token buyers send per fill."
-                        inputMode="decimal"
-                        value={getTokenAmount}
-                        onChange={(e) => setGetTokenAmount(
-                            normalizeLocalizedDecimal(e.target.value) ?? e.target.value,
-                        )}
-                        autoComplete="off"
-                    />
-                </>
-            ) : oracleAddress.trim() ? (
-                <FieldNote variant="info" role="status">
-                    The oracle sets the native coin price when each fill occurs.
-                </FieldNote>
-            ) : (
-                <Input
-                    id="dispenser-trigger-price"
-                    label={`Trigger price${coinTicker ? ` (${coinTicker})` : ''}`}
-                    help={`Native ${coinTicker || 'coin'} amount buyers send per fill.`}
-                    inputMode="decimal"
-                    value={triggerPrice}
-                    onChange={(e) => setTriggerPrice(
-                        normalizeLocalizedDecimal(e.target.value) ?? e.target.value,
-                    )}
-                    autoComplete="off"
-                />
-            )}
-            {/* The price problem sits under the price fields, with its one-click fix as a link action in the note. */}
-            <FieldNote
-                variant="error"
-                action={priceNotes.bundle ? (
-                    <Button
-                        type="button"
-                        variant="link"
-                        size="sm"
-                        icon={<Icon.CheckIcon />}
-                        onClick={() => {
-                            setGiveAmount(priceNotes.bundle.giveAmount);
-                            setTriggerPrice(priceNotes.bundle.getAmount);
-                        }}
-                    >
-                        {`Sell ${priceNotes.bundle.giveAmount} per fill at ${priceNotes.bundle.getAmount} ${coinTicker}`}
-                    </Button>
-                ) : null}
-            >
-                {priceNotes.block}
-            </FieldNote>
-
-            {payWith === 'coin' ? (
-                <Button
-                    variant="link"
-                    size="sm"
-                    icon={null}
-                    className={styles.advancedToggle}
-                    aria-expanded={showAdvanced}
-                    onClick={() => setShowAdvanced((v) => !v)}
-                >
-                    {showAdvanced ? 'Advanced options' : 'Advanced options (fiat pricing, oracle)'}
-                    <Icon.ChevronDownIcon
-                        style={{ transform: showAdvanced ? 'rotate(180deg)' : undefined }}
-                    />
-                </Button>
-            ) : null}
-
-            {showAdvanced && payWith === 'coin' ? (
-                <>
-                    <Select
-                        id="dispenser-fiat-code"
-                        label="Priced in fiat"
-                        optional
-                        help="Price each fill in a fiat currency instead of a fixed coin amount; validators convert it at the current rate."
-                        value={fiatCode}
-                        onChange={(e) => setFiatCode(e.target.value)}
-                    >
-                        {/* Native options supply Select choices because the kit has no option primitive. */}
-                        <option value="">(none, coin-paid)</option>
-                        {FIAT_CODES.map((c) => (
-                            /* Native options supply Select choices because the kit has no option primitive. */
-                            <option key={c} value={c}>{c}</option>
-                        ))}
-                    </Select>
-                    <Input
-                        id="dispenser-fiat-amount"
-                        label="Fiat amount"
-                        placeholder="12.34"
-                        help="Validator-priced fiat dispenser. Leave blank if using a user oracle."
-                        inputMode="decimal"
-                        value={fiatAmount}
-                        onChange={(e) => setFiatAmount(
-                            normalizeLocalizedDecimal(e.target.value) ?? e.target.value,
-                        )}
-                        autoComplete="off"
-                    />
-                    <FieldNote variant="info" role="status">{priceNotes.fiatWarning}</FieldNote>
-                    <AddressField
-                        id="dispenser-oracle"
-                        label="Oracle address"
-                        optional
-                        help="Oracle address used for fiat pricing. If it charges a usage fee, you pay it now based on the escrow amount. Enter the full address."
-                        value={oracleAddress}
-                        onChange={(e) => setOracleAddress(e.target.value)}
-                        autoComplete="off"
-                        autoCapitalize="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                    />
-                </>
-            ) : null}
-
-            <RadioGroup
-                legend="Expiration"
-                help="By default the dispenser stays open for the network's standard window. Pick a time to close it sooner or later."
-                name="disp-exp"
-                value={expMode}
-                onChange={setExpMode}
-                options={[
-                    { value: 'default', label: 'Default window' },
-                    { value: 'custom', label: 'Expire at a specific time' },
-                ]}
-            />
-            {expMode === 'custom' ? (
-                <Input
-                    id="dispenser-expiration"
-                    label="Expires"
-                    type="datetime-local"
-                    help="The date and time the dispenser closes. It must be in the future."
-                    value={expInput}
-                    onChange={(e) => setExpInput(e.target.value)}
-                />
-            ) : null}
-
-            <div className={styles.choiceGroup}>
-                <p className={styles.choiceGroupLabel}>Restrict who can buy <OptionalPill /> <InfoTip aria="About restricting buyers" label="An allow-list lets only the listed addresses buy. A block-list refuses the listed addresses." /></p>
-                <div className={styles.choiceButtons}>
-                    <Button variant="secondary" size="sm" icon={<Icon.TokenListIcon />} onClick={() => setListPickerFor('allow')}>
-                        {allowListIdx ? `Allow-list #${allowListIdx}` : 'Set allow-list'}
-                    </Button>
-                    {allowListIdx ? <Button variant="secondary" size="sm" onClick={() => setAllowListIdx('')}>Clear</Button> : null}
-                    <Button variant="secondary" size="sm" icon={<Icon.TokenListIcon />} onClick={() => setListPickerFor('block')}>
-                        {blockListIdx ? `Block-list #${blockListIdx}` : 'Set block-list'}
-                    </Button>
-                    {blockListIdx ? <Button variant="secondary" size="sm" onClick={() => setBlockListIdx('')}>Clear</Button> : null}
-                </div>
-            </div>
-
-            {/* D-161: "Restrict who can buy" is the reading that causes the
-                mistake - the chain checks this dispenser's own address against
-                the same list. Rendered beside the control that caused it rather
-                than at review, so the fix (pick another list, or clear it) is
-                one click away from the warning. */}
-            {allowListWarningNode}
-
-            <FeesCard
-                chainId={chainId}
-                quote={protocolFeeQuote}
-                pending={protocolFeePending}
-                fiat={feeFiatFormat}
-                feeSelector={<FeeSelector
+            from={(
+                // The standard From section, first in both views. The
+                // token decides the network, so the Network field is locked.
+                <FromSection
+                    {...bind('from')}
                     chainId={chainId}
-                    label="Network fee"
+                    chainRegistry={chainRegistry}
+                    lockNetwork
+                    networkHelp="The token decides the network. Pick a token on another network to move the dispenser there."
+                    address={fromAddress?.address}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    addressHelp={fromHelp}
+                    // Only when this network truly has no address; a
+                    // render before the source is picked must not open From for good.
+                    missing={(addressesByChain?.[chainId] || []).length === 0 ? noSourceNotice : null}
+                />
+            )}
+            fee={(
+                // The one Network fee section: the existing selector
+                // and fees card (network, protocol fee and the pay-in-coin switch).
+                <FeeSection
+                    {...bind('fee')}
+                    chainId={chainId}
                     coinTicker={coinTicker}
                     tiers={feeTiers}
                     value={feePick}
                     onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />}
-            >
-                <NativeFeeToggle
-                    checked={payFeeInNativeCoin}
-                    onChange={setPayFeeInNativeCoin}
-                    coinTicker={coinTicker}
-                    mandatory={nativeFeeMandatory}
+                    customEstimate={feeCustomEstimate}
+                    protocolSummary={protocolFeeSummary(protocolFeeQuote, protocolFeePending, payInNative, coinTicker)}
+                    fees={{
+                        quote: protocolFeeQuote,
+                        pending: protocolFeePending,
+                        fiat: feeFiatFormat,
+                        nativeFeeProps: {
+                            checked: payFeeInNativeCoin,
+                            onChange: setPayFeeInNativeCoin,
+                            mandatory: nativeFeeMandatory,
+                        },
+                    }}
                 />
-            </FeesCard>
-
-        </FormPage>,
+            )}
+        >
+            {/* The main section, open: what the dispenser sells and for what. */}
+            <FormSection id="dispenser" title="Dispenser" icon={Icon.PlusIcon} {...bind('dispenser')} summary={dispenserSummary}>
+                {view === 'quick' ? quickView() : (
+                    <>
+                        {fullDispenserFields}
+                        {rateLine}
+                    </>
+                )}
+            </FormSection>
+            {/* Dispenser terms, closed; in Quick it expands in place. */}
+            <FormSection id="options" title="Dispenser Terms" icon={Icon.GearIcon} {...bind('options')} summary={termsSummary}>
+                {termsBody}
+            </FormSection>
+        </FormFrame>,
     );
+}
+
+// The protocol fee joins the Network fee row's summary, as the
+// standard asks of forms with a protocol fee. Nothing while it is unknown.
+function protocolFeeSummary(quote, pending, payInNative, coinTicker) {
+    if (pending) return undefined;
+    const fee = normalizeProtocolFee(quote);
+    if (!fee.known || fee.free) return undefined;
+    if (payInNative) {
+        const native = formatCoinBaseUnits(quote?.requiredFeeSats);
+        return native ? `${native} ${coinTicker} protocol fee` : undefined;
+    }
+    return fee.amount ? `${fee.amount} XCHAIN protocol fee` : undefined;
 }
 
 function DetailRow({ label, value }) {

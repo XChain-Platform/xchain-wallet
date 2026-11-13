@@ -26,11 +26,11 @@ import {
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { formatOrList } from '../../i18n/index.js';
 import '../../i18n/locales/en/flows.js';
-import '../../i18n/locales/en/settings.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useDocumentTitleSection } from '../hooks/useDocumentTitle.js';
 import { NAME_MAX_LENGTH, hasVisibleText, nameLength } from '../../util/display_name.js';
 import { useOwnWalletWriteHold } from '../hooks/useOwnWalletWriteHold.js';
+import { notifyWalletModesChanged } from '../hooks/useWalletMode.js';
 import styles from './PairPartnerWallet.module.css';
 import {
     importPhraseFormat,
@@ -71,7 +71,7 @@ const MAX_QR_CHARS = 1200;
  *
  * The lane runs four stages:
  *
- *   role      pick which half THIS device is. Sets `settings.walletMode`.
+ *   role      pick which half THIS device is: the wallet's own mode (§20).
  *   seed      import the shared recovery phrase (skipped when the caller
  *             passes an existing `walletId`, e.g. re-pairing from Settings).
  *   exchange  show this wallet's pairing code (account-level PUBLIC keys
@@ -155,6 +155,8 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                     label: walletName,
                 });
                 if (cancelled) return;
+                // The host wrote the role onto this wallet; readers re-read it.
+                notifyWalletModesChanged();
                 setLocalCode(res?.encoded || null);
                 setLocalKeySetId(
                     res?.payload?.keys ? flowsLib.keySetIdOf(res.payload.keys) : null,
@@ -292,17 +294,19 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
         setBusy(true);
         try {
             const formatArg = importPhraseFormatArg(acceptedFormat, false);
+            // The role picked above is this wallet's mode (§20), so the
+            // wallet is created in it.
             const r = await messaging.importMnemonic({
-                password, mnemonic: trimmed, name: walletName, ...formatArg,
+                password, mnemonic: trimmed, name: walletName, walletMode, ...formatArg,
             });
             const id = r?.wallet?.id || r?.walletId || r?.id || null;
             if (!id) {
                 throw new Error('The wallet imported but the shell returned no wallet id, so pairing cannot continue.');
             }
-            // `walletMode` rides along on the pairing requests rather than
-            // being flipped here: the host persists it as part of the same
-            // call that reads the keys, so a payload can never advertise a
-            // mode the wallet is not actually in.
+            // `walletMode` also rides along on the pairing requests: the host
+            // writes it onto this wallet's record in the same call that reads
+            // the keys, so a payload can never advertise a mode the wallet is
+            // not actually in.
             setWalletId(id);
             setStage('exchange');
         } catch (err) {
@@ -383,13 +387,12 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
     }
 
     // The window title names the pairing lane the heading shows.
-    useDocumentTitleSection(lane.title || 'Pair an offline signer');
+    useDocumentTitleSection(lane.title || 'Pair an Offline Signer');
     const header = (
         <PageHeader
             onBack={handleBack}
             backDisabled={busy}
-            title={lane.title || 'Pair an offline signer'}
-        />
+            title={lane.title || 'Pair an Offline Signer'}        />
     );
     const step = pairingStep(stage, Boolean(existingWalletId), Boolean(initialMode));
 
@@ -554,7 +557,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                             )}
                             <div className={styles.pairingCode} dir="ltr">
                                 <span className={styles.pairingCodeCopy}>
-                                    <CopyButton value={localCode} label="Copy pairing code" iconOnly />
+                                    <CopyButton value={localCode} label="Copy Pairing Code" iconOnly />
                                 </span>
                                 {localCode}
                             </div>

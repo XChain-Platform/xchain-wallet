@@ -11,8 +11,26 @@
 import { t } from '../../i18n/index.js';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AddressField, AddressText, Button, ChainBadge, Checkbox, CopyButton, FeeSelector, FormNotice, FormPage, FormSection, Icon, InfoTip, Input, ListPage, NetworkField, PageHeader, RadioGroup, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, CopyButton, FormNotice, FormPage, Icon, InfoTip, Input, ListPage, PageHeader, RadioGroup, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+// Cross Chain Order renders through the shared Give/Get standard (Quick and
+// Full views of one state), with Receive at beside the get side. The give
+// network sits in From; the get token decides the get network.
+import {
+    GiveGetQuick,
+    OwnershipToggle,
+    QuickAddressRow,
+    RateLine,
+    useGiveGetView,
+} from '../components/giveGet/index.js';
+// The Wallet Form Standard frame (From, Cross-Chain Order, Ownership, Order Terms, Network fee, action).
+import { FeeSection, FormAction, FormFrame, FormSection, FromSection, joinSummary } from '../components/formStandard/index.js';
+import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
+// The "Use typed name" option Create order's Asset picker offers, so
+// a ^ID reference (or a ticker the list does not hold) can be the Get token.
+import { TypedNameContext, TypedNameListPage } from './CreateOrderForm.jsx';
+import { formatLocalDateTime } from '../utils/dateTime.js';
 import { registry as registryLib } from '@xchain-wallet/core';
+import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/crossChainOrder.js';
 import '../../i18n/locales/en/crossChainSwap.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -31,16 +49,16 @@ import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
 import { useTickBalance } from '../hooks/useTickBalance.js';
-import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
-import { FeesCard } from '../components/FeesCard.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { MessagingContext } from '../MessagingContext.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
-import { compareDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+// divideDecimalStrings feeds the rate line Swap also shows.
+import { compareDecimalStrings, divideDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { addressValidationError } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
+import { orderGiveParts } from '../utils/confirmSummaryParts.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { MAX_MEMO_LENGTH, memoCharacterError, memoLengthError } from '../utils/memoLimit.js';
@@ -159,6 +177,19 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
     const [password, setPassword] = useState('');
     const [givePickerOpen, setGivePickerOpen] = useState(false);
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
+    // The Quick card's get-token chip and Receive at book open these
+    // pages; the Full view keeps the typed Get token and Receive at fields.
+    const [getPickerOpen, setGetPickerOpen] = useState(false);
+    const [receivePickerOpen, setReceivePickerOpen] = useState(false);
+    // The Quick | Full view and the section open state live here, above every
+    // early return, so a picker page or the confirm screen never resets them.
+    // Only the Cross-Chain Order section starts open; the last view is remembered.
+    const giveGetView = useGiveGetView('crossChainOrder', {
+        sections: { from: false, order: true, ownership: false, options: false, fee: false },
+    });
+    // What the Get token picker's search box holds, for its
+    // "Use typed name" option (a ^ID reference or an unlisted ticker).
+    const [getTypedQuery, setGetTypedQuery] = useState('');
 
     const giveBalance = useTickBalance({
         messaging,
@@ -181,15 +212,22 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
     const givePickerMessaging = useMemo(() => {
         const sourceAddress = fromAddress?.address;
         if (!giveChainId || !sourceAddress) return messaging;
+        // The give picker lists every network (the picked asset sets
+        // the give network); on the current give network it still lists only
+        // what the From address holds, since that address escrows the give side.
         return new Proxy(messaging, {
             get(target, property, receiver) {
                 if (property === 'getAddressesByChain') {
-                    return async () => ({ [giveChainId]: [fromAddress] });
+                    return async (...args) => {
+                        const all = await target.getAddressesByChain(...args);
+                        return { ...(all || {}), [giveChainId]: [fromAddress] };
+                    };
                 }
                 if (property === 'getWalletBalances') {
                     return async (...args) => {
                         const balances = await target.getWalletBalances(...args);
                         return {
+                            ...(balances || {}),
                             [giveChainId]: (balances?.[giveChainId] || [])
                                 .filter((entry) => entry?.address === sourceAddress),
                         };
@@ -434,11 +472,24 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
         }
     }
 
+    // Open, in place, the standard section that holds a refused field.
+    function revealRefusal() {
+        const { setSectionOpen } = giveGetView;
+        if (!giveChainId || !fromAddress) setSectionOpen('from', true);
+        setSectionOpen('order', true);
+        const m = memo.trim();
+        const unix = expMode === 'custom' ? localInputToUnix(expInput.trim()) : null;
+        const expBad = expMode === 'custom' && (!unix || unix <= Math.floor(Date.now() / 1000));
+        if (expBad || m.includes('|') || m.includes(';') || memoLengthError(m) || memoCharacterError(m)) {
+            setSectionOpen('options', true);
+        }
+    }
+
     function handleReview(event) {
         event.preventDefault();
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        if (feeStop) { setFormError(feeStop.formError); return; }
-        if (!guardBeforeSign()) return;
+        if (feeStop) { setFormError(feeStop.formError); giveGetView.setSectionOpen('fee', true); return; }
+        if (!guardBeforeSign()) { revealRefusal(); return; }
         setFormError(null);
         if (singleEncode) { void openConfirmModal(); return; }
         setStage('review');
@@ -525,7 +576,10 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
         <PageHeader
             onBack={handleBack}
             backDisabled={stage === 'submitting'}
-            title={stage === 'review' || stage === 'submitting' ? 'Review order' : 'Cross-chain order'}
+            title={stage === 'review' || stage === 'submitting' ? 'Review Order' : 'Cross Chain Order'}
+            /* No My orders button on the form: the standard allows one action,
+               and My orders has its own page and nav entry. The broadcast panel
+               still links to it. */
         />
     );
     const wrap = (children) => (
@@ -564,12 +618,12 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                     <>
                         <p className={styles.successLabel}>{t('crossChainSwap.success.giveTxLabel')}</p>
                         <code className={styles.txid}>{txid}</code>
-                        <CopyButton value={txid} label="Copy transaction ID" />
+                        <CopyButton value={txid} label="Copy Transaction ID" />
                     </>
                 ) : <p className={styles.hint}>Broadcast complete.</p>}
                 <p className={styles.hint}>{t('crossChainOrder.success.hint', { tick: giveTick.trim().toUpperCase() })}</p>
                 <div className={styles.actions}>
-                    {onManageOrders ? <Button variant="secondary" icon={<Icon.MarketIcon />} onClick={onManageOrders}>My orders</Button> : null}
+                    {onManageOrders ? <Button variant="secondary" icon={<Icon.MarketIcon />} onClick={onManageOrders}>My Orders</Button> : null}
                     <Button variant="primary" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button>
                 </div>
             </ListPage>,
@@ -580,6 +634,12 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
         return (
             <ActionConfirmScreen
                 confirmAction={confirmAction}
+                summary={{
+                    verb: t('components.confirmSummary.verbPlaceOrder'),
+                    ...orderGiveParts(actionParams, giveCoinTicker),
+                    chainId: giveChainId,
+                    address: fromAddress?.address,
+                }}
                 screenVariant={variant}
                 chainLabel={giveDescriptor?.displayName || giveChainId}
                 feeText={feeEstimate?.coinAmount ? `Network fee: ${feeEstimate.coinAmount} ${giveCoinTicker}`.trim() : undefined}
@@ -602,10 +662,18 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={giveChainId}
+                // A picked give token holds From to its network, as on the
+                // Network field; before that, an address on another chain
+                // moves the give Network there first. The get network stays
+                // apart from it, so its addresses cannot be picked here.
+                lockNetwork={Boolean(giveTick.trim())}
                 onChainChange={handleGiveChainChange}
+                unavailableReason={(_address, cid) => (cid && cid === getChainId
+                    ? 'This address is on the Get network. Give and Get use different networks.'
+                    : null)}
                 onPick={(a) => { setFromAddressId(a.id); setSourcePickerOpen(false); }}
                 onBack={() => setSourcePickerOpen(false)}
             />
@@ -618,17 +686,72 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                 <TokenPicker
                     purpose="send"
                     walletId={walletId}
-                    title="Select give token"
-                    chainIdFilter={giveChainId}
+                    title="Select Give Token"
                     kindFilter="tokens"
                     kindLocked
                     onSelect={(selection) => {
+                        // The picked token's chain becomes the give network.
+                        if (selection.chainId && selection.chainId !== giveChainId) handleGiveChainChange(selection.chainId);
                         setGiveTick(String(selection.tick || '').toUpperCase());
                         setGivePickerOpen(false);
                     }}
                     onBack={() => setGivePickerOpen(false)}
                 />
             </MessagingContext.Provider>
+        );
+    }
+
+    // The Get token picker page, in both views. Receive discovery lists tokens
+    // the wallet has never held; a ^123 reference or unlisted ticker is typed
+    // and taken with "Use typed name". A typed name names no chain, so it is
+    // used on the current get network.
+    if (getPickerOpen) {
+        const pickGetTick = (tick) => {
+            const nextTick = String(tick || '').trim().toUpperCase();
+            if (nextTick !== getTick) setGetAmount('');
+            setGetTick(nextTick);
+            setGetTypedQuery('');
+            setGetPickerOpen(false);
+        };
+        return (
+            <TypedNameContext.Provider value={{ query: getTypedQuery, onUse: pickGetTick }}>
+                <TokenPicker
+                    purpose="receive"
+                    walletId={walletId}
+                    title="Select Get Token"
+                    kindFilter="tokens"
+                    kindLocked
+                    tokenQuery={getTypedQuery}
+                    onTokenQueryChange={setGetTypedQuery}
+                    listPageComponent={TypedNameListPage}
+                    onSelect={(selection) => {
+                        // Lists every network; the picked token's chain becomes the get network.
+                        if (selection.chainId && selection.chainId !== getChainId) handleGetChainChange(selection.chainId);
+                        pickGetTick(selection.tick);
+                    }}
+                    onBack={() => { setGetTypedQuery(''); setGetPickerOpen(false); }}
+                />
+            </TypedNameContext.Provider>
+        );
+    }
+
+    // The Quick Receive at book picks one of the wallet's own
+    // addresses on the get chain; an outside address is typed in Full.
+    if (receivePickerOpen && getChainId) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="Receive At"
+                walletId={walletId}
+                chainId={getChainId}
+                lockNetwork
+                onPick={(a) => {
+                    setGetAddress(a.address);
+                    setReceivePickerOpen(false);
+                    setFormError(null);
+                }}
+                onBack={() => setReceivePickerOpen(false)}
+            />
         );
     }
 
@@ -652,9 +775,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                             loading={stage === 'submitting'}
                             disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                         >
-                            {isWatcherMode ? 'Create unsigned transaction'
-                                : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                    : 'Place order'}
+                            {isWatcherMode ? 'Create Unsigned Transaction' : 'Place Order'}
                         </Button>
                     </>
                 )}
@@ -699,207 +820,369 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
         );
     }
 
+    // The same digits-only rule for every amount input, Quick or Full.
+    const amountInput = (setter) => (rawValue) => {
+        const stripped = String(rawValue).replace(/,/g, '');
+        if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+        setter(stripped);
+    };
+
+    // The flip button swaps the whole side, network included. Receive at
+    // re-resolves on the new get chain, since an address on the old one is
+    // not valid there.
+    function flipSides() {
+        if (!getChainId || !giveChainId) return;
+        setGiveChainId(getChainId);
+        setGetChainId(giveChainId);
+        resetGetAddress();
+        setGiveTick(getTick);
+        setGetTick(giveTick);
+        setGiveAmount(getAmount);
+        setGetAmount(giveAmount);
+        setGiveOwnership(getOwnership);
+        setGetOwnership(giveOwnership);
+        setFormError(null);
+    }
+
+    const giveTickUpper = giveTick.trim().toUpperCase();
+    const getTickUpper = getTick.trim().toUpperCase();
+    const giveBalanceText = giveBalance != null && giveTick.trim()
+        ? `${formatWithThousands(giveBalance)} ${giveTickUpper} available`
+        : null;
+    const onGiveMax = giveBalance && Number(giveBalance) > 0
+        ? () => setGiveAmount(giveBalance)
+        : undefined;
+
+    // The rate line Swap shows, from the two amounts as typed.
+    const rate = !giveOwnership && !getOwnership && isPlainPositive(giveAmount) && isPlainPositive(getAmount)
+        ? divideDecimalStrings(getAmount, giveAmount, 8)
+        : null;
+    const displayedRate = rate === '0' ? '< 0.00000001' : rate;
+    const rateText = displayedRate && giveTickUpper && getTickUpper
+        ? `1 ${giveTickUpper} = ${displayedRate} ${getTickUpper}`
+        : 'Enter both amounts to see the rate';
+    const rateLine = <RateLine text={rateText} />;
+
+    // One line naming every non-default term, else "Default terms".
+    const termsParts = [];
+    if (expMode === 'custom') {
+        const unix = localInputToUnix(expInput.trim());
+        termsParts.push(expInput.trim() && unix ? `Expires ${formatLocalDateTime(unix)}` : 'Custom expiry');
+    }
+    if (memo.trim()) termsParts.push('Memo');
+    // The standard's summaries join their parts with ", ".
+    const termsSummary = termsParts.length ? joinSummary(...termsParts) : 'Default terms';
+
+    const sideSummary = (tick, amount, ownership) => {
+        const upper = tick.trim().toUpperCase();
+        if (!upper) return 'No token yet';
+        if (ownership) return `Ownership of ${upper}`;
+        return amount ? `${formatWithThousands(amount)} ${upper}` : upper;
+    };
+    // The main section's closed summary, "100 DANKEST for 5 COOL".
+    const orderSummary = giveTickUpper || getTickUpper
+        ? `${sideSummary(giveTick, giveAmount, giveOwnership)} for ${sideSummary(getTick, getAmount, getOwnership)}`
+        : 'No tokens yet';
+
+    const { view, setView, sections, setSectionOpen } = giveGetView;
+    // Spread onto a standard section; the open state lives in
+    // useGiveGetView above the early returns, so a picker page keeps it.
+    // `main` flags Order as the form's main section (data-form-main).
+    const bind = (id) => ({ open: Boolean(sections[id]), onOpenChange: (open) => setSectionOpen(id, open), main: id === 'order' });
+    // An XCHAIN protocol fee joins the Network fee row's summary; paid
+    // in the coin it is part of the open card's total instead.
+    const protocolFee = normalizeProtocolFee(protocolFeeQuote);
+    const protocolSummary = protocolFee.known && !protocolFee.free && !nativeFee.flag
+        ? `${protocolFee.amount} XCHAIN`
+        : undefined;
+
+    // The ownership switches, built once and shown in whichever view is open.
+    // Flipping one clears that side's amount.
+    const giveOwnershipToggle = (
+        <OwnershipToggle
+            label="Give this token's ownership (not a balance)"
+            help={`Offer control of the whole token instead of a quantity. Transfers the entire ownership of ${giveTickUpper || 'this token'} when the order fills.`}
+            checked={giveOwnership}
+            onChange={(checked) => {
+                if (checked !== giveOwnership) setGiveAmount('');
+                setGiveOwnership(checked);
+            }}
+        />
+    );
+    const getOwnershipToggle = (
+        <OwnershipToggle
+            label="Require the matcher to give that token's ownership"
+            help={`Ask for control of the whole token instead of a quantity. The matcher must currently own ${getTickUpper || 'this token'}; on a fill its ownership is released to your Receive at address.`}
+            checked={getOwnership}
+            onChange={(checked) => {
+                if (checked !== getOwnership) setGetAmount('');
+                setGetOwnership(checked);
+            }}
+        />
+    );
+
+    const giveNetworkHelp = 'The chain you pay from. The token you give, your From address and the network fee are on this chain.';
+    const getNetworkHelp = 'The chain you want to be paid on. The token you get and your Receive at address are on this chain.';
+    const fromHelp = 'The wallet address that offers the give token and signs this cross-chain order.';
+    const receiveHelp = 'Your address on the get network. Each fill is released to it.';
+    // Shown inside From, and only when the give network has no
+    // address at all, so the first default pick never opens From for good.
+    const noAddressNotice = !(addressesByChain[giveChainId] || []).length ? (
+        <FormNotice variant="error">No address on this network. Use Receive to generate one first.</FormNotice>
+    ) : null;
+
+    // The Quick body of the main section: the give and get cards
+    // (Receive at stays on the get card), the flip and the rate.
+    const quickOrder = (
+        <GiveGetQuick
+            give={{
+                label: 'You give',
+                help: 'The token you offer on the give network. It is held in escrow while the order rests on the book, and may fill in parts.',
+                // No network control; the card shows the asset's network read-only.
+                asset: giveTick && giveChainId ? { chainId: giveChainId, tick: giveTick } : null,
+                assetLabel: 'Give token',
+                onOpenAsset: () => setGivePickerOpen(true),
+                amount: giveAmount,
+                onAmountChange: amountInput(setGiveAmount),
+                amountLabel: 'Give amount',
+                ownership: giveOwnership,
+                ownershipHint: 'Moves as one piece when the order fills.',
+                balanceText: giveBalanceText,
+                onMax: onGiveMax || null,
+                maxDisabled: !giveBalance,
+                // No From row or no-address notice in the card; both
+                // live in From, the standard's first section.
+            }}
+            get={{
+                label: 'You get',
+                help: 'The token you want on the get network. Each fill is released to your Receive at address there.',
+                // No network control; the card shows the asset's network read-only.
+                asset: getTick && getChainId ? { chainId: getChainId, tick: getTick } : null,
+                assetLabel: 'Get token',
+                onOpenAsset: () => setGetPickerOpen(true),
+                amount: getAmount,
+                onAmountChange: amountInput(setGetAmount),
+                amountLabel: 'Get amount',
+                ownership: getOwnership,
+                ownershipHint: 'The matcher hands over this token name.',
+                address: (
+                    <QuickAddressRow
+                        label="Receive at"
+                        help={receiveHelp}
+                        address={getAddress.trim()}
+                        placeholder="Pick an address on the get network"
+                        onPick={getChainId ? () => setReceivePickerOpen(true) : undefined}
+                        pickLabel="Choose receiving address"
+                    />
+                ),
+            }}
+            onFlip={getChainId ? flipSides : undefined}
+            flipLabel="Flip give and get, networks included"
+            rate={rateLine}
+        />
+    );
+
+    // The Full body of the main section: every give and get field in
+    // one open section (Receive at with the get side), then the rate.
+    const fullOrder = (
+        <>
+                        <TokenFieldWithHelp
+                            id="cross-chain-order-give-token"
+                            label="Give token"
+                            help="The token ticker or token reference you are offering on the give network."
+                            value={giveTick && giveChainId ? { chainId: giveChainId, tick: giveTick } : null}
+                            onOpenPicker={() => setGivePickerOpen(true)}
+                        />
+                        {!giveOwnership ? (
+                            <AmountField
+                                label="Give amount"
+                                help="The amount of the give token placed in escrow. The order waits on the network's order book and may fill in parts. Use Cross-chain swap for one all-or-nothing fill."
+                                amount={giveAmount}
+                                tick={giveTick}
+                                divisibility={giveTokenInfo?.divisibility}
+                                onAmountFieldChange={amountInput(setGiveAmount)}
+                                onMax={onGiveMax}
+                                maxDisabled={!giveBalance}
+                                balanceText={giveBalanceText}
+                            />
+                        ) : null}
+                        {giveOwnershipToggle}
+                        {/* No Get network field; the picked get token sets it. */}
+                        <AddressField
+                            label="Receive at"
+                            help={receiveHelp}
+                            value={getAddress}
+                            onChange={(e) => setGetAddress(e.target.value)}
+                            /* The book icon opens the same own-address page as Quick. */
+                            icon={getChainId ? 'addresses' : undefined}
+                            onIconClick={getChainId ? () => setReceivePickerOpen(true) : undefined}
+                            iconLabel="Choose receiving address"
+                            placeholder="Automatically filled from your wallet on the get network"
+                            autoComplete="off"
+                            autoCorrect="off"
+                            spellCheck={false}
+                        />
+                        {/* Get token opens the same picker as Quick, so its
+                            chain decides the get network; a typed name named no chain. */}
+                        <TokenFieldWithHelp
+                            id="cross-chain-order-get-token"
+                            label="Get token"
+                            help="The token you want to receive. Its network is the get network."
+                            value={getTick && getChainId ? { chainId: getChainId, tick: getTick } : null}
+                            onOpenPicker={() => setGetPickerOpen(true)}
+                        />
+                        {!getOwnership ? (
+                            <AmountField
+                                label="Get amount"
+                                help="The total amount of the get token required in exchange for the offered asset."
+                                amount={getAmount}
+                                tick={getTick}
+                                divisibility={getTokenInfo?.divisibility}
+                                onAmountFieldChange={amountInput(setGetAmount)}
+                            />
+                        ) : null}
+                        {getOwnershipToggle}
+                        {rateLine}
+        </>
+    );
+
+    // The Order Terms fields, one optional section in both views, so Quick's
+    // terms row expands in place and never switches to Full. The section
+    // carries the Optional tag, so the fields carry none.
+    const termsFields = (
+        <>
+                        <RadioGroup
+                            legend="Expiration"
+                            help="Choose the default order window or set the exact date and time when this order stops accepting fills."
+                            name="xorder-exp"
+                            value={expMode}
+                            onChange={setExpMode}
+                            options={[
+                                { value: 'default', label: 'Default window' },
+                                { value: 'custom', label: 'Expire at a specific time' },
+                            ]}
+                        />
+                        {expMode === 'custom' ? (
+                            <Input
+                                label="Expires"
+                                type="datetime-local"
+                                help="The order is valid until this wall-clock time. Must be in the future."
+                                value={expInput}
+                                onChange={(e) => setExpInput(e.target.value)}
+                            />
+                        ) : null}
+                        <Input
+                            label="Memo"
+                            help="An optional note stored with this cross-chain order."
+                            maxLength={MAX_MEMO_LENGTH}
+                            value={memo}
+                            onChange={(e) => setMemo(e.target.value)}
+                            autoComplete="off"
+                        />
+        </>
+    );
+
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label="Create cross-chain order"
             onSubmit={handleReview}
-            sectioned
+            data-form-standard="cross-chain-order"
             // The review composes the terms as they stand at Review, so the
             // fields hold still until the confirm page opens.
             inert={confirmAction.composing ? '' : undefined}
             aria-busy={confirmAction.composing ? 'true' : undefined}
-            status={validationError || formError ? (
-                <>
-                    {validationError ? <StatusMessage variant="error">{validationError}</StatusMessage> : null}
-                    {formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
-                </>
-            ) : null}
-            actions={(
-                <>
-                    {onManageOrders ? <Button variant="secondary" icon={<Icon.MarketIcon />} onClick={onManageOrders}>My orders</Button> : null}
-                    <Button
-                        type="submit"
-                        variant="success"
-                        icon={<Icon.MarketIcon />}
-                        loading={confirmAction.composing}
-                        disabled={!fromAddress || confirmAction.composing
-                            || (!!validationError && !(missingRequiredTerm && validationError === receiveAddressError))}
-                    >
-                        Place order
-                    </Button>
-                </>
+            // The Quick | Full switch sits 8px above From.
+            view={view}
+            onViewChange={setView}
+            viewLabel="Cross Chain Order form view"
+            status={[
+                validationError ? <StatusMessage key="validation" variant="error">{validationError}</StatusMessage> : null,
+                formError ? <StatusMessage key="form" variant="error">{formError}</StatusMessage> : null,
+            ]}
+            from={(
+                <FromSection
+                    {...bind('from')}
+                    chainId={giveChainId}
+                    // The get network is never offered as the give network.
+                    chainIds={chainIds.filter((cid) => cid !== getChainId)}
+                    chainRegistry={chainRegistry}
+                    // The give network. A picked give token decides it;
+                    // before one is picked it can change here.
+                    lockNetwork={Boolean(giveTickUpper)}
+                    onNetworkChange={handleGiveChainChange}
+                    networkHelp={giveNetworkHelp}
+                    address={fromAddress?.address || null}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    addressHelp={fromHelp}
+                    missing={noAddressNotice}
+                />
+            )}
+            fee={(
+                <FeeSection
+                    {...bind('fee')}
+                    chainId={giveChainId}
+                    coinTicker={giveCoinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeCustomEstimate}
+                    protocolSummary={protocolSummary}
+                    fees={{
+                        quote: protocolFeeQuote,
+                        pending: protocolFeePending,
+                        nativeFeeProps: { ...nativeFee.toggleProps, coinTicker: giveCoinTicker },
+                    }}
+                />
+            )}
+            action={(
+                <FormAction
+                    icon={<Icon.MarketIcon />}
+                    loading={confirmAction.composing}
+                    disabled={!fromAddress || confirmAction.composing
+                        || (!!validationError && !(missingRequiredTerm && validationError === receiveAddressError))}
+                >
+                    Place Order
+                </FormAction>
             )}
         >
-            <FormSection title="You give">
-                    <NetworkField
-                        label="Give network"
-                        help="The chain you pay from. The token you give, your From address and the network fee are on this chain."
-                        value={giveChainId || ''}
-                        onChange={handleGiveChainChange}
-                        chainIds={chainIds}
-                        chainRegistry={chainRegistry}
-                    />
-                    {fromAddress ? (
-                        <AddressField
-                            label="From"
-                            icon="addresses"
-                            help="The wallet address that offers the give token and signs this cross-chain order."
-                            value={fromAddress.address}
-                            readOnly
-                            onChange={() => {}}
-                            onIconClick={() => setSourcePickerOpen(true)}
-                            iconLabel="Choose source address"
-                        />
-                    ) : (
-                        <FormNotice variant="error">No address on this network. Use Receive to generate one first.</FormNotice>
-                    )}
-                    <TokenFieldWithHelp
-                        id="cross-chain-order-give-token"
-                        label="Give token"
-                        help="The token ticker or token reference you are offering on the give network."
-                        value={giveTick && giveChainId ? { chainId: giveChainId, tick: giveTick } : null}
-                        onOpenPicker={() => setGivePickerOpen(true)}
-                    />
-                    <Checkbox
-                        label="Give this token's ownership (not a balance)"
-                        help="Offer control of the whole token instead of a quantity. It moves as one piece when the order fills."
-                        checked={giveOwnership}
-                        onChange={(e) => {
-                            if (e.target.checked !== giveOwnership) setGiveAmount('');
-                            setGiveOwnership(e.target.checked);
-                        }}
-                    />
-                    {!giveOwnership ? (
-                        <AmountField
-                            label="Give amount"
-                            help="The amount of the give token placed in escrow. The order waits on the network's order book and may fill in parts. Use Cross-chain swap for one all-or-nothing fill."
-                            amount={giveAmount}
-                            tick={giveTick}
-                            divisibility={giveTokenInfo?.divisibility}
-                            onAmountFieldChange={(rawValue) => {
-                                const stripped = String(rawValue).replace(/,/g, '');
-                                if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
-                                setGiveAmount(stripped);
-                            }}
-                            onMax={giveBalance && Number(giveBalance) > 0 ? () => setGiveAmount(giveBalance) : undefined}
-                            maxDisabled={!giveBalance}
-                            balanceText={giveBalance != null && giveTick.trim()
-                                ? `${formatWithThousands(giveBalance)} ${giveTick.trim().toUpperCase()} available`
-                                : null}
-                        />
-                    ) : null}
+            {/* The main section, open, holds both sides in either view. */}
+            <FormSection
+                id="order"
+                title="Cross Chain Order"
+                icon={Icon.MarketIcon}
+                {...bind('order')}
+                summary={orderSummary}
+            >
+                {view === 'quick' ? quickOrder : fullOrder}
             </FormSection>
-
-            <FormSection title="You get">
-                    <NetworkField
-                        label="Get network"
-                        help="The chain you want to be paid on. The token you get and your Receive at address are on this chain."
-                        value={getChainId || ''}
-                        onChange={handleGetChainChange}
-                        chainIds={chainIds}
-                        chainRegistry={chainRegistry}
-                    />
-                    <AddressField
-                        label="Receive at"
-                        help="Your address on the get network. Each fill is released to it."
-                        value={getAddress}
-                        onChange={(e) => setGetAddress(e.target.value)}
-                        placeholder="Automatically filled from your wallet on the get network"
-                        autoComplete="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                    />
-                    <Input
-                        label="Get token"
-                        help="The token ticker or token reference you want to receive on the get network."
-                        value={getTick}
-                        onChange={(e) => {
-                            const nextTick = e.target.value.toUpperCase();
-                            if (nextTick !== getTick) setGetAmount('');
-                            setGetTick(nextTick);
-                        }}
-                        autoComplete="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                    />
-                    <Checkbox
-                        label="Require the matcher to give that token's ownership"
-                        help="Ask for control of the whole token instead of a quantity. Only an address that currently owns it can match."
-                        checked={getOwnership}
-                        onChange={(e) => {
-                            if (e.target.checked !== getOwnership) setGetAmount('');
-                            setGetOwnership(e.target.checked);
-                        }}
-                    />
-                    {!getOwnership ? (
-                        <AmountField
-                            label="Get amount"
-                            help="The total amount of the get token required in exchange for the offered asset."
-                            amount={getAmount}
-                            tick={getTick}
-                            divisibility={getTokenInfo?.divisibility}
-                            onAmountFieldChange={(rawValue) => {
-                                const stripped = String(rawValue).replace(/,/g, '');
-                                if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
-                                setGetAmount(stripped);
-                            }}
-                        />
-                    ) : null}
+            {/* Quick keeps both ownership switches in one optional
+                section; Full shows each beside its side's fields. */}
+            {view === 'quick' ? (
+                <FormSection
+                    id="ownership"
+                    title="Ownership"
+                    icon={Icon.KeyIcon}
+                    optional
+                    {...bind('ownership')}
+                    summary={giveOwnership || getOwnership ? 'Ownership' : 'Amounts'}
+                >
+                    {giveOwnershipToggle}
+                    {getOwnershipToggle}
+                </FormSection>
+            ) : null}
+            <FormSection
+                id="options"
+                title="Order Terms"
+                icon={Icon.FilterIcon}
+                optional
+                {...bind('options')}
+                summary={termsSummary}
+            >
+                {termsFields}
             </FormSection>
-
-            <FormSection title="Order settings">
-                    <RadioGroup
-                        legend="Expiration"
-                        help="Choose the default order window or set the exact date and time when this order stops accepting fills."
-                        name="xorder-exp"
-                        value={expMode}
-                        onChange={setExpMode}
-                        options={[
-                            { value: 'default', label: 'Default window' },
-                            { value: 'custom', label: 'Expire at a specific time' },
-                        ]}
-                    />
-                    {expMode === 'custom' ? (
-                        <Input
-                            label="Expires"
-                            type="datetime-local"
-                            help="The order is valid until this wall-clock time. Must be in the future."
-                            value={expInput}
-                            onChange={(e) => setExpInput(e.target.value)}
-                        />
-                    ) : null}
-
-                    <Input
-                        label="Memo"
-                        help="An optional note stored with this cross-chain order."
-                        optional
-                        maxLength={MAX_MEMO_LENGTH}
-                        value={memo}
-                        onChange={(e) => setMemo(e.target.value)}
-                        autoComplete="off"
-                    />
-
-                    <FeesCard
-                        chainId={giveChainId}
-                        quote={protocolFeeQuote}
-                        pending={protocolFeePending}
-                        feeSelector={feeTiers ? (
-                        <FeeSelector
-                            chainId={giveChainId}
-                            label="Network fee"
-                            coinTicker={giveCoinTicker}
-                            tiers={feeTiers}
-                            value={feePick}
-                            onChange={setFeePick}
-                            customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                        />
-                        ) : null}
-                    >
-                        <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={giveCoinTicker} />
-                    </FeesCard>
-            </FormSection>
-        </FormPage>,
+        </FormFrame>,
     );
 }
 

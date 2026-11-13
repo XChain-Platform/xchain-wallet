@@ -37,6 +37,7 @@ import {
     PageHeader,
     Screen,
     SectionHeader,
+    Select,
     Skeleton,
     StatusMessage,
 } from '@xchain-wallet/core/ui';
@@ -44,6 +45,8 @@ import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core'
 import { countdownText } from '../../market/obligationStatus.js';
 import { formatLocalDateTime } from '../utils/dateTime.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+// The standard list filter, on the title line.
+import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import { MarketLifecycleTimeline } from '../components/MarketLifecycleTimeline.jsx';
@@ -61,6 +64,8 @@ import { explorerPageUrl } from '../utils/explorerLinks.js';
 import L from './ObligationsView.module.css';
 import F from './IssueTokenForm.module.css';
 import S from './MySwapsView.module.css';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -240,6 +245,10 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
     const [cancellingKeys, setCancellingKeys] = useState(/** @type {Set<string>} */ (new Set()));
     const [timelineKey, setTimelineKey] = useState(/** @type {string | null} */ (null));
     const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000));
+    // The title-line filter's state (search text, Status and Sort).
+    const [query, setQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState('all');
+    const [sortBy, setSortBy] = useState('newest');
     const loadRequestId = useRef(0);
 
     useEffect(() => {
@@ -314,25 +323,58 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
         return () => { loadRequestId.current += 1; };
     }, [load]);
 
+    // The title bar holds the filter and New swap (plus) icons; the page body
+    // is only the swap list.
+    const filterMenu = (
+        <ListFilterMenu
+            query={query}
+            onQueryChange={setQuery}
+            active={statusFilter !== 'all' || sortBy !== 'newest'}
+            label="Filter swaps"
+            searchPlaceholder="Search"
+            searchLabel="Search swaps"
+        >
+            <Select
+                label="Status"
+                size="md"
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+            >
+                <option value="all">All</option>
+                <option value="open">Open</option>
+                <option value="closed">Closed</option>
+            </Select>
+            <Select
+                label="Sort"
+                size="md"
+                value={sortBy}
+                onChange={(event) => setSortBy(event.target.value)}
+            >
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="expiring">Expiring soonest</option>
+            </Select>
+        </ListFilterMenu>
+    );
     const header = (
         <PageHeader
             onBack={onBack}
-            title="My swaps"
+            title="My Swaps"
+            trailing={(
+                <>
+                    {filterMenu}
+                    {onCreateSwap ? (
+                        <Button variant="secondary" icon={<Icon.PlusIcon />} aria-label="New swap" title="New swap" onClick={onCreateSwap}>
+                            {null}
+                        </Button>
+                    ) : null}
+                </>
+            )}
         />
     );
-    // The page header holds only the title and Back, so New swap sits in
-    // the content's actions row. An empty list offers it from its
-    // EmptyState instead, so the screen never shows it twice.
-    const wrap = (children, { notices, emptyOffersCreate = false } = {}) => (
+    const wrap = (children, { notices } = {}) => (
         <Screen variant={variant} header={header}>
-            <ListPage
-                notices={notices}
-                actions={onCreateSwap && !emptyOffersCreate ? (
-                    <Button variant="secondary" icon={<Icon.PlusIcon />} onClick={onCreateSwap}>
-                        New swap
-                    </Button>
-                ) : null}
-            >
+            <ListPage notices={notices}>
                 {children}
             </ListPage>
         </Screen>
@@ -371,7 +413,7 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
                 <StatusMessage
                     variant="error"
                     className={L.hint}
-                    recovery={{ label: 'Try again', onAction: load }}
+                    recovery={{ label: 'Try Again', onAction: load }}
                 >
                     {loadError}
                 </StatusMessage>
@@ -380,13 +422,11 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
     }
     if (items.length === 0) {
         return wrap(
+            // The empty state is text only; New swap is in the title bar.
             <EmptyState
                 title="No swaps yet"
                 body="Atomic token swaps you offer show up here across every pair."
-                actionLabel={onCreateSwap ? 'Create a swap' : undefined}
-                onAction={onCreateSwap}
             />,
-            { emptyOffersCreate: true },
         );
     }
 
@@ -394,8 +434,32 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
         const status = deriveStatus(it, it.cancelledKeys, nowSec);
         return status === 'open' && cancellingKeys.has(it.key) ? 'cancelling' : status;
     };
-    const openItems = items.filter((it) => statusOf(it) === 'open');
-    const closedItems = items.filter((it) => statusOf(it) !== 'open');
+    // The title-line filter narrows by search text and Status, and Sort
+    // orders each section.
+    const needle = query.trim().toLowerCase();
+    const matches = (it) => {
+        if (!needle) return true;
+        const row = it.row;
+        const hay = [
+            sideLabel(row.give_tick, row.give_coin, row.give_amount, row.give_ownership),
+            sideLabel(row.get_tick, row.get_coin, row.get_amount, row.get_ownership),
+            row.action_index, it.owner.address, it.chainId, CLOSED_LABELS[statusOf(it)] || statusOf(it),
+        ].join(' ').toLowerCase();
+        return hay.includes(needle);
+    };
+    const expiryOf = (it) => {
+        const n = Number(it.live?.expiration ?? it.row.expiration);
+        return Number.isFinite(n) && n > 0 ? n : Infinity;
+    };
+    const indexOf = (it) => Number(it.row.action_index || 0);
+    const sortItems = (list) => [...list].sort((a, b) => {
+        if (sortBy === 'oldest') return indexOf(a) - indexOf(b);
+        if (sortBy === 'expiring') return (expiryOf(a) - expiryOf(b)) || (indexOf(b) - indexOf(a));
+        return indexOf(b) - indexOf(a);
+    });
+    const shown = items.filter(matches);
+    const openItems = statusFilter === 'closed' ? [] : sortItems(shown.filter((it) => statusOf(it) === 'open'));
+    const closedItems = statusFilter === 'open' ? [] : sortItems(shown.filter((it) => statusOf(it) !== 'open'));
 
     const renderRow = (it) => {
         const status = statusOf(it);
@@ -446,7 +510,7 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
                         aria-expanded={timelineKey === it.key}
                         onClick={() => setTimelineKey(timelineKey === it.key ? null : it.key)}
                     >
-                        {timelineKey === it.key ? 'Hide timeline' : 'Timeline'}
+                        {timelineKey === it.key ? 'Hide Timeline' : 'Timeline'}
                     </Button>
                     {status === 'open' ? (
                         <>
@@ -469,15 +533,19 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
         );
     };
 
+    // A filter or search with no matches reads as one plain empty state.
+    if (openItems.length === 0 && closedItems.length === 0 && (needle || statusFilter !== 'all')) {
+        return wrap(<EmptyState title="No matching swaps" body="Change or clear the filter to see more." titleAs="p" />);
+    }
     return wrap(
         <>
-            {openItems.length > 0 ? (
+            {statusFilter !== 'closed' ? (openItems.length > 0 ? (
                 <section>
                     <SectionHeader title="Open" />
                     {/* Safari needs an explicit list role because this class removes list styling. */}
                     <ul className={L.list} role="list" aria-label="Open swaps">{openItems.map(renderRow)}</ul>
                 </section>
-            ) : <EmptyState title="No open swaps" body="Open atomic swaps appear here." titleAs="p" />}
+            ) : <EmptyState title="No open swaps" body="Open atomic swaps appear here." titleAs="p" />) : null}
             {closedItems.length > 0 ? (
                 <section>
                     <SectionHeader title="Closed" />
@@ -638,7 +706,7 @@ function SwapActionPanel({
         }
     }
 
-    const header = <PageHeader onBack={done ? onDone : onBack} title={isCancel ? 'Cancel swap' : 'Edit swap'} />;
+    const header = <PageHeader onBack={done ? onDone : onBack} title={isCancel ? 'Cancel Swap' : 'Edit Swap'} />;
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
             {children}
@@ -653,7 +721,7 @@ function SwapActionPanel({
                 chainId={chainId}
                 addresses={chainAddresses}
                 filterType="2"
-                title={listPickerFor === 'allow' ? 'Choose allow-list' : 'Choose block-list'}
+                title={listPickerFor === 'allow' ? 'Choose Allow-List' : 'Choose Block-List'}
                 onSelect={(r) => {
                     if (listPickerFor === 'allow') setAllowListIdx(r.actionIndex); else setBlockListIdx(r.actionIndex);
                     setListPickerFor(null);
@@ -668,6 +736,15 @@ function SwapActionPanel({
             <ActionConfirmScreen
                 {...lane.confirmProps}
                 confirmAction={withFormattedExpiration(lane.confirmProps.confirmAction)}
+                summary={{
+                    verb: isCancel
+                        ? t('components.confirmSummary.verbCancelSwap')
+                        : t('components.confirmSummary.verbEditSwap'),
+                    ...(row.give_tick ? { ticker: String(row.give_tick).toUpperCase() } : {}),
+                    chainId,
+                    direction: 'none',
+                    address: owner?.address,
+                }}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
                 signerReady={signerReady}
@@ -733,7 +810,7 @@ function SwapActionPanel({
             ) : null}
             actions={(
                 // The panel's one forward action, green with its icon whether it
-                // updates or cancels the swap (U63).
+                // updates or cancels the swap.
                 <Button
                     type="submit"
                     variant="success"
@@ -741,7 +818,7 @@ function SwapActionPanel({
                     loading={submitting || lane.composing}
                     disabled={submitting || lane.composing || !!validationError || (type === 'edit' && !editHasChange)}
                 >
-                    {lane.isWatcherMode ? 'Create unsigned transaction' : (isCancel ? 'Cancel swap' : 'Update swap')}
+                    {lane.isWatcherMode ? 'Create Unsigned Transaction' : (isCancel ? 'Cancel Swap' : 'Update Swap')}
                 </Button>
             )}
         >
@@ -786,16 +863,16 @@ function SwapActionPanel({
                     </p>
                     <div className={F.actions}>
                         <Button variant="secondary" size="sm" icon={<Icon.TokenListIcon />} onClick={() => setListPickerFor('allow')}>
-                            {allowListIdx === '0' ? 'Remove allow list' : (allowListIdx ? `Allow-list #${allowListIdx}` : 'Set allow-list')}
+                            {allowListIdx === '0' ? 'Remove Allow List' : (allowListIdx ? `Allow-List #${allowListIdx}` : 'Set Allow-List')}
                         </Button>
                         <Button variant="secondary" size="sm" icon={<Icon.TokenListIcon />} onClick={() => setListPickerFor('block')}>
-                            {blockListIdx === '0' ? 'Remove block list' : (blockListIdx ? `Block-list #${blockListIdx}` : 'Set block-list')}
+                            {blockListIdx === '0' ? 'Remove Block List' : (blockListIdx ? `Block-List #${blockListIdx}` : 'Set Block-List')}
                         </Button>
                         {canRemoveList && currentAllowList && allowListIdx !== '0' ? (
-                            <Button type="button" variant="secondary" size="sm" icon={<Icon.TrashIcon />} onClick={() => setAllowListIdx('0')}>Remove allow list</Button>
+                            <Button type="button" variant="secondary" size="sm" icon={<Icon.TrashIcon />} onClick={() => setAllowListIdx('0')}>Remove Allow List</Button>
                         ) : null}
                         {canRemoveList && currentBlockList && blockListIdx !== '0' ? (
-                            <Button type="button" variant="secondary" size="sm" icon={<Icon.TrashIcon />} onClick={() => setBlockListIdx('0')}>Remove block list</Button>
+                            <Button type="button" variant="secondary" size="sm" icon={<Icon.TrashIcon />} onClick={() => setBlockListIdx('0')}>Remove Block List</Button>
                         ) : null}
                     </div>
                     <p className={F.hint}>

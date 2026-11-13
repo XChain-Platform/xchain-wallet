@@ -9,13 +9,16 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+// The Wallet Form Standard frame (From, main section, Network fee, one action).
+import { FeeSection, FormAction, FormFrame, FormSection, FromSection, summaryAddress, useFormSections } from '../components/formStandard/index.js';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { titleCase } from '../utils/titleCase.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
@@ -39,6 +42,8 @@ import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/governance.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -49,48 +54,54 @@ const PROTOCOL_COIN_TICKER = {
 };
 
 /**
- * VOTE delegation form (v3): set or clear a standing delegation of a token's
- * voting weight to another address (liquid democracy, VOTE.md §13). One
- * component, two modes, mirroring DelegationActionForm's rotate/revoke split.
+ * VOTE delegation form (v3), one job per route (liquid democracy, VOTE.md
+ * §13). The mode is fixed by the route; the form never switches between them.
  *
- *   - `mode: 'delegate'`: hand your TICK voting weight to another holder. Only
- *     flows for polls where you did not vote directly and still hold the token
- *     at close (resolved at tally time); this just records the instruction.
- *   - `mode: 'clear'`: revoke any standing delegation for TICK (blank DELEGATE_TO).
+ *   - `mode: 'delegate'` (Delegate votes): hand your TICK voting weight to
+ *     another holder. Only flows for polls where you did not vote directly
+ *     and still hold the token at close (resolved at tally time); this just
+ *     records the instruction.
+ *   - `mode: 'clear'` (from a My delegations row): revoke the standing
+ *     delegation for TICK (blank DELEGATE_TO). The row fixes the address,
+ *     the token and the network, so they show read-only with the current
+ *     delegate.
  *
  * @param {object} props
  * @param {'delegate' | 'clear'} props.mode
  * @param {string} props.walletId
  * @param {string} props.chainId
  * @param {string} [props.presetTick]
+ * @param {{ tick: string, delegate: string, address: string }} [props.clear]  the My delegations row being cleared
  * @param {() => void} props.onBack
+ * @param {() => void} [props.onDone]   after a cleared delegation, back to the list
  */
 export function DelegateVoteForm(props) {
-    const { mode, walletId, chainId, presetTick } = props;
-    return <DelegateVoteFormState key={JSON.stringify([mode, walletId, chainId, presetTick])} {...props} />;
+    const { mode, walletId, chainId, presetTick, clear } = props;
+    return <DelegateVoteFormState key={JSON.stringify([mode, walletId, chainId, presetTick, clear?.tick, clear?.address])} {...props} />;
 }
 
-function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chainId: initialChainId, presetTick, onBack }) {
+function DelegateVoteFormState({ mode = 'delegate', walletId, chainId: initialChainId, presetTick, clear = null, onBack, onDone }) {
     // Seeded from the launching context; the Network field lets the user retarget.
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
     const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    // Delegate and clear share this component; the user can flip between them on
-    // the form stage (both are VOTE v3, clear = blank DELEGATE_TO).
-    const [mode, setMode] = useState(initialMode === 'clear' ? 'clear' : 'delegate');
-    const isClear = mode === 'clear';
+    // Clearing only happens from a My delegations row, which names the
+    // address, token and current delegate; without that row it is a delegate.
+    const isClear = mode === 'clear' && Boolean(clear?.tick && clear?.address);
     const verb = isClear ? 'Clear vote delegation' : 'Delegate votes';
-    // The main action names what it does, with its own icon (U63).
-    const submitLabel = isClear ? 'Clear delegation' : 'Delegate votes';
+    // Title Case button label for the same action as `verb`.
+    const actionLabel = isClear ? t('governance.action.clearDelegation') : t('governance.action.delegateVotes');
+    // The main action names what it does, with its own icon.
+    const submitLabel = isClear ? 'Clear Delegation' : 'Delegate Votes';
     const submitIcon = isClear ? <Icon.TrashIcon /> : <Icon.UsersIcon />;
 
     const [addressesByChain, setAddressesByChain] = useState(/** @type {Record<string, any[]> | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
 
-    const [tick, setTick] = useState(presetTick || '');
+    const [tick, setTick] = useState((isClear ? clear.tick : presetTick) || '');
     const [delegateTo, setDelegateTo] = useState('');
     const [memo, setMemo] = useState('');
     const [password, setPassword] = useState('');
@@ -105,6 +116,11 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const submitInFlightRef = useRef(false);
+    // The standard's open state, held above the early returns (the
+    // picker pages) so it survives them; only the main section starts open.
+    const formSections = useFormSections({ from: false, delegation: true, memo: false, fee: false });
+    // Counts review presses, so a section holding the error reopens on each.
+    const [validationAttempt, setValidationAttempt] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
@@ -118,6 +134,18 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
             .then(([byChain, active]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
+                // A clear signs from the row's own address (its delegator),
+                // never the active one.
+                if (isClear) {
+                    const own = (byChain?.[chainId] || []).find((a) => a.address === clear.address);
+                    if (!own) {
+                        setLoadError('This address is not in this wallet on this network.');
+                        return;
+                    }
+                    setFromAddressId(own.id);
+                    setLoadError(null);
+                    return;
+                }
                 const sourceId = preferredSourceId(byChain?.[chainId] || [], active?.[chainId]);
                 if (!sourceId) {
                     setLoadError('No address on this network. Use Receive to generate one first.');
@@ -262,6 +290,7 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
 
     function handleReview(event) {
         event.preventDefault();
+        setValidationAttempt((n) => n + 1); // Reopens the section holding the error.
         if (!fromAddress) { setFormError('No source address available.'); return; }
         if (!descriptor?.coin || !descriptor?.networkKind || !isValidAddressForChain(
             fromAddress.address, descriptor.coin, descriptor.networkKind,
@@ -355,7 +384,7 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
                 ? () => { setSubmitError(null); setStage('form'); }
                 : onBack}
             backDisabled={stage === 'submitting'}
-            title={stage === 'review' || stage === 'submitting' ? `Review ${verb.toLowerCase()}` : verb}
+            title={titleCase(stage === 'review' || stage === 'submitting' ? `Review ${verb.toLowerCase()}` : verb)}
         />
     );
     const wrap = (children) => <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>{children}</Screen>;
@@ -389,7 +418,7 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
                     <dt className={styles.detailsLabel}>Transaction ID</dt>
                     <dd className={styles.detailsValue}>{String(txid || 'n/a')}</dd>
                 </dl>
-                <div className={styles.actions}><Button variant="success" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button></div>
+                <div className={styles.actions}><Button variant="success" icon={<Icon.CheckIcon />} onClick={onDone || onBack}>Done</Button></div>
             </ListPage>,
         );
     }
@@ -408,11 +437,13 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
                         <Button
                             type="submit"
                             variant="primary"
-                            icon={isWatcherMode || isHwSource ? undefined : submitIcon}
+                            icon={isHwSource ? <Icon.SignIcon /> : submitIcon}
                             loading={stage === 'submitting'}
                             disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                         >
-                            {isWatcherMode ? `Create unsigned transaction: ${verb.toLowerCase()}` : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: ${verb.toLowerCase()}` : verb}
+                            {isWatcherMode
+                                ? t('governance.action.createUnsignedFor', { action: actionLabel })
+                                : actionLabel}
                         </Button>
                     </>
                 )}
@@ -465,9 +496,21 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
     // confirm page, rendered in place of the form (the overlay modal
     // didn't fit small/mobile viewports); form state stays intact behind it.
     if (actionConfirm.open) {
+        // The token whose votes move, and the address they go to.
+        const delegateVoteSummary = {
+            verb: isClear
+                ? t('components.confirmSummary.verbClearDelegation')
+                : t('components.confirmSummary.verbDelegateVotes'),
+            ...(voteParams.tick ? { ticker: voteParams.tick.toUpperCase() } : {}),
+            direction: 'none',
+            chainId,
+            address: fromAddress?.address,
+            ...(voteParams.delegateTo ? { recipient: voteParams.delegateTo } : {}),
+        };
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={delegateVoteSummary}
                 screenVariant={variant}
                 chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 feeText={feeEstimate?.coinAmount
@@ -492,7 +535,7 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={chainId}
                 onChainChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
@@ -507,7 +550,7 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
             <TokenPicker
                 purpose="send"
                 walletId={walletId}
-                title="Select token"
+                title="Select Token"
                 networkFilter={coinFromChainId(chainId)}
                 onSelect={(sel) => { setTick(String(sel.tick || '').toUpperCase()); setTokenPickerOpen(false); }}
                 onBack={() => setTokenPickerOpen(false)}
@@ -526,59 +569,97 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
         );
     }
 
+    // The section each form error belongs to. A fee stop opens Network
+    // fee, a source problem opens From, a memo problem opens Memo, everything
+    // else (token, delegate) the main one.
+    const feeStopNow = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+    const feeHasError = Boolean(formError && feeStopNow && formError === feeStopNow.formError);
+    const fromHasError = Boolean(formError && /source address/i.test(formError) && !/^Delegate-to/.test(formError));
+    const memoHasError = Boolean(formError && /^Memo/i.test(formError));
+    const delegationHasError = Boolean(formError && !feeHasError && !fromHasError && !memoHasError);
+    const sectionErrorKey = (hasError) => (hasError ? validationAttempt + 1 : 0);
+    const delegationSummary = [
+        tick.trim() ? tick.trim().toUpperCase() : null,
+        !isClear && delegateTo.trim() ? `to ${summaryAddress(delegateTo)}` : null,
+        isClear && clear.delegate ? `from ${summaryAddress(clear.delegate)}` : null,
+    ].filter(Boolean).join(' ') || 'No token yet';
+
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label={verb}
             onSubmit={handleReview}
             status={formError ? (
                 <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="primary"
+            action={(
+                <FormAction
                     icon={submitIcon}
                     loading={actionConfirm.composing}
                     disabled={actionConfirm.composing}
                 >
                     {submitLabel}
-                </Button>
+                </FormAction>
             )}
-        >
-            <NetworkField label="Network" help="The chain the delegation is recorded on. Your From address and the fee are on this network, and the governance token must live on it." value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]} chainRegistry={chainRegistry} />
-            {fromAddress ? (
-                <AddressField
-                    label="From"
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
-                    help="The address whose voting weight you delegate or take back. It sends this action and pays the network fee."
+            /* The standard order: From (Network and address), Delegation (token
+               and delegate), optional Memo, then the Network fee row. A preset
+               governance token decides the network, so it locks there. */
+            from={(
+                <FromSection
+                    {...formSections.bind('from')}
+                    chainId={chainId}
+                    chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]}
+                    chainRegistry={chainRegistry}
+                    onNetworkChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
+                    lockNetwork={Boolean(presetTick) || isClear}
+                    networkHelp="The chain the delegation is recorded on. Your From address and the fee are on this network, and the governance token must live on it."
+                    address={fromAddress?.address || null}
+                    // A clear is fixed to the delegation's own address: no picker.
+                    onOpenPicker={isClear ? undefined : () => setSourcePickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    addressHelp="The address whose voting weight you delegate or take back. It sends this action and pays the network fee."
+                    revealKey={sectionErrorKey(fromHasError)}
+                />
+            )}
+            fee={feeTiers ? (
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeCustomEstimate}
+                    revealKey={sectionErrorKey(feeHasError)}
                 />
             ) : null}
-
-            {/* The form opens with Network, then From (U60); the action choice follows as a field. */}
-            <RadioGroup
-                legend="Action"
-                name="delegateMode"
-                value={mode}
-                onChange={(value) => { setMode(value === 'clear' ? 'clear' : 'delegate'); setFormError(null); }}
-                help="Delegating lets another holder cast this address's weight on polls you do not vote on yourself. A direct vote still overrides it. Clearing the delegation stops your weight flowing to the delegate."
-                options={[
-                    { value: 'delegate', label: 'Delegate my votes' },
-                    { value: 'clear', label: 'Clear my delegation' },
-                ]}
-            />
-
+        >
+            <FormSection
+                id="delegation"
+                title="Delegation"
+                icon={Icon.UsersIcon}
+                {...formSections.bind('delegation')}
+                revealKey={sectionErrorKey(delegationHasError)}
+                summary={delegationSummary}
+            >
             <TokenField
                 label="Governance token"
                 help="The token whose voting weight you are delegating or clearing the delegation for."
                 value={tick && chainId ? { chainId, tick } : null}
                 onOpenPicker={() => setTokenPickerOpen(true)}
+                disabled={isClear}
             />
+
+            {/* Clearing shows the delegate being removed, read-only. */}
+            {isClear ? (
+                <AddressField
+                    label="Current delegate"
+                    help="The holder your weight in this token flows to today. Polls that close after the clear is recorded no longer count your weight through them."
+                    value={clear.delegate || ''}
+                    readOnly
+                    onChange={() => {}}
+                />
+            ) : null}
 
             {!isClear ? (
                 <AddressField
@@ -590,29 +671,28 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
                     onIconClick={() => setContactsPickerOpen(true)}
                 />
             ) : null}
+            </FormSection>
 
+            {/* Memo is its own optional section; inside it the field
+                drops its own Optional tag. */}
+            <FormSection
+                id="memo"
+                title="Memo"
+                icon={Icon.MessageIcon}
+                optional
+                {...formSections.bind('memo')}
+                revealKey={sectionErrorKey(memoHasError)}
+                summary={memo.trim() ? memo.trim() : 'None'}
+            >
             <Input
                 label="Memo"
-                optional
                 maxLength={MAX_MEMO_LENGTH}
                 help="A short public note stored with this delegation on chain. Anyone can read it."
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
                 autoComplete="off"
             />
-
-            {feeTiers ? (
-                <FeeSelector
-                    chainId={chainId}
-                    label="Network fee"
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
-            ) : null}
-
-        </FormPage>,
+            </FormSection>
+        </FormFrame>,
     );
 }

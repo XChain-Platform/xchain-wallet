@@ -11,8 +11,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { base58check, bech32 } from '@scure/base';
 import { sha256 } from '@noble/hashes/sha2';
-import { Screen, PageHeader, Button, EmptyState, FieldIconButton, Input, ListPage, ListRow, AnimatedQrFrames, MultisigBadge, QrScanner, StatusMessage, Textarea, Icon } from '@xchain-wallet/core/ui';
-import { flows as flowsLib, schemas, uri as uriLib } from '@xchain-wallet/core';
+import { Screen, PageHeader, AddressText, Button, ChainBadge, EmptyState, FieldIconButton, Input, ListPage, ListRow, AnimatedQrFrames, MultisigBadge, NetworkField, QrScanner, StatusMessage, Textarea, Icon } from '@xchain-wallet/core/ui';
+import { flows as flowsLib, registry as registryLib, schemas, uri as uriLib } from '@xchain-wallet/core';
+import { formatActivityTime } from '../utils/dateTime.js';
+import { MultisigSendForm } from './MultisigSendForm.jsx';
+import listStyles from './MultisigSigningSession.module.css';
 import { formatNativeBaseUnits, tickerForCoin } from '../../registry/coinTicker.js';
 import { ADDRESS_PARAMS } from '../utils/addressValidation.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -26,6 +29,76 @@ import styles from './IssueTokenForm.module.css';
 
 const { progressSummary } = schemas.multisigSigningSession;
 const base58 = base58check(sha256);
+const chainRegistry = registryLib.defaultRegistry();
+
+// Multisig spends are Bitcoin-only today, as in Create multisig.
+const MULTISIG_COIN = 'bitcoin';
+
+// The list groups sessions by what the user has to do next.
+const READY_STATUSES = new Set(['ready-to-finalize', 'finalized']);
+const WAITING_STATUSES = new Set(['collecting-nonces', 'collecting-sigs']);
+
+// The plain multisig type word, as MultisigBadge shows it.
+const SCHEME_WORDS = {
+    'p2sh-multisig': 'Classic',
+    'p2wsh-multisig': 'SegWit',
+    'taproot-musig2': 'Taproot',
+};
+
+// A row leads with the action ("Send 0.25 BTC"); the destination the
+// summary also names is on the session page, not in the list.
+function sessionTitle(session) {
+    const summary = String(session?.actionSummary || '').trim();
+    if (!summary) return t('multisig.sessions.untitled');
+    const cut = summary.indexOf(' to ');
+    return cut > 0 ? summary.slice(0, cut) : summary;
+}
+
+function sessionSubtitle(session) {
+    const parts = [t('multisig.sessions.type', {
+        threshold: session.threshold,
+        count: [...new Set(session.cosignerPubkeys || [])].length,
+        scheme: SCHEME_WORDS[session.scheme] || '',
+    }).trim()];
+    if (session.scheme === 'taproot-musig2' && WAITING_STATUSES.has(session.status)) {
+        parts.push(t('multisig.sessions.step', { step: session.status === 'collecting-nonces' ? 1 : 2 }));
+    }
+    // Open sessions count their age from the start, finished ones from the end.
+    const age = formatActivityTime(WAITING_STATUSES.has(session.status) || READY_STATUSES.has(session.status)
+        ? session.createdAt
+        : (session.updatedAt || session.createdAt));
+    if (age) parts.push(age);
+    return parts.join(' · ');
+}
+
+// The one coloured status on the right of each row.
+function sessionPill(session) {
+    if (session.status === 'finalized') return { text: t('multisig.sessions.pillSendNow'), tone: listStyles.pillReady };
+    if (session.status === 'ready-to-finalize') return { text: t('multisig.sessions.pillReady'), tone: listStyles.pillReady };
+    if (session.status === 'broadcast') return { text: t('multisig.sessions.pillSent'), tone: listStyles.pillSent };
+    if (session.status === 'cancelled') return { text: t('multisig.sessions.pillCancelled'), tone: listStyles.pillCancelled };
+    return {
+        text: t('multisig.sessions.pillSigned', {
+            current: contributionProgress(session).contributed.length,
+            threshold: session.threshold,
+        }),
+        tone: listStyles.pillWaiting,
+    };
+}
+
+/**
+ * Split sessions into the three list groups, newest first in each.
+ * @param {any[]} sessions
+ */
+export function groupSigningSessions(sessions) {
+    const newestFirst = [...(sessions || [])].sort((a, b) => String(b.updatedAt || b.createdAt || '')
+        .localeCompare(String(a.updatedAt || a.createdAt || '')));
+    return {
+        ready: newestFirst.filter((s) => READY_STATUSES.has(s.status)),
+        waiting: newestFirst.filter((s) => WAITING_STATUSES.has(s.status)),
+        done: newestFirst.filter((s) => !READY_STATUSES.has(s.status) && !WAITING_STATUSES.has(s.status)),
+    };
+}
 const {
     encodeXcwChunks,
     createXcwCollector,
@@ -242,6 +315,14 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
     const [signResult, setSignResult] = useState(/** @type {string | null} */ (null));
     const [linkInput, setLinkInput] = useState(initialLink || '');
     const [linkStatus, setLinkStatus] = useState(/** @type {string | null} */ (null));
+    // The list's folded Done group, the dashed Open-a-signing-link row (open
+    // at once when the page was handed a link), and its scanner.
+    const [doneOpen, setDoneOpen] = useState(false);
+    const [linkOpen, setLinkOpen] = useState(Boolean(initialLink));
+    const [linkScannerOpen, setLinkScannerOpen] = useState(false);
+    // Start a signing session from this page: pick the multisig, then the
+    // action, then the action's own form.
+    const [starting, setStarting] = useState(false);
     const listRequestId = useRef(0);
     const activeRequestId = useRef(0);
     const mountedRef = useRef(false);
@@ -682,13 +763,24 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
     // when the last failure recorded a re-runnable action (retryRef);
     // undefined otherwise so StatusMessage renders the diagnostic alone.
     const errorRecovery = retryRef.current
-        ? { label: 'Try again', onAction: retryRef.current }
+        ? { label: 'Try Again', onAction: retryRef.current }
         : undefined;
 
+    // The list's title line carries the plus that starts a new session.
     const header = (
         <PageHeader
             onBack={() => (activeId ? setActiveId(null) : onBack())}
-            title={activeId ? 'Multisig signing' : 'Multisig signing sessions'}
+            title={activeId ? 'Multisig Signing' : 'Multisig Signing Sessions'}
+            trailing={activeId ? null : (
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<Icon.PlusIcon />}
+                    onClick={() => setStarting(true)}
+                    aria-label={t('multisig.start.button')}
+                    title={t('multisig.start.button')}
+                />
+            )}
         />
     );
 
@@ -708,74 +800,142 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
         );
     }
 
+    if (starting && !activeId) {
+        return (
+            <SessionStartFlow
+                walletId={walletId}
+                variant={variant}
+                onCancel={() => setStarting(false)}
+                onSessionStarted={(sessionId) => {
+                    setStarting(false);
+                    if (sessionId) setActiveId(sessionId);
+                    void refreshList();
+                }}
+            />
+        );
+    }
+
     if (!sessions) {
         return wrap(<p className={styles.hint}>Loading sessions…</p>);
     }
 
     if (!activeId) {
+        const groups = groupSigningSessions(sessions);
+        const sessionRow = (s) => {
+            const pill = sessionPill(s);
+            const descriptor = chainRegistry.get(s.chainId);
+            return (
+                <li key={s.id}>
+                    <ListRow
+                        onClick={() => setActiveId(s.id)}
+                        chevron
+                        leading={descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : null}
+                        title={sessionTitle(s)}
+                        subtitle={sessionSubtitle(s)}
+                        trailing={<span className={`${listStyles.pill} ${pill.tone}`}>{pill.text}</span>}
+                    />
+                </li>
+            );
+        };
+        const group = (id, title, rows) => (rows.length > 0 ? (
+            <li className={listStyles.group}>
+                <h2 id={`signing-group-${id}`} className={listStyles.groupHeading}>
+                    <span>{title}</span>
+                    <span className={listStyles.groupCount}>{rows.length}</span>
+                </h2>
+                <ul className={listStyles.rows} aria-labelledby={`signing-group-${id}`}>
+                    {rows.map(sessionRow)}
+                </ul>
+            </li>
+        ) : null);
         return wrap(
             <>
-                <section className={styles.signingLinkBlock} aria-labelledby="open-signing-link-title">
-                    <p id="open-signing-link-title" className={styles.successTitle}>
-                        {t('multisig.signingLink.openTitle')}
-                    </p>
-                    <Input
-                        label={t('multisig.signingLink.openLabel')}
-                        help={t('multisig.signingLink.openHint')}
-                        value={linkInput}
-                        onChange={(event) => setLinkInput(event.target.value)}
-                        autoComplete="off"
-                    />
-                    <div className={styles.actions}>
-                        <Button
-                            variant="primary"
-                            onClick={() => importSigningLink(linkInput)}
-                            loading={busy}
-                            disabled={linkInput.trim().length === 0}
-                        >
-                            {t('multisig.signingLink.open')}
-                        </Button>
-                    </div>
-                    {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
-                </section>
                 {sessions.length === 0 && !error ? (
-                <EmptyState
-                    title="No signing sessions"
-                    body="Multisig spending sessions for this wallet appear here."
-                />
+                    <EmptyState
+                        title={t('multisig.sessions.emptyTitle')}
+                        body={t('multisig.sessions.emptyBody')}
+                    />
                 ) : (
-                    <ul
-                        aria-label="Multisig sessions"
-                        style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-2)' }}
-                    >
-                        {sessions.map((s) => {
-                            const summary = signingProgressSummary(s);
-                            return (
-                                <li key={s.id}>
-                                    <ListRow
-                                        onClick={() => setActiveId(s.id)}
-                                        chevron
-                                        title={(
-                                            <MultisigBadge
-                                                threshold={s.threshold}
-                                                cosignerCount={s.cosignerPubkeys.length}
-                                                scheme={s.scheme}
-                                                size="sm"
-                                            />
-                                        )}
-                                        subtitle={(
-                                            <>
-                                                {summary?.label}: {summary?.current} of {summary?.threshold}
-                                                {' · '}{statusLabel(s.status)}
-                                                {s.actionSummary ? <><br />{s.actionSummary}</> : null}
-                                            </>
-                                        )}
-                                    />
-                                </li>
-                            );
-                        })}
+                    <ul aria-label={t('multisig.sessions.listLabel')} className={`${listStyles.rows} ${listStyles.groups}`}>
+                        {group('ready', t('multisig.sessions.groupReady'), groups.ready)}
+                        {group('waiting', t('multisig.sessions.groupWaiting'), groups.waiting)}
+                        {groups.done.length > 0 ? (
+                            <li className={listStyles.group}>
+                                <button
+                                    type="button"
+                                    className={listStyles.doneToggle}
+                                    aria-expanded={doneOpen}
+                                    onClick={() => setDoneOpen((open) => !open)}
+                                >
+                                    <span>{t('multisig.sessions.groupDone', { count: groups.done.length })}</span>
+                                    <span className={`${listStyles.doneChevron} ${doneOpen ? listStyles.doneChevronOpen : ''}`} aria-hidden="true">
+                                        <Icon.ForwardIcon />
+                                    </span>
+                                </button>
+                                {doneOpen ? (
+                                    <ul className={listStyles.rows} aria-label={t('multisig.sessions.groupDone', { count: groups.done.length })}>
+                                        {groups.done.map(sessionRow)}
+                                    </ul>
+                                ) : null}
+                            </li>
+                        ) : null}
                     </ul>
                 )}
+                {linkOpen ? (
+                    <section className={styles.signingLinkBlock} aria-labelledby="open-signing-link-title">
+                        <p id="open-signing-link-title" className={styles.successTitle}>
+                            {t('multisig.signingLink.openTitle')}
+                        </p>
+                        {linkScannerOpen ? (
+                            <QrScanner
+                                onFrame={(text) => {
+                                    setLinkScannerOpen(false);
+                                    setLinkInput(text);
+                                    void importSigningLink(text);
+                                }}
+                                alt={t('multisig.signingLink.scan')}
+                            />
+                        ) : null}
+                        <Input
+                            label={t('multisig.signingLink.openLabel')}
+                            help={t('multisig.signingLink.openHint')}
+                            value={linkInput}
+                            onChange={(event) => setLinkInput(event.target.value)}
+                            autoComplete="off"
+                            fieldAction={(
+                                <FieldIconButton
+                                    icon={<Icon.ScanIcon />}
+                                    label={linkScannerOpen ? t('multisig.signingLink.stopScan') : t('multisig.signingLink.scan')}
+                                    aria-pressed={linkScannerOpen}
+                                    onClick={() => setLinkScannerOpen((v) => !v)}
+                                    disabled={busy}
+                                />
+                            )}
+                        />
+                        <div className={styles.actions}>
+                            <Button
+                                variant="primary"
+                                icon={<Icon.LinkIcon />}
+                                onClick={() => importSigningLink(linkInput)}
+                                loading={busy}
+                                disabled={linkInput.trim().length === 0}
+                            >
+                                {t('multisig.signingLink.open')}
+                            </Button>
+                        </div>
+                    </section>
+                ) : (
+                    <button
+                        type="button"
+                        className={listStyles.openLinkRow}
+                        onClick={() => setLinkOpen(true)}
+                    >
+                        <Icon.LinkIcon />
+                        <span>{t('multisig.signingLink.openTitle')}</span>
+                        <span className={listStyles.openLinkHint}>{t('multisig.signingLink.openRowHint')}</span>
+                    </button>
+                )}
+                {error ? <StatusMessage variant="error" recovery={errorRecovery}>{error}</StatusMessage> : null}
             </>,
         );
     }
@@ -822,7 +982,7 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
                                 {t('common.copy')}
                             </Button>
                             {typeof globalThis.navigator?.share === 'function' ? (
-                                <Button variant="secondary" onClick={handleShareLink}>
+                                <Button variant="secondary" onClick={handleShareLink} icon={<Icon.ExternalLinkIcon />}>
                                     {t('multisig.signingLink.share')}
                                 </Button>
                             ) : null}
@@ -865,7 +1025,7 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
                     </details>
                 ) : null}
                 <div className={styles.actions}>
-                    <Button variant="ghost" onClick={() => setView('tracker')}>Back to tracker</Button>
+                    <Button variant="ghost" onClick={() => setView('tracker')}>Back to Tracker</Button>
                 </div>
             </>,
         );
@@ -880,7 +1040,7 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
                         add a local signature. Scan the request with a signer wallet instead.
                     </StatusMessage>
                     <div className={styles.actions}>
-                        <Button variant="ghost" onClick={() => setView('tracker')}>Back to tracker</Button>
+                        <Button variant="ghost" onClick={() => setView('tracker')}>Back to Tracker</Button>
                     </div>
                 </>,
             );
@@ -911,10 +1071,10 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
                 {error ? <StatusMessage variant="error" recovery={errorRecovery}>{error}</StatusMessage> : null}
                 <div className={styles.actions}>
                     <Button variant="ghost" onClick={() => { setSignPassword(''); setView('tracker'); }}>
-                        Back to tracker
+                        Back to Tracker
                     </Button>
                     <Button variant="primary" onClick={handleSignLocally} loading={busy} disabled={signPassword.length === 0}>
-                        Sign with my key
+                        Sign With My Key
                     </Button>
                 </div>
             </>,
@@ -960,13 +1120,13 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
                 {error ? <StatusMessage variant="error" recovery={errorRecovery}>{error}</StatusMessage> : null}
                 <div className={styles.actions}>
                     <Button variant="ghost" onClick={() => { setScannerOpen(false); setView('tracker'); }} disabled={busy}>
-                        Back to tracker
+                        Back to Tracker
                     </Button>
                     <Button variant="danger" onClick={resetCollector} disabled={busy}>
-                        Clear received reply
+                        Clear Received Reply
                     </Button>
                     <Button variant="primary" onClick={handlePasteSubmit} loading={busy} disabled={pasteInput.trim().length === 0}>
-                        Submit chunks
+                        Submit Chunks
                     </Button>
                 </div>
             </>,
@@ -1090,23 +1250,23 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
             {error ? <StatusMessage variant="error" recovery={errorRecovery}>{error}</StatusMessage> : null}
             <div className={styles.actions}>
                 <Button variant="ghost" onClick={() => setActiveId(null)} disabled={busy}>
-                    Back to sessions
+                    Back to Sessions
                 </Button>
                 {!isTerminal && Array.isArray(exportFrames) ? (
                     <Button variant="ghost" onClick={() => setView('export-qr')} disabled={busy}>
-                        {active.status === 'finalized' ? 'Export signed transaction' : 'Export signing request'}
+                        {active.status === 'finalized' ? 'Export Signed Transaction' : 'Export Signing Request'}
                     </Button>
                 ) : null}
                 {canCollect ? (
                     <Button variant="ghost" onClick={() => { resetCollector(); setView('paste-inbox'); }} disabled={busy}>
                         {isMusig2 && active.status === 'collecting-sigs'
-                            ? 'Import partial signature'
-                            : 'Import cosigner reply'}
+                            ? 'Import Partial Signature'
+                            : 'Import Cosigner Reply'}
                     </Button>
                 ) : null}
                 {canCollect && !isWatcherMode ? (
                     <Button variant="ghost" onClick={() => { setSignResult(null); setView('sign-locally'); }} disabled={busy}>
-                        Sign with my key
+                        Sign With My Key
                     </Button>
                 ) : null}
                 {!isTerminal && isWatcherMode ? (
@@ -1116,22 +1276,22 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
                 ) : null}
                 {!isTerminal ? (
                     <Button variant="danger" onClick={handleCancel} loading={canceling} disabled={busy}>
-                        Cancel session
+                        Cancel Session
                     </Button>
                 ) : null}
                 {canAggregate && !isTerminal ? (
-                    <Button variant="primary" onClick={handleAggregate} loading={busy && !canceling} disabled={busy}>
-                        Combine replies
+                    <Button variant="primary" onClick={handleAggregate} loading={busy && !canceling} disabled={busy} icon={<Icon.MultisigIcon />}>
+                        Combine Replies
                     </Button>
                 ) : null}
                 {active.status === 'ready-to-finalize' ? (
-                    <Button variant="primary" onClick={handleFinalize} loading={busy && !canceling} disabled={busy || !canFinalize}>
-                        Finalize transaction
+                    <Button variant="primary" onClick={handleFinalize} loading={busy && !canceling} disabled={busy || !canFinalize} icon={<Icon.CheckIcon />}>
+                        Finalize Transaction
                     </Button>
                 ) : null}
                 {active.status === 'finalized' ? (
                     <Button variant="primary" onClick={handleBroadcast} loading={busy && !canceling} disabled={busy}>
-                        Broadcast transaction
+                        Broadcast Transaction
                     </Button>
                 ) : null}
             </div>
@@ -1142,4 +1302,148 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
 function shortPk(pk) {
     if (typeof pk !== 'string' || pk.length < 12) return pk;
     return `${pk.slice(0, 8)}…${pk.slice(-4)}`;
+}
+
+/**
+ * Start a signing session from the sessions page: pick the multisig (on a
+ * Bitcoin network), then the action, which opens that action's normal form
+ * with the multisig as From. The form creates the session on confirm, the
+ * same path Send takes when its source is a multisig. Send is the only
+ * multisig action today.
+ *
+ * @param {object} props
+ * @param {string} props.walletId
+ * @param {string} props.variant
+ * @param {() => void} props.onCancel
+ * @param {(sessionId?: string) => void} props.onSessionStarted
+ */
+function SessionStartFlow({ walletId, variant, onCancel, onSessionStarted }) {
+    const { messaging } = useMessaging();
+    const btcChainIds = useMemo(() => chainRegistry.byCoin(MULTISIG_COIN).map((d) => d.id), []);
+    const [chainIds, setChainIds] = useState(/** @type {string[] | null} */ (null));
+    const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
+    const [multisigs, setMultisigs] = useState(/** @type {any[] | null} */ (null));
+    const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [picked, setPicked] = useState(/** @type {any | null} */ (null));
+    const [step, setStep] = useState(/** @type {'multisig' | 'action' | 'send'} */ ('multisig'));
+
+    // Offer the Bitcoin networks the wallet holds addresses on, as Create
+    // multisig does; every Bitcoin network when the address read fails.
+    useEffect(() => {
+        let cancelled = false;
+        Promise.resolve(typeof messaging.getAddressesByChain === 'function'
+            ? messaging.getAddressesByChain(walletId)
+            : null)
+            .catch(() => null)
+            .then((byChain) => {
+                if (cancelled) return;
+                const held = byChain
+                    ? btcChainIds.filter((cid) => Array.isArray(byChain[cid]) && byChain[cid].length > 0)
+                    : [];
+                const offered = held.length > 0 ? held : btcChainIds;
+                setChainIds(offered);
+                setChainId((current) => current || offered[0] || null);
+            });
+        return () => { cancelled = true; };
+    }, [walletId, messaging, btcChainIds]);
+
+    useEffect(() => {
+        if (!chainId) return undefined;
+        let cancelled = false;
+        setMultisigs(null);
+        setLoadError(null);
+        Promise.resolve(messaging.listMultisigReceiveAddresses({ walletId, chainId }))
+            .then((rows) => { if (!cancelled) setMultisigs(Array.isArray(rows) ? rows : []); })
+            .catch((err) => {
+                if (cancelled) return;
+                setMultisigs([]);
+                setLoadError(userFacingMessage(err, t('multisig.start.loadFailed')));
+            });
+        return () => { cancelled = true; };
+    }, [walletId, chainId, messaging]);
+
+    const screenFor = (title, onBack, children) => (
+        <Screen variant={variant} header={<PageHeader onBack={onBack} title={title} />}>
+            <ListPage>{children}</ListPage>
+        </Screen>
+    );
+
+    if (step === 'send' && picked) {
+        return (
+            <MultisigSendForm
+                walletId={walletId}
+                chainId={chainId}
+                multisigConfigId={picked.multisigConfigId}
+                multisig={picked}
+                onSessionStarted={onSessionStarted}
+                onChangeSource={() => setStep('multisig')}
+                wrapPage={(page) => (
+                    <Screen variant={variant} header={<PageHeader onBack={() => setStep('action')} title={t('multisig.start.sendTitle')} />}>
+                        {page}
+                    </Screen>
+                )}
+            />
+        );
+    }
+
+    if (step === 'action' && picked) {
+        return screenFor(t('multisig.start.pickActionTitle'), () => setStep('multisig'), (
+            <ul className={listStyles.rows} aria-label={t('multisig.start.actionsLabel')}>
+                <li>
+                    <ListRow
+                        onClick={() => setStep('send')}
+                        chevron
+                        leading={<Icon.SendIcon />}
+                        title={t('multisig.start.actionSend')}
+                        subtitle={t('multisig.start.actionSendHint')}
+                    />
+                </li>
+            </ul>
+        ));
+    }
+
+    return screenFor(t('multisig.start.pickMultisigTitle'), onCancel, (
+        <>
+            {chainIds && chainIds.length > 1 ? (
+                <NetworkField
+                    value={chainId}
+                    onChange={(value) => { setPicked(null); setChainId(value); }}
+                    chainIds={chainIds}
+                    chainRegistry={chainRegistry}
+                    help={t('multisig.start.networkHelp')}
+                />
+            ) : null}
+            {loadError ? <StatusMessage variant="error">{loadError}</StatusMessage> : null}
+            {!multisigs ? (
+                <p className={styles.hint}>{t('multisig.start.loading')}</p>
+            ) : multisigs.length === 0 && !loadError ? (
+                <EmptyState
+                    title={t('multisig.start.emptyTitle')}
+                    body={t('multisig.start.emptyBody')}
+                />
+            ) : (
+                <ul className={listStyles.rows} aria-label={t('multisig.start.listLabel')}>
+                    {multisigs.map((entry) => {
+                        const spendable = Boolean(entry.address) && !entry.overCeiling;
+                        return (
+                            <li key={entry.multisigConfigId}>
+                                <ListRow
+                                    onClick={spendable ? () => { setPicked(entry); setStep('action'); } : undefined}
+                                    chevron={spendable}
+                                    title={t('multisig.sessions.type', {
+                                        threshold: entry.threshold,
+                                        count: entry.cosignerCount,
+                                        scheme: SCHEME_WORDS[entry.scheme] || '',
+                                    }).trim()}
+                                    subtitle={spendable
+                                        ? <AddressText address={entry.address} />
+                                        : t('multisig.start.noAddress')}
+                                />
+                            </li>
+                        );
+                    })}
+                </ul>
+            )}
+        </>
+    ));
 }

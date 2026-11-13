@@ -9,12 +9,21 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
-import { Button, FormPage, Screen, Icon, Input, PageHeader } from '@xchain-wallet/core/ui';
+import { Screen, Icon, Input, PageHeader } from '@xchain-wallet/core/ui';
+// The Wallet Form Standard frame (no From and no fee: this form never signs or sends).
+import { FormAction, FormFrame, FormSection, useFormSections } from '../components/formStandard/index.js';
 import { t } from '../../i18n/index.js';
 import { NAME_MAX_LENGTH, hasVisibleText, nameKey, nameLength } from '../../util/display_name.js';
+import '../../i18n/locales/en/renameAccount.js';
 import '../../i18n/locales/en/renameWallet.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { readActiveWallet, writeActiveWallet } from '../utils/activeWalletMemory.js';
+// The wallet tile, for its colour and image.
+import { IdentityAvatar } from '../components/WalletIdentity.jsx';
+import { readWalletTile, writeWalletTile, tileRadius, walletTileText } from '../utils/walletTile.js';
+
+// Colour, shape and image controls are shared with Edit Account.
+import { TileLookFields, TILE_COLOURS } from '../components/TileLookFields.jsx';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 
 /**
@@ -37,6 +46,10 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
     const variant = screenVariantFor(shell);
 
     const [name, setName] = useState(initialName);
+    const savedTile = readWalletTile(walletId);
+    const [tileColour, setTileColour] = useState(savedTile.colour || TILE_COLOURS[0]);
+    const [tileImage, setTileImage] = useState(/** @type {string | null} */ (savedTile.image || null));
+    const [tileShape, setTileShape] = useState(savedTile.shape === 'rounded' ? 'rounded' : 'circle');
     const [wallets, setWallets] = useState(/** @type {any[] | null} */ (null));
     const [walletLoadError, setWalletLoadError] = useState(/** @type {string | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
@@ -47,7 +60,8 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
     const edited = useRef(false);
     const firstRead = useRef(true);
     const nameRef = useRef(/** @type {HTMLInputElement | null} */ (null));
-    const formRef = useRef(/** @type {HTMLFormElement | null} */ (null));
+    // The main section starts open, the Look section closed.
+    const formSections = useFormSections({ wallet: true, look: false });
 
     useEffect(() => {
         setTimeout(() => {
@@ -107,6 +121,8 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
         }
         setError(null);
         setBusy(true);
+        // The tile's look is saved with the name.
+        writeWalletTile(walletId, { colour: tileColour, image: tileImage, shape: tileShape });
         try {
             const result = await messaging.renameWallet({ walletId, name: trimmed });
             const renamed = result?.wallet || result;
@@ -127,46 +143,69 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
         <PageHeader
             onBack={onBack}
             backDisabled={busy}
-            title={t('renameWallet.title')}
+            title={t('renameWallet.formTitle')}
         />
     );
 
     const formBody = (
-        <FormPage
-            ref={formRef}
-            label={t('renameWallet.title')}
+        /* FormFrame with the main section open and Look closed. */
+        <FormFrame
+            label={t('renameWallet.formTitle')}
             onSubmit={handleSubmit}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="primary"
+            action={(
+                <FormAction
+                    icon={<Icon.SaveIcon />}
                     disabled={saveDisabled}
                     aria-busy={busy ? 'true' : undefined}
-                    icon={<Icon.PencilIcon />}
                 >
-                    {t('renameWallet.title')}
-                </Button>
+                    {t('renameAccount.saveChanges')}
+                </FormAction>
             )}
         >
-            <Input
-                ref={nameRef}
-                label={t('renameWallet.name')}
-                help={t('renameWallet.nameHelp')}
-                maxLength={NAME_MAX_LENGTH}
-                value={name}
-                onChange={(e) => {
-                    const nextName = e.target.value;
-                    edited.current = true;
-                    setName(nextName);
-                    setError(nameLength(nextName.trim()) > NAME_MAX_LENGTH
-                        ? `Wallet name must be ${NAME_MAX_LENGTH} characters or fewer.`
-                        : null);
-                }}
-                autoComplete="off"
-                disabled={busy || Boolean(walletLoadError)}
-                error={error || walletLoadError || undefined}
-            />
-        </FormPage>
+            <FormSection
+                id="wallet"
+                title={t('settings.thisWallet.wallet')}
+                icon={Icon.WalletIcon}
+                {...formSections.bind('wallet')}
+                revealKey={error || walletLoadError ? 1 : 0}
+                summary={name.trim() || t('renameAccount.unnamed')}
+            >
+                {/* The wallet tile, centred at the top of the section. */}
+                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <span style={{ '--xc-avatar-shape': tileRadius(tileShape), display: 'inline-flex' }}>
+                        <IdentityAvatar name={name || 'Wallet'} text={walletTileText(name)} seed={walletId} context="hero" variant="asset" tone={tileColour} src={tileImage} />
+                    </span>
+                </div>
+                <Input
+                    ref={nameRef}
+                    label={t('renameWallet.name')}
+                    help={t('renameWallet.nameHelp')}
+                    maxLength={NAME_MAX_LENGTH}
+                    value={name}
+                    onChange={(e) => {
+                        const nextName = e.target.value;
+                        edited.current = true;
+                        setName(nextName);
+                        setError(nameLength(nextName.trim()) > NAME_MAX_LENGTH
+                            ? `Wallet name must be ${NAME_MAX_LENGTH} characters or fewer.`
+                            : null);
+                    }}
+                    autoComplete="off"
+                    disabled={busy || Boolean(walletLoadError)}
+                    error={error || walletLoadError || undefined}
+                />
+            </FormSection>
+            <FormSection
+                id="look"
+                title={t('renameAccount.look')}
+                icon={Icon.PaletteIcon}
+                optional
+                {...formSections.bind('look')}
+                summary={`${tileShape === 'rounded' ? 'Rounded' : 'Circle'}${tileImage ? ', image' : ', colour'}`}
+            >
+                <TileLookFields kind="wallet"colour={tileColour} onColour={setTileColour} shape={tileShape} onShape={setTileShape} image={tileImage} onImage={setTileImage} />
+            </FormSection>
+        </FormFrame>
     );
 
     return (

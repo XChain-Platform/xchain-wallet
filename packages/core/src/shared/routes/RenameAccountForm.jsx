@@ -9,13 +9,19 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
-import { Button, FormPage, Screen, Icon, Input, PageHeader } from '@xchain-wallet/core/ui';
+import { Screen, Icon, Input, PageHeader } from '@xchain-wallet/core/ui';
+// The Wallet Form Standard frame (no From and no fee: this form never signs or sends).
+import { FormAction, FormFrame, FormSection, useFormSections } from '../components/formStandard/index.js';
 import { t } from '../../i18n/index.js';
-import '../../i18n/locales/en/accountPicker.js';
 import '../../i18n/locales/en/renameAccount.js';
+import '../../i18n/locales/en/settings.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { NAME_MAX_LENGTH, hasVisibleText, nameKey, nameLength } from '../../util/display_name.js';
+// Edit Account carries the same tile look controls as Edit Wallet.
+import { IdentityAvatar } from '../components/WalletIdentity.jsx';
+import { TileLookFields, TILE_COLOURS } from '../components/TileLookFields.jsx';
+import { readWalletTile, writeWalletTile, tileRadius, walletTileText } from '../utils/walletTile.js';
 
 /**
  * RenameAccountForm: change an Account record's `name` field. No
@@ -39,6 +45,10 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
     const variant = screenVariantFor(shell);
 
     const [name, setName] = useState(initialName);
+    const savedTile = readWalletTile(accountId);
+    const [tileColour, setTileColour] = useState(savedTile.colour || TILE_COLOURS[0]);
+    const [tileImage, setTileImage] = useState(/** @type {string | null} */ (savedTile.image || null));
+    const [tileShape, setTileShape] = useState(savedTile.shape === 'rounded' ? 'rounded' : 'circle');
     const [accounts, setAccounts] = useState(/** @type {any[]} */ ([]));
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [busy, setBusy] = useState(false);
@@ -48,7 +58,8 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
     const edited = useRef(false);
     const firstRead = useRef(true);
     const nameRef = useRef(/** @type {HTMLInputElement | null} */ (null));
-    const formRef = useRef(/** @type {HTMLFormElement | null} */ (null));
+    // The main section starts open, the Look section closed.
+    const formSections = useFormSections({ account: true, look: false });
 
     useEffect(() => {
         setTimeout(() => {
@@ -96,6 +107,8 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
         }
         setError(null);
         setBusy(true);
+        // The tile's look is saved with the name.
+        writeWalletTile(accountId, { colour: tileColour, image: tileImage, shape: tileShape });
         try {
             const result = await messaging.renameAccount({ accountId, name: trimmed });
             onRenamed(result?.account || result);
@@ -112,40 +125,65 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
         <PageHeader
             onBack={onBack}
             backDisabled={busy}
-            title={t('accountPicker.renameTitle')}
+            title={t('renameAccount.title')}
         />
     );
 
     const formBody = (
-        <FormPage
-            ref={formRef}
-            label={t('accountPicker.renameTitle')}
+        /* FormFrame with the main section open and Look closed. */
+        <FormFrame
+            label={t('renameAccount.title')}
             onSubmit={handleSubmit}
-            actions={(
-                <Button type="submit" variant="primary" disabled={saveDisabled} icon={<Icon.PencilIcon />}>
-                    {t('accountPicker.renameTitle')}
-                </Button>
+            action={(
+                <FormAction icon={<Icon.SaveIcon />} disabled={saveDisabled}>
+                    {t('renameAccount.saveChanges')}
+                </FormAction>
             )}
         >
-            <Input
-                ref={nameRef}
-                label={t('renameAccount.name')}
-                help={t('renameAccount.nameHelp')}
-                maxLength={NAME_MAX_LENGTH}
-                value={name}
-                onChange={(e) => {
-                    const nextName = e.target.value;
-                    edited.current = true;
-                    setName(nextName);
-                    setError(nameLength(nextName.trim()) > NAME_MAX_LENGTH
-                        ? `Account name must be ${NAME_MAX_LENGTH} characters or fewer.`
-                        : null);
-                }}
-                autoComplete="off"
-                disabled={busy}
-                error={error || undefined}
-            />
-        </FormPage>
+            <FormSection
+                id="account"
+                title={t('settings.thisWallet.account')}
+                icon={Icon.UserIcon}
+                {...formSections.bind('account')}
+                revealKey={error ? 1 : 0}
+                summary={name.trim() || t('renameAccount.unnamed')}
+            >
+                {/* The account tile, centred at the top of the section. */}
+                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <span style={{ '--xc-avatar-shape': tileRadius(tileShape), display: 'inline-flex' }}>
+                        <IdentityAvatar name={name || 'Account'} text={walletTileText(name)} seed={accountId} context="hero" variant="asset" tone={tileColour} src={tileImage} />
+                    </span>
+                </div>
+                <Input
+                    ref={nameRef}
+                    label={t('renameAccount.name')}
+                    help={t('renameAccount.nameHelp')}
+                    maxLength={NAME_MAX_LENGTH}
+                    value={name}
+                    onChange={(e) => {
+                        const nextName = e.target.value;
+                        edited.current = true;
+                        setName(nextName);
+                        setError(nameLength(nextName.trim()) > NAME_MAX_LENGTH
+                            ? `Account name must be ${NAME_MAX_LENGTH} characters or fewer.`
+                            : null);
+                    }}
+                    autoComplete="off"
+                    disabled={busy}
+                    error={error || undefined}
+                />
+            </FormSection>
+            <FormSection
+                id="look"
+                title={t('renameAccount.look')}
+                icon={Icon.PaletteIcon}
+                optional
+                {...formSections.bind('look')}
+                summary={`${tileShape === 'rounded' ? 'Rounded' : 'Circle'}${tileImage ? ', image' : ', colour'}`}
+            >
+                <TileLookFields kind="account" colour={tileColour} onColour={setTileColour} shape={tileShape} onShape={setTileShape} image={tileImage} onImage={setTileImage} />
+            </FormSection>
+        </FormFrame>
     );
 
     return (

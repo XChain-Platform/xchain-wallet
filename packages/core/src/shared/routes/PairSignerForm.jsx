@@ -27,12 +27,14 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { safeHttpUrl } from '../utils/externalUrl.js';
 import { isWebHidSupported, detectBrowserFamilyForWebHidHint } from '../utils/webhidSupport.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+// The label-and-save step uses the Wallet Form Standard frame.
+import { FormAction, FormFrame, FormSection, useFormSections } from '../components/formStandard/index.js';
 import styles from './PairSignerForm.module.css';
 
 const { checkFirmware } = signersLib;
 
 /**
- * Pair hardware signer (§17.6 / §18.3).
+ * Pair hardware wallet (§17.6 / §18.3).
  *
  * Four-stage flow:
  *
@@ -89,6 +91,9 @@ export function PairSignerForm({
     const [pairedSigners, setPairedSigners] = useState(/** @type {any[]} */ ([]));
     const [unpairingId, setUnpairingId] = useState(/** @type {string | null} */ (null));
     const [notice, setNotice] = useState(/** @type {string | null} */ (null));
+    // The confirm step's one section starts open. Pairing never
+    // sends or signs, so the form has no From section and no fee.
+    const formSections = useFormSections({ signer: true });
     const unpairedIds = useRef(new Set());
     const locallyPairedRecords = useRef(new Map());
     const pairingAttempt = useRef(0);
@@ -245,7 +250,11 @@ export function PairSignerForm({
         <PageHeader
             onBack={handleCancel}
             backDisabled={stage === 'saving'}
-            title="Pair hardware signer"
+            // "hardware wallet" is the common name; the step count rides on
+            // the title line and stays marked as the current step for
+            // assistive tech.
+            title="Pair Hardware Wallet"
+            subtitle={<span aria-current="step">{`Step ${pairStepFor(stage)} of 4`}</span>}
             trailing={onOpenInTab && (stage === 'vendor' || stage === 'error') ? (
                 <Button
                     variant="ghost"
@@ -266,14 +275,17 @@ export function PairSignerForm({
 
     if (stage === 'vendor' || stage === 'error') {
         return wrap(
+            // The device list is the card; wide screens draw no form
+            // card around it, so there is no card inside a card.
             <FormPage
-                label="Choose hardware signer"
+                cardless
+                label="Choose hardware wallet"
                 status={error ? (
                     <StatusMessage
                         variant="error"
                         recovery={
                             vendor && !/WebHID|not supported|not available/i.test(error)
-                                ? { label: 'Try again', onAction: () => handlePickVendor(vendor) }
+                                ? { label: 'Try Again', onAction: () => handlePickVendor(vendor) }
                                 : undefined
                         }
                     >
@@ -311,6 +323,8 @@ export function PairSignerForm({
                                     {pairTrezor ? 'Connect via Trezor Connect popup.' : 'Not available in this context.'}
                                 </span>
                             </span>
+                            {/* The Back-sized chevron every tappable list row carries. */}
+                            <span className={styles.vendorChevron} aria-hidden="true"><Icon.ForwardIcon /></span>
                         </Button>
                     </li>
                     <li>
@@ -342,6 +356,8 @@ export function PairSignerForm({
                                         : 'Connect via WebHID. Chrome, Edge, or Brave on desktop.'}
                                 </span>
                             </span>
+                            {/* The Back-sized chevron every tappable list row carries. */}
+                            <span className={styles.vendorChevron} aria-hidden="true"><Icon.ForwardIcon /></span>
                         </Button>
                     </li>
                 </ul>
@@ -352,7 +368,7 @@ export function PairSignerForm({
     if (stage === 'pairing') {
         return wrap(
             <FormPage
-                label="Pair hardware signer"
+                label="Pair hardware wallet"
                 actions={(
                     <Button variant="ghost" icon={<Icon.XIcon />} onClick={handleCancel}>
                         Cancel
@@ -375,7 +391,7 @@ export function PairSignerForm({
     if (stage === 'done' && savedRecord) {
         return wrap(
             <FormPage
-                label="Paired hardware signer"
+                label="Paired hardware wallet"
                 status={error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
                 actions={(
                     <div className={styles.actions}>
@@ -392,7 +408,7 @@ export function PairSignerForm({
                             icon={<Icon.CheckIcon />}
                             onClick={onPaired || onBack}
                         >
-                            Finish pairing
+                            Finish Pairing
                         </Button>
                     </div>
                 )}
@@ -424,39 +440,38 @@ export function PairSignerForm({
         })
         : null;
 
+    // The standard frame. One open Signer section holds the device facts and
+    // the Label; the firmware verdict and any error share the status slot
+    // above the one action. Cancel is the header Back (handleCancel).
+    const signerSummary = label.trim() || verdict?.displayName || pairingInfo?.model || labelFor(pairingInfo?.vendor);
     return wrap(
-        <FormPage
-            label="Confirm hardware signer"
+        <FormFrame
+            label="Confirm hardware wallet"
             onSubmit={handleSave}
             status={[
                 error ? <StatusMessage variant="error">{error}</StatusMessage> : null,
                 verdict ? <FirmwareBanner key="firmware" verdict={verdict} vendor={pairingInfo?.vendor} /> : null,
             ]}
-            actions={(
-                <>
-                    <Button
-                        variant="ghost"
-                        icon={<Icon.XIcon />}
-                        onClick={handleCancel}
-                        disabled={stage === 'saving'}
-                    >
-                        Cancel
-                    </Button>
-                    <Button
-                        type="submit"
-                        variant="success"
-                        icon={verdict?.status === 'unsupported'
-                            ? <Icon.ExternalLinkIcon />
-                            : <Icon.UsbIcon />}
-                        loading={stage === 'saving'}
-                        disabled={verdict?.status === 'unsupported'}
-                    >
-                        {verdict?.status === 'unsupported' ? 'Update firmware first' : 'Pair signer'}
-                    </Button>
-                </>
+            action={(
+                <FormAction
+                    icon={verdict?.status === 'unsupported'
+                        ? <Icon.ExternalLinkIcon />
+                        : <Icon.UsbIcon />}
+                    loading={stage === 'saving'}
+                    disabled={verdict?.status === 'unsupported'}
+                >
+                    {verdict?.status === 'unsupported' ? 'Update Firmware First' : 'Pair Signer'}
+                </FormAction>
             )}
         >
             <StepIndicator current={3} />
+            <FormSection
+                id="signer"
+                title="Signer"
+                icon={Icon.UsbIcon}
+                {...formSections.bind('signer')}
+                summary={signerSummary}
+            >
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Vendor</dt>
                 <dd className={styles.detailsValue}>{labelFor(pairingInfo?.vendor)}</dd>
@@ -481,16 +496,22 @@ export function PairSignerForm({
                 autoComplete="off"
                 maxLength={40}
             />
-        </FormPage>,
+            </FormSection>
+        </FormFrame>,
     );
 }
 
-function StepIndicator({ current }) {
-    return (
-        <p aria-current="step" className={styles.stepIndicator}>
-            Step {current} of 4
-        </p>
-    );
+// The step count lives in the page header (pairStepFor), so this renders nothing.
+function StepIndicator() {
+    return null;
+}
+
+// vendor/error = 1 choose device, pairing = 2, label and save = 3, done = 4.
+function pairStepFor(stage) {
+    if (stage === 'vendor' || stage === 'error') return 1;
+    if (stage === 'pairing') return 2;
+    if (stage === 'done') return 4;
+    return 3;
 }
 
 function isPairingCancellation(err) {

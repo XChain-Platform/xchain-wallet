@@ -1,0 +1,131 @@
+/* Signing sessions list: sessions grouped by what the user has to do next
+   (Ready to send, Waiting on cosigners, then Done folded away), with the
+   open-a-signing-link row at the bottom. */
+
+.group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.groupHeading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.groupCount {
+    font-variant-numeric: tabular-nums;
+}
+
+.rows {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+/* The outer list of groups spaces the groups apart. */
+.groups {
+    gap: var(--xc-space-4);
+}
+
+.pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px var(--xc-space-2);
+    border-radius: var(--xc-radius-pill);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.pillWaiting {
+    background: var(--xc-warning-bg);
+    color: var(--xc-warning-text);
+}
+
+.pillReady {
+    background: var(--xc-info-bg);
+    color: var(--xc-info-text);
+}
+
+.pillSent {
+    background: var(--xc-success-bg);
+    color: var(--xc-success);
+}
+
+.pillCancelled {
+    background: var(--xc-surface-raised);
+    color: var(--xc-text-muted);
+}
+
+/* The Done group folds behind a disclosure row. */
+.doneToggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: var(--xc-space-3);
+    border: var(--xc-card-border);
+    border-radius: var(--xc-card-radius);
+    background: var(--xc-card-bg);
+    color: var(--xc-text);
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+}
+
+.doneChevron {
+    display: inline-flex;
+    transition: transform 0.15s ease;
+}
+
+.doneChevronOpen {
+    transform: rotate(90deg);
+}
+
+/* Open a signing link: an accent-outlined row, so it reads as a secondary
+   entry point rather than one of the sessions. */
+.openLinkRow {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    width: 100%;
+    padding: var(--xc-space-3);
+    border: 1px dashed var(--xc-accent-primary);
+    border-radius: var(--xc-card-radius);
+    background: transparent;
+    color: var(--xc-accent-text);
+    font: inherit;
+    font-weight: 600;
+    text-align: start;
+    cursor: pointer;
+}
+
+.openLinkRow svg {
+    width: 1rem;
+    height: 1rem;
+}
+
+.openLinkHint {
+    margin-inline-start: auto;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 400;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .doneChevron {
+        transition: none;
+    }
+}

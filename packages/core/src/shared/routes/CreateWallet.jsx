@@ -16,7 +16,9 @@ import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { crypto as cryptoLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { MnemonicGrid } from '../components/MnemonicGrid.jsx';
+import { WalletModeField } from '../components/WalletModeField.jsx';
 import { AdsNotice } from '../components/AdsNotice.jsx';
+import { WarningCard, WarningLine } from '../components/WarningCard.jsx';
 import { pickQuizPositions } from '../utils/pickQuizPositions.js';
 import { nextPaint } from '../utils/nextPaint.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
@@ -105,6 +107,8 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
     const [confirm, setConfirm] = useState('');
     // §15.1: 12-word default, 24-word opt-in. 12 words = 128-bit entropy, 24 = 256-bit.
     const [wordCount, setWordCount] = useState(/** @type {12 | 24} */ (12));
+    // §20: the new wallet's mode, chosen once here; Normal by default.
+    const [walletMode, setWalletMode] = useState(/** @type {'full' | 'watcher' | 'signer'} */ ('full'));
     // §15.6: optional 25th-word BIP39 passphrase. Empty string means "not used".
     const [showPassphrase, setShowPassphrase] = useState(false);
     const [bip39Passphrase, setBip39Passphrase] = useState('');
@@ -355,7 +359,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
                 if (typeof messaging.addImportedWallet !== 'function') {
                     throw new Error('messaging.addImportedWallet is not available in this shell.');
                 }
-                const r = await messaging.addImportedWallet({ password, mnemonic, name: walletName, bip39Passphrase: passphraseArg, origin: 'created' });
+                const r = await messaging.addImportedWallet({ password, mnemonic, name: walletName, bip39Passphrase: passphraseArg, origin: 'created', walletMode });
                 createdWalletId = r?.wallet?.id || r?.walletId || null;
                 if (createdWalletId) {
                     createdWalletRef.current = {
@@ -364,7 +368,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
                     };
                 }
             } else {
-                const r = await messaging.importMnemonic({ password, mnemonic, name: walletName, bip39Passphrase: passphraseArg, origin: 'created' });
+                const r = await messaging.importMnemonic({ password, mnemonic, name: walletName, bip39Passphrase: passphraseArg, origin: 'created', walletMode });
                 createdWalletId = r?.wallet?.id || r?.walletId || null;
             }
             // §19.7 / G034: record that the user just verified the seed
@@ -391,15 +395,15 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
 
 
     const headerTitle = stage === 'password'
-        ? (isFull ? 'Create a new wallet' : 'Create wallet')
+        ? (isFull ? 'Create a New Wallet' : 'Create Wallet')
         : stage === 'mnemonic'
-            ? (isFull ? 'Write down your recovery phrase' : 'Recovery phrase')
+            ? (isFull ? 'Write Down Your Recovery Phrase' : 'Recovery Phrase')
             : stage === 'verify'
-                ? (isFull ? 'Verify your recovery phrase' : 'Verify phrase')
+                ? (isFull ? 'Verify Your Recovery Phrase' : 'Verify Phrase')
                 : stage === 'persisting'
-                    ? 'Creating your wallet'
+                    ? 'Creating Your Wallet'
                     : stage === 'stale'
-                        ? 'Wallet already created'
+                        ? 'Wallet Already Created'
                         : 'Automatic Donation System';
     // The window title names the step the heading shows.
     useDocumentTitleSection(headerTitle);
@@ -542,13 +546,11 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
                     : null}
                 progress={<span aria-current="step">{t('createWallet.step2Of3')}</span>}
                 status={[
-                    <StatusMessage key="recovery-warning" variant="error">
-                        <div className={styles.warningLines}>
-                            <p>{t('createWallet.writeTheseWordsOnPaper', { wordCount })}</p>
-                            <p>{t('createWallet.storeYourRecoveryPhraseSafely')}</p>
-                            <p>{RECOVERY_PHRASE_WARNING}</p>
-                        </div>
-                    </StatusMessage>,
+                    <WarningCard key="recovery-warning">
+                        <WarningLine>{t('createWallet.writeTheseWordsOnPaper', { wordCount })}</WarningLine>
+                        <WarningLine>{t('createWallet.storeYourRecoveryPhraseSafely')}</WarningLine>
+                        <WarningLine critical>{RECOVERY_PHRASE_WARNING}</WarningLine>
+                    </WarningCard>,
                     persistError ? <StatusMessage key="persist-error" variant="error">{persistError}</StatusMessage> : null,
                 ]}
             >
@@ -692,6 +694,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
                     },
                 ]}
             />
+            <WalletModeField value={walletMode} onChange={setWalletMode} name="create-wallet-mode" />
             <div className={styles.advancedRow}>
                 <div className={styles.advancedToggle}>
                     <Switch

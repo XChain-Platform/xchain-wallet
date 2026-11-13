@@ -9,7 +9,20 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FieldNote, FormPage, Icon, IconSelect, Input, NetworkField, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+// Network, From and the fee selector come from the standard
+// FromSection and FeeSection.
+import { AddressField, AddressText, Button, ChainBadge, FieldNote, FormPage, Icon, IconSelect, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+// New Message sits on the Wallet Form Standard frame (a send-like form).
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    joinSummary,
+    summaryAddress,
+    useFormSections,
+} from '../components/formStandard/index.js';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { chainIconSmallUrl } from '../../branding/branding.js';
 import { isValidAddressAnyNetwork, detectAddressCoin } from '../utils/addressValidation.js';
@@ -20,6 +33,7 @@ import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
+import { FileField } from '../components/FileField.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { buildDeliveryNetworkOptions } from '../utils/deliveryNetworks.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -43,6 +57,7 @@ import { MAX_MESSAGE_BYTES, messageWireByteLength } from '../../flows/messageAct
 import styles from './IssueTokenForm.module.css';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/composeMessage.js';
+import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/gatedPublish.js';
 import '../../i18n/locales/en/send.js';
 import '../../i18n/locales/en/verifySignature.js';
@@ -249,6 +264,12 @@ function ComposeMessageForm({
     }, []);
     const [hwStatus, setHwStatus] = useState('idle');
     const [result, setResult] = useState(/** @type {any | null} */ (null));
+    // The standard sections' open state, held above the early returns so it
+    // survives the pickers and the confirm page. Only Message starts open; a
+    // Send refusal names its section and bumps the counter to reopen it.
+    const formSections = useFormSections({ from: false, message: true, fee: false });
+    const [errorSection, setErrorSection] = useState(/** @type {'from' | 'message' | 'fee' | null} */ (null));
+    const [reviewAttempt, setReviewAttempt] = useState(0);
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
@@ -486,20 +507,19 @@ function ComposeMessageForm({
     const messageCharacterError = actionTextSafetyError(message, t('verifySignature.message')) || undefined;
     const messageError = messageCharacterError || messageLengthError;
 
-    function handleAttachmentPick(event) {
-        const file = event.target?.files?.[0];
+    // The File arrives from the attachment field's dialog or a drop on it;
+    // the field clears its own input so the same file can be picked again.
+    function handleAttachmentPick(file) {
         if (!file) return;
         const readId = ++attachmentReadIdRef.current;
         setAttachment(null);
         const type = String(file.type || '').toLowerCase();
         if (!MESSAGE_ATTACHMENT_TYPES.includes(type)) {
             setAttachmentError(t('composeMessage.attachmentUnsupported'));
-            event.target.value = '';
             return;
         }
         if (file.size === 0) {
             setAttachmentError(t('composeMessage.attachmentEmpty'));
-            event.target.value = '';
             return;
         }
         if (file.size > MAX_MESSAGE_ATTACHMENT_BYTES) {
@@ -507,7 +527,6 @@ function ComposeMessageForm({
                 size: file.size.toLocaleString(),
                 max: MAX_MESSAGE_ATTACHMENT_BYTES.toLocaleString(),
             }));
-            event.target.value = '';
             return;
         }
         setAttachmentError(null);
@@ -527,7 +546,6 @@ function ComposeMessageForm({
             }
         };
         reader.readAsDataURL(file);
-        event.target.value = '';
     }
 
     // The selected encryption, as a single dropdown value. 'plaintext' maps to
@@ -660,23 +678,34 @@ function ComposeMessageForm({
     function handleReview(event) {
         event?.preventDefault?.();
         if (stage !== 'form') return;
+        // Each attempt bumps the counter; a refusal names its section.
+        setReviewAttempt((n) => n + 1);
+        setErrorSection(null);
         // Require a source on the selected delivery network.
         if (!fromAddress || !chainId) {
+            setErrorSection('from');
             setSubmitError(t('composeMessage.noSigningAddress'));
             return;
         }
         // Require a recipient and either text or an attachment.
         if (!toAddress.trim()) {
+            setErrorSection('message');
             setSubmitError(t('composeMessage.enterRecipient'));
             return;
         }
         if (!message.trim() && !attachment) {
+            setErrorSection('message');
             setSubmitError(t('composeMessage.enterMessage'));
             return;
         }
-        if (messageError) return;
-        if (addressInvalid) return;
+        // A field error already on screen still reopens Message if
+        // the user closed it, so Send never looks like it did nothing.
+        if (messageError || addressInvalid) {
+            setErrorSection('message');
+            return;
+        }
         if (feeStop) {
+            setErrorSection('fee');
             setSubmitError(feeStop.formError);
             return;
         }
@@ -1023,6 +1052,13 @@ function ComposeMessageForm({
         return (
             <ActionConfirmScreen
                 {...handshakeLane.confirmProps}
+                summary={{
+                    verb: t('components.confirmSummary.verbRequestSession'),
+                    direction: 'none',
+                    chainId,
+                    address: fromAddress?.address,
+                    ...(toAddress.trim() ? { recipient: toAddress.trim() } : {}),
+                }}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
                 signerReady={signerReady}
@@ -1044,6 +1080,13 @@ function ComposeMessageForm({
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={{
+                    verb: t('composeMessage.sendMessage'),
+                    direction: 'none',
+                    chainId,
+                    address: fromAddress?.address,
+                    ...(toAddress.trim() ? { recipient: toAddress.trim() } : {}),
+                }}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
                 feeText={fee?.coinAmount
@@ -1104,8 +1147,17 @@ function ComposeMessageForm({
         );
     }
 
+    // A section holding the last refusal gets a key that changes on every
+    // attempt, so it reopens even after being closed. errorSection is cleared
+    // at the start of each attempt, so it names only the latest refusal's section.
+    const sectionErrorKey = (id) => (errorSection === id ? reviewAttempt : 0);
+    const messageSummary = joinSummary(
+        toAddress.trim() ? `To ${summaryAddress(toAddress)}` : null,
+        encryptionOptions.find((option) => option.value === encryptionValue)?.label || null,
+    );
+    const feeTicker = descriptor?.coin ? (NATIVE_TICKER_BY_CHAIN[descriptor.coin] || descriptor.coin.toUpperCase()) : '';
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label={t('composeMessage.newTitle')}
             onSubmit={handleReview}
@@ -1177,47 +1229,69 @@ function ComposeMessageForm({
                     <StatusMessage key="key-lookup-error" variant="error">{pubkeyError}</StatusMessage>
                 ) : null,
             ]}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="primary"
+            action={(
+                // The one standard action (green, with an icon).
+                <FormAction
                     icon={<Icon.SendIcon />}
                     loading={actionConfirm.composing}
                     disabled={actionConfirm.composing || Boolean(messageError)}
                 >
                     {actionConfirm.composing ? t('composeMessage.preparingReview') : t('composeMessage.sendMessage')}
-                </Button>
+                </FormAction>
+            )}
+            /* The standard order. From (closed) holds the delivery
+               Network and the funding From address; Message (open)
+               holds the recipient, the message, the attachment and the
+               encryption; then the Network fee row. */
+            from={(
+                <FromSection
+                    {...formSections.bind('from')}
+                    chainId={chainId}
+                    chainIds={networkOptions.map((option) => option.value)}
+                    chainRegistry={chainRegistry}
+                    // The delivery network sets COIN, resolves the recipient's
+                    // key, funds the transaction and pays the fee.
+                    onNetworkChange={(v) => {
+                        setChainId(v);
+                        setFromAddressId(null);
+                        if (submitError) setSubmitError(null);
+                    }}
+                    networkHelp={t('composeMessage.networkHelp')}
+                    // The funding address, auto-picked per network and
+                    // changeable through the own-address picker.
+                    address={fromAddress?.address || null}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel={t('send.source.choose')}
+                    addressHelp={t('composeMessage.fromHelp')}
+                    revealKey={sectionErrorKey('from')}
+                />
+            )}
+            fee={(
+                // Low / Normal / Fast / Custom on the delivery network.
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    chainId={chainId}
+                    coinTicker={feeTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={(next) => {
+                        setFeePick(next);
+                        if (submitError) setSubmitError(null);
+                        if (handshakeError) setHandshakeError(null);
+                    }}
+                    customEstimate={customEstimate}
+                    revealKey={sectionErrorKey('fee')}
+                />
             )}
         >
-            {/* 1. Network, the standard picker field (U59, U60). The delivery
-                network sets COIN, resolves the recipient's key, funds the
-                transaction and pays the fee. */}
-            <NetworkField
-                value={chainId || ''}
-                chainIds={networkOptions.map((option) => option.value)}
-                chainRegistry={chainRegistry}
-                onChange={(v) => {
-                    setChainId(v);
-                    setFromAddressId(null);
-                    if (submitError) setSubmitError(null);
-                }}
-            />
-
-            {/* 2. From: the funding address, auto-picked per network and
-                changeable through the own-address picker. */}
-            {fromAddress ? (
-                <AddressField
-                    label={t('send.fields.from')}
-                    help={t('composeMessage.fromHelp')}
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel={t('send.source.choose')}
-                />
-            ) : null}
-
+            <FormSection
+                id="message"
+                title={t('verifySignature.message')}
+                icon={Icon.MessageIcon}
+                {...formSections.bind('message')}
+                revealKey={sectionErrorKey('message')}
+                summary={messageSummary}
+            >
             {/* 3. Address (recipient), with an address-book shortcut */}
             <AddressField
                 label={t('verifySignature.address')}
@@ -1257,35 +1331,27 @@ function ComposeMessageForm({
                 style={{ minHeight: '4rem' }}
             />
 
-            <div>
-                <Input
-                    id="message-attachment"
-                    type="file"
-                    label={t('composeMessage.attachmentLabelLimit', { max: MAX_MESSAGE_ATTACHMENT_BYTES.toLocaleString() })}
-                    help={t('composeMessage.attachmentHelp')}
-                    optional
-                    accept={MESSAGE_ATTACHMENT_TYPES.join(',')}
-                    onChange={handleAttachmentPick}
-                    error={attachmentError}
-                />
-                {attachment ? (
-                    <p>
-                        {t('composeMessage.attached', { name: attachment.name, size: attachment.size.toLocaleString() })}{' '}
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => {
-                                attachmentReadIdRef.current += 1;
-                                setAttachment(null);
-                                setAttachmentError(null);
-                            }}
-                        >
-                            {t('send.recipient.remove')}
-                        </Button>
-                    </p>
-                ) : null}
-            </div>
+            {/* The standard file field: the attached file's name and size sit
+                in the field, and its X removes the attachment. */}
+            <FileField
+                id="message-attachment"
+                label={t('composeMessage.attachmentLabelLimit', { max: MAX_MESSAGE_ATTACHMENT_BYTES.toLocaleString() })}
+                help={t('composeMessage.attachmentHelp')}
+                optional
+                inputLabel={t('composeMessage.attachmentLabel')}
+                accept={MESSAGE_ATTACHMENT_TYPES}
+                fileName={attachment
+                    ? t('composeMessage.attachedValue', { name: attachment.name, size: attachment.size.toLocaleString() })
+                    : ''}
+                onFile={handleAttachmentPick}
+                onClear={() => {
+                    attachmentReadIdRef.current += 1;
+                    setAttachment(null);
+                    setAttachmentError(null);
+                }}
+                clearLabel={t('composeMessage.removeAttachment')}
+                error={attachmentError}
+            />
 
             {/* 6. Encryption. Locked (still visible) for thread replies: a
                 conversation keeps the method it started with. */}
@@ -1307,22 +1373,8 @@ function ComposeMessageForm({
                     {t('composeMessage.keyFound')}
                 </p>
             ) : null}
-            {/* 7. Network fee (Low / Normal / Fast / Custom slider) */}
-            {feeTiers ? (
-                <FeeSelector
-                    chainId={chainId}
-                    label={t('send.networkFee')}
-                    coinTicker={descriptor?.coin ? (NATIVE_TICKER_BY_CHAIN[descriptor.coin] || descriptor.coin.toUpperCase()) : ''}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={(next) => {
-                        setFeePick(next);
-                        if (submitError) setSubmitError(null);
-                        if (handshakeError) setHandshakeError(null);
-                    }}
-                    customEstimate={feePick.mode === 'custom' ? customEstimate : null}
-                />
-            ) : null}
+            </FormSection>
+            {/* 7. Network fee: the standard FeeSection, passed to FormFrame above. */}
 
             {/* The send's own failure, on the stage the send is pressed from.
                 On the confirm-page path the host composes and pre-flights
@@ -1332,7 +1384,7 @@ function ComposeMessageForm({
                 nowhere to render: only the review stage read `submitError`, so
                 Send message looked like a button that does nothing. Cleared by
                 the next edit of the address, message or delivery network. */}
-        </FormPage>,
+        </FormFrame>,
     );
 }
 

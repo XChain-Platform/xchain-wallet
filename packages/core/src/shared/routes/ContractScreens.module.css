@@ -6,30 +6,11 @@
     max-width: 100%;
 }
 
-.toolbarSearch {
-    /* 200px keeps search usable before the toolbar lets it shrink. */
-    flex: 1 1 200px;
-    min-width: 0;
-}
-
-.toolbarSearch > * {
-    margin-bottom: 0;
-}
-
 /* The filter row shares one control size (U07): the small buttons beside the
    small search field take the control font token the field uses, not the
    compact chip text. The doubled class outranks the Button size class. */
 .toolbarControl.toolbarControl {
     --xc-button-font-size: var(--xc-control-font-sm);
-}
-
-.chainFilters {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--xc-space-2);
-    min-width: 0;
-    max-width: 100%;
 }
 
 .abiField {
@@ -90,4 +71,30 @@
 
 .toolActions > * {
     flex: 0 1 auto;
+}
+
+/* The All | Mine | Interactions tabs sit directly above the contract list. */
+.tabsRow {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+}
+
+.tabsRow > * {
+    flex: 1 1 auto;
+    width: 100%;
+}
+
+.tabLabel {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--xc-space-1);
+    white-space: nowrap;
+}
+
+.tabLabel svg {
+    flex: 0 0 auto;
+    width: 1rem;
+    height: 1rem;
 }

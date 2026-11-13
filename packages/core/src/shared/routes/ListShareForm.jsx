@@ -13,16 +13,20 @@ import {
     AddressField,
     Button,
     FormNotice,
-    FormPage,
+    // The form body is the standard FormFrame (it wraps FormPage).
     Icon,
     Input,
     ListPage,
-    NetworkField,
+    // Network comes from the standard FromSection.
     PageHeader,
     Screen,
     StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/routes.js';
+import '../../i18n/locales/en/components.js';
+import { listLabel } from '../utils/listLabel.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -48,9 +52,37 @@ import { typedConfirmationCopy } from '../utils/typedConfirmationCopy.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { explorerReadFailure } from '../../sdk/explorerErrors.js';
 import styles from './IssueTokenForm.module.css';
+// The form sits in the Wallet Form Standard frame: From, the Share section,
+// an optional Memo section, the Network fee row, the status slot and the action.
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    joinSummary,
+    useFormSections,
+} from '../components/formStandard/index.js';
+import { formatCoinBaseUnits } from '../../flows/feesCard.js';
+import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const SDK_REASON = "This wallet's SDK cannot build a list share yet; it arrives with the next SDK update.";
+
+/**
+ * The protocol fee for the closed Network fee summary, in the coin
+ * the Fees card charges it in, or null while it is unknown or free.
+ */
+function protocolFeeSummary({ quote, pending, payInNative, coinTicker }) {
+    if (pending) return null;
+    const fee = normalizeProtocolFee(quote);
+    if (!fee.known || fee.free) return null;
+    if (payInNative) {
+        const native = formatCoinBaseUnits(quote?.requiredFeeSats);
+        return native ? `${native} ${coinTicker}`.trim() : null;
+    }
+    return fee.amount ? `${fee.amount} XCHAIN` : null;
+}
 const TICKER_BY_COIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 
 function rowsFromSharedLists(value) {
@@ -124,6 +156,11 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const submitInFlightRef = useRef(false);
+    // The standard sections' open state, held above the picker
+    // early returns so it survives them; a counter of Share attempts reopens
+    // the section that holds the error on every attempt.
+    const formSections = useFormSections({ from: false, share: true, memo: false, fee: false });
+    const [reviewAttempt, setReviewAttempt] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
@@ -253,6 +290,7 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     async function handleReview(event) {
         event.preventDefault();
         if (submitInFlightRef.current) return;
+        setReviewAttempt((n) => n + 1); // Reopens the section holding an error.
         if (!validate()) return;
         submitInFlightRef.current = true;
         setFormError(null);
@@ -288,7 +326,7 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
         }
     }
 
-    const header = <PageHeader onBack={onBack} title="Share list" />;
+    const header = <PageHeader onBack={onBack} title="Share List" />;
     const wrap = (children) => (
         <Screen variant={variant} header={header}>{children}</Screen>
     );
@@ -297,6 +335,13 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
         return (
             <ActionConfirmScreen
                 {...lane.confirmProps}
+                summary={{
+                    verb: t('components.confirmSummary.verbShareList'),
+                    target: listLabel(listActionIndex, detail?.name),
+                    direction: 'none',
+                    chainId,
+                    address: fromRecord?.address,
+                }}
                 walletId={walletId}
                 screenVariant={variant}
                 chainLabel={null}
@@ -326,7 +371,7 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={chainId}
                 lockNetwork
@@ -397,47 +442,109 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     // Why the form cannot be submitted, in one notice: the owner first, then the list itself.
     const blockers = [ownershipReason, ...eligibility.reasons.map((reason) => reason.text)].filter(Boolean);
     const formDisabled = sdkSupported !== true || !eligibility.ok || Boolean(ownershipReason);
+    // Which section holds the form error, so that section reopens on
+    // every Share attempt even after the user closed it.
+    const errorSection = !formError ? null
+        : /memo/i.test(formError) ? 'memo'
+            : /owned by|owner could not be verified/i.test(formError) ? 'from'
+                : 'share';
+    const sectionErrorKey = (id) => (errorSection === id ? reviewAttempt + 1 : 0);
+    const fromHelp = "Only this list's owner can share it. The network refuses a share signed by any other address.";
+    const networkFeeText = feeEstimate ? `${feeEstimate.coinAmount} ${coinTicker}`.trim() : null;
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label="Share list"
             onSubmit={handleReview}
-            status={(sdkSupported === false || formError) ? (
-                <>
-                    {sdkSupported === false ? <StatusMessage variant="error">{SDK_REASON}</StatusMessage> : null}
-                    {formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
-                </>
-            ) : null}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="success"
-                    icon={lane.isWatcherMode ? undefined : <Icon.UsersIcon />}
+            status={[
+                sdkSupported === false ? <StatusMessage key="sdk" variant="error">{SDK_REASON}</StatusMessage> : null,
+                formError ? <StatusMessage key="error" variant="error">{formError}</StatusMessage> : null,
+            ]}
+            action={(
+                <FormAction
+                    // The action always carries an icon, watcher mode included.
+                    icon={lane.isWatcherMode ? <Icon.SignIcon /> : <Icon.UsersIcon />}
                     loading={lane.composing}
                     disabled={formDisabled || !typedConfirmOk || !selectedOwner || lane.composing}
                 >
-                    {lane.isWatcherMode ? 'Create unsigned transaction' : 'Share list'}
-                </Button>
+                    {lane.isWatcherMode ? 'Create Unsigned Transaction' : 'Share List'}
+                </FormAction>
+            )}
+            /* From (closed) holds the list's locked network and the
+               owner address; with no wallet-held owner it opens and keeps the
+               empty field and its picker. */
+            from={(
+                <FromSection
+                    {...formSections.bind('from')}
+                    chainId={chainId}
+                    chainRegistry={chainRegistry}
+                    lockNetwork
+                    networkHelp={t('routes.listShare.networkHelp')}
+                    address={fromRecord?.address || null}
+                    addressLabel="From"
+                    addressHelp={fromHelp}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    revealKey={sectionErrorKey('from')}
+                    missing={(
+                        <AddressField
+                            label="From"
+                            icon="addresses"
+                            help={fromHelp}
+                            value=""
+                            readOnly
+                            onChange={() => {}}
+                            onIconClick={() => setSourcePickerOpen(true)}
+                            iconLabel="Choose source address"
+                        />
+                    )}
+                />
+            )}
+            /* The Fees card (network and protocol fee, native-fee
+               switch) sits in the one Network fee row; it has no speed picker,
+               so the closed summary carries the network fee itself. */
+            fee={(
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    tiers={null}
+                    value={{ mode: 'normal' }}
+                    onChange={() => {}}
+                    etaMinutes={feeEstimate?.etaMinutes}
+                    protocolSummary={joinSummary(networkFeeText, protocolFeeSummary({
+                        quote: protocolFeeQuote,
+                        pending: protocolFeePending,
+                        payInNative: nativeFee.toggleProps.checked,
+                        coinTicker,
+                    }))}
+                >
+                    <FeesCard
+                        chainId={chainId}
+                        quote={protocolFeeQuote}
+                        pending={protocolFeePending}
+                        feeSelector={null}
+                        tiers={feeEstimate ? { normal: feeEstimate } : undefined}
+                        value={{ mode: 'normal' }}
+                        coinTicker={coinTicker}
+                    >
+                        <NativeFeeToggle
+                            {...nativeFee.toggleProps}
+                            coinTicker={coinTicker}
+                            disabled={formDisabled}
+                        />
+                    </FeesCard>
+                </FeeSection>
             )}
         >
-            <NetworkField
-                label="Network"
-                value={chainId}
-                onChange={() => {}}
-                chainIds={[chainId]}
-                chainRegistry={chainRegistry}
-            />
-            <AddressField
-                label="From"
-                icon="addresses"
-                help="Only this list's owner can share it. The network refuses a share signed by any other address."
-                value={fromRecord?.address || ''}
-                readOnly
-                onChange={() => {}}
-                onIconClick={() => setSourcePickerOpen(true)}
-                iconLabel="Choose source address"
-            />
-
+            <FormSection
+                id="share"
+                title="Share"
+                icon={Icon.UsersIcon}
+                {...formSections.bind('share')}
+                revealKey={sectionErrorKey('share')}
+                summary={joinSummary(`List #${listActionIndex}`, typeof detail.name === 'string' && detail.name ? neutralizeControlText(detail.name) : null)}
+            >
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>List</dt>
                 <dd className={styles.detailsValue}>#{listActionIndex}</dd>
@@ -455,17 +562,6 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                 <FormNotice variant="warning" role="alert" lines={blockers} />
             ) : null}
 
-            <Input
-                label="Memo"
-                optional
-                maxLength={MAX_MEMO_LENGTH}
-                help="A note recorded with this permanent list share."
-                value={memo}
-                onChange={(event) => { setMemo(event.target.value); setFormError(null); }}
-                autoComplete="off"
-                disabled={formDisabled}
-            />
-
             <FormNotice
                 variant="warning"
                 role={null}
@@ -475,22 +571,6 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                     'Each later edit costs LIST_SHARED_EDIT_BASE plus LIST_SHARED_EDIT_PER_ITEM for every item added or removed.',
                 ]}
             />
-
-            <FeesCard
-                chainId={chainId}
-                quote={protocolFeeQuote}
-                pending={protocolFeePending}
-                feeSelector={null}
-                tiers={feeEstimate ? { normal: feeEstimate } : undefined}
-                value={{ mode: 'normal' }}
-                coinTicker={coinTicker}
-            >
-                <NativeFeeToggle
-                    {...nativeFee.toggleProps}
-                    coinTicker={coinTicker}
-                    disabled={formDisabled}
-                />
-            </FeesCard>
 
             <Input
                 label="Type SHARE to confirm"
@@ -502,7 +582,28 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                 spellCheck={false}
                 disabled={formDisabled}
             />
+            </FormSection>
 
-        </FormPage>,
+            {/* Memo is its own optional section, closed until used. */}
+            <FormSection
+                id="memo"
+                title="Memo"
+                icon={Icon.MessageIcon}
+                optional
+                {...formSections.bind('memo')}
+                revealKey={sectionErrorKey('memo')}
+                summary={trimmedMemo || 'None'}
+            >
+            <Input
+                label="Memo"
+                maxLength={MAX_MEMO_LENGTH}
+                help="A note recorded with this permanent list share."
+                value={memo}
+                onChange={(event) => { setMemo(event.target.value); setFormError(null); }}
+                autoComplete="off"
+                disabled={formDisabled}
+            />
+            </FormSection>
+        </FormFrame>,
     );
 }

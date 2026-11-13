@@ -26,18 +26,10 @@ import {
     StatusMessage,
 } from '@xchain-wallet/core/ui';
 
-// Why-migrate explanation copy reads as a paragraph rather than a
-// caption. Override the shared `.hint` (centred, muted) with a
-// left-justified, full-contrast block so the content is comfortably
-// readable.
-const explainParagraphStyle = {
-    textAlign: 'justify',
-    color: 'var(--xc-text)',
-    fontSize: 'var(--xc-text-sm)',
-    lineHeight: 1.55,
-    margin: '0 0 var(--xc-space-3)',
-};
 import { registry as registryLib, crypto as cryptoLib, flows as flowsLib } from '@xchain-wallet/core';
+// The explanation copy uses the shared explanation paragraph: body size,
+// start-aligned and full contrast, like the license and the security warnings.
+import paragraphStyles from '../components/WarningCard.module.css';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { DURESS_PASSWORD_COLLISION_MESSAGE, walletPasswordCollidesWithDuress } from '../../flows/duressPassphrase.js';
 import { MnemonicGrid } from '../components/MnemonicGrid.jsx';
@@ -118,6 +110,8 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
     // the encrypted wallet is saved. No sweep path exists before that point.
     const [mnemonic, setMnemonic] = useState(/** @type {string | null} */ (null));
     const [wroteItDown, setWroteItDown] = useState(false);
+    // Set once the backup step's phrase has been revealed.
+    const [phraseShown, setPhraseShown] = useState(false);
     const [quizPositions, setQuizPositions] = useState(/** @type {number[]} */ ([]));
     const [quizAnswers, setQuizAnswers] = useState(/** @type {Record<number, string>} */ ({}));
     const [quizError, setQuizError] = useState(/** @type {string | null} */ (null));
@@ -352,13 +346,16 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                         ? () => setStage('backup')
                         : onBack}
             backDisabled={stage === 'submitting'}
-            title={{
-                explain: 'Upgrade to a standard recovery phrase',
-                create: 'Set up new wallet',
-                backup: 'Write down your recovery phrase',
-                verify: 'Verify your written copy',
-                submitting: 'Creating your new wallet',
-                done: 'New BIP39 wallet ready',
+            // A short Title Case title on every step; the step's own
+            // words go on the subtitle line, like Pair hardware wallet.
+            title="Upgrade Wallet"
+            subtitle={{
+                explain: 'Step 1 of 4: Why upgrade',
+                create: 'Step 2 of 4: Set up the new wallet',
+                backup: 'Step 3 of 4: Write down the phrase',
+                verify: 'Step 4 of 4: Check your copy',
+                submitting: 'Creating the new wallet',
+                done: 'New wallet ready',
             }[stage]}
         />
     );
@@ -371,23 +368,24 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
     if (stage === 'explain') {
         return wrap(
             <ListPage>
-                <p style={explainParagraphStyle}>
+                <p className={paragraphStyles.body}>
                     Your current wallet uses the legacy 12-word Counterwallet
                     recovery format. BIP39 is widely supported and gives your
                     wallet separate addresses for each supported chain.
                 </p>
-                <p style={explainParagraphStyle}>
+                <p className={paragraphStyles.body}>
                     XChain Platform creates a separate BIP39 wallet and leaves
                     your legacy wallet unchanged. You will back up and verify
                     the new recovery phrase before the wallet is saved.
                 </p>
-                <p style={explainParagraphStyle}>
+                <p className={paragraphStyles.body}>
                     Afterward, you can review each sweep. Sweeps move tokens and
                     token ownerships, but not BTC, LTC, or DOGE balances. Move
                     those balances separately and keep enough for network fees.
                 </p>
                 <div className={styles.actions}>
-                    <Button variant="success" onClick={() => setStage('create')} icon={<Icon.MigrateIcon />}>
+                    {/* The page's main button spans the full width, like every form. */}
+                    <Button variant="success" block style={{ width: '100%' }} onClick={() => setStage('create')} icon={<Icon.MigrateIcon />}>
                         Continue
                     </Button>
                 </div>
@@ -405,7 +403,8 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
             <FormPage
                 key="migrate-backup"
                 label="Back up new recovery phrase"
-                actions={(
+                // Nothing to confirm until the phrase has been shown.
+                actions={phraseShown ? (
                     <Button
                         type="button"
                         variant="success"
@@ -413,23 +412,23 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                         onClick={handleStartVerify}
                         icon={<Icon.VerifyIcon />}
                     >
-                        Verify recovery phrase
+                        Verify Recovery Phrase
                     </Button>
-                )}
+                ) : null}
             >
-                <p style={explainParagraphStyle}>
+                <p className={paragraphStyles.body}>
                     These 12 words are your new recovery phrase. Write them on
                     paper, store them safely, and keep them private. You can use
                     the phrase to restore your BIP39 wallet on another device.
                 </p>
-                {mnemonic ? <MnemonicGrid mnemonic={mnemonic} variant={variant === 'full' ? 'full' : 'small'} /> : null}
-                <div style={{ margin: 'var(--xc-space-3) 0' }}>
+                {mnemonic ? <MnemonicGrid mnemonic={mnemonic} variant={variant === 'full' ? 'full' : 'small'} onRevealedChange={setPhraseShown} /> : null}
+                {phraseShown ? <div style={{ margin: 'var(--xc-space-3) 0' }}>
                     <Checkbox
                         label="I have written down the new recovery phrase and stored it safely."
                         checked={wroteItDown}
                         onChange={(e) => setWroteItDown(e.target.checked)}
                     />
-                </div>
+                </div> : null}
             </FormPage>,
         );
     }
@@ -448,11 +447,11 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                 )}
                 actions={(
                     <Button type="submit" variant="success" icon={<Icon.CheckIcon />}>
-                        Create BIP39 wallet
+                        Create BIP39 Wallet
                     </Button>
                 )}
             >
-                <p style={explainParagraphStyle}>
+                <p className={paragraphStyles.body}>
                     Enter the requested words from the recovery phrase you just
                     wrote down. The new wallet is created only after every word
                     matches.
@@ -485,7 +484,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
         return wrap(
             <FormPage label="Wallet creation status">
                 <div role="status" aria-live="polite">
-                    <p style={explainParagraphStyle}>
+                    <p className={paragraphStyles.body}>
                         XChain Platform is encrypting the new BIP39 wallet with
                         your password. This can take a minute on some devices.
                         Keep the app open. Your legacy wallet stays unchanged.
@@ -498,7 +497,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
     if (stage === 'done') {
         return wrap(
             <ListPage>
-                <p style={explainParagraphStyle}>
+                <p className={paragraphStyles.body}>
                     Your new recovery phrase is verified and the wallet is saved.
                     Your legacy wallet is unchanged, and nothing moves until
                     you review and submit a sweep. Each sweep can move token
@@ -566,7 +565,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                                                             toAddress: row.next,
                                                         })}
                                                     >
-                                                        Review sweep
+                                                        Review Sweep
                                                     </Button>
                                                 ) : null}
                                             </div>
@@ -583,7 +582,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                 <div className={styles.actions}>
                     {addressesReady && unsweptCount > 0 ? (
                         <Button variant="secondary" onClick={handleDismiss} icon={<Icon.XIcon />}>
-                            Dismiss list
+                            Dismiss List
                         </Button>
                     ) : null}
                     <Button variant="success" onClick={handleDone} icon={<Icon.CheckIcon />}>
@@ -605,7 +604,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                     variant="success"
                     icon={<Icon.KeyIcon />}
                 >
-                    Generate recovery phrase
+                    Generate Recovery Phrase
                 </Button>
             )}
         >
@@ -640,7 +639,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                 autoComplete="new-password"
             />
             {error ? <FieldNote variant="error">{error}</FieldNote> : null}
-            <p style={explainParagraphStyle}>
+            <p className={paragraphStyles.body}>
                 This password encrypts only the new wallet on this device. Your
                 legacy wallet password is not needed. Next, you will save
                 and verify a new recovery phrase before the wallet is created.

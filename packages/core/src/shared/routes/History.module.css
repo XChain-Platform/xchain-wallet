@@ -33,34 +33,9 @@
     .refreshing svg { animation: none; }
 }
 
-/* Unified filter card containing search, chain picker, and the collapsible
-   advanced-filters panel in one bordered container so the mobile view reads
-   as one block instead of three stacked widgets. */
-.filterCard {
-    composes: card from '../../ui/Card.module.css';
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-3);
-    width: 100%;
-    box-sizing: border-box;
-}
-
-/* Holds only the phone Filters toggle, so it takes no room on wider
-   layouts, where the filter card is always open. */
-.toolbarTop {
-    display: none;
-    align-items: center;
-    justify-content: flex-end;
-    gap: var(--xc-space-2);
-}
-
 .exportButton {
     flex: 0 0 auto;
     white-space: nowrap;
-}
-
-.phoneFilterToggle {
-    display: none;
 }
 
 .searchRow {
@@ -111,29 +86,6 @@
     position: relative;
 }
 
-.chainPickerBtn {
-    appearance: none;
-    width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-sm);
-    border: 1px solid var(--xc-border);
-    background: var(--xc-bg);
-    color: var(--xc-text);
-    font-size: var(--xc-text-sm);
-    font-family: inherit;
-    cursor: pointer;
-}
-
-.chainPickerBtn:hover { background: var(--xc-bg-muted); }
-.chainPickerBtn:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
 .chainPickerLeft {
     display: inline-flex;
     align-items: center;
@@ -147,27 +99,6 @@
 .chainPickerWrap .chainPickerLeft {
     gap: var(--xc-space-2);
     min-width: 0;
-}
-
-.chainPickerIcon {
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    object-fit: cover;
-    flex-shrink: 0;
-}
-
-.chainPickerAllIcon {
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: var(--xc-bg-muted);
-    color: var(--xc-text-muted);
-    font-size: 12px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
 }
 
 .chainPickerMenu {
@@ -249,14 +180,6 @@
 
 .toolbarControl svg {
     flex: 0 0 auto;
-}
-
-/* Advanced filter panel: fieldsets stacked, each with a small label
-   above and a chip-wrap (or input row) below. */
-.morePanel {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-3);
 }
 
 .dateRow {
@@ -354,6 +277,24 @@
 
 .row {
     position: relative;
+}
+
+/* The forward chevron at the end of a row that opens its detail page, at the
+   Back chevron's size like the Coins, Tokens and DeFi rows: a 32px icon box
+   clipped to its middle third, so the stroke meets the row's padding and the
+   box adds no width. */
+.rowChevron {
+    --xc-icon-size: 32px;
+    display: inline-flex;
+    justify-content: center;
+    width: calc(var(--xc-icon-size) / 3);
+    overflow: hidden;
+}
+
+.rowChevron svg {
+    flex: 0 0 auto;
+    width: var(--xc-icon-size);
+    height: var(--xc-icon-size);
 }
 
 .row:hover {
@@ -1116,30 +1057,6 @@
    keys stack above their values. System text zoom does not reduce the CSS
    viewport, so this reflow includes common 375px through 430px phone widths. */
 @media not all and (min-width: 480px) {
-    .toolbarTop {
-        display: flex;
-    }
-
-    .phoneFilterToggle {
-        display: flex;
-        flex: 1 1 auto;
-        min-width: 0;
-    }
-
-    .phoneFilterToggle svg {
-        width: 18px;
-        height: 18px;
-    }
-
-    .filterCard {
-        display: none;
-        min-width: 0;
-    }
-
-    .filterCard.filterCardOpen {
-        display: flex;
-    }
-
     .dateRow {
         grid-template-columns: minmax(0, 1fr);
     }

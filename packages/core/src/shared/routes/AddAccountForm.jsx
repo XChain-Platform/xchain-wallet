@@ -9,11 +9,17 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Screen, Button, FormPage, Input, Icon, PageHeader } from '@xchain-wallet/core/ui';
+import { Screen, Input, Icon, PageHeader } from '@xchain-wallet/core/ui';
+// The Wallet Form Standard frame (no From and no fee: this form never signs or sends).
+import { FormAction, FormFrame, FormSection, useFormSections } from '../components/formStandard/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignerSelectForm } from './SignerSelectForm.jsx';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { NAME_MAX_LENGTH, hasVisibleText, nameKey, nameLength } from '../../util/display_name.js';
+// Add Account carries the same tile look controls as Edit Account.
+import { IdentityAvatar } from '../components/WalletIdentity.jsx';
+import { TileLookFields, TILE_COLOURS } from '../components/TileLookFields.jsx';
+import { writeWalletTile, tileRadius, walletTileText } from '../utils/walletTile.js';
 
 /**
  * Add a new BIP44 account under the active wallet (§11.3.2). Derives
@@ -46,6 +52,9 @@ export function AddAccountForm({ walletId, onBack, onCreated }) {
     const variant = screenVariantFor(shell);
 
     const [name, setName] = useState('Account');
+    const [tileColour, setTileColour] = useState(TILE_COLOURS[0]);
+    const [tileImage, setTileImage] = useState(/** @type {string | null} */ (null));
+    const [tileShape, setTileShape] = useState('circle');
     const [accounts, setAccounts] = useState(/** @type {any[]} */ ([]));
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [busy, setBusy] = useState(false);
@@ -55,6 +64,9 @@ export function AddAccountForm({ walletId, onBack, onCreated }) {
     const [signerId, setSignerId] = useState(/** @type {string | null} */ (null));
     const nameRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const userEditedRef = useRef(false);
+
+    // The main section starts open, the Look section closed.
+    const formSections = useFormSections({ account: true, look: false });
 
     const onPickSigner = useCallback((id) => setSignerId(id), []);
 
@@ -112,6 +124,8 @@ export function AddAccountForm({ walletId, onBack, onCreated }) {
                 name: trimmed,
                 signerId: signerId || undefined,
             });
+            // The new account's look is saved once it exists.
+            if (result?.account?.id) writeWalletTile(result.account.id, { colour: tileColour, image: tileImage, shape: tileShape });
             onCreated(result?.account);
         } catch (err) {
             // Show flow copy as is; developer text becomes lock-and-unlock advice (a stale signer pool is the usual cause)
@@ -120,50 +134,71 @@ export function AddAccountForm({ walletId, onBack, onCreated }) {
         }
     }
 
+    // The one standard action, a verb with an icon.
     const actions = (
-        <Button
-            type="submit"
-            variant="primary"
-            loading={busy}
-            disabled={busy}
-            icon={<Icon.PlusIcon />}
-        >
-            Add account
-        </Button>
+        <FormAction icon={<Icon.PlusIcon />} loading={busy} disabled={busy}>
+            Add Account
+        </FormAction>
     );
 
     return (
         <Screen
             variant={variant}
-            header={<PageHeader onBack={onBack} backDisabled={busy} title="Add account" />}
+            header={<PageHeader onBack={onBack} backDisabled={busy} title="Add Account" />}
         >
-            <FormPage
-                label="Add account"
+            {/* FormFrame with the main section open and Look closed. */}
+            <FormFrame
+                label="Add Account"
                 onSubmit={handleSubmit}
-                actions={actions}
+                action={actions}
             >
-                <SignerSelectForm
-                    walletId={walletId}
-                    value={signerId}
-                    onChange={onPickSigner}
-                    disabled={busy}
-                />
-                <Input
-                    ref={nameRef}
-                    label="Account name"
-                    maxLength={NAME_MAX_LENGTH}
-                    value={name}
-                    onChange={(e) => {
-                        userEditedRef.current = true;
-                        setName(e.target.value);
-                        if (error) setError(null);
-                    }}
-                    autoComplete="off"
-                    disabled={busy}
-                    error={error || undefined}
-                    help="Names a separate set of addresses in this wallet."
-                />
-            </FormPage>
+                <FormSection
+                    id="account"
+                    title="Account"
+                    icon={Icon.UserIcon}
+                    {...formSections.bind('account')}
+                    revealKey={error ? 1 : 0}
+                    summary={name.trim() || 'Unnamed'}
+                >
+                    {/* The account tile, centred at the top of the section. */}
+                    <div style={{ display: 'flex', justifyContent: 'center' }}>
+                        <span style={{ '--xc-avatar-shape': tileRadius(tileShape), display: 'inline-flex' }}>
+                            <IdentityAvatar name={name || 'Account'} text={walletTileText(name)} seed="new-account" context="hero" variant="asset" tone={tileColour} src={tileImage} />
+                        </span>
+                    </div>
+                    <SignerSelectForm
+                        walletId={walletId}
+                        value={signerId}
+                        onChange={onPickSigner}
+                        disabled={busy}
+                    />
+                    <Input
+                        ref={nameRef}
+                        label="Account name"
+                        maxLength={NAME_MAX_LENGTH}
+                        value={name}
+                        onChange={(e) => {
+                            userEditedRef.current = true;
+                            setName(e.target.value);
+                            if (error) setError(null);
+                        }}
+                        autoComplete="off"
+                        disabled={busy}
+                        error={error || undefined}
+                        help="Names a separate set of addresses in this wallet."
+                    />
+                </FormSection>
+                <FormSection
+                    id="look"
+                    title="Look"
+                    icon={Icon.PaletteIcon}
+                    optional
+                    {...formSections.bind('look')}
+                    summary={`${tileShape === 'rounded' ? 'Rounded' : 'Circle'}${tileImage ? ', image' : ', colour'}`}
+                >
+                    <TileLookFields noun="account" colour={tileColour} onColour={setTileColour} shape={tileShape} onShape={setTileShape} image={tileImage} onImage={setTileImage} />
+                </FormSection>
+            </FormFrame>
         </Screen>
     );
 }

@@ -9,8 +9,19 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { AddressField, Button, FeeSelector, FormNotice, FormPage, Icon, Input } from '@xchain-wallet/core/ui';
+// FormPage, Button and FeeSelector come through the standard frame.
+import { AddressField, FormNotice, Icon, Input } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+// The Wallet Form Standard frame (From, Payment, Network fee, action).
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    summaryAddress,
+    useFormSections,
+} from '../components/formStandard/index.js';
 import {
     customFeeEstimate,
     customFeeReviewStop,
@@ -21,6 +32,8 @@ import {
     nativeUnitScaleFor,
     tickerForDescriptor,
 } from '../../registry/coinTicker.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/multisig.js';
 import { useMessaging } from '../useMessaging.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -53,6 +66,10 @@ export function MultisigSendForm({
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState(null);
     const [resolved, setResolved] = useState(multisig || null);
+    // The standard sections' open state; From and the fee start
+    // closed, Payment open. A fee refusal reopens the fee row on each try.
+    const formSections = useFormSections({ from: false, payment: true, fee: false });
+    const [feeErrorKey, setFeeErrorKey] = useState(0);
 
     useEffect(() => {
         if (multisig) {
@@ -86,7 +103,8 @@ export function MultisigSendForm({
         event.preventDefault();
         if (busy || taproot || !resolved || !to.trim() || !amountSats || amountSats <= 0n || !feeRate) return;
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: selectedEstimate });
-        if (feeStop) { setError(feeStop.formError); return; }
+        // A custom-fee refusal opens the Network fee section.
+        if (feeStop) { setError(feeStop.formError); setFeeErrorKey((k) => k + 1); return; }
         setBusy(true);
         setError(null);
         try {
@@ -106,61 +124,83 @@ export function MultisigSendForm({
         }
     }
 
+    // Closed-section summary, "0.001 BTC to bc1q...0a2".
+    const ticker = tickerForDescriptor(descriptor);
+    const paymentSummary = [
+        amount.trim() ? `${amount.trim()} ${ticker}` : null,
+        to.trim() ? `to ${summaryAddress(to.trim())}` : null,
+    ].filter(Boolean).join(' ') || null;
+
+    // The standard order. From (closed) holds the network, which the
+    // multisig decides, and the multisig address with its signature
+    // threshold; Payment (open) holds To and Amount; then the Network fee row.
     return wrapPage(
-        <FormPage
+        <FormFrame
             id="multisig-send-form"
             label="Send from multisig"
             onSubmit={submit}
             status={error ? <FormNotice variant="error">{error}</FormNotice> : null}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="success"
+            action={(
+                <FormAction
                     icon={<Icon.SendIcon />}
                     loading={busy}
                     disabled={busy || taproot || !resolved || !to.trim() || !amountSats || amountSats <= 0n || !feeRate}
                 >
-                    Start signing
-                </Button>
+                    Start Signing
+                </FormAction>
             )}
-        >
-            <Input label="Network" value={descriptor?.name || chainId} readOnly />
-            <AddressField
-                label="From"
-                icon="addresses"
-                value={resolved?.address || ''}
-                readOnly
-                onChange={() => {}}
-                onIconClick={onChangeSource}
-                iconLabel="Choose source address"
-            />
-            {resolved ? <p>Needs {resolved.threshold} of {resolved.cosignerCount} signatures</p> : null}
-            {taproot ? <FormNotice variant="warning">{TAPROOT_MESSAGE}</FormNotice> : null}
-            <AddressField
-                label="To"
-                value={to}
-                onChange={(event) => setTo(event.target.value)}
-                autoComplete="off"
-            />
-            <Input
-                label={`Amount (${tickerForDescriptor(descriptor)})`}
-                inputMode="decimal"
-                value={amount}
-                onChange={(event) => setAmount(event.target.value)}
-                autoComplete="off"
-            />
-            {feeTiers ? (
-                <FeeSelector
+            from={(
+                <FromSection
+                    {...formSections.bind('from')}
                     chainId={chainId}
-                    label="Network fee"
-                    coinTicker={tickerForDescriptor(descriptor)}
+                    chainRegistry={chainRegistry}
+                    lockNetwork
+                    networkHelp={t('multisig.send.networkHelp')}
+                    address={resolved?.address || null}
+                    addressHelp={t('multisig.send.fromHelp')}
+                    onOpenPicker={onChangeSource}
+                    pickerLabel="Choose source address"
+                    detail={resolved ? t('multisig.send.needsSignatures', { threshold: resolved.threshold, cosignerCount: resolved.cosignerCount }) : null}
+                />
+            )}
+            fee={(
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    chainId={chainId}
+                    coinTicker={ticker}
                     tiers={feeTiers}
                     value={feePick}
                     onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? selectedEstimate : null}
+                    customEstimate={selectedEstimate}
+                    revealKey={feeErrorKey}
                 />
-            ) : null}
-        </FormPage>,
+            )}
+        >
+            <FormSection
+                id="payment"
+                title="Payment"
+                icon={Icon.SendIcon}
+                {...formSections.bind('payment')}
+                summary={paymentSummary}
+            >
+                {taproot ? <FormNotice variant="warning">{TAPROOT_MESSAGE}</FormNotice> : null}
+                <AddressField
+                    label="To"
+                    help={t('multisig.send.toHelp')}
+                    value={to}
+                    onChange={(event) => setTo(event.target.value)}
+                    autoComplete="off"
+                />
+                <Input
+                    label={`Amount (${ticker})`}
+                    help={t('multisig.send.amountHelp')}
+                    inputMode="decimal"
+                    value={amount}
+                    onChange={(event) => setAmount(event.target.value)}
+                    autoComplete="off"
+                />
+            </FormSection>
+        </FormFrame>,
     );
 }
 

@@ -35,7 +35,10 @@
 // `messaging.createAccount` / `messaging.generateReceiveAddress`.
 
 import { useEffect, useState } from 'react';
-import { FormPage, FormSection, InfoTip, RadioGroup, StatusMessage } from '@xchain-wallet/core/ui';
+// Under the Wallet Form Standard this is a field group placed inside
+// its host's own section (Add Account's Account section, the developer-mode
+// network row), so it draws no page or section frame of its own.
+import { Icon, RadioGroup, StatusMessage } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/signerSelect.js';
 import { useMessaging } from '../useMessaging.js';
@@ -146,31 +149,31 @@ export function SignerSelectForm({ walletId, value, onChange, disabled = false }
         })),
     ];
 
+    // No FormPage or titled section around the choice; the intro is the
+    // group's help tip, and every option carries an icon (RadioGroup's icon),
+    // as every standard toggle does.
     return (
-        <FormPage as="div" sectioned label={t('signerSelect.choose')}>
-            <FormSection
-                title={t('signerSelect.choose')}
-                trailing={<InfoTip label={t('signerSelect.intro')} />}
-            >
-                {isWatcherMode ? (
-                    <StatusMessage variant="warning" role="note">
-                        {t('signerSelect.watcherNote')}
-                    </StatusMessage>
-                ) : null}
-                <RadioGroup
-                    legend={t('signerSelect.title')}
-                    aria-label={t('signerSelect.choose')}
-                    name={`signer-${walletId}`}
-                    value={value ?? 'software'}
-                    onChange={(nextValue) => emitChange(nextValue === 'software' ? null : nextValue)}
-                    options={options.map((opt) => ({
-                        value: opt.id ?? 'software',
-                        label: opt.label,
-                        description: opt.sub,
-                    }))}
-                    disabled={disabled}
-                />
-            </FormSection>
-        </FormPage>
+        <>
+            {isWatcherMode ? (
+                <StatusMessage variant="warning" role="note">
+                    {t('signerSelect.watcherNote')}
+                </StatusMessage>
+            ) : null}
+            <RadioGroup
+                legend={t('signerSelect.title')}
+                aria-label={t('signerSelect.choose')}
+                help={t('signerSelect.intro')}
+                name={`signer-${walletId}`}
+                value={value ?? 'software'}
+                onChange={(nextValue) => emitChange(nextValue === 'software' ? null : nextValue)}
+                options={options.map((opt) => ({
+                    value: opt.id ?? 'software',
+                    label: opt.label,
+                    icon: opt.kind === 'software' ? Icon.KeyIcon : Icon.UsbIcon,
+                    description: opt.sub,
+                }))}
+                disabled={disabled}
+            />
+        </>
     );
 }

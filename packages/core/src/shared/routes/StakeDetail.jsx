@@ -35,6 +35,7 @@ import {
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import styles from './IssueTokenForm.module.css';
 import local from './StakeDetail.module.css';
+import homeTabsStyles from '../components/HomeTabs.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -282,8 +283,7 @@ export function StakeDetail({
         <PageHeader
             onBack={onBack}
             backLabel="Back to staking"
-            title={kind === 'validator' ? 'Validator stake' : `Contract #${contractActionIndex} stake`}
-        />
+            title={kind === 'validator' ? 'Validator Stake' : `Contract #${contractActionIndex} Stake`}        />
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
@@ -296,14 +296,14 @@ export function StakeDetail({
 
     const tabs = kind === 'validator'
         ? [
-            { id: 'rewards', label: 'Rewards' },
-            { id: 'delegation', label: 'Delegation' },
-            { id: 'details', label: 'Details' },
+            { id: 'rewards', label: 'Rewards', icon: <Icon.CoinsIcon /> },
+            { id: 'delegation', label: 'Delegation', icon: <Icon.UsersIcon /> },
+            { id: 'details', label: 'Details', icon: <Icon.InfoIcon /> },
         ]
         : [
-            { id: 'positions', label: 'Positions' },
-            { id: 'slashes', label: 'Penalties' },
-            { id: 'details', label: 'Details' },
+            { id: 'positions', label: 'Positions', icon: <Icon.StakeIcon /> },
+            { id: 'slashes', label: 'Penalties', icon: <Icon.ThumbsDownIcon /> },
+            { id: 'details', label: 'Details', icon: <Icon.InfoIcon /> },
         ];
 
     return wrap(
@@ -443,7 +443,7 @@ export function StakeDetail({
                                     onClick={onRevokeDelegation ? () => { setMoreOpen(false); onRevokeDelegation(); } : undefined}
                                     disabled={!onRevokeDelegation || !primaryDelegation}
                                 >
-                                    Revoke delegation
+                                    Revoke Delegation
                                 </Button>
                                 <Button
                                     variant="ghost"
@@ -454,7 +454,7 @@ export function StakeDetail({
                                     onClick={onOpenOperatorDashboard ? () => { setMoreOpen(false); onOpenOperatorDashboard(); } : undefined}
                                     disabled={!onOpenOperatorDashboard || !primaryStake}
                                 >
-                                    Operator view
+                                    Operator View
                                 </Button>
                             </div>
                         ) : null}
@@ -470,7 +470,7 @@ export function StakeDetail({
                         disabled={!onStakeMore}
                         title="Stake more into this contract"
                     >
-                        Add stake
+                        Add Stake
                     </Button>
                     <Button
                         variant="secondary"
@@ -514,7 +514,7 @@ export function StakeDetail({
                                     onClick={onOpenContract ? () => { setMoreOpen(false); onOpenContract(); } : undefined}
                                     disabled={!onOpenContract}
                                 >
-                                    View contract
+                                    View Contract
                                 </Button>
                             </div>
                         ) : null}
@@ -534,7 +534,10 @@ export function StakeDetail({
                         className={`${local.tab} ${activeTab === t.id ? local.tabActive : ''}`}
                         onClick={() => setActiveTab(t.id)}
                     >
-                        {t.label}
+                        <span className={homeTabsStyles.tabWithIcon}>
+                            <span className={homeTabsStyles.tabIcon} aria-hidden="true">{t.icon}</span>
+                            {t.label}
+                        </span>
                     </button>
                 ))}
             </div>

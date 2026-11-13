@@ -420,7 +420,7 @@ export function MultisigCreate({ walletId, onBack }) {
         <PageHeader
             onBack={stage === 'review' || stage === 'submitting' ? () => setStage('compose') : onBack}
             backDisabled={stage === 'submitting'}
-            title={stage === 'review' || stage === 'submitting' ? 'Review multisig' : 'Create multisig'}
+            title={stage === 'review' || stage === 'submitting' ? 'Review Multisig' : 'Create Multisig'}
         />
     );
     // The review always opens at its top instead of inheriting how far the
@@ -484,7 +484,7 @@ export function MultisigCreate({ walletId, onBack }) {
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="Use one of this wallet's addresses"
+                title="Use One of This Wallet's Addresses"
                 walletId={walletId}
                 chainId={chainId}
                 lockNetwork
@@ -501,7 +501,7 @@ export function MultisigCreate({ walletId, onBack }) {
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="Address to share"
+                title="Address to Share"
                 walletId={walletId}
                 chainId={chainId}
                 lockNetwork
@@ -541,7 +541,7 @@ export function MultisigCreate({ walletId, onBack }) {
                             icon={<Icon.CheckIcon />}
                             loading={stage === 'submitting'}
                         >
-                            Confirm multisig
+                            Confirm Multisig
                         </Button>
                     </div>
                 )}
@@ -677,7 +677,7 @@ export function MultisigCreate({ walletId, onBack }) {
                             onClick={addRow}
                             disabled={rows.length >= MAX_MULTISIG_COSIGNERS[scheme]}
                         >
-                            Add cosigner
+                            Add Cosigner
                         </Button>
                     </div>
                 </div>
@@ -692,7 +692,7 @@ export function MultisigCreate({ walletId, onBack }) {
                     disabled={composeError || stage === 'submitting'}
                     loading={stage === 'submitting'}
                 >
-                    Create multisig
+                    Create Multisig
                 </Button>
                 <Button
                     type="button"
@@ -851,7 +851,7 @@ function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, c
                             }
                         }}
                     >
-                        Import shared setup
+                        Import Shared Setup
                     </Button>
                     {row.shareError ? <FieldNote variant="error">{row.shareError}</FieldNote> : null}
                     <Input
@@ -942,7 +942,7 @@ function cosignerKind(origin) {
 // The option labels stay short enough to show whole in a narrow select; the help
 // tip explains each origin without crowding the field.
 const ORIGIN_HINTS = {
-    local: 'A software account or paired hardware signer in this wallet.',
+    local: 'A software account in this wallet, or a hardware wallet paired to it.',
     'external-xpub': 'Paste the account public key from another wallet.',
     'external-hardware': 'Sign through file transfer.',
 };

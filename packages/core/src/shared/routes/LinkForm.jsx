@@ -9,7 +9,9 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+// The From address and the fee selector render inside the
+// standard FromSection and FeeSection.
+import { AddressText, Button, ChainBadge, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -18,6 +20,7 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 import { nativeFeeForFeelessAction } from '../../flows/feeBearingActions.js';
 import {
     estimateNativeSendFee,
@@ -37,6 +40,15 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { MAX_MEMO_LENGTH, MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+// Link actions is laid out on the Wallet Form Standard frame.
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    useFormSections,
+} from '../components/formStandard/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -109,6 +121,13 @@ export function LinkForm({ walletId, onBack }) {
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    // Which standard section the last Review refusal points at, and a
+    // counter bumped on every Review, so that section reopens on each attempt.
+    const [formErrorSection, setFormErrorSection] = useState(/** @type {'from' | 'link' | 'fee' | null} */ (null));
+    const [reviewAttempt, setReviewAttempt] = useState(0);
+    // The sections' open state, held above the picker and review
+    // early returns. From starts closed, Link open, Memo and the fee closed.
+    const formSections = useFormSections({ from: false, link: true, memo: false, fee: false });
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const [hwStatus, setHwStatus] = useState('idle');
@@ -403,14 +422,18 @@ export function LinkForm({ walletId, onBack }) {
     // reachable from the review screen is in an invalid state.
     function handleReview(event) {
         event.preventDefault();
+        // Every Review attempt may reopen the section that holds the error.
+        setReviewAttempt((n) => n + 1);
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        if (feeStop) { setFormError(feeStop.formError); return; }
+        if (feeStop) { setFormError(feeStop.formError); setFormErrorSection('fee'); return; }
         if (!chain1Id || !chain2Id) {
             setFormError('Pick both networks before reviewing.');
+            setFormErrorSection('link');
             return;
         }
         if (!fromAddress || !submitChainId) {
             setFormError('Pick a source address first.');
+            setFormErrorSection('from');
             return;
         }
         // The live banner above the form already states this problem; copying it
@@ -418,13 +441,16 @@ export function LinkForm({ walletId, onBack }) {
         if (validationError) return;
         if (previewPending) {
             setFormError('Wait for both action previews to finish loading.');
+            setFormErrorSection('link');
             return;
         }
         if (!actionIndex1 || !actionIndex2) {
             setFormError('Provide both action indices before reviewing.');
+            setFormErrorSection('link');
             return;
         }
         setFormError(null);
+        setFormErrorSection(null);
         if (singleEncode) { openConfirmScreen(); return; }
         setStage('review');
     }
@@ -505,7 +531,7 @@ export function LinkForm({ walletId, onBack }) {
     const header = (
         <PageHeader
             onBack={onBack}
-            title={isReviewOrSubmitting ? 'Review link' : 'Link actions'}
+            title={isReviewOrSubmitting ? 'Review Link' : 'Link Actions'}
         />
     );
     const wrap = (children) => (
@@ -576,7 +602,7 @@ export function LinkForm({ walletId, onBack }) {
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={formChainId}
                 onChainChange={(value) => { setFormChainId(value); setFormError(null); }}
@@ -595,6 +621,18 @@ export function LinkForm({ walletId, onBack }) {
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={{
+                    verb: t('components.confirmSummary.verbLink'),
+                    target: t('components.confirmSummary.linkTarget', {
+                        coin1: linkParams.COIN1,
+                        index1: linkParams.COIN1_ACTION_INDEX,
+                        coin2: linkParams.COIN2,
+                        index2: linkParams.COIN2_ACTION_INDEX,
+                    }),
+                    direction: 'none',
+                    chainId: submitChainId,
+                    address: fromAddress?.address,
+                }}
                 screenVariant={variant}
                 chainLabel={null}
                 feeText={feeEstimate?.coinAmount && feeCoinTicker
@@ -647,16 +685,13 @@ export function LinkForm({ walletId, onBack }) {
                         <Button
                             type="submit"
                             variant="primary"
+                            icon={<Icon.SignIcon />}
                             loading={stage === 'submitting'}
                             disabled={isWatcherMode
                                 ? false
                                 : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                         >
-                            {isWatcherMode
-                                ? 'Create unsigned transaction'
-                                : hw
-                                    ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                    : 'Sign link'}
+                            {isWatcherMode ? 'Create Unsigned Transaction' : 'Sign Link'}
                         </Button>
                     </>
                 )}
@@ -737,61 +772,81 @@ export function LinkForm({ walletId, onBack }) {
         .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
         .map(([cid]) => cid);
 
+    // The closed summaries and the reveal keys of the standard sections.
+    const sectionErrorKey = (hasError) => (hasError && reviewAttempt > 0 ? reviewAttempt : 0);
+    const sideSummary = (ticker, index) => [ticker, index ? `#${index}` : ''].filter(Boolean).join(' ');
+    const linkSummary = [sideSummary(ticker1, actionIndex1), sideSummary(ticker2, actionIndex2)]
+        .filter(Boolean).join(' to ') || null;
+    const linkHasError = Boolean((validationError && !memoTooLong) || (formError && formErrorSection === 'link'));
+
     return wrapForm(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label="Link actions"
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}
-            status={validationError || formError ? (
-                <>
-                    {validationError ? (
-                        <StatusMessage variant="error">
-                            {validationError}
-                        </StatusMessage>
-                    ) : null}
-                    {formError ? (
-                        <StatusMessage variant="error">{formError}</StatusMessage>
-                    ) : null}
-                </>
-            ) : null}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="success"
+            status={[
+                validationError ? (
+                    <StatusMessage key="validation" variant="error">
+                        {validationError}
+                    </StatusMessage>
+                ) : null,
+                formError ? (
+                    <StatusMessage key="form" variant="error">{formError}</StatusMessage>
+                ) : null,
+            ]}
+            action={(
+                <FormAction
                     icon={<Icon.LinkIcon />}
                     loading={actionConfirm.composing || previewPending}
                     disabled={actionConfirm.composing || previewPending}
                 >
                     {actionConfirm.composing
-                        ? 'Preparing review…'
-                        : previewPending ? 'Looking up actions…'
-                        : 'Link actions'}
-                </Button>
+                        ? 'Preparing Review…'
+                        : previewPending ? 'Looking Up Actions…'
+                        : 'Link Actions'}
+                </FormAction>
+            )}
+            from={(
+                <FromSection
+                    {...formSections.bind('from')}
+                    chainId={formChainId}
+                    chainIds={chainIds}
+                    chainRegistry={chainRegistry}
+                    onNetworkChange={(value) => { setFormChainId(value); setFormError(null); }}
+                    networkHelp="The chain the link is recorded on. Your From address and the fee are on this network."
+                    address={fromAddress?.address || null}
+                    addressLabel="From"
+                    addressHelp="The address that signs and pays for the link. The link is recorded on the network chosen above."
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    revealKey={sectionErrorKey(formError && formErrorSection === 'from')}
+                />
+            )}
+            fee={(
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    chainId={submitChainId}
+                    coinTicker={feeCoinTicker || ''}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeCustomEstimate}
+                    revealKey={sectionErrorKey(formError && formErrorSection === 'fee')}
+                />
             )}
         >
-            <NetworkField
-                label="Network"
-                help="The chain the link is recorded on. Your From address and the fee are on this network."
-                value={formChainId}
-                onChange={(value) => { setFormChainId(value); setFormError(null); }}
-                chainIds={chainIds}
-                chainRegistry={chainRegistry}
-            />
-
-            {fromAddress ? (
-                <AddressField
-                    label="From"
-                    help="The address that signs and pays for the link. The link is recorded on the network chosen above."
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
-                />
-            ) : null}
-
+            {/* The main section holds both action cards; each card
+                keeps its own Network field, since the network an action was
+                recorded on is part of what is linked, not the source. */}
+            <FormSection
+                id="link"
+                title="Link"
+                icon={Icon.LinkIcon}
+                {...formSections.bind('link')}
+                revealKey={sectionErrorKey(linkHasError)}
+                summary={linkSummary}
+            >
             <div className={styles.linkActions} data-xc-preserve-nested-cards>
                 <ActionCard
                     number="1"
@@ -815,29 +870,29 @@ export function LinkForm({ walletId, onBack }) {
                     previewCache={previewCache}
                 />
             </div>
+            </FormSection>
 
-            <Input
-                label="Memo"
+            {/* Memo is its own optional closed section; the section carries the
+                Optional tag, not the field. */}
+            <FormSection
+                id="memo"
+                title="Memo"
+                icon={Icon.MessageIcon}
                 optional
-                maxLength={MAX_MEMO_LENGTH}
-                help={MEMO_HINT}
-                error={memoTooLong || undefined}
-                value={memo}
-                onChange={(e) => setMemo(e.target.value)}
-            />
-
-            {feeTiers ? (
-                <FeeSelector
-                    chainId={submitChainId}
-                    label="Network fee"
-                    coinTicker={feeCoinTicker || ''}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                {...formSections.bind('memo')}
+                revealKey={sectionErrorKey(Boolean(memoTooLong))}
+                summary={trimmedMemo || 'None'}
+            >
+                <Input
+                    label="Memo"
+                    maxLength={MAX_MEMO_LENGTH}
+                    help={MEMO_HINT}
+                    error={memoTooLong || undefined}
+                    value={memo}
+                    onChange={(e) => setMemo(e.target.value)}
                 />
-            ) : null}
-        </FormPage>,
+            </FormSection>
+        </FormFrame>,
     );
 }
 
@@ -879,6 +934,8 @@ function ActionCard({ number, chainIds, chainId, onChainChange, actionIndex, onA
                         onChange={onChainChange}
                         chainIds={chainIds}
                         chainRegistry={chainRegistry}
+                        // Link data (where the action lives), not the source network.
+                        notSource
                     />
                 </div>
 

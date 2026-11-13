@@ -1,37 +1,50 @@
+/* The Network field lives in the title-line filter, so the toolbar row
+   holds only the All | My bets | My markets tabs, full width, directly
+   above the list. */
 .toolbarRow {
     display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    gap: var(--xc-space-2);
     width: 100%;
 }
 
-.toolbarNetwork {
-    flex: 1 1 12rem;
+.toolbarActions {
     min-width: 0;
 }
 
-.toolbarNetwork > * {
-    margin-bottom: 0;
+.toolbarActions > * {
+    flex: 1 1 auto;
+    width: 100%;
 }
 
-/* The network field already shares the tabs' medium height and control
-   radius. Use the tabs' small control type token on this row as well. */
+/* Kept for callers that still pass the old network-field wrapper class. */
 .toolbarControl.toolbarControl > * {
     --chain-picker-font-size: var(--xc-control-font-sm);
 }
 
-.toolbarActions {
-    flex: 0 1 18rem;
-    min-width: min(100%, 14rem);
+/* Each tab is an icon and its word. */
+.tabLabel {
+    display: inline-flex;
     align-items: center;
+    justify-content: center;
+    gap: var(--xc-space-1);
+    white-space: nowrap;
 }
 
-@media (max-width: 420px) {
-    .toolbarActions {
-        flex: 1 1 100%;
-        min-width: 0;
-        width: 100%;
+.tabLabel svg {
+    flex: 0 0 auto;
+    width: 1rem;
+    height: 1rem;
+}
+
+/* The card list measures its own width, so the desktop shell gets a
+   two-column grid while phones and the popup keep one column. */
+.cardArea {
+    width: 100%;
+    min-width: 0;
+}
+
+@supports (container-type: inline-size) and (width: 1cqw) {
+    .cardArea {
+        container-type: inline-size;
     }
 }
 
@@ -39,40 +52,20 @@
     list-style: none;
     margin: 0;
     padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--xc-space-3);
 }
 
-.marketHeader {
-    width: 100%;
+.marketList > li {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: var(--xc-space-2);
-}
-
-.marketCard {
-    composes: card from '../../ui/Card.module.css';
-    min-height: var(--xc-tap-min);
-    width: 100%;
     min-width: 0;
-    box-sizing: border-box;
-    text-align: start;
-    color: var(--xc-text);
-    box-shadow: var(--xc-list-shadow);
-    cursor: pointer;
 }
 
-.marketCard:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
-.marketDetail {
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
-    line-height: 1.4;
-    overflow-wrap: anywhere;
+@supports (container-type: inline-size) and (width: 1cqw) {
+    @container (min-width: 760px) {
+        .marketList {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
 }

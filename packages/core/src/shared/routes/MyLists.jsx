@@ -200,8 +200,7 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
         <PageHeader
             onBack={onBack}
             backLabel="Back to home"
-            title="My lists"
-        />
+            title="My Lists"        />
     );
     // The page header holds only the title and Back, so every action of the
     // screen sits in the content's actions row, in every state. An empty
@@ -217,14 +216,14 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
                         icon={<Icon.PlusIcon />}
                         onClick={() => onCreateList()}
                     >
-                        Create list
+                        Create List
                     </Button>
                 ) : null}
                 {onOpenSharedLists ? (
-                    <Button variant="secondary" size="sm" icon={<Icon.UsersIcon />} onClick={() => onOpenSharedLists()}>Shared lists</Button>
+                    <Button variant="secondary" size="sm" icon={<Icon.UsersIcon />} onClick={() => onOpenSharedLists()}>Shared Lists</Button>
                 ) : null}
                 {onCreateUnionList ? (
-                    <Button variant="secondary" size="sm" onClick={() => onCreateUnionList()}>Create union list</Button>
+                    <Button variant="secondary" size="sm" onClick={() => onCreateUnionList()}>Create Union List</Button>
                 ) : null}
             </>
         ) : null
@@ -245,7 +244,7 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
                     variant="error"
                     className={styles.entryDescription}
                     recovery={{
-                        label: 'Try again',
+                        label: 'Try Again',
                         onAction: () => {
                             setAddressesError(null);
                             setAddressesByChain(null);
@@ -288,7 +287,7 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
             variant="error"
             className={styles.entryDescription}
             recovery={{
-                label: 'Try again',
+                label: 'Try Again',
                 onAction: () => {
                     setListsByChain({});
                     setListsReload((value) => value + 1);
@@ -319,7 +318,7 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
                     <EmptyState
                         title="No lists yet"
                         body="Create an address list for airdrops or a token list for project rosters and gates."
-                        actionLabel={onCreateList ? 'Create list' : undefined}
+                        actionLabel={onCreateList ? 'Create List' : undefined}
                         onAction={onCreateList ? () => onCreateList() : undefined}
                     />
                 ) : (

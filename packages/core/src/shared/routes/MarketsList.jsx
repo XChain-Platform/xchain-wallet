@@ -9,11 +9,13 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Button, Chip, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
+import { Button, Chip, EmptyState, Icon, ListPage, Select, ListRow, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
+// The standard title-line list filter (search and Show).
+import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
 import { DispenserBadge } from '../components/DispenserBadge.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { AssetMark } from '../../ui/AssetMark.jsx';
@@ -59,7 +61,6 @@ export function MarketsList({
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const { offline: networkOffline, recheck: recheckNetwork } = useNetworkOffline({ walletId });
-    const tabsId = useId();
 
     const [markets, setMarkets] = useState(/** @type {Array<{ tick1: string, tick2: string, lastPrice?: string, change24h?: string, depth?: number }>} */ ([]));
     const [watchlist, setWatchlist] = useState(/** @type {any[]} */ ([]));
@@ -73,8 +74,8 @@ export function MarketsList({
     const pendingWatchlistKeysRef = useRef(new Set());
     const [pendingWatchlistKeys, setPendingWatchlistKeys] = useState(new Set());
     const [debouncedSearch, setDebouncedSearch] = useState('');
-    const searchRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const marketResultsRef = useRef(/** @type {HTMLUListElement | null} */ (null));
+    const marketResultsId = useId();
     const walletScopeRef = useRef(walletId);
     if (walletScopeRef.current !== walletId) {
         walletScopeRef.current = walletId;
@@ -207,22 +208,6 @@ export function MarketsList({
         return applySearch(rows);
     }, [tab, markets, watchlist, selectedAsset, debouncedSearch]);
 
-    const firstMarketResult = () => marketResultsRef.current?.querySelector('[data-market-result="true"]');
-    const handleSearchKeyDown = (event) => {
-        if (event.key !== 'ArrowDown' && event.key !== 'Enter') return;
-        const result = firstMarketResult();
-        if (!result) return;
-        event.preventDefault();
-        if (event.key === 'Enter') result.click();
-        else result.focus();
-    };
-    const clearSearch = () => {
-        setSearch('');
-        setDebouncedSearch('');
-        setVisibleMarketCount(MARKETS_PAGE_SIZE);
-        searchRef.current?.focus();
-    };
-
     const hasRowsBeforeSearch = useMemo(() => {
         if (tab !== 'watchlist') return markets.length > 0;
         if (!selectedAsset) return false;
@@ -231,12 +216,14 @@ export function MarketsList({
             && (entry.tick1.toUpperCase() === selectedTick || entry.tick2.toUpperCase() === selectedTick));
     }, [tab, markets, watchlist, selectedAsset]);
     const filtersHideAllMarkets = displayMarkets.length === 0 && (
+        // A search with matches before it; an empty Watchlist keeps its own text.
         (Boolean(search.trim()) && hasRowsBeforeSearch)
-        || (tab !== 'all' && markets.length > 0)
     );
     const resetFilters = () => {
+        // The cleared search applies at once, not after the debounce.
         setSearch('');
-        setTab('all');
+        setDebouncedSearch('');
+        setTab('popular');
         setVisibleMarketCount(MARKETS_PAGE_SIZE);
     };
 
@@ -269,8 +256,51 @@ export function MarketsList({
         }
     }, [watchlist, walletId, messaging, loadWatchlist]);
 
+    // From the search box, Enter opens the top market and the arrows move
+    // into the list at either end.
+    const handleSearchKeyDown = (event) => {
+        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Enter') return;
+        const results = Array.from(marketResultsRef.current?.querySelectorAll('[data-market-result="true"]') || []);
+        const result = event.key === 'ArrowUp' ? results.at(-1) : results[0];
+        if (!result) return;
+        event.preventDefault();
+        if (event.key === 'Enter') result.click();
+        else result.focus();
+    };
+
+    // Search and the Show list live in the title-line filter; the
+    // icon is lit when there is search text or Show is not Popular.
+    const filterMenu = selectedAsset ? (
+        <ListFilterMenu
+            query={search}
+            onQueryChange={(value) => {
+                setSearch(value);
+                setVisibleMarketCount(MARKETS_PAGE_SIZE);
+            }}
+            active={tab !== 'popular'}
+            label="Filter markets"
+            searchPlaceholder="Search"
+            searchLabel="Search markets"
+            onSearchKeyDown={handleSearchKeyDown}
+            resultsId={marketResultsId}
+        >
+            <Select
+                label="Show"
+                size="md"
+                value={tab}
+                onChange={(event) => {
+                    setTab(event.target.value);
+                    setVisibleMarketCount(MARKETS_PAGE_SIZE);
+                }}
+            >
+                <option value="popular">Popular</option>
+                <option value="all">All</option>
+                <option value="watchlist">Watchlist</option>
+            </Select>
+        </ListFilterMenu>
+    ) : null;
     const header = (
-        <PageHeader onBack={onBack} title="Decentralized exchange" />
+        <PageHeader onBack={onBack} title="Decentralized Exchange" trailing={filterMenu} />
     );
 
     const selectorDescriptor = selectedAsset ? chainRegistry.get(selectedAsset.chainId) : null;
@@ -299,7 +329,7 @@ export function MarketsList({
                     <StatusMessage
                         variant="error"
                         recovery={{
-                            label: 'Try again',
+                            label: 'Try Again',
                             onAction: () => {
                                 setSettledAssetKey(null);
                                 setLoading(true);
@@ -338,69 +368,16 @@ export function MarketsList({
                             <span className={marketsStyles.assetChevron} aria-hidden="true">›</span>
                         </Button>
 
-                        {selectedAsset ? (
-                            <div style={{
-                                display: 'flex',
-                                flexWrap: 'wrap',
-                                alignItems: 'center',
-                                gap: 'var(--xc-space-2)',
-                                marginBottom: 'var(--xc-space-3)',
-                            }}>
-                                <div className={marketsStyles.searchField}>
-                                    <Input
-                                        ref={searchRef}
-                                        type="search"
-                                        enterKeyHint="search"
-                                        autoCapitalize="off"
-                                        autoCorrect="off"
-                                        spellCheck={false}
-                                        value={search}
-                                        onChange={(e) => {
-                                            setSearch(e.target.value);
-                                            setVisibleMarketCount(MARKETS_PAGE_SIZE);
-                                        }}
-                                        onKeyDown={handleSearchKeyDown}
-                                        placeholder="Search"
-                                        aria-label="Search markets"
-                                    />
-                                </div>
-                                {search ? (
-                                    <Button type="button" size="sm" variant="ghost" icon={null} onClick={clearSearch} aria-label="Clear market search">
-                                        <Icon.XIcon />
-                                    </Button>
-                                ) : null}
-                                <Tabs
-                                    id={tabsId}
-                                    items={[
-                                        { id: 'all', label: 'All' },
-                                        { id: 'popular', label: 'Popular' },
-                                        { id: 'watchlist', label: 'Watchlist' },
-                                    ]}
-                                    value={tab}
-                                    onChange={(nextTab) => {
-                                        setTab(nextTab);
-                                        setVisibleMarketCount(MARKETS_PAGE_SIZE);
-                                    }}
-                                    panelId={`${tabsId}-panel`}
-                                    aria-label="Markets view"
-                                    className={marketsStyles.marketTabs}
-                                />
-                            </div>
-                        ) : null}
                     </div>
                 )}
             >
-                <div
-                    id={selectedAsset ? `${tabsId}-panel` : undefined}
-                    role={selectedAsset ? 'tabpanel' : undefined}
-                    aria-labelledby={selectedAsset ? `${tabsId}-tab-${tab}` : undefined}
-                >
-                    <div role="region" aria-label="Markets results" aria-busy={(marketsLoading && !showOffline) || undefined}>
+                <div>
+                    <div id={marketResultsId} role="region" aria-label="Markets results" aria-busy={(marketsLoading && !showOffline) || undefined}>
                         {!selectedAsset ? (
                             <EmptyState
                                 title="No asset selected"
                                 body="Choose a coin or token to view its markets."
-                                actionLabel="Choose an asset"
+                                actionLabel="Choose an Asset"
                                 onAction={onChangeAsset}
                                 actionIcon={<Icon.MarketIcon />}
                             />
@@ -426,7 +403,8 @@ export function MarketsList({
                                     : tab === 'watchlist'
                                         ? `Starred markets for ${selectedAsset.tick} appear here after you star one.`
                                         : undefined}
-                                actionLabel={filtersHideAllMarkets ? 'Reset filters' : undefined}
+                                actionLabel={filtersHideAllMarkets ? 'Reset Filters' : undefined}
+                                actionIcon={<Icon.RefreshIcon />}
                                 onAction={filtersHideAllMarkets ? resetFilters : undefined}
                             />
                         ) : (
@@ -464,9 +442,10 @@ export function MarketsList({
                                     <Button
                                         type="button"
                                         variant="secondary"
+                                        icon={<Icon.ChevronDownIcon />}
                                         onClick={() => setVisibleMarketCount((count) => count + MARKETS_PAGE_SIZE)}
                                     >
-                                        Load more markets
+                                        Load More Markets
                                     </Button>
                                 </div>
                             ) : null}
@@ -525,7 +504,7 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPric
                 type="button"
                 variant="ghost"
                 size="sm"
-                icon={null}
+                icon={<span aria-hidden="true">{starred ? '★' : '☆'}</span>}
                 className={marketsStyles.starButton}
                 onClick={(e) => { e.stopPropagation(); onToggleStar(); }}
                 aria-label={starred ? 'Remove from watchlist' : 'Add to watchlist'}
@@ -537,9 +516,7 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPric
                     minWidth: 'var(--xc-tap-min)',
                     minHeight: 'var(--xc-tap-min)',
                 }}
-            >
-                {starred ? '★' : '☆'}
-            </Button>
+            />
             <ListRow
                 type="button"
                 className={marketsStyles.marketButton}

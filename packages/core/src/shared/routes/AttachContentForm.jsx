@@ -8,8 +8,20 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, Checkbox, FeeSelector, FormNotice, FormPage, Icon, InfoTip, Input, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+// Network, From and the fee selector come from the standard
+// FromSection and FeeSection.
+import { AddressText, Button, Checkbox, FormNotice, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+// The compose stage sits on the Wallet Form Standard frame.
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    joinSummary,
+    useFormSections,
+} from '../components/formStandard/index.js';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { TokenField } from '../components/TokenField.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
@@ -19,7 +31,7 @@ import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
-import { useDropZone } from '../hooks/useDropZone.js';
+import { FileField } from '../components/FileField.jsx';
 import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
 import { nativeFeeForFeelessAction } from '../../flows/feeBearingActions.js';
 import { normalizeGenesisRow } from './ManageToken.jsx';
@@ -41,14 +53,17 @@ import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { imagePreviewDataUrl, publishFileType } from '../utils/publishingFile.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/publishFile.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
 
 const ARTWORK_ACCEPT = ['image/*', 'audio/*', '.svg', '.json', '.txt'];
-// Moderate oversize drops reach the exact metadata-aware error below, while
-// unexpectedly large drops stop before FileReader allocates their contents.
-const MAX_DROP_BYTES = 32 * 1024;
+// Moderate oversize files reach the exact metadata-aware error below, while
+// unexpectedly large ones stop before FileReader allocates their contents.
+const MAX_READ_BYTES = 32 * 1024;
 const MAX_TITLE_LENGTH = 100;
 const POSITIVE_ACTION_INDEX = /^[1-9]\d*$/;
 
@@ -179,8 +194,19 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     const [waitElapsed, setWaitElapsed] = useState(0);
     const [indexLookupError, setIndexLookupError] = useState(/** @type {string | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
-    const fileInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const fileReadIdRef = useRef(0);
+    // The standard sections' open state, held above the early
+    // returns so it survives the From picker and the review stages. From
+    // closed, Artwork open, the rest closed. A refusal names its section and
+    // bumps the counter, so that section reopens even after being closed.
+    const formSections = useFormSections({ from: false, artwork: true, memo: false, picture: false, fee: false });
+    const [errorSection, setErrorSection] = useState(/** @type {'from' | 'artwork' | 'memo' | 'picture' | 'fee' | null} */ (null));
+    const [refusalCount, setRefusalCount] = useState(0);
+    const refuse = (section, message) => {
+        setErrorSection(section);
+        setRefusalCount((n) => n + 1);
+        setFormError(message);
+    };
 
     // The active map is best-effort: a host without `getActiveAddresses`, or
     // one whose call fails, still yields a usable form (newest-HD fallback).
@@ -452,8 +478,6 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         return out;
     }
 
-    const fileFieldLabelId = useId();
-    const fileLimitId = useId();
 
     const previewUrl = useMemo(
         () => imagePreviewDataUrl(fileMeta?.bytes),
@@ -475,17 +499,18 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         const bytes = new Uint8Array(content);
         setFileMeta(null);
         const { type, error: typeError } = artworkFileType(file);
+        // File refusals belong to the Artwork section (refuse reopens it).
         if (typeError) {
-            setFormError(typeError);
+            refuse('artwork', typeError);
             return;
         }
         if (bytes.length === 0) {
-            setFormError('That file is empty.');
+            refuse('artwork', 'That file is empty.');
             return;
         }
         const cap = attachmentCapFor(file.name || 'file', type);
         if (bytes.length > cap) {
-            setFormError(
+            refuse('artwork',
                 `That file is ${bytes.length.toLocaleString()} bytes; with this title and memo the on-chain ceiling is ${cap.toLocaleString()} bytes. For larger artwork, put an image URL in the token's description instead.`,
             );
             return;
@@ -499,104 +524,112 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         });
     }, [attachmentCapFor]);
 
-    const handleFilePick = useCallback((event) => {
-        const file = event.target?.files?.[0];
+    // A picked and a dropped file take the same path: name, type and size
+    // checks, then one read whose result only the latest pick may apply.
+    const handleFile = useCallback((file) => {
         if (!file) return;
         const readId = ++fileReadIdRef.current;
         setFileMeta(null);
         setFormError(null);
         const fileNameError = actionTextSafetyError(file.name || 'file', 'File name');
         if (fileNameError) {
-            setFormError(fileNameError);
+            refuse('artwork', fileNameError);
             return;
         }
-        const { error: typeError } = artworkFileType(file);
+        const { type, error: typeError } = artworkFileType(file);
         if (typeError) {
-            setFormError(typeError);
+            refuse('artwork', typeError);
+            return;
+        }
+        if (file.size > MAX_READ_BYTES) {
+            const cap = attachmentCapFor(file.name || 'file', type);
+            refuse('artwork',
+                `That file is ${file.size.toLocaleString()} bytes; with this title and memo the on-chain ceiling is ${cap.toLocaleString()} bytes. For larger artwork, put an image URL in the token's description instead.`,
+            );
             return;
         }
         const reader = new FileReader();
         reader.onload = () => {
             if (readId !== fileReadIdRef.current) return;
             if (reader.result instanceof ArrayBuffer) acceptFile(file, reader.result);
-            else setFormError('Could not read that file.');
+            else refuse('artwork', 'Could not read that file.');
         };
         reader.onerror = () => {
-            if (readId === fileReadIdRef.current) setFormError('Could not read that file.');
+            if (readId === fileReadIdRef.current) refuse('artwork', 'Could not read that file.');
         };
         reader.readAsArrayBuffer(file);
-    }, [acceptFile]);
+    }, [acceptFile, attachmentCapFor]);
 
-    const drop = useDropZone({
-        readAs: 'arrayBuffer',
-        accept: ARTWORK_ACCEPT,
-        maxBytes: MAX_DROP_BYTES,
-        onError: (msg) => { setFileMeta(null); setFormError(msg); },
-        onFile: ({ file, content }) => {
-            if (content instanceof ArrayBuffer) acceptFile(file, content);
-        },
-    });
+    // Removing the file also drops any read still in flight.
+    const clearFile = useCallback(() => {
+        fileReadIdRef.current += 1;
+        setFileMeta(null);
+        setFormError(null);
+    }, []);
 
     async function handleReviewFile(event) {
         event.preventDefault();
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        if (feeStop) { setFormError(feeStop.formError); return; }
+        // Each refusal names the section holding its field, so that
+        // section reopens on every attempt.
+        if (feeStop) { refuse('fee', feeStop.formError); return; }
         if (!fromAddress) {
-            setFormError('No signing address available on this network.');
+            refuse('from', 'No signing address available on this network.');
             return;
         }
         if (issuerEligibility.pending) {
-            setFormError(`Wait for the wallet to verify the current owner of ${tick}.`);
+            refuse('from', `Wait for the wallet to verify the current owner of ${tick}.`);
             return;
         }
         if (issuerEligibility.error) {
-            setFormError(issuerEligibility.error);
+            refuse('from', issuerEligibility.error);
             return;
         }
         if (!fileMeta) {
-            setFormError('Pick a file first.');
+            refuse('artwork', 'Pick a file first.');
             return;
         }
         if (!fileParams?.NAME) {
-            setFormError('The file name cannot be empty. Rename the file and choose it again.');
+            refuse('artwork', 'The file name cannot be empty. Rename the file and choose it again.');
             return;
         }
         if (!fileParams.TYPE) {
-            setFormError('The file content type cannot be empty. Choose the file again.');
+            refuse('artwork', 'The file content type cannot be empty. Choose the file again.');
             return;
         }
         if ((title && /[|;]/.test(title)) || (memo && /[|;]/.test(memo)) || /[|;]/.test(fileMeta.name)) {
-            setFormError('File name, title, and memo cannot contain | or ; characters.');
+            refuse((title && /[|;]/.test(title)) || /[|;]/.test(fileMeta.name) ? 'artwork' : 'memo',
+                'File name, title, and memo cannot contain | or ; characters.');
             return;
         }
         const unsafeMetadata = actionTextSafetyError(fileMeta.name, 'File name')
             || actionTextSafetyError(title, 'Title');
         if (unsafeMetadata) {
-            setFormError(unsafeMetadata);
+            refuse('artwork', unsafeMetadata);
             return;
         }
         if (fileParams.TITLE.length > MAX_TITLE_LENGTH) {
-            setFormError(`Title cannot be longer than ${MAX_TITLE_LENGTH} characters.`);
+            refuse('artwork', `Title cannot be longer than ${MAX_TITLE_LENGTH} characters.`);
             return;
         }
         const memoTooLong = memoLengthError(fileParams.MEMO);
         if (memoTooLong) {
-            setFormError(memoTooLong);
+            refuse('memo', memoTooLong);
             return;
         }
         if (setAsTokenInfo && !previewUrl) {
-            setFormError('Choose an image file before making it the token picture.');
+            refuse('picture', 'Choose an image file before making it the token picture.');
             return;
         }
         const cap = attachmentCapFor(fileMeta.name, fileMeta.type);
         if (fileMeta.bytes.length > cap) {
-            setFormError(
+            refuse('artwork',
                 `With this title and memo the on-chain ceiling is ${cap.toLocaleString()} bytes and the file is ${fileMeta.bytes.length.toLocaleString()} bytes. Shorten the title or memo.`,
             );
             return;
         }
         if (!fromAddress.id || typeof fromAddress.id !== 'string') {
-            setFormError('The selected signing address is missing its wallet ID. Choose another address.');
+            refuse('from', 'The selected signing address is missing its wallet ID. Choose another address.');
             return;
         }
         if (!descriptor?.coin || !descriptor?.networkKind || !isValidAddressForChain(
@@ -604,7 +637,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             descriptor.coin,
             descriptor.networkKind,
         )) {
-            setFormError('The selected signing address is not valid for this network.');
+            refuse('from', 'The selected signing address is not valid for this network.');
             return;
         }
         setGenesisRefreshing(true);
@@ -612,9 +645,12 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         setGenesisRefreshing(false);
         setIssueActionIndex(latestGenesis.index);
         if (!latestGenesis.index) {
+            // The token's creation record is not a field; it shows in the status slot.
+            setErrorSection(null);
             setFormError(latestGenesis.error);
             return;
         }
+        setErrorSection(null);
         setFormError(null);
         setStage('review-file');
     }
@@ -796,7 +832,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         <PageHeader
             onBack={onBack}
             backLabel="Back"
-            title={`Attach artwork to ${tick}`}
+            title={`Attach Artwork to ${tick}`}
         />
     );
     const wrap = (children) => (
@@ -846,9 +882,23 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     // Confirm page for whichever leg is in flight, rendered in place of that
     // leg's review stage; the stage machine stays intact behind it.
     if (actionConfirm.open) {
+        // The leg in flight names the action; the token it attaches to is
+        // the hero.
+        const attachSummary = {
+            verb: stage === 'review-link'
+                ? t('components.confirmSummary.verbLink')
+                : stage === 'review-desc'
+                    ? t('components.confirmSummary.verbUpdateDescription')
+                    : t('publishFile.title'),
+            ...(tick ? { ticker: String(tick).toUpperCase() } : {}),
+            direction: 'none',
+            chainId,
+            address: fromAddress?.address,
+        };
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={attachSummary}
                 screenVariant={variant}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
@@ -931,7 +981,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     </p>
                 ) : null}
                 <div className={styles.actions}>
-                    <Button variant="ghost" icon={<Icon.XIcon />} onClick={onBack}>Close (keep waiting)</Button>
+                    <Button variant="ghost" icon={<Icon.XIcon />} onClick={onBack}>Close (Keep Waiting)</Button>
                 </div>
             </>,
         );
@@ -961,7 +1011,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     <StatusMessage variant="error">{indexLookupError}</StatusMessage>
                 ) : null}
                 <div className={styles.actions}>
-                    <Button variant="ghost" icon={<Icon.XIcon />} onClick={onBack}>Close (keep waiting)</Button>
+                    <Button variant="ghost" icon={<Icon.XIcon />} onClick={onBack}>Close (Keep Waiting)</Button>
                 </div>
             </>,
         );
@@ -979,7 +1029,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 actions={(
                     <>
                         <Button variant="ghost" type="button" icon={<Icon.XIcon />} onClick={() => setStage('done')} disabled={submitting}>
-                            Skip (artwork only)
+                            Skip (Artwork Only)
                         </Button>
                         <Button
                             type="submit"
@@ -988,7 +1038,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                             loading={submitting}
                             disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                         >
-                            Upload token info
+                            Upload Token Info
                         </Button>
                     </>
                 )}
@@ -1061,7 +1111,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                             loading={submitting}
                             disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                         >
-                            Update description
+                            Update Description
                         </Button>
                     </>
                 )}
@@ -1139,7 +1189,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                             loading={submitting}
                             disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                         >
-                            Upload file
+                            Upload File
                         </Button>
                     </>
                 )}
@@ -1228,7 +1278,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                         loading={submitting}
                         disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                     >
-                        Link artwork to {tick}
+                        Link Artwork to {tick}
                     </Button>
                 )}
             >
@@ -1282,7 +1332,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={chainId}
                 lockNetwork
@@ -1300,48 +1350,72 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     // on-chain record, so every character typed there lowers it.
     const fileLimitBytes = fileMeta
         ? attachmentCapFor(fileMeta.name, fileMeta.type)
-        : attachmentCapFor('file.bin', 'application/octet-stream');
+        : attachmentCapFor('file', 'application/octet-stream');
 
     // stage === 'compose' (also the fallback if review stages lose
     // their prerequisites, e.g. addresses reloaded)
+    // A section holding the last refusal gets a key that changes on
+    // every attempt; From also opens while the picked address cannot make
+    // the artwork official (the owner check), since the fix lives there.
+    const sectionErrorKey = (id) => (errorSection === id && formError ? refusalCount : 0);
+    const artworkSummary = joinSummary(tick, title.trim() || null, fileMeta?.name || null);
     return wrapForm(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label="Attach artwork"
             onSubmit={handleReviewFile}
             status={formError || issuerEligibility.error ? (
                 <StatusMessage variant="error">{formError || issuerEligibility.error}</StatusMessage>
             ) : null}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="success"
+            action={(
+                <FormAction
                     icon={<Icon.UploadIcon />}
                     loading={genesisRefreshing}
                     disabled={genesisRefreshing || issuerEligibility.pending || !!issuerEligibility.error}
                 >
-                    Attach artwork
-                </Button>
+                    Attach Artwork
+                </FormAction>
+            )}
+            /* The standard order. From (closed) holds the Network the
+               token fixes and the From address; Artwork (open) holds the
+               fixed Token, Title and the file; then Memo, Token Picture
+               (optional, closed) and the Network fee row. */
+            from={(
+                <FromSection
+                    {...formSections.bind('from')}
+                    chainId={chainId}
+                    chainIds={chainId ? [chainId] : []}
+                    chainRegistry={chainRegistry}
+                    lockNetwork
+                    networkHelp={`The chain ${tick} lives on. The artwork is stored and linked on this network, and your From address pays both fees here.`}
+                    address={fromAddress?.address || null}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    addressHelp={`The address that signs both the upload and the link. Only ${tick}'s current owner can make the artwork official, so pick the owner address.`}
+                    revealKey={sectionErrorKey('from') || (issuerEligibility.error ? `owner:${fromAddress?.address || ''}` : 0)}
+                />
+            )}
+            fee={(
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeCustomEstimate}
+                    revealKey={sectionErrorKey('fee')}
+                />
             )}
         >
-            <NetworkField
-                label="Network"
-                help={`The chain ${tick} lives on. The artwork is stored and linked on this network, and your From address pays both fees here.`}
-                value={chainId}
-                onChange={() => {}}
-                chainIds={chainId ? [chainId] : []}
-                chainRegistry={chainRegistry}
-            />
-            <AddressField
-                label="From"
-                help={`The address that signs both the upload and the link. Only ${tick}'s current owner can make the artwork official, so pick the owner address.`}
-                icon="addresses"
-                value={fromAddress?.address || ''}
-                readOnly
-                onChange={() => {}}
-                onIconClick={() => setSourcePickerOpen(true)}
-                iconLabel="Choose source address"
-            />
+            <FormSection
+                id="artwork"
+                title="Artwork"
+                icon={Icon.ImageIcon}
+                {...formSections.bind('artwork')}
+                revealKey={sectionErrorKey('artwork')}
+                summary={artworkSummary}
+            >
             {/* Opened from one token's Manage page, so the token is fixed. */}
             <TokenField
                 label="Token"
@@ -1350,42 +1424,28 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 onOpenPicker={() => {}}
                 disabled
             />
-            <div className={inputStyles.field}>
-                <div className={inputStyles.labelRow}>
-                    <span id={fileFieldLabelId} className={inputStyles.label}>Artwork file</span>
-                    <InfoTip
-                        className={inputStyles.labelHelp}
-                        label={`Stores the artwork on the chain itself and links it to ${tick}. Two signatures: one to upload the file, one to make it official. A compact image (SVG, small PNG/JPEG/WebP) works best. For larger artwork, put an image URL in the token's description instead.`}
-                        aria="About Artwork file"
-                    />
-                </div>
-                <div
-                    {...drop.rootProps}
-                    role="group"
-                    aria-labelledby={fileFieldLabelId}
-                    aria-describedby={fileLimitId}
-                >
-                    <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept={ARTWORK_ACCEPT.join(',')}
-                        onChange={handleFilePick}
-                        style={{ display: 'none' }}
-                        aria-label="Choose file to attach"
-                    />
-                    <Button
-                        type="button"
-                        variant="secondary"
-                        icon={<Icon.DocumentIcon />}
-                        onClick={() => fileInputRef.current?.click()}
-                    >
-                        {fileMeta ? 'Choose a different file' : 'Choose a file'}
-                    </Button>
-                </div>
-                <div id={fileLimitId} className={inputStyles.hint}>
-                    Up to {fileLimitBytes.toLocaleString()} bytes with the current title and memo.
-                </div>
-            </div>
+            {/* Title comes before the artwork file. */}
+            <Input
+                label="Title"
+                optional
+                help={`A short name for the artwork, stored on the chain with the file. If you also make it ${tick}'s picture, it becomes the token's display name. Every character here takes room from the file. It cannot contain | or ;.`}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                autoComplete="off"
+                maxLength={MAX_TITLE_LENGTH}
+            />
+            {/* The standard file field Publish file uses: the size ceiling
+                in the label, the file name in the field, Upload or X at its
+                edge. A file dropped on the field takes the same checks. */}
+            <FileField
+                label={`Artwork file (up to ${fileLimitBytes.toLocaleString()} bytes)`}
+                help={`${`Stores the artwork on the chain itself and links it to ${tick}. Two signatures: one to upload the file, one to make it official. A compact image (SVG, small PNG/JPEG/WebP) works best. For larger artwork, put an image URL in the token's description instead.`} Up to about ${fileLimitBytes.toLocaleString()} bytes with the current title and memo.`}
+                inputLabel="Choose file to attach"
+                accept={ARTWORK_ACCEPT}
+                fileName={fileMeta?.name || ''}
+                onFile={handleFile}
+                onClear={clearFile}
+            />
             {fileMeta ? (
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>File</dt>
@@ -1407,24 +1467,37 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     style={{ maxWidth: 160, maxHeight: 160, objectFit: 'contain', borderRadius: 8, display: 'block', margin: '0 auto var(--xc-space-3)' }}
                 />
             ) : null}
-            <Input
-                label="Title"
+            </FormSection>
+            {/* Memo is its own optional section, closed; the field carries no
+                Optional tag of its own. */}
+            <FormSection
+                id="memo"
+                title="Memo"
+                icon={Icon.MessageIcon}
                 optional
-                help={`A short name for the artwork, stored on the chain with the file. If you also make it ${tick}'s picture, it becomes the token's display name. Every character here takes room from the file. It cannot contain | or ;.`}
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                autoComplete="off"
-                maxLength={MAX_TITLE_LENGTH}
-            />
+                {...formSections.bind('memo')}
+                revealKey={sectionErrorKey('memo')}
+                summary={memo.trim() ? memo.trim() : 'None'}
+            >
             <Input
                 label="Memo"
-                optional
                 maxLength={MAX_MEMO_LENGTH}
                 help="A public note stored on the chain with the artwork file. Every character here takes room from the file. It cannot contain | or ;."
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
                 autoComplete="off"
             />
+            </FormSection>
+            {/* The token-picture choice is an optional section, closed. */}
+            <FormSection
+                id="picture"
+                title="Token Picture"
+                icon={Icon.ImageIcon}
+                optional
+                {...formSections.bind('picture')}
+                revealKey={sectionErrorKey('picture')}
+                summary={setAsTokenInfo ? 'On' : 'Off'}
+            >
             <Checkbox
                 label={(
                     <>
@@ -1437,17 +1510,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 onChange={(e) => setSetAsTokenInfo(e.target.checked)}
                 disabled={Boolean(fileMeta && !previewUrl)}
             />
-            {feeTiers ? (
-                <FeeSelector
-                    chainId={chainId}
-                    label="Network fee"
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
-            ) : null}
-        </FormPage>,
+            </FormSection>
+        </FormFrame>,
     );
 }

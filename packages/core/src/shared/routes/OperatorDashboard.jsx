@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, EmptyState, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { isDemoWallet, synthesizeDemoStaking } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -201,7 +201,7 @@ function OperatorDashboardView({ walletId, chainId, address, onBack }) {
     const descriptor = chainRegistry.get(chainId);
 
     const header = (
-        <PageHeader onBack={onBack} backLabel="Back to staking" title="Operator dashboard" />
+        <PageHeader onBack={onBack} backLabel="Back to staking" title="Operator Dashboard" />
     );
 
     // One page error names every section that could not load; one Try again reloads them all.
@@ -219,14 +219,14 @@ function OperatorDashboardView({ walletId, chainId, address, onBack }) {
     return (
         <Screen variant={variant} header={header}>
             <ListPage className={styles.dashboard} toolbar={(
-                <Button type="button" variant="ghost" disabled={refreshing} onClick={() => refreshRef.current()}>
-                    {refreshing ? 'Refreshing metrics…' : 'Refresh metrics'}
+                <Button type="button" variant="ghost" icon={<Icon.RefreshIcon />} disabled={refreshing} onClick={() => refreshRef.current()}>
+                    {refreshing ? 'Refreshing Metrics…' : 'Refresh Metrics'}
                 </Button>
             )}>
                 {failedSections.length > 0 ? (
                     <StatusMessage
                         variant="error"
-                        recovery={{ label: 'Try again', onAction: () => reloadRef.current() }}
+                        recovery={{ label: 'Try Again', onAction: () => reloadRef.current() }}
                     >
                         {`Couldn't load ${andList(failedSections)}.`}
                     </StatusMessage>

@@ -17,6 +17,7 @@ import '../../i18n/locales/en/history.js';
 import '../../i18n/locales/en/pending.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { ActivityRow, actionIconForAction } from '../components/ActivityRow.jsx';
+import { Icon } from '../../ui/index.js';
 import { classifyEntryAction, classifyEntryStatus } from '../utils/historyFilter.js';
 import { contractDisplayLabel } from './contractResponseShape.js';
 import { truncateAddress } from '../../ui/AddressText.jsx';
@@ -336,7 +337,12 @@ export const EntryRow = memo(function EntryRow({ entry, selected, opensDetail = 
                 selected={selected}
                 aria-description={rowDescription || undefined}
                 decoration={showConnector ? <span className={styles.connector} aria-hidden="true" /> : null}
-                trailing={opensDetail ? null : <DoubleChevron direction={selected ? 'up' : 'down'} />}
+                // A row that opens its detail page ends in the Back-sized
+                // forward chevron every tappable list row carries; an inline
+                // disclosure row keeps its expand chevron.
+                trailing={opensDetail
+                    ? <span className={styles.rowChevron} data-row-chevron><Icon.ForwardIcon /></span>
+                    : <DoubleChevron direction={selected ? 'up' : 'down'} />}
             />
             {selected ? (
                 <DetailCard

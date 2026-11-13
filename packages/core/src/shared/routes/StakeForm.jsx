@@ -9,8 +9,12 @@
 // contact legal@dankest.llc.
 
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/routes.js';
+import '../../i18n/locales/en/components.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FormPage, Icon, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+// The Wallet Form Standard frame (From, main section, Network fee, one action).
+import { FeeSection, FormAction, FormFrame, FormSection, FromSection, useFormSections } from '../components/formStandard/index.js';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { validatorLaneChainIds } from '../../registry/actions.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -130,6 +134,11 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
     const [reviewParams, setReviewParams] = useState(
         /** @type {Record<string, string> | null} */ (null),
     );
+    // The standard's open state, held above the early returns (the
+    // address picker page) so it survives them; only the main section starts open.
+    const formSections = useFormSections({ from: false, stake: true, mode: false, fee: false });
+    // Counts review presses, so a section holding the error reopens on each.
+    const [validationAttempt, setValidationAttempt] = useState(0);
 
     useEffect(() => {
         setChainId(initialChainId);
@@ -390,6 +399,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
 
     function handleReview(event) {
         event.preventDefault();
+        setValidationAttempt((n) => n + 1); // Reopens the section holding the error.
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
         if (feeStop) { setFormError(feeStop.formError); return; }
         if (!fromAddress) {
@@ -508,7 +518,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
         <PageHeader
             onBack={stage === 'review' ? leaveReview : onBack}
             backDisabled={stage === 'submitting' || actionConfirm.composing}
-            title={stage === 'review' || stage === 'submitting' ? 'Review stake' : 'Stake XCHAIN'}
+            title={stage === 'review' || stage === 'submitting' ? 'Review Stake' : 'Stake XCHAIN'}
         />
     );
     const wrap = (children) => (
@@ -599,10 +609,8 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                         }
                     >
                         {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : 'Stake XCHAIN'}
+                            ? 'Create Unsigned Transaction'
+                            : 'Stake XCHAIN'}
                     </Button>
                 )}
             >
@@ -671,6 +679,14 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={{
+                    verb: t('components.confirmSummary.verbStake'),
+                    ticker: 'XCHAIN',
+                    ...(actionParams.AMOUNT ? { amount: actionParams.AMOUNT } : {}),
+                    direction: 'out',
+                    chainId,
+                    address: fromAddress?.address,
+                }}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
@@ -695,7 +711,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={chainId}
                 onChainChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
@@ -708,8 +724,18 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
         );
     }
 
+    // The section each form error belongs to. A fee stop opens Network
+    // fee, a source problem opens From, everything else (amount, key) the main one.
+    const feeStopNow = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+    const feeHasError = Boolean(formError && feeStopNow && formError === feeStopNow.formError);
+    const fromHasError = Boolean(formError && /source address/i.test(formError));
+    const stakeHasError = Boolean(formError && !feeHasError && !fromHasError);
+    const sectionErrorKey = (hasError) => (hasError ? validationAttempt + 1 : 0);
+    const stakeSummary = amount.trim() ? formatWithThousands(amount.trim()) : 'No amount yet';
+    const modeSummary = `${stakeMode === '2' ? 'Top up' : 'New stake'}${detectStatus === 'new' || detectStatus === 'topup' ? ' (detected)' : ''}`;
+
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label="Stake XCHAIN"
             onSubmit={handleReview}
@@ -717,51 +743,55 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
             status={formError ? (
                 <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="success"
+            action={(
+                <FormAction
                     loading={actionConfirm.composing}
                     icon={<Icon.StakeIcon />}
                     disabled={!fromAddress || actionConfirm.composing}
                 >
-                    {singleEncode ? 'Stake' : 'Review stake'}
-                </Button>
+                    {singleEncode ? 'Stake' : 'Review Stake'}
+                </FormAction>
             )}
-        >
-            <NetworkField label="Network" help="The chain your stake is locked on. Only networks that support staking are listed, and the From address and the fee are on the network you pick." value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? validatorLaneChainIds(Object.keys(addressesByChain), chainRegistry) : [chainId]} chainRegistry={chainRegistry} />
-            {fromAddress ? (
-                <AddressField
-                    label="From"
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
+            /* The standard order: From (Network and address), Position (amount,
+               what it unlocks, signing key), optional Stake Mode (the detected
+               new-or-top-up choice), then the Network fee row. */
+            from={(
+                <FromSection
+                    {...formSections.bind('from')}
+                    chainId={chainId}
+                    chainIds={addressesByChain ? validatorLaneChainIds(Object.keys(addressesByChain), chainRegistry) : [chainId]}
+                    chainRegistry={chainRegistry}
+                    onNetworkChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
+                    networkHelp="The chain your stake is locked on. Only networks that support staking are listed, and the From address and the fee are on the network you pick."
+                    address={fromAddress?.address || null}
+                    addressHelp={t('routes.stakeForm.fromHelp')}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    revealKey={sectionErrorKey(fromHasError)}
+                />
+            )}
+            fee={feeTiers ? (
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeCustomEstimate}
+                    revealKey={sectionErrorKey(feeHasError)}
                 />
             ) : null}
-
-            <RadioGroup
-                legend="Mode"
-                name="stakeMode"
-                value={stakeMode}
-                onChange={(value) => { setStakeMode(value); setFormError(null); }}
-                options={[
-                    { value: '1', label: 'New stake' },
-                    { value: '2', label: 'Top up an existing stake' },
-                ]}
-                help="Set automatically from the signing public key below. Change it only if you need to override the detected mode."
-            />
-            {detectStatus !== 'idle' ? (
-                <p style={{ fontSize: '0.8rem', margin: '0.5rem 0 0', color: 'var(--xc-text-muted)' }}>
-                    {detectStatus === 'checking' && 'Checking the network for an existing stake…'}
-                    {detectStatus === 'new' && '✓ No existing stake for this public key. New stake is selected.'}
-                    {detectStatus === 'topup' && '✓ Existing stake found; defaulting to Top up. (Choose New stake to force-reject as duplicate.)'}
-                    {detectStatus === 'error' && 'Couldn\'t reach the network. Pick the mode manually; the network will reject if the wrong one is chosen.'}
-                </p>
-            ) : null}
-
+        >
+            <FormSection
+                id="stake"
+                title="Position" /* A noun, so the header never shares the Stake button's name. */
+                icon={Icon.StakeIcon}
+                {...formSections.bind('stake')}
+                revealKey={sectionErrorKey(stakeHasError)}
+                summary={stakeSummary}
+                summaryUnit={amount.trim() ? 'XCHAIN' : undefined}
+            >
             <AmountField
                 label="Amount"
                 help="Amount to stake. Capabilities activate automatically when your total stake reaches their thresholds."
@@ -839,19 +869,40 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                 autoCorrect="off"
                 spellCheck={false}
             />
-
-            {feeTiers ? (
-                <FeeSelector
-                    chainId={chainId}
-                    label="Network fee"
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
+            {/* The detection line follows the key it reads, so it stays
+                in view while Stake Mode is closed. */}
+            {detectStatus !== 'idle' ? (
+                <p style={{ fontSize: '0.8rem', margin: '0.5rem 0 0', color: 'var(--xc-text-muted)' }}>
+                    {detectStatus === 'checking' && 'Checking the network for an existing stake…'}
+                    {detectStatus === 'new' && '✓ No existing stake for this public key. New stake is selected.'}
+                    {detectStatus === 'topup' && '✓ Existing stake found; defaulting to Top up. (Choose New stake to force-reject as duplicate.)'}
+                    {detectStatus === 'error' && 'Couldn\'t reach the network. Pick the mode manually; the network will reject if the wrong one is chosen.'}
+                </p>
             ) : null}
-
-        </FormPage>,
+            </FormSection>
+            {/* Set automatically from the key, so it is an optional
+                closed section; it opens on a press of its row. */}
+            <FormSection
+                id="mode"
+                title="Stake Mode"
+                icon={Icon.GearIcon}
+                optional
+                {...formSections.bind('mode')}
+                summary={modeSummary}
+            >
+            <RadioGroup
+                legend="Mode"
+                name="stakeMode"
+                value={stakeMode}
+                onChange={(value) => { setStakeMode(value); setFormError(null); }}
+                // Every choice option carries an icon (RadioGroup's icon).
+                options={[
+                    { value: '1', label: 'New stake', icon: Icon.PlusIcon },
+                    { value: '2', label: 'Top up an existing stake', icon: Icon.StakeIcon },
+                ]}
+                help="Set automatically from the signing public key above. Change it only if you need to override the detected mode."
+            />
+            </FormSection>
+        </FormFrame>,
     );
 }

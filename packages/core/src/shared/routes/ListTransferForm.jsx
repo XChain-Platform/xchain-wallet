@@ -16,12 +16,29 @@ import {
     FormPage,
     Icon,
     Input,
-    NetworkField,
+    // Network comes from the standard FromSection.
     PageHeader,
     Screen,
     StatusMessage,
 } from '@xchain-wallet/core/ui';
+// The form sits in the Wallet Form Standard frame: From, the
+// Transfer section, an optional Memo section, the status slot and the action.
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    joinSummary,
+    summaryAddress,
+    useFormSections,
+} from '../components/formStandard/index.js';
+import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
 import { airdrop as airdropLib, registry as registryLib } from '@xchain-wallet/core';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/routes.js';
+import '../../i18n/locales/en/components.js';
+import { listLabel } from '../utils/listLabel.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -72,6 +89,11 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
     const variant = screenVariantFor(shell);
     const descriptor = chainRegistry.get(chainId);
     const signerReady = useSignerReady(walletId);
+    // The standard's Network fee row, display only: the transfer
+    // lane takes no fee pick, so the row shows the normal-rate estimate the
+    // other list forms show, and the exact fee is set at review.
+    const coinTicker = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' }[descriptor?.coin] || '';
+    const feeEstimate = useMemo(() => estimateNativeSendFee({ chainId, chainRegistry }), [chainId]);
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -89,6 +111,11 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const submitInFlightRef = useRef(false);
+    // The standard sections' open state, held above the picker
+    // early returns so it survives them; a counter of Transfer attempts
+    // reopens the section that holds the error on every attempt.
+    const formSections = useFormSections({ from: false, transfer: true, memo: false, fee: false });
+    const [reviewAttempt, setReviewAttempt] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
@@ -197,6 +224,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
     async function handleReview(event) {
         event.preventDefault();
         if (submitInFlightRef.current) return;
+        setReviewAttempt((n) => n + 1); // Reopens the section holding an error.
         if (!validate()) return;
         submitInFlightRef.current = true;
         setFormError(null);
@@ -248,7 +276,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
         setContactsPickerOpen(true);
     }
 
-    const header = <PageHeader onBack={onBack} title="Transfer list" />;
+    const header = <PageHeader onBack={onBack} title="Transfer List" />;
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
             {children}
@@ -259,6 +287,14 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
         return (
             <ActionConfirmScreen
                 {...lane.confirmProps}
+                summary={{
+                    verb: t('components.confirmSummary.verbTransferList'),
+                    target: listLabel(listActionIndex),
+                    direction: 'none',
+                    chainId: listRef.chainId,
+                    address: fromRecord?.address,
+                    ...(trimmedDestination ? { recipient: trimmedDestination } : {}),
+                }}
                 walletId={walletId}
                 screenVariant={variant}
                 chainLabel={null}
@@ -286,7 +322,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={chainId}
                 lockNetwork
@@ -372,47 +408,84 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
         : !selectedOwner
             ? `The current owner, ${shortAddress(owner)}, is not an address in this wallet. A transfer signed by another address will be refused by the network, so this wallet cannot transfer it.`
             : null;
+    // Which section holds the form error, so that section reopens on
+    // every Transfer attempt even after the user closed it.
+    const errorSection = !formError ? null
+        : /memo/i.test(formError) ? 'memo'
+            : /owned by|owner could not be verified/i.test(formError) ? 'from'
+                : 'transfer';
+    const sectionErrorKey = (id) => (errorSection === id ? reviewAttempt + 1 : 0);
+    const fromHelp = "Only this list's owner can transfer it. The network refuses a transfer signed by any other address.";
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label="Transfer list"
             onSubmit={handleReview}
-            status={sdkSupported === false || formError ? (
-                <>
-                    {sdkSupported === false ? <StatusMessage variant="error">{SDK_REASON}</StatusMessage> : null}
-                    {formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
-                </>
-            ) : null}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="success"
-                    icon={lane.isWatcherMode ? undefined : <Icon.HandshakeIcon />}
+            status={[
+                sdkSupported === false ? <StatusMessage key="sdk" variant="error">{SDK_REASON}</StatusMessage> : null,
+                formError ? <StatusMessage key="error" variant="error">{formError}</StatusMessage> : null,
+            ]}
+            action={(
+                <FormAction
+                    // The action always carries an icon, watcher mode included.
+                    icon={lane.isWatcherMode ? <Icon.SignIcon /> : <Icon.HandshakeIcon />}
                     loading={lane.composing}
                     disabled={sdkSupported !== true || Boolean(ownershipReason) || !typedConfirmOk || !selectedOwner || lane.composing}
                 >
-                    {lane.isWatcherMode ? 'Create unsigned transaction' : 'Transfer list'}
-                </Button>
+                    {lane.isWatcherMode ? 'Create Unsigned Transaction' : 'Transfer List'}
+                </FormAction>
             )}
+            /* From (closed) holds the list's locked network and the
+               owner address; with no wallet-held owner it opens and keeps the
+               empty field and its picker. */
+            from={(
+                <FromSection
+                    {...formSections.bind('from')}
+                    chainId={chainId}
+                    chainRegistry={chainRegistry}
+                    lockNetwork
+                    networkHelp={t('routes.listTransfer.networkHelp')}
+                    address={fromRecord?.address || null}
+                    addressLabel="From"
+                    addressHelp={fromHelp}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    revealKey={sectionErrorKey('from')}
+                    missing={(
+                        <AddressField
+                            label="From"
+                            icon="addresses"
+                            help={fromHelp}
+                            value=""
+                            readOnly
+                            onChange={() => {}}
+                            onIconClick={() => setSourcePickerOpen(true)}
+                            iconLabel="Choose source address"
+                        />
+                    )}
+                />
+            )}
+            fee={feeEstimate ? (
+                // FeeSection's fixed-fee mode (no speed pick on this lane).
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    fixedFee={feeEstimate.coinAmount}
+                    etaMinutes={feeEstimate.etaMinutes}
+                >
+                    <p className={styles.hint}>An estimate. The exact fee is set when the transfer is built for review.</p>
+                </FeeSection>
+            ) : null}
         >
-            <NetworkField
-                label="Network"
-                value={chainId}
-                onChange={() => {}}
-                chainIds={[chainId]}
-                chainRegistry={chainRegistry}
-            />
-            <AddressField
-                label="From"
-                icon="addresses"
-                help="Only this list's owner can transfer it. The network refuses a transfer signed by any other address."
-                value={fromRecord?.address || ''}
-                readOnly
-                onChange={() => {}}
-                onIconClick={() => setSourcePickerOpen(true)}
-                iconLabel="Choose source address"
-            />
-
+            <FormSection
+                id="transfer"
+                title="Transfer"
+                icon={Icon.HandshakeIcon}
+                {...formSections.bind('transfer')}
+                revealKey={sectionErrorKey('transfer')}
+                summary={joinSummary(`List #${listActionIndex}`, trimmedDestination ? `to ${summaryAddress(trimmedDestination)}` : null)}
+            >
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>List</dt>
                 <dd className={styles.detailsValue}>#{listActionIndex}</dd>
@@ -434,16 +507,6 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
                 autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
-                disabled={sdkSupported !== true || Boolean(ownershipReason)}
-            />
-            <Input
-                label="Memo"
-                optional
-                maxLength={MAX_MEMO_LENGTH}
-                help="A note recorded with this list ownership transfer."
-                value={memo}
-                onChange={(event) => { setMemo(event.target.value); setFormError(null); }}
-                autoComplete="off"
                 disabled={sdkSupported !== true || Boolean(ownershipReason)}
             />
 
@@ -468,7 +531,28 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
                 spellCheck={false}
                 disabled={sdkSupported !== true || Boolean(ownershipReason)}
             />
+            </FormSection>
 
-        </FormPage>,
+            {/* Memo is its own optional section, closed until used. */}
+            <FormSection
+                id="memo"
+                title="Memo"
+                icon={Icon.MessageIcon}
+                optional
+                {...formSections.bind('memo')}
+                revealKey={sectionErrorKey('memo')}
+                summary={trimmedMemo || 'None'}
+            >
+            <Input
+                label="Memo"
+                maxLength={MAX_MEMO_LENGTH}
+                help="A note recorded with this list ownership transfer."
+                value={memo}
+                onChange={(event) => { setMemo(event.target.value); setFormError(null); }}
+                autoComplete="off"
+                disabled={sdkSupported !== true || Boolean(ownershipReason)}
+            />
+            </FormSection>
+        </FormFrame>,
     );
 }

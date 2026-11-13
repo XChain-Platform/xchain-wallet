@@ -212,8 +212,7 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
         <PageHeader
             nested
             onBack={busy ? undefined : onClose}
-            title="Add addresses"
-        />
+            title="Add Addresses"        />
     );
     const footer = coinOptions.length > 0 ? (
         <form aria-label="Generate addresses" onSubmit={handleGenerate}>

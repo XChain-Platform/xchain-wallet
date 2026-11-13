@@ -9,7 +9,10 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, Checkbox, FeeSelector, FieldNote, FormPage, FormSection, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FieldNote, FormPage, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+// The Wallet Form Standard frame. Its FormSection is the collapsible one,
+// not the settings block of the same name in core/ui.
+import { FeeSection, FormAction, FormFrame, FormSection, summaryAddress, useFormSections } from '../components/formStandard/index.js';
 import { t } from '../../i18n/index.js';
 import { registry as registryLib } from '@xchain-wallet/core';
 import '../../i18n/locales/en/parallelComposer.js';
@@ -24,6 +27,7 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useFormLeaveGuard } from '../hooks/useFormLeaveGuard.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import { titleCase } from '../utils/titleCase.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { BackIcon, CheckIcon, ForwardIcon, PlusIcon, RefreshIcon, SignIcon, TrashIcon, XIcon } from '../../ui/icons/index.jsx';
@@ -61,8 +65,8 @@ const newRowId = () => `row-${++nextRowId}`;
  *
  * The spec's key warning surfaces in Review: parallel actions are NOT
  * atomic. Each action signs and broadcasts independently; a failure
- * on row 2 does not roll back row 1. The composer requires the user
- * to acknowledge this before signing the first row.
+ * on row 2 does not roll back row 1. Review states this, and every
+ * row's confirm screen repeats it as a notice.
  *
  * Sign loop. Every row opens the shared confirm page, runs its own
  * network dry-run, and signs the exact PSBT shown there. Hardware
@@ -73,12 +77,11 @@ const newRowId = () => `row-${++nextRowId}`;
  * rows can be retried in place; pending rows after a failure can be
  * skipped or re-attempted from the Review screen.
  *
- * Prefill (§42.8.4 templates). When `initialRows` is supplied the
+ * Prefill. When `initialRows` is supplied the
  * composer seeds with those rows instead of one blank row. Each
  * prefill row carries a resolved `chainId` and a stringified
  * `paramsJson`; the composer treats them as ordinary rows from then
- * on (full edit / remove / re-order). Callers (CrossChainTemplates)
- * are responsible for resolving each template's `chainHint` to a
+ * on (full edit / remove / re-order). The caller picks each row's
  * concrete chainId from the wallet's available chains.
  *
  * @param {object} props
@@ -111,12 +114,18 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
 
     const [rows, setRows] = useState(/** @type {Row[]} */ ([]));
     const [sourcePickerRowId, setSourcePickerRowId] = useState(/** @type {string | null} */ (null));
-    const [acknowledgedNoRollback, setAcknowledgedNoRollback] = useState(false);
     const [stage, setStage] = useState(
         /** @type {'compose' | 'review' | 'signing' | 'done'} */ ('compose'),
     );
     const [activeRowIndex, setActiveRowIndex] = useState(0);
     const [watcherResult, setWatcherResult] = useState(/** @type {any | null} */ (null));
+    // Each row is one collapsible section. Every row is the queue's own
+    // content (there is no single main section), so rows start open and the
+    // user folds the ones they are done with.
+    const [rowOpen, setRowOpen] = useState(/** @type {Record<string, boolean>} */ ({}));
+    // The signing step's Network fee section, held here so it survives the
+    // confirm page that replaces the step while a row signs.
+    const signSections = useFormSections({ fee: false });
 
     // A run that stops part-way keeps its unsent rows as a draft, so leaving the
     // composer never loses them and a broadcast row is never offered again.
@@ -353,7 +362,6 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
     };
 
     const startSigning = () => {
-        if (!acknowledgedNoRollback) return;
         setResumeNotice(null);
         setStage('signing');
         setActiveRowIndex(rows.findIndex((r) => r.status !== 'success'));
@@ -519,8 +527,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
-                walletId={walletId}
+                title="From Address"                walletId={walletId}
                 chainId={sourcePickerRow.chainId}
                 onChainChange={(nextChainId) => updateRowNetwork(sourcePickerRowIndex, nextChainId)}
                 onPick={(address) => {
@@ -539,6 +546,15 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
             <ActionConfirmScreen
                 {...activeLane.confirmProps}
                 confirmAction={confirmActionWithPlainRefusal(activeLane.confirmProps.confirmAction)}
+                // The row's action names the verb; its amount, token and
+                // recipient come from the host's decode of the composed row. A
+                // single action has no later one to fail, so it carries no notice.
+                summary={{
+                    verb: titleCase(actionDisplayLabel(activeRow?.action)),
+                    chainId: activeChainId,
+                    address: activeFromAddress?.address,
+                    ...(rows.length > 1 ? { notice: t('parallelComposer.confirmNotice') } : {}),
+                }}
                 screenVariant={variant}
                 chainLabel={activeDescriptor?.displayName || activeChainId || ''}
                 feeText={feeEstimate?.coinAmount
@@ -602,14 +618,31 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
             `${totalSucceeded} broadcast, ${totalSkipped} skipped, ${remaining} remaining.`,
             `Current row: ${statusLabel(activeRow.status)}.`,
         ].join(' ');
+        // The signing step on the Form Standard: the row being signed, the
+        // Network fee section for its chain, the status slot, then Skip and Sign.
         return wrap(
-            <FormPage
+            <FormFrame
                 demoGuard={demoGuard}
                 label="Sign parallel actions"
                 status={activeRow.status === 'failed' && activeRow.error ? (
                     <StatusMessage variant="error">{activeRow.error}</StatusMessage>
                 ) : null}
-                actions={(
+                fee={feeTiers ? (
+                    <FeeSection
+                        {...signSections.bind('fee')}
+                        chainId={activeChainId}
+                        coinTicker={activeCoinTicker}
+                        tiers={feeTiers}
+                        value={feePick}
+                        onChange={setFeePick}
+                        customEstimate={feeCustomEstimate}
+                        // A custom rate that cannot be built stops the row; open the section holding it.
+                        revealKey={activeRow.status === 'failed' && activeRow.error
+                            && activeRow.error === customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate })?.formError
+                            ? `fee-${activeRow.error}` : 0}
+                    />
+                ) : null}
+                action={(
                     <>
                         <Button
                             type="button"
@@ -652,19 +685,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                     row={activeRow}
                     addressesByChain={addressesByChain}
                 />
-                {feeTiers ? (
-                    <FeeSelector
-                        chainId={activeChainId}
-                        label="Network fee"
-                        coinTicker={activeCoinTicker}
-                        tiers={feeTiers}
-                        value={feePick}
-                        onChange={setFeePick}
-                        customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                    />
-                ) : null}
-
-            </FormPage>,
+            </FormFrame>,
         );
     }
 
@@ -688,7 +709,6 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                             type="button"
                             variant="success"
                             icon={<SignIcon />}
-                            disabled={!acknowledgedNoRollback}
                             onClick={startSigning}
                         >
                             Sign all
@@ -705,27 +725,25 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                         If a later row fails, successful earlier rows remain broadcast.
                         {t('parallelComposer.noRollback')}
                 </FieldNote>
-                <Checkbox
-                    className={parallelStyles.acknowledgement}
-                    label="I understand successful actions cannot be rolled back if a later action fails."
-                    checked={acknowledgedNoRollback}
-                    onChange={(e) => setAcknowledgedNoRollback(e.target.checked)}
-                    aria-describedby="parallel-no-rollback-warning"
-                />
             </FormPage>,
         );
     }
 
-    // stage === 'compose'
+    // stage === 'compose'. On the Form Standard: one collapsible section per
+    // row (each row carries its own Network and From, so there is no single
+    // From section), Add Action under the rows, the status slot, one action.
+    const issueRowIndex = rows.findIndex((row, i) => {
+        const issue = rowIssues[i];
+        return issue && (!issue.missing || touchedRows[row.id]);
+    });
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label="Compose parallel actions"
             onSubmit={async (event) => {
                 event.preventDefault();
                 await goReview();
             }}
-            sectioned
             status={[
                 shownComposeError || validationError ? (
                     <StatusMessage key="error" variant="error">{shownComposeError || validationError}</StatusMessage>
@@ -736,22 +754,14 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                     </StatusMessage>
                 ) : null,
             ]}
-            actions={(
-                <>
-                    <Button type="button" variant="secondary" size="sm" icon={<PlusIcon />} onClick={addRow}>
-                        Add action
-                    </Button>
-                    <Button
-                        type="submit"
-                        variant="success"
-                        size="sm"
-                        icon={<SignIcon />}
-                        loading={validating}
-                        disabled={Boolean(shownComposeError) || validating}
-                    >
-                        Sign and send queue
-                    </Button>
-                </>
+            action={(
+                <FormAction
+                    icon={<SignIcon />}
+                    loading={validating}
+                    disabled={Boolean(shownComposeError) || validating}
+                >
+                    Sign and Send Queue
+                </FormAction>
             )}
         >
             {rows.map((row, i) => (
@@ -759,6 +769,10 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                     key={row.id}
                     index={i}
                     row={row}
+                    open={rowOpen[row.id] ?? true}
+                    onOpenChange={(open) => setRowOpen((current) => ({ ...current, [row.id]: open }))}
+                    // A row's own problem reopens it, so the message is never behind a chevron.
+                    revealKey={i === issueRowIndex ? `issue:${shownComposeError}` : 0}
                     chainIds={chainsWithAddresses}
                     addressesByChain={addressesByChain}
                     actionsList={actionsList}
@@ -769,16 +783,37 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                     canRemove={rows.length > 1}
                 />
             ))}
-        </FormPage>,
+            {/* Extra rows stack under the last one, as Send's Add recipient does. */}
+            <div className={parallelStyles.addRow}>
+                <Button type="button" variant="secondary" size="sm" icon={<PlusIcon />} onClick={addRow}>
+                    Add Action
+                </Button>
+            </div>
+        </FormFrame>,
     );
 }
 
-function RowEditor({ index, row, chainIds, addressesByChain, actionsList, onChange, onNetworkChange, onOpenSourcePicker, onRemove, canRemove }) {
+function RowEditor({ index, row, open, onOpenChange, revealKey, chainIds, addressesByChain, actionsList, onChange, onNetworkChange, onOpenSourcePicker, onRemove, canRemove }) {
     const addrs = (addressesByChain && row.chainId) ? (addressesByChain[row.chainId] || []) : [];
     const pickedAddress = addrs.find((address) => address.id === row.fromAddressId) || null;
+    const network = row.chainId ? (chainRegistry.get(row.chainId)?.displayName || row.chainId) : null;
+    // Closed, a row reads "Send on Bitcoin, bc1q...7c1c".
+    const summary = [
+        row.action ? `${actionDisplayLabel(row.action)}${network ? ` on ${network}` : ''}` : network,
+        pickedAddress ? summaryAddress(pickedAddress.address) : null,
+    ].filter(Boolean).join(', ') || t('parallelComposer.rowEmpty');
 
     return (
-        <FormSection title={`Row ${index + 1}`}>
+        <FormSection
+            id={row.id}
+            title={`Row ${index + 1}`}
+            icon={SignIcon}
+            main={index === 0}
+            open={open}
+            onOpenChange={onOpenChange}
+            revealKey={revealKey}
+            summary={summary}
+        >
 
             <div className={parallelStyles.rowStatus}>
                 <span>Row state</span>

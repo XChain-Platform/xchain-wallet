@@ -22,6 +22,7 @@ import { useNativeExitRoot } from '../hooks/useNativeExitRoot.js';
 import { demoOwnsVaultPassword, exitDemoWallet } from '../utils/demoGraduation.js';
 import { isWalletExistsError } from '../utils/walletExistsError.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { titleCase } from '../utils/titleCase.js';
 import { OnboardingCarousel } from './OnboardingCarousel.jsx';
 import styles from './Onboarding.module.css';
 import { t } from '../../i18n/index.js';
@@ -410,7 +411,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
         <PageHeader
             onBack={onBack}
             backLabel={t('onboarding.backToWallets')}
-            title={t('walletPicker.add')}
+            title={titleCase(t('walletPicker.add'))}
         />
     ) : null;
 
@@ -541,6 +542,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                                 <Button
                                     variant="ghost"
                                     block
+                                    icon={<Icon.BackIcon />}
                                     onClick={onBack}
                                     disabled={!!gradBusy}
                                 >
@@ -585,7 +587,8 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
     }
 
     return (
-        <Screen variant={variant} header={header}>
+        // The first-run page, with no header, centres its body (welcomeMain).
+        <Screen variant={variant} header={header} bodyClassName={header ? undefined : styles.welcomeMain}>
             <FormPage
                 label={t('onboarding.walletSetup')}
                 // Inside the app the page header already names the screen and the

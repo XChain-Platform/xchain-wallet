@@ -17,7 +17,7 @@ import styles from './ActionsMenu.module.css';
 
 const SIGNER_ACTION_IDS = new Set(['sign-psbt', 'sign-message', 'verify-signature']);
 
-const ENTRY_ICON = {
+export const ENTRY_ICON = {
     issue: Icon.PlusIcon,
     mint: Icon.MintIcon,
     destroy: Icon.TrashIcon,
@@ -42,7 +42,6 @@ const ENTRY_ICON = {
     batch: Icon.MenuIcon,
     'cross-chain-swap': Icon.SwapIcon,
     'cross-chain-order': Icon.MarketIcon,
-    'cross-chain-templates': Icon.DocumentIcon,
     'bridge-move': Icon.MigrateIcon,
     'bridge-settings': Icon.GearIcon,
     'multisig-create': Icon.MultisigIcon,

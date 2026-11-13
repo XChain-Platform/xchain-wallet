@@ -9,7 +9,9 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, Checkbox, EmptyState, FeeSelector, FieldNote, FormNotice, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+// Network, From and the fee selector come from the standard FromSection and
+// FeeSection (formStandard, below).
+import { AddressText, Button, ChainBadge, Checkbox, EmptyState, FieldNote, FormNotice, FormPage, Icon, Input, ListPage, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib, airdrop as airdropLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -19,6 +21,7 @@ import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useDropZone } from '../hooks/useDropZone.js';
+import { FileField } from '../components/FileField.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { DiagnosticDetails } from '../components/DiagnosticDetails.jsx';
@@ -35,6 +38,8 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/routes.js';
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
@@ -53,8 +58,37 @@ import {
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { listActionSize, listActionSizeError } from '../utils/listActionSize.js';
+// The form sits in the Wallet Form Standard frame: From, the List section,
+// optional Details and Memo sections, the Network fee row, the status slot
+// and the action.
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    joinSummary,
+    useFormSections,
+} from '../components/formStandard/index.js';
+import { formatCoinBaseUnits } from '../../flows/feesCard.js';
+import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+/**
+ * The protocol fee for the closed Network fee summary, in the coin
+ * the Fees card charges it in, or null while it is unknown or free.
+ */
+function protocolFeeSummary({ quote, pending, payInNative, coinTicker }) {
+    if (pending) return null;
+    const fee = normalizeProtocolFee(quote);
+    if (!fee.known || fee.free) return null;
+    if (payInNative) {
+        const native = formatCoinBaseUnits(quote?.requiredFeeSats);
+        return native ? `${native} ${coinTicker}`.trim() : null;
+    }
+    return fee.amount ? `${fee.amount} XCHAIN` : null;
+}
 
 const META_ERROR_TEXT = {
     pipe: 'Cannot contain the | character.',
@@ -143,6 +177,12 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
+    // The standard sections' open state, held above the picker and
+    // review early returns so it survives them; a counter of Publish attempts
+    // reopens the section that holds the error on every attempt.
+    const formSections = useFormSections({ from: false, list: true, details: false, memo: false, fee: false });
+    const [reviewAttempt, setReviewAttempt] = useState(0);
+    const [feeStopped, setFeeStopped] = useState(false);
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const submitInFlightRef = useRef(false);
 
@@ -342,17 +382,33 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         enabled: true,
     });
 
+    // A CSV or TXT file, picked or dropped, adds its addresses under any
+    // already in the box. The file field names it only while the box still
+    // holds exactly what the file left there.
+    const [recipientsFile, setRecipientsFile] = useState(
+        /** @type {{ name: string, before: string, after: string } | null} */ (null),
+    );
+    const recipientsFileName = recipientsFile && recipientsFile.after === pasteText ? recipientsFile.name : '';
     const recipientsDrop = useDropZone({
         accept: ['.csv', '.txt', 'text/csv', 'text/plain'],
         readAs: 'text',
         onError: (msg) => setFormError(msg),
-        onFile: ({ content }) => {
+        onFile: ({ file, content }) => {
             const text = typeof content === 'string' ? content : '';
-            const parts = airdropLib.parseCsv(text);
-            setPasteText((prev) => (prev.trim() ? `${prev}\n${parts.join('\n')}` : parts.join('\n')));
+            const joined = airdropLib.parseCsv(text).join('\n');
+            const next = pasteText.trim() ? `${pasteText}\n${joined}` : joined;
+            setPasteText(next);
+            setRecipientsFile({ name: file?.name || 'Addresses file', before: pasteText, after: next });
             setFormError(null);
         },
     });
+
+    // Removing the file takes back only the addresses it added; the box was
+    // not edited since, or the file name would no longer show.
+    function clearRecipientsFile() {
+        if (recipientsFile && recipientsFile.after === pasteText) setPasteText(recipientsFile.before);
+        setRecipientsFile(null);
+    }
 
     // Software sources go through the single-encode confirm
     // page; hardware + watcher keep the legacy review stage (same split
@@ -462,7 +518,12 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
 
     function handleReview(event) {
         event.preventDefault();
+        // Each attempt reopens the section holding the error; a
+        // custom fee stop opens the Network fee row even when the fee field
+        // shows the error itself.
+        setReviewAttempt((n) => n + 1);
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        setFeeStopped(Boolean(feeStop));
         if (feeStop) { setFormError(feeStop.formError); return; }
         if (!validate()) return;
         setFormError(null);
@@ -523,7 +584,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     const header = (
         <PageHeader
             onBack={onBack}
-            title={stage === 'review' || stage === 'submitting' ? 'Review list' : 'Create list'}
+            title={stage === 'review' || stage === 'submitting' ? 'Review List' : 'Create List'}
         />
     );
     const wrap = (children) => (
@@ -590,6 +651,13 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={{
+                    verb: t('components.confirmSummary.verbCreateList'),
+                    ...(trimmedName ? { target: trimmedName } : {}),
+                    direction: 'none',
+                    chainId,
+                    address: fromAddress?.address,
+                }}
                 screenVariant={variant}
                 chainLabel={null}
                 feeText={feeEstimate?.coinAmount
@@ -643,7 +711,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                             loading={stage === 'submitting'}
                             disabled={isWatcherMode ? false : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                         >
-                            {isWatcherMode ? 'Create unsigned transaction' : hw ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Publish list'}
+                            {isWatcherMode ? 'Create Unsigned Transaction' : 'Publish List'}
                         </Button>
                     </>
                 )}
@@ -704,7 +772,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={chainId}
                 onChainChange={(cid) => { setChainId(cid); setFromAddressId(null); setFormError(null); }}
@@ -719,7 +787,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
             <TokenPicker
                 purpose="receive"
                 walletId={walletId}
-                title="Add a token"
+                title="Add a Token"
                 onSelect={(sel) => {
                     const t = String(sel.tick || '');
                     const selectedDescriptor = sel.chainId ? chainRegistry.get(sel.chainId) : null;
@@ -753,47 +821,99 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     }
 
     // stage === 'form'
+    // Which section holds the form error, so that section reopens on
+    // every Publish attempt even after the user closed it.
+    const errorSection = feeStopped ? 'fee'
+        : !formError ? null
+            : /memo/i.test(formError) ? 'memo'
+                : /name and description/i.test(formError) ? 'details'
+                    : /signing address/i.test(formError) ? 'from'
+                        : 'list';
+    const sectionErrorKey = (id) => (errorSection === id ? reviewAttempt + 1 : 0);
+    const listSummary = joinSummary(
+        listType === '2' ? 'Address list' : 'Token list',
+        `${items.length} item${items.length === 1 ? '' : 's'}`,
+    );
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label="Create list"
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}
-            status={formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="success"
+            status={[formError ? <StatusMessage key="error" variant="error">{formError}</StatusMessage> : null]}
+            action={(
+                <FormAction
                     icon={singleEncode ? <Icon.UploadIcon /> : <Icon.DocumentIcon />}
                     loading={actionConfirm.composing}
                     disabled={actionConfirm.composing}
                 >
-                    {actionConfirm.composing ? 'Preparing review…' : singleEncode ? 'Publish list' : 'Create unsigned transaction'}
-                </Button>
+                    {actionConfirm.composing ? 'Preparing Review…' : singleEncode ? 'Publish List' : 'Create Unsigned Transaction'}
+                </FormAction>
+            )}
+            /* From (closed) holds Network and the From address. With
+               no address on the network it opens and says so. */
+            from={(
+                <FromSection
+                    {...formSections.bind('from')}
+                    chainId={chainId}
+                    chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]}
+                    chainRegistry={chainRegistry}
+                    onNetworkChange={(cid) => { setChainId(cid); setFromAddressId(null); setFormError(null); }}
+                    networkHelp="The chain the list is published on. Your From address and the fee are on this network, and the list holds addresses or tokens of this chain."
+                    address={fromAddress?.address || null}
+                    addressLabel="From"
+                    addressHelp={t('routes.listCreate.fromHelp')}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    revealKey={sectionErrorKey('from')}
+                    // Only when the network truly has no address; the
+                    // default pick lands one render after the list loads.
+                    missing={(addressesByChain?.[chainId] || []).length === 0
+                        ? <FormNotice variant="error">No address on this network. Use Receive to generate one first.</FormNotice>
+                        : null}
+                />
+            )}
+            /* The one Network fee row: the speed picker, then the Fees
+               card (network and protocol fee, native-fee switch). */
+            fee={(
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeCustomEstimate}
+                    revealKey={sectionErrorKey('fee')}
+                    protocolSummary={protocolFeeSummary({
+                        quote: protocolFeeQuote,
+                        pending: protocolFeePending,
+                        payInNative: nativeFee.toggleProps.checked,
+                        coinTicker,
+                    }) || undefined}
+                >
+                    <FeesCard
+                        chainId={chainId}
+                        feeSelector={null}
+                        tiers={feeTiers || undefined}
+                        value={feePick}
+                        customEstimate={feeCustomEstimate}
+                        quote={protocolFeeQuote}
+                        pending={protocolFeePending}
+                    >
+                        <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
+                    </FeesCard>
+                </FeeSection>
             )}
         >
-            <NetworkField
-                label="Network"
-                help="The chain the list is published on. Your From address and the fee are on this network, and the list holds addresses or tokens of this chain."
-                value={chainId}
-                onChange={(cid) => { setChainId(cid); setFromAddressId(null); setFormError(null); }}
-                chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]}
-                chainRegistry={chainRegistry}
-            />
-            {fromAddress ? (
-                <AddressField
-                    label="From"
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
-                />
-            ) : (
-                <FormNotice variant="error">No address on this network. Use Receive to generate one first.</FormNotice>
-            )}
-
+            <FormSection
+                id="list"
+                title="List"
+                icon={Icon.TokenListIcon}
+                {...formSections.bind('list')}
+                revealKey={sectionErrorKey('list')}
+                summary={listSummary}
+            >
             <Select
                 label="List type"
                 value={listType}
@@ -835,22 +955,21 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                             autoComplete="off"
                         />
                     </div>
-                    {/* Wraps, and drives a hidden file input from a real
-                        button: the browser's own picker is unstyled and,
-                        beside the Contacts button, ran off a phone screen. */}
+                    {/* The standard file field; the drop-zone hook keeps its
+                        size cap, type check and read for both the dialog and
+                        a drop on the field. */}
+                    <FileField
+                        label={t('routes.listCreate.addressesFile')}
+                        help={t('routes.listCreate.addressesFileHelp')}
+                        optional
+                        inputLabel={t('routes.listCreate.addressesFileInput')}
+                        fileName={recipientsFileName}
+                        drop={recipientsDrop}
+                        onClear={clearRecipientsFile}
+                    />
                     <div className={styles.importActions}>
-                        <div style={{ display: 'none' }}>
-                            <Input
-                                {...recipientsDrop.pickerProps}
-                                aria-label="Upload CSV of addresses"
-                                autoComplete="off"
-                            />
-                        </div>
-                        <Button type="button" variant="ghost" onClick={recipientsDrop.openFilePicker}>
-                            Upload CSV
-                        </Button>
                         <Button type="button" variant="ghost" onClick={() => setContactPickerOpen(true)}>
-                            Add from contacts
+                            Add From Contacts
                         </Button>
                     </div>
                     {pasteText.trim() ? (
@@ -862,8 +981,8 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     ) : null}
                     {recipients.invalid.length > 0 ? (
                         <div className={styles.hint}>
-                            <Button type="button" className={styles.back} onClick={() => setShowInvalid((s) => !s)}>
-                                {showInvalid ? 'Hide' : 'Show'} {recipients.invalid.length} invalid
+                            <Button type="button" className={styles.back} icon={showInvalid ? <Icon.EyeOffIcon /> : <Icon.EyeIcon />} onClick={() => setShowInvalid((s) => !s)}>
+                                {showInvalid ? 'Hide' : 'Show'} {recipients.invalid.length} Invalid
                             </Button>
                             {showInvalid ? (
                                 <ul>{recipients.invalid.map((a, i) => (<li key={i}><code>{a}</code></li>))}</ul>
@@ -921,12 +1040,26 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     onStatusChange={setTickStatus}
                 />
             )}
+            {/* The action size describes the list, so it closes the List section. */}
+            <p className={styles.hint}>
+                Action size: {actionSize.compiledBytes.toLocaleString('en-US')} / {actionSize.maxBytes.toLocaleString('en-US')} bytes.
+            </p>
+            </FormSection>
 
+            {/* Name and Description are one optional Details section;
+                inside it the fields drop their own Optional tags. */}
             {metaSupported ? (
-                <>
+                <FormSection
+                    id="details"
+                    title="Details"
+                    icon={Icon.DocumentIcon}
+                    optional
+                    {...formSections.bind('details')}
+                    revealKey={sectionErrorKey('details')}
+                    summary={joinSummary(trimmedName, trimmedDescription ? 'description' : null) || 'None'}
+                >
                     <Input
                         label="Name"
-                        optional
                         help={`A public on-chain name for this list, up to ${LIST_META_NAME_MAX_BYTES} UTF-8 bytes.`}
                         hint={`${utf8ByteLength(trimmedName)} / ${LIST_META_NAME_MAX_BYTES} bytes`}
                         error={nameError || undefined}
@@ -936,7 +1069,6 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     />
                     <Input
                         label="Description"
-                        optional
                         help={`A public on-chain description of this list, up to ${LIST_META_DESCRIPTION_MAX_BYTES} UTF-8 bytes.`}
                         hint={`${utf8ByteLength(trimmedDescription)} / ${LIST_META_DESCRIPTION_MAX_BYTES} bytes`}
                         error={descriptionError || undefined}
@@ -944,41 +1076,28 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                         onChange={(e) => { setListDescription(e.target.value); setFormError(null); }}
                         autoComplete="off"
                     />
-                </>
+                </FormSection>
             ) : null}
+            {/* Memo is its own optional section, closed until used. */}
+            <FormSection
+                id="memo"
+                title="Memo"
+                icon={Icon.MessageIcon}
+                optional
+                {...formSections.bind('memo')}
+                revealKey={sectionErrorKey('memo')}
+                summary={trimmedMemo || 'None'}
+            >
             <Input
                 label="Memo"
-                optional
                 maxLength={MAX_MEMO_LENGTH}
                 help="A public note stored on-chain with this list creation action. It is separate from the list's name and description and cannot contain | or ;."
                 value={memo}
                 onChange={(e) => { setMemo(e.target.value); setFormError(null); }}
                 autoComplete="off"
             />
-
-            <FeesCard
-                chainId={chainId}
-                feeSelector={feeTiers ? (
-                    <FeeSelector
-                        chainId={chainId}
-                        label="Network fee"
-                        coinTicker={coinTicker}
-                        tiers={feeTiers}
-                        value={feePick}
-                        onChange={setFeePick}
-                        customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                    />
-                ) : null}
-                quote={protocolFeeQuote}
-                pending={protocolFeePending}
-            >
-                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
-            </FeesCard>
-            <p className={styles.hint}>
-                Action size: {actionSize.compiledBytes.toLocaleString('en-US')} / {actionSize.maxBytes.toLocaleString('en-US')} bytes.
-            </p>
-
-        </FormPage>,
+            </FormSection>
+        </FormFrame>,
     );
 }
 
@@ -1032,7 +1151,7 @@ function ContactAddressPickerScreen({ variant, messaging, chainCoin, onAdd, onBa
         });
     }
 
-    const header = <PageHeader onBack={onBack} title="Add from contacts" />;
+    const header = <PageHeader onBack={onBack} title="Add From Contacts" />;
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
             <ListPage>{children}</ListPage>
@@ -1072,7 +1191,7 @@ function ContactAddressPickerScreen({ variant, messaging, chainCoin, onAdd, onBa
                     disabled={checked.size === 0}
                     onClick={() => onAdd(rows.filter((r) => checked.has(r.key)).map((r) => r.address))}
                 >
-                    Add {checked.size || ''} selected
+                    Add {checked.size || ''} Selected
                 </Button>
             </div>
         </>,

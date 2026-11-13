@@ -231,7 +231,8 @@
    the input's baseline rather than the label's. */
 .buySection {
     min-width: 0;
-    margin-top: var(--xc-space-4);
+    /* The Buy tab's panel spaces its blocks; no extra top margin. */
+    margin-top: 0;
     overflow-wrap: anywhere;
 }
 
@@ -240,6 +241,227 @@
     max-width: 100%;
     white-space: normal;
     overflow-wrap: anywhere;
+}
+
+/* Page layout: the owner's Refill and Close under the blue card, then the
+   Buy | Details | Fills | Settings tabs with the Buy tab's dispense stepper. */
+.layout,
+.column {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+/* Wide screens: the card and the owner's buttons on the left, the tabs and
+   the chosen tab on the right. */
+@media (min-width: 834px) {
+    .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        align-items: start;
+        gap: var(--xc-space-3);
+        width: 100%;
+    }
+}
+
+.ownerActions {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: var(--xc-space-2);
+}
+
+.closeButton.closeButton {
+    color: var(--xc-danger-fg);
+    border-color: var(--xc-danger);
+}
+
+.closeButton.closeButton:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--xc-danger) 8%, var(--xc-surface));
+    color: var(--xc-danger-fg);
+}
+
+/* The section tabs share the row evenly, icon beside the word, on one line
+   down to the 360px popup. */
+.sectionTabs.sectionTabs [role='tab'] {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-inline: var(--xc-space-1);
+    white-space: nowrap;
+}
+
+@media not all and (min-width: 400px) {
+    .sectionTabs.sectionTabs [role='tab'] {
+        padding-inline: 2px;
+        font-size: var(--xc-text-xs);
+    }
+}
+
+.panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.panel > .tabBar {
+    margin-bottom: 0;
+}
+
+/* One titled card per block in a tab. */
+.card {
+    composes: card from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.card > dl {
+    margin-bottom: 0;
+}
+
+.cardTitle {
+    margin: 0;
+    font-size: var(--xc-text-md);
+    font-weight: 700;
+    color: var(--xc-text);
+}
+
+/* Copy address, copy action index and the explorer link: one wrapping row. */
+.linkRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+}
+
+.linkRow > * {
+    flex: 1 1 140px;
+    min-width: 0;
+}
+
+.linkRow > .quickActionLink {
+    flex-direction: row;
+    padding-block: var(--xc-space-1);
+}
+
+.linkRow .quickActionLogo {
+    width: 20px;
+    height: 20px;
+}
+
+.stepper {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.stepperHead {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+}
+
+.stepperLabel {
+    font-size: var(--xc-text-sm);
+    font-weight: 700;
+    color: var(--xc-text);
+}
+
+.stepperMax {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    padding: 0;
+    min-height: var(--xc-tap-min);
+    font-family: inherit;
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    color: var(--xc-accent-text);
+    cursor: pointer;
+}
+
+.stepperMax:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.stepperRow {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: stretch;
+    gap: var(--xc-space-2);
+}
+
+.stepperRow > button {
+    min-width: var(--xc-tap-min);
+}
+
+.stepperField {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--xc-space-1);
+    min-width: 0;
+    padding-inline: var(--xc-space-2);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-control-radius);
+    background: var(--xc-surface);
+}
+
+.stepperField:focus-within {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 1px;
+}
+
+.stepperInput {
+    appearance: none;
+    width: 6ch;
+    min-width: 0;
+    min-height: var(--xc-tap-min);
+    border: 0;
+    background: transparent;
+    padding: 0;
+    font-family: inherit;
+    font-size: var(--xc-text-lg);
+    font-weight: 700;
+    color: var(--xc-text);
+    text-align: end;
+}
+
+.stepperInput:focus {
+    outline: none;
+}
+
+/* Forced-colors mode paints no stepper frame tint, so focus gets an outline. */
+@media (forced-colors: active) {
+    .stepperInput:focus {
+        outline: 2px solid Highlight;
+        outline-offset: 2px;
+    }
+}
+
+.stepperUnit {
+    flex: 0 1 auto;
+    min-width: 0;
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.stepperHint {
+    margin: 0;
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+}
+
+.buyButton.buyButton {
+    width: 100%;
 }
 
 @media not all and (min-width: 400px) {

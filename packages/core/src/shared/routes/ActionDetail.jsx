@@ -17,6 +17,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useWalletSource } from '../hooks/useDemoGuard.jsx';
 import { DetailCard, detailTransferDirection } from './History.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import { titleCase } from '../utils/titleCase.js';
 import { normalizeHistoryRow } from '../utils/historyRow.js';
 import { useActionProofVerification } from '../hooks/useProofVerification.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -200,8 +201,8 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
                 // A pending action has no index, and the fallback here
                 // rendered it as "#0", an index that belongs to a real
                 // action on every chain.
-                ? titleAction
-                : `${titleAction} #${actionIndexLabel}`}
+                ? titleCase(titleAction)
+                : `${titleCase(titleAction)} #${actionIndexLabel}`}
         />
     );
 

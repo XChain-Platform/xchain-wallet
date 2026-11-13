@@ -1,9 +1,24 @@
-.approvedBody {
-    gap: var(--xc-space-3);
+/* 8px between every block on the page, as on the coin page. */
+.approvedBody.approvedBody {
+    gap: var(--xc-space-2);
 }
 
+/* An outlined card with no blue fill, the token's icon centred and
+   larger, its name and description centred under it. */
 .approvedHero {
-    composes: balanceHero from './TokenDetail.module.css';
+    composes: card from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--xc-space-2);
+    color: var(--xc-text);
+    text-align: center;
+}
+
+.approvedHeroIcon {
+    --xc-avatar-size-list: 64px;
+    --xc-avatar-initials-list: var(--xc-text-xl, 24px);
+    display: inline-flex;
 }
 
 .approvedHeroText {
@@ -11,12 +26,13 @@
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
+    align-items: center;
     gap: var(--xc-space-1);
 }
 
 .approvedHeroName {
     margin: 0;
-    color: var(--xc-on-accent);
+    color: var(--xc-text);
     font-size: var(--xc-text-lg);
     font-weight: 800;
     overflow-wrap: anywhere;
@@ -24,7 +40,7 @@
 
 .approvedHeroDescription {
     margin: 0;
-    color: var(--xc-on-accent);
+    color: var(--xc-text-muted);
     font-size: var(--xc-text-sm);
     line-height: 1.4;
     overflow-wrap: anywhere;
@@ -32,29 +48,6 @@
 
 .approvedTabPanel {
     min-width: 0;
-}
-
-.approvedActionGrid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--xc-space-2);
-}
-
-.approvedActionTile {
-    min-width: 0;
-    min-height: calc(var(--xc-control-h-lg) + var(--xc-space-6) + var(--xc-space-3));
-    padding: var(--xc-space-2);
-    flex-direction: column;
-    justify-content: center;
-    gap: var(--xc-space-2);
-    white-space: normal;
-    text-align: center;
-    line-height: 1.2;
-}
-
-.approvedActionTile svg {
-    width: var(--xc-icon-md);
-    height: var(--xc-icon-md);
 }
 
 .approvedDetailsCard {
@@ -129,4 +122,26 @@
 .approvedEditable svg {
     width: var(--xc-icon-sm);
     height: var(--xc-icon-sm);
+}
+
+/* Destroy is the same tile as the rest; only its icon and label
+   take the danger colour. Four classes outrank QuickActionTile .square. */
+.dangerTile.dangerTile.dangerTile.dangerTile {
+    color: var(--xc-danger);
+}
+
+/* The action groups stack 8px apart, and each heading sits 8px
+   over its tiles, the page's one spacing step. */
+.actionGroups {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+/* The locked-tile reason under a group, small and muted. */
+.lockedReason {
+    margin: 0;
+    font-size: var(--xc-text-xs);
+    line-height: 1.4;
+    color: var(--xc-text-muted);
 }

@@ -9,7 +9,9 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, Checkbox, EmptyState, FeeSelector, FormPage, Icon, InfoTip, Input, ListPage, ListRow, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+// Network, From and the fee selector render inside the standard
+// FromSection and FeeSection.
+import { AddressText, Button, ChainBadge, Checkbox, EmptyState, FormNotice, FormPage, Icon, InfoTip, Input, ListPage, ListRow, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -48,6 +50,18 @@ import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
 import { toggleActionClass, waitForTxOutputsVisible } from '../utils/controllerBindClasses.js';
 import { MAX_MEMO_LENGTH } from '../utils/memoLimit.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/unbindForm.js';
+// Bind controller is laid out on the Wallet Form Standard frame.
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    joinSummary,
+    useFormSections,
+} from '../components/formStandard/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -146,7 +160,9 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     const [ownedTokens, setOwnedTokens] = useState(
         /** @type {Array<{ tick: string, ownerAddress: string, ownerAddressId: string }> | null} */ (null),
     );
-    const [unbind, setUnbind] = useState(false);
+    // This form only binds; unbinding is a separate form opened from a bound
+    // controller, so the unbind branches below stay off here.
+    const [unbind] = useState(false);
     const [controller, setController] = useState('');
     const [selectedActionClasses, setSelectedActionClasses] = useState(/** @type {string[]} */ (['transfer']));
     const [cooldownBlocks, setCooldownBlocks] = useState('');
@@ -162,6 +178,13 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [fieldError, setFieldError] = useState(/** @type {{ field: string, message: string } | null} */ (null));
     const errorFor = (field) => (fieldError && fieldError.field === field ? fieldError.message : undefined);
+    // The standard section a form-level refusal belongs to, and a
+    // counter bumped on every Bind attempt so that section reopens each time.
+    const [formErrorSection, setFormErrorSection] = useState(/** @type {string | null} */ (null));
+    const [reviewAttempt, setReviewAttempt] = useState(0);
+    // Open state held above every early return (pickers, review).
+    // From starts closed, Controller open, the rest closed.
+    const formSections = useFormSections({ from: false, controller: true, cooldown: false, memo: false, fee: false });
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const [sequenceResults, setSequenceResults] = useState(
@@ -466,18 +489,24 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     function handleReview(event) {
         event.preventDefault();
         if (isBlockedWatchOnlySource || (isHwSource && hwStatus !== 'available')) return;
+        // Each attempt may reopen the section that holds the refusal.
+        setReviewAttempt((n) => n + 1);
+        setFormErrorSection(null);
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        if (feeStop) { setFormError(feeStop.formError); return; }
+        if (feeStop) { setFormError(feeStop.formError); setFormErrorSection('fee'); return; }
         if (!fromAddress) {
             setFormError('No source address available.');
+            setFormErrorSection('from');
             return;
         }
         if (target === 'token' && issuerEligibility.pending) {
             setFormError(`Wait for the wallet to verify the current owner of ${selectedTick}.`);
+            setFormErrorSection('controller');
             return;
         }
         if (target === 'token' && issuerEligibility.error) {
             setFormError(issuerEligibility.error);
+            setFormErrorSection('controller');
             return;
         }
         if (!descriptor?.coin || !descriptor?.networkKind || !isValidAddressForChain(
@@ -486,10 +515,12 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
             descriptor.networkKind,
         )) {
             setFormError('The selected source address is not valid for this network.');
+            setFormErrorSection('from');
             return;
         }
         if (actionClassesChainId !== chainId) {
             setFormError('Action classes are still refreshing for this network. Try again in a moment.');
+            setFormErrorSection('controller');
             return;
         }
         if (selectedActionClasses.length === 0) {
@@ -506,6 +537,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
             const field = controllerBindErrorField(validationError);
             setFieldError(field ? { field, message: validationError } : null);
             setFormError(field ? null : validationError);
+            if (!field) setFormErrorSection('controller');
             return;
         }
         setFieldError(null);
@@ -637,7 +669,8 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     });
 
     const verb = unbind ? 'Unbind' : 'Bind';
-    const actionButtonLabel = `${verb} ${target}`;
+    // Title Case verb label ("Bind Token", "Bind Address").
+    const actionButtonLabel = `${verb} ${target === 'token' ? 'Token' : 'Address'}`;
     // Keep the current chain listed so the field always shows its value.
     const networkChainIds = walletChainIds
         ? (chainId && !walletChainIds.includes(chainId) ? [...walletChainIds, chainId] : walletChainIds)
@@ -653,8 +686,8 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 : onBack}
             backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
-                    ? `Review ${verb.toLowerCase()} controller`
-                    : `${verb} controller`}
+                    ? `Review ${verb} Controller`
+                    : `${verb} Controller`}
         />
     );
     const wrap = (children) => (
@@ -732,6 +765,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                     <Button
                         type="submit"
                         variant="primary"
+                        icon={<Icon.SignIcon />}
                         loading={stage === 'submitting'}
                         disabled={
                             isWatcherMode
@@ -741,9 +775,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                     >
                         {isWatcherMode
                             ? `${verb} controller`
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: ${verb.toLowerCase()} controller`
-                                : `Sign: ${verb.toLowerCase()} controller`}
+                            : `Sign: ${verb.toLowerCase()} controller`}
                     </Button>
                 )}
             >
@@ -838,9 +870,21 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     // confirm page, rendered in place of the form (the overlay modal
     // didn't fit small/mobile viewports); form state stays intact behind it.
     if (actionConfirm.open) {
+        // A token bind names the token; a bind names the controller it
+        // hands control to.
+        const controllerAddress = String(controller).trim();
+        const bindConfirmSummary = {
+            verb: unbind ? t('unbindForm.title') : t('components.confirmSummary.verbBindController'),
+            ...(target === 'token' && selectedTick ? { ticker: String(selectedTick).toUpperCase() } : {}),
+            direction: 'none',
+            chainId,
+            address: fromAddress?.address,
+            ...(!unbind && controllerAddress ? { recipient: controllerAddress } : {}),
+        };
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={bindConfirmSummary}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
@@ -865,7 +909,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={chainId}
                 onChainChange={(cid) => {
@@ -896,21 +940,46 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         );
     }
 
-    const networkField = (
-        <NetworkField
-            help="The chain the token and its controller binding are on. Your From address and the fee are on this network."
-            value={chainId}
-            onChange={(cid) => {
-                // Re-picking the network already shown keeps the chosen From
-                // source; only a real switch clears it and reloads sources.
-                if (cid === chainId) return;
-                setChainId(cid);
-                setFromAddressId(null);
-                setSourceError(null);
-            }}
+    // Section reveal keys and closed summaries of the standard frame.
+    const sectionErrorKey = (hasError) => (hasError && reviewAttempt > 0 ? reviewAttempt : 0);
+    const formErrorIn = (section) => Boolean(formError && formErrorSection === section);
+    // A hardware source whose device is not ready opens From, where the
+    // device block says why Bind is unavailable.
+    const hwBlocked = isHwSource && hwStatus !== 'available';
+    const onNetworkChange = (cid) => {
+        // Re-picking the network already shown keeps the chosen From
+        // source; only a real switch clears it and reloads sources.
+        if (cid === chainId) return;
+        setChainId(cid);
+        setFromAddressId(null);
+        setSourceError(null);
+    };
+    const fromSection = (
+        <FromSection
+            {...formSections.bind('from')}
+            chainId={chainId}
             chainIds={networkChainIds}
             chainRegistry={chainRegistry}
-        />
+            onNetworkChange={onNetworkChange}
+            networkHelp="The chain the token and its controller binding are on. Your From address and the fee are on this network."
+            address={sourceError ? null : (fromAddress?.address || null)}
+            addressLabel="From"
+            addressHelp="The owner address that signs this bind. Binding a token needs the token owner; binding an address uses that address."
+            onOpenPicker={target === 'address' ? () => setSourcePickerOpen(true) : undefined}
+            pickerLabel="Choose source address"
+            // A network with no address to sign from opens From and says so.
+            missing={sourceError ? <FormNotice variant="error">{sourceError}</FormNotice> : null}
+            revealKey={sectionErrorKey(formErrorIn('from')) || (hwBlocked ? 'hw' : 0)}
+        >
+            {isHwSource && !sourceError ? (
+                <SignCredentials
+                    fromAddress={fromAddress}
+                    chainId={chainId}
+                    onStatusChange={onHwStatusChange}
+                    getSignerStatus={messaging.getSignerStatus}
+                />
+            ) : null}
+        </FromSection>
     );
 
     // A network with nothing to sign from offers only the switch away and the
@@ -918,24 +987,32 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     // not stack beside it.
     if (sourceError) {
         return wrap(
-            <FormPage
+            <FormFrame
                 demoGuard={demoGuard}
                 label={`${verb} controller`}
                 onSubmit={(event) => event.preventDefault()}
-                actions={(
-                    <Button type="submit" variant="success" icon={<Icon.LinkIcon />} disabled>
+                action={(
+                    <FormAction icon={<Icon.LinkIcon />} disabled>
                         {actionButtonLabel}
-                    </Button>
+                    </FormAction>
                 )}
+                from={fromSection}
             >
-                {networkField}
-                <StatusMessage variant="error">{sourceError}</StatusMessage>
-            </FormPage>,
+                {null}
+            </FormFrame>,
         );
     }
 
+    const classesSummary = selectedActionClasses.join(', ');
+    const controllerSummary = joinSummary(
+        target === 'token' ? (selectedTick || 'Token') : 'This address',
+        !unbind && String(controller).trim() ? `contract #${String(controller).trim()}` : null,
+        classesSummary,
+    );
+    const controllerHasError = Boolean(formErrorIn('controller') || errorFor('controller') || errorFor('actionClass'));
+
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label={`${verb} controller`}
             onSubmit={handleReview}
@@ -944,10 +1021,8 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
             ) : isBlockedWatchOnlySource ? (
                 <StatusMessage variant="error">{WATCH_ONLY_SIGNING_MESSAGE}</StatusMessage>
             ) : null}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="success"
+            action={(
+                <FormAction
                     icon={<Icon.LinkIcon />}
                     loading={actionConfirm.composing}
                     disabled={!fromAddress
@@ -957,31 +1032,33 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                         || actionConfirm.composing}
                 >
                     {actionButtonLabel}
-                </Button>
+                </FormAction>
+            )}
+            from={fromSection}
+            fee={(
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeCustomEstimate}
+                    revealKey={sectionErrorKey(formErrorIn('fee'))}
+                />
             )}
         >
-            {networkField}
-            {fromAddress ? (
-                <AddressField
-                    label="From"
-                    help="The owner address that signs this bind. Binding a token needs the token owner; binding an address uses that address."
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={target === 'address' ? () => setSourcePickerOpen(true) : undefined}
-                    iconLabel="Choose source address"
-                />
-            ) : null}
-            {isHwSource ? (
-                <SignCredentials
-                    fromAddress={fromAddress}
-                    chainId={chainId}
-                    onStatusChange={onHwStatusChange}
-                    getSignerStatus={messaging.getSignerStatus}
-                />
-            ) : null}
-
+            {/* The main section holds what is protected, the guard
+                contract and the action classes; the Action class box is a
+                framed checkbox list. */}
+            <FormSection
+                id="controller"
+                title="Controller"
+                icon={Icon.LinkIcon}
+                {...formSections.bind('controller')}
+                revealKey={sectionErrorKey(controllerHasError)}
+                summary={controllerSummary}
+            >
             <Select
                 label="What to protect"
                 help="Choose Token to let the guard contract approve or block actions for a token this wallet owns. Choose Address to protect actions from the selected address."
@@ -1042,7 +1119,8 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 />
             ) : null}
 
-            <fieldset aria-describedby={errorFor('actionClass') ? 'controller-bind-action-class-error' : undefined}>
+            {/* The Action class box is framed, with rounded corners. */}
+            <fieldset className={styles.roundedFieldset} aria-describedby={errorFor('actionClass') ? 'controller-bind-action-class-error' : undefined}>
                 <legend>
                     <span>Action class</span>
                     {' '}
@@ -1092,17 +1170,22 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 </p>
             ) : null}
 
-            <Checkbox
-                className={styles.checkRow}
-                label="Unbind (remove the controller) instead of binding"
-                checked={unbind}
-                onChange={(e) => setUnbind(e.target.checked)}
-            />
+            </FormSection>
 
+            {/* Cooldown and Memo are optional closed sections; the
+                fields drop their own Optional tags, the sections carry them. */}
             {!unbind ? (
+                <FormSection
+                    id="cooldown"
+                    title="Cooldown"
+                    icon={Icon.ClockIcon}
+                    optional
+                    {...formSections.bind('cooldown')}
+                    revealKey={sectionErrorKey(Boolean(errorFor('cooldown')))}
+                    summary={cooldownBlocks.trim() ? `${cooldownBlocks.trim()} blocks` : 'None'}
+                >
                 <Input
                     label="Cooldown blocks"
-                    optional
                     help="Blocks a later unbind must wait before it takes effect. Leave blank for none."
                     inputMode="numeric"
                     value={cooldownBlocks}
@@ -1110,11 +1193,20 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                     onChange={(e) => setCooldownBlocks(e.target.value)}
                     autoComplete="off"
                 />
+                </FormSection>
             ) : null}
 
+            <FormSection
+                id="memo"
+                title="Memo"
+                icon={Icon.MessageIcon}
+                optional
+                {...formSections.bind('memo')}
+                revealKey={sectionErrorKey(Boolean(errorFor('memo')))}
+                summary={memo.trim() || 'None'}
+            >
             <Input
                 label="Memo"
-                optional
                 maxLength={MAX_MEMO_LENGTH}
                 help="Free-text note recorded with the bind/unbind event."
                 value={memo}
@@ -1125,25 +1217,13 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 autoCorrect="off"
                 spellCheck={false}
             />
-
-            {feeTiers ? (
-                <FeeSelector
-                    chainId={chainId}
-                    label="Network fee"
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
-            ) : null}
-
-        </FormPage>,
+            </FormSection>
+        </FormFrame>,
     );
 }
 
 function OwnedTokenPickerScreen({ variant, chainId, tokens, onPick, onBack }) {
-    const header = <PageHeader onBack={onBack} title="Select token" />;
+    const header = <PageHeader onBack={onBack} title="Select Token" />;
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
             <ListPage>{children}</ListPage>

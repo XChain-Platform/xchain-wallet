@@ -175,18 +175,6 @@ select.picker {
     border: 0;
 }
 
-/* Keep the section named for assistive technology while its first field leads visually. */
-.untitledSection > :global([data-xc-section-header]) {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
-}
-
 .fromLine {
     composes: card from '../../ui/Card.module.css';
     display: flex;
@@ -212,16 +200,6 @@ select.picker {
     margin: var(--xc-space-2) 0;
 }
 
-/* PC-02 lock matrix: one row per ISSUE v3 lock flag (checkbox + label
-   via .checkRow, then a per-flag permanence hint underneath it). */
-.lockFlagRow {
-    padding: var(--xc-space-2) 0;
-    border-bottom: 1px solid var(--xc-border);
-}
-.lockFlagRow:last-child {
-    border-bottom: none;
-}
-
 /* Upload and contacts buttons share the row at full width, wrapping
    on a narrow screen, with no box of their own. */
 .importActions {
@@ -244,9 +222,9 @@ select.picker {
 
 .actions {
     display: flex;
-    /* Wraps: without it a row of three or more buttons ran off the left
-       edge of a 360px screen (Betting, 2026-10-12), because the row is
-       right-aligned and the overflow goes out the leading side. */
+    /* Wraps: without it a row of three or more buttons runs off the left
+       edge of a 360px screen, because the row is right-aligned and the
+       overflow goes out the leading side. */
     flex-wrap: wrap;
     gap: var(--xc-space-2);
     justify-content: flex-end;
@@ -266,8 +244,7 @@ select.picker {
 
 /* Inside a form stack the form gap spaces the row; the margin above is for
    result screens, where the row follows plain content. */
-:global([data-form-stack]) > .actions,
-.advancedOptions > .actions {
+:global([data-form-stack]) > .actions {
     margin-top: 0;
 }
 
@@ -283,18 +260,6 @@ select.picker {
     margin-inline-start: var(--xc-space-1);
 }
 
-.advancedOptions {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-form-gap);
-    min-width: 0;
-}
-
-/* The advanced column is spaced by its gap alone, like a form stack, so a
-   StatusMessage in it drops the row's own block margin. */
-.advancedOptions > [data-variant] {
-    margin: 0;
-}
 
 .betActions {
     display: flex;
@@ -325,26 +290,6 @@ select.picker {
 .betOddsRow > * {
     min-width: 0;
     overflow-wrap: anywhere;
-}
-
-.betWagerChoices {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--xc-space-2);
-    min-width: 0;
-    margin-bottom: var(--xc-space-2);
-}
-
-.betOutcomeRow {
-    display: flex;
-    align-items: flex-end;
-    gap: var(--xc-space-2);
-    min-width: 0;
-}
-
-.betOutcomeField {
-    flex: 1 1 auto;
-    min-width: 0;
 }
 
 .summary {
@@ -574,27 +519,20 @@ select.picker {
 }
 
 @media not all and (min-width: 400px) {
-    .betActions,
-    .betWagerChoices {
+    .betActions {
         display: grid;
         grid-template-columns: minmax(0, 1fr);
         justify-content: stretch;
         width: 100%;
     }
 
-    .betActions > *,
-    .betWagerChoices > * {
+    .betActions > * {
         width: 100%;
     }
 
-    .betOddsRow,
-    .betOutcomeRow {
+    .betOddsRow {
         flex-direction: column;
         align-items: stretch;
-    }
-
-    .betOutcomeRow > button {
-        width: 100%;
     }
 
 }
@@ -703,7 +641,6 @@ select.picker {
     word-break: break-all;
 }
 
-.requiredTag,
 .irreversibleTag {
     display: inline-flex;
     align-items: center;
@@ -713,29 +650,22 @@ select.picker {
     font-size: var(--xc-text-xs);
     line-height: 1;
     white-space: nowrap;
-}
-
-.requiredTag {
-    color: var(--xc-accent-text);
-    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
+    color: var(--xc-warning-text);
+    background: color-mix(in srgb, var(--xc-text) 6%, transparent);
     font-weight: 700;
-}
-
-.optionalSections {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
-    min-width: 0;
-    margin-top: calc(-1 * var(--xc-space-2));
 }
 
 .optionalSection {
     composes: flush from '../../ui/Card.module.css';
     min-width: 0;
-    overflow: hidden;
+    /* Visible, so a dropdown list inside a section opens over the
+       page instead of being cut off at the section's edge; the header keeps
+       the rounded corners itself. */
+    overflow: visible;
 }
 
 .sectionHeader {
+    border-radius: inherit;
     width: 100%;
     min-width: 0;
     padding: var(--xc-space-2) var(--xc-space-3);
@@ -771,12 +701,6 @@ select.picker {
     min-width: 0;
     font-size: var(--xc-text-sm);
     font-weight: 600;
-}
-
-.irreversibleTag {
-    color: var(--xc-warning-text);
-    background: color-mix(in srgb, var(--xc-text) 6%, transparent);
-    font-weight: 700;
 }
 
 .sectionSummary {
@@ -840,4 +764,145 @@ select.picker {
     .sectionChevron {
         transition: none;
     }
+}
+
+/* Sweep's What to sweep label reads as a field label (the Input label's
+   size, weight and muted colour) with its help tip beside it; it is not a
+   heading, so it draws no divider and adds no padding above itself. */
+.sweepGroupLabel {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    margin: 0;
+    padding: 0;
+    font-size: var(--xc-text-sm);
+    font-weight: 500;
+    color: var(--xc-text-muted);
+}
+
+/* Lock token's switch list starts 8px under the Token field: the
+   form's gap is taken back to 8px and the first row drops its top padding. */
+.lockFlagList.lockFlagList {
+    margin-block-start: calc(var(--xc-space-2) - var(--xc-form-gap, var(--xc-space-4)));
+    /* The locks sit together in one outlined card, rows divided by
+       lines, so the switches read as one group rather than loose fields. */
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-card-radius, var(--xc-radius-md));
+    background: var(--xc-surface);
+    overflow: hidden;
+}
+
+.lockFlagList > .lockRow {
+    padding-block: var(--xc-space-2);
+}
+
+/* A lock row's icon and switch sit at the top, level with the lock's
+   name, so a row whose explanation wraps (Callback) lines up with the rest
+   instead of centring its switch beside the paragraph. */
+.lockRow.lockRow {
+    align-items: flex-start;
+}
+
+/* Inside a lock row the switch's 44px touch box does not centre its
+   track; the track sits at the top, level with the lock's name, and the
+   icon does too. */
+.lockRow.lockRow > label {
+    min-block-size: 0;
+    align-self: flex-start;
+    /* The switch holds the name and explanation beside its track; the track
+       sits at the top of that block, not centred on a wrapped explanation. */
+    align-items: flex-start;
+}
+
+.lockRow.lockRow > label > span:last-child {
+    block-size: auto;
+    min-block-size: 0;
+}
+
+/* Lock address / Pause token current-state badge, 8px under the
+   address field. */
+.sleepStateRow {
+    margin: calc(var(--xc-space-2) - var(--xc-form-gap, var(--xc-space-4))) 0 0;
+}
+
+.sleepStateBadge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px var(--xc-space-2);
+    border-radius: var(--xc-radius-pill);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    background: var(--xc-bg-muted);
+    color: var(--xc-text-muted);
+}
+
+.sleepState_active {
+    background: color-mix(in srgb, var(--xc-success, #15803D) 14%, var(--xc-surface));
+    color: var(--xc-success, #15803D);
+}
+
+.sleepState_paused {
+    background: color-mix(in srgb, var(--xc-warning, #B45309) 16%, var(--xc-surface));
+    color: var(--xc-warning-text, var(--xc-warning, #B45309));
+}
+
+/* Bind controller's Action class box: a framed group with the card
+   radius on its corners. */
+.roundedFieldset {
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-card-radius, var(--xc-radius-md));
+    padding: var(--xc-space-2) var(--xc-space-3);
+    margin: 0;
+    min-width: 0;
+    /* The one-word Action class options sit in a grid (three across on
+       phones, more on wide screens) so they are quicker to scan and tick. */
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+    column-gap: var(--xc-space-3);
+    row-gap: 0;
+}
+
+.roundedFieldset > :not(legend) {
+    margin: 0;
+    min-width: 0;
+}
+
+/* Collapsible sections (Issue token, Manage token) point their
+   chevron right while closed and down while open; the title holds one line
+   and the closed summary takes the ellipsis. */
+.sectionChevron.sectionChevron {
+    transform: rotate(-90deg);
+}
+
+.sectionChevron.sectionChevronOpen {
+    transform: rotate(0deg);
+}
+
+.sectionTitle.sectionTitle {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.sectionSummary.sectionSummary {
+    flex: 1 1 auto;
+    text-align: end;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* Collapsible sections stack 8px apart (Create poll, Issue token),
+   taking the form's larger gap back down between two sections. */
+.optionalSection + .optionalSection {
+    margin-block-start: calc(var(--xc-space-2) - var(--xc-form-gap, var(--xc-space-4)));
+}
+
+/* A collapsible section also sits 8px under the field above it
+   (Question on Create poll, Ticker on Issue token). */
+* + .optionalSection {
+    margin-block-start: calc(var(--xc-space-2) - var(--xc-form-gap, var(--xc-space-4)));
+}
+
+/* Whatever follows the last section (the fee picker) sits 8px under it. */
+.optionalSection + * {
+    margin-block-start: calc(var(--xc-space-2) - var(--xc-form-gap, var(--xc-space-4)));
 }

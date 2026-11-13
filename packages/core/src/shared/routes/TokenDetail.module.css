@@ -7,236 +7,108 @@
     line-height: 1.2;
 }
 
-/* ───── Asset balance hero - matches TotalBalanceHero ───── */
+/* ───── Asset balance card - Home's balance card (TotalBalanceHero in
+   HomeTabs' heroStack, PortfolioChart behind it) ───── */
 
-.balanceHero {
-    /* raw-color-ok: black anchors the brand gradient in every theme. */
-    background: linear-gradient(180deg, var(--xc-accent-primary) 0%, color-mix(in srgb, var(--xc-accent-primary) 80%, #000) 100%);
-    color: var(--xc-on-accent);
-    border-radius: var(--xc-radius-md);
-    padding: var(--xc-space-2) var(--xc-space-3);
+/* The caption carries the asset's small icon beside its name, in Home's 20px
+   name style. The icon's chain badge may sit past the caption's edge, so only
+   the name itself is cut to an ellipsis. */
+.cardCaption.cardCaption {
     display: flex;
-    flex-direction: row;
     align-items: center;
     gap: var(--xc-space-2);
-    box-shadow: var(--xc-shadow-sm);
-    min-height: 104px;
-    box-sizing: border-box;
+    overflow: visible;
 }
 
-.balanceHeroMain {
-    flex: 1 1 auto;
+.cardCaptionText {
     min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.balanceHeroRow {
-    display: grid;
-    grid-template-areas:
-        'label controls'
-        'amount amount';
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 4px var(--xc-space-2);
-}
-
-.balanceHeroLabel {
-    grid-area: label;
-    font-size: var(--xc-text-xs);
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: color-mix(in srgb, var(--xc-on-accent) 85%, transparent);
-}
-
-/* The shared Balance actions menu sits in the label row's end column. */
-.balanceHeroMenu {
-    grid-area: controls;
-    justify-self: end;
-}
-
-/* Positioning wrapper around the hero icon so the per-chain network
-   overlay (visible only for non-native tokens) can anchor to its
-   bottom-right corner - same affordance the Home BalanceList rows
-   use to indicate which chain a token lives on. */
-.balanceHeroIconWrap {
+.cardCaptionIconWrap {
     position: relative;
     flex: 0 0 auto;
-    width: var(--xc-avatar-size-hero);
-    height: var(--xc-avatar-size-hero);
+    width: 24px;
+    height: 24px;
 }
 
-.balanceHeroIcon {
+.cardCaptionIcon {
     display: block;
-    /* The shared hero size keeps detail artwork aligned with other asset heroes. */
-    width: var(--xc-avatar-size-hero);
-    height: var(--xc-avatar-size-hero);
-    flex: 0 0 auto;
+    width: 24px;
+    height: 24px;
     object-fit: contain;
     border-radius: var(--xc-avatar-shape);
 }
 
-.balanceHeroIconFallback {
+.cardCaptionIconFallback {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: var(--xc-avatar-size-hero);
-    height: var(--xc-avatar-size-hero);
+    width: 24px;
+    height: 24px;
+    overflow: hidden;
     border-radius: var(--xc-avatar-shape);
+    /* The card's frosted white, as on its buttons. */
     background: color-mix(in srgb, var(--xc-on-accent) 20%, transparent);
     color: var(--xc-on-accent);
-    font-size: var(--xc-avatar-initials-hero);
+    font-size: 9px;
     font-weight: 800;
 }
 
-.balanceHeroChainOverlay {
+/* The chain a token lives on, as a small badge on the icon's corner (the
+   same affordance the Home balance rows use). */
+.cardCaptionChain {
     position: absolute;
-    bottom: -2px;
-    inset-inline-end: -2px;
-    width: 1.5rem;
-    height: 1.5rem;
+    bottom: -3px;
+    inset-inline-end: -3px;
+    width: 12px;
+    height: 12px;
     border-radius: 50%;
     /* raw-color-ok: fixed white preserves transparent chain artwork. */
     background: #FFFFFF;
-    /* White ring against the gradient hero so the overlay reads as a
-       distinct badge rather than blending into the token artwork. */
-    box-shadow: 0 0 0 2px var(--xc-accent-primary);
+    box-shadow: 0 0 0 1.5px var(--xc-accent-primary);
     object-fit: cover;
     display: block;
 }
 
-.balanceHeroAmount {
-    grid-area: amount;
-    font-family: var(--xc-font-mono);
-    font-size: 32px;
-    font-weight: 800;
-    line-height: 1.1;
-    letter-spacing: -0.01em;
-    color: var(--xc-on-accent);
-    white-space: nowrap;
-    overflow: hidden;
-    direction: ltr;
-    unicode-bidi: isolate;
+/* An unseen pill holds the change row's height until a change is
+   known, so the card does not grow when the price history arrives. */
+.cardChangeIdle {
+    visibility: hidden;
 }
 
-/* AutoShrinkText scaffolding. The wrap is the measurement container -
-   block-level so it inherits the parent's font-size and width. The
-   inner span carries the actual text and is `transform: scale(...)`d
-   to fit when overflowing. Its LTR number origin stays at the physical
-   left so shrinking pulls trailing characters toward the leading edge
-   rather than collapsing around the middle. */
-.balanceHeroAmountFitWrap {
-    display: block;
-    overflow: hidden;
-    white-space: nowrap;
-    width: 100%;
-}
-
-.balanceHeroAmountFitInner {
-    display: inline-block;
-    white-space: nowrap;
-    transform-origin: left center;
-    /* An amount keeps its left-to-right order on a right-to-left page. */
-    direction: ltr;
-    unicode-bidi: isolate;
-}
-
-/* Unit code (BTC / USD / JPY / …) suffix next to the primary big
-   amount. Half the size of the 32px amount so the digits stay the
-   primary visual anchor while the shared on-accent color keeps the
-   suffix readable. Matches the Home total-balance hero treatment. */
-.balanceHeroAmountCode {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--xc-on-accent);
-    margin-inline-start: 6px;
-    letter-spacing: 0;
-    white-space: nowrap;
-    vertical-align: baseline;
-}
-
-/* Unit code suffix for the secondary "≈ …" note line. Sized
-   relative to its parent (which is already smaller) so the ratio
-   stays roughly consistent with the primary's half-size suffix. */
-.balanceHeroNoteCode {
-    font-size: 0.85em;
-    font-weight: 500;
-    color: var(--xc-on-accent);
-    margin-inline-start: var(--xc-space-1);
-    white-space: nowrap;
-    vertical-align: baseline;
-}
-
-.balanceHeroHidden {
-    letter-spacing: 0.15em;
-    color: var(--xc-on-accent);
-}
-
-.balanceHeroNote {
+/* The balance in the other unit, small, on its own row under the
+   big balance across the card's whole width. */
+.cardSecondary {
+    grid-column: 1 / -1;
+    grid-row: 4;
     display: flex;
-    align-items: center;
+    align-items: baseline;
     justify-content: space-between;
     gap: var(--xc-space-2);
+    min-width: 0;
     font-size: var(--xc-text-sm);
-    color: color-mix(in srgb, var(--xc-on-accent) 85%, transparent);
     font-weight: 500;
+    line-height: 1.2;
+    /* The card's soft white for secondary figures. */
+    color: color-mix(in srgb, var(--xc-on-accent) 80%, transparent);
 }
 
-/* The age of a kept price sits on the accent hero, so it takes the hero's
-   own text color rather than the muted one. */
-.balanceHeroNote .balanceHeroStaleness {
+/* The age of a kept price takes the card's text color, not the muted one. */
+.cardSecondary .cardStaleness {
     flex: 0 0 auto;
     white-space: nowrap;
     color: inherit;
 }
 
-.balanceHeroNoteLeft {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    white-space: nowrap;
+/* Range buttons with no history to switch keep their room unseen. */
+.rangesIdle {
+    visibility: hidden;
 }
 
 /* ───── Quick actions ───── */
-
-/* The quick actions group: the tile row, then any reason that blocks a tile. */
-.quickActionsGroup {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
-}
-
-/* One centred row of square tiles, as on Home. Each track shrinks with the
-   row so four tiles share one line at 320 px, and stops at its fixed size on
-   wide screens instead of stretching to the row width. */
-.quickActions {
-    position: relative;
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(0, 88px);
-    justify-content: center;
-    gap: var(--xc-space-2);
-}
-
-/* Each quick action is the shared QuickActionTile, which owns its look; this
-   keeps the tile geometry the row lays out (square, icon over label) in step
-   with it. */
-.quickActions > button,
-.quickActionMoreWrap > button {
-    aspect-ratio: 1 / 1;
-    width: 100%;
-    min-width: 0;
-    min-height: auto;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--xc-space-1);
-    padding: var(--xc-space-1);
-    font-size: var(--xc-text-xs);
-    text-align: center;
-}
 
 .quickActionReason {
     margin: 0;
@@ -247,55 +119,10 @@
     text-align: center;
 }
 
-/* The More info tile anchors its menu. */
-.quickActionMoreWrap {
-    position: relative;
-    display: flex;
-    min-width: 0;
-}
-
-.quickActionMoreMenu {
-    position: absolute;
-    inset-inline-end: 0;
-    top: calc(100% + var(--xc-space-1));
-    z-index: var(--xc-z-dropdown);
-    display: flex;
-    flex-direction: column;
-    min-width: 200px;
-    overflow: hidden;
-    border: var(--xc-card-border);
-    border-radius: var(--xc-card-radius);
-    padding: 0;
-    background: var(--xc-card-bg);
-    box-shadow: var(--xc-shadow-md);
-}
-
-.quickActionMoreEntry {
-    width: 100%;
-    justify-content: flex-start;
-    padding-inline: var(--xc-space-3);
-    text-align: start;
-}
-
-.quickActionMoreEntryIcon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: var(--xc-icon-sm);
-    height: var(--xc-icon-sm);
-}
-
-.moreInfoEmpty {
-    margin: 0;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
-}
-
 .tabPanel {
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-3);
+    gap: var(--xc-space-2);
     min-height: 0;
 }
 
@@ -318,32 +145,6 @@
 
 .priceAlertCard > button {
     align-self: flex-start;
-}
-
-/* Pulls the market card up under the balance hero's box-shadow halo so
-   the visible gap above the chart matches the gap to the quick-action
-   row below it. Mirrors the same offset PortfolioChart uses on Home, and
-   keeps the shared card border and padding like that chart card does. */
-.marketCardOffset {
-    margin-top: -6px;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.marketHistorySlot {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    block-size: calc(var(--xc-space-8) * 2 + var(--xc-space-2));
-    min-block-size: calc(var(--xc-space-8) * 2 + var(--xc-space-2));
-}
-
-.marketHistoryMessage {
-    margin: 0;
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
-    text-align: center;
 }
 
 .descriptionValue {
@@ -369,62 +170,6 @@
 }
 
 /* ───── Per-tab content ───── */
-
-/* Cells size to their values and wrap to a new line when a phone row
-   cannot hold all three, so a long price or market cap is shown whole
-   instead of being cut to an ellipsis in a third of the width. */
-.stats {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    gap: var(--xc-space-2) var(--xc-space-3);
-}
-
-/* The third stats cell (24h change) is right-aligned so the +/- pct
-   reads against the chart's right edge - same visual anchor the Home
-   PortfolioChart uses for its single change line. */
-.stats > .statCell:last-child {
-    text-align: end;
-    align-items: flex-end;
-    margin-inline-start: auto;
-}
-
-.statCell {
-    display: flex;
-    flex-direction: column;
-    flex: 0 1 auto;
-    gap: 2px;
-    min-width: 0;
-    max-width: 100%;
-}
-
-.statLabel {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-}
-
-.statValue,
-.statValuePositive,
-.statValueNegative {
-    font-size: var(--xc-text-md);
-    font-weight: 600;
-    color: var(--xc-text);
-    font-variant-numeric: tabular-nums;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    direction: ltr;
-    unicode-bidi: isolate;
-}
-
-.statValuePositive { color: var(--xc-success, #14b86c); }
-.statValueNegative { color: var(--xc-danger-fg, #d93838); }
-
-.chart {
-    padding: 0;
-}
 
 .metaTable {
     width: 100%;
@@ -921,18 +666,107 @@
     font-size: var(--xc-text-sm);
 }
 
-/* Engines disagree on whether gradients survive forced-colors mode, so pin
- * the surface and its label to one system pair instead of guessing. */
-@media (forced-colors: active) {
-    .balanceHero {
-        background: var(--xc-accent-primary);
-        color: var(--xc-on-accent);
-    }
-}
-
 .supplyChart {
     display: block;
     width: 100%;
     height: 80px;
     color: var(--xc-accent, currentColor);
+}
+
+/* The page header carries the coin's icon beside its name. */
+.headerTitleWithIcon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--xc-space-2);
+    max-width: 100%;
+    min-width: 0;
+}
+
+/* The card has no icon-and-name line of its own (the header has
+   it); the caption stays for screen readers only, and the round buttons sit
+   beside the change pill. */
+.cardNoCaption.cardNoCaption.cardNoCaption {
+    grid-template-areas:
+        'meta actions'
+        'amount amount';
+}
+
+.cardNoCaption .cardCaption {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+/* The Actions tab. Square rounded tiles in a grid that fills the
+   width: three or four across on a phone, more on a desktop. */
+.assetActions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+/* Tiles sit 8px apart and are 80px tall in every window. A phone row of four
+   spans the full width, so each tile is a quarter of the row. 600px and
+   wider keep 80px squares, as many per row as fit, from the left. */
+.assetActionGrid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--xc-space-2);
+}
+
+/* The square tile draws itself 1:1 (QuickActionTile .square); here the
+   height is fixed and only the width follows the column. Five classes to
+   outrank that tripled rule whichever sheet loads last. */
+.assetActionGrid.assetActionGrid.assetActionGrid.assetActionGrid.assetActionGrid > * {
+    aspect-ratio: auto;
+    block-size: 80px;
+}
+
+@media (min-width: 600px) {
+    .assetActionGrid {
+        grid-template-columns: repeat(auto-fill, 80px);
+    }
+}
+
+.assetActionOwner {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+.assetActionReasons {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+}
+
+/* 8px from the tab line to the panel, and 8px between the panel's
+   items, the page's one spacing step. The 8px above the panel is the page
+   column's own gap (.detailPage). */
+/* The coin page stacks its blocks (card, tabs, tab content) 8px apart, as
+   Home does, not at the list template's 16px section gap. Doubled to outrank
+   ListPage's .page, whichever sheet loads last. */
+.detailPage.detailPage {
+    gap: var(--xc-space-2);
+}
+
+/* The coin page's three tabs share the frame's width exactly, lining up with
+   the action tiles under them. The shared framed tab's min-width: max-content
+   would let History take over a third on a 360px popup, so the labels give
+   way here and the side padding shrinks on the narrowest rows. */
+.detailTabs.detailTabs [role='tab'] {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-inline: var(--xc-space-1);
+}
+
+/* The explorer button on the title line takes the header's outlined
+   trailing-button box (PageHeader .trailing) and the external-link icon at
+   the header icon size. */
+.explorerButton > span {
+    display: inline-flex;
 }

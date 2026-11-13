@@ -44,8 +44,6 @@ import { setForgotPasswordRestoreIntent } from '../utils/forgotPasswordRecovery.
 import { nextPaint } from '../utils/nextPaint.js';
 import {
     readActiveWallet,
-    readActiveWalletName,
-    subscribeActiveWallet,
     writeActiveWallet,
 } from '../utils/activeWalletMemory.js';
 // The demo-exit confirm opens only on a tap, so it and its styles load on demand.
@@ -128,7 +126,6 @@ export function Locked({ onUnlocked, lockReason = null }) {
     const [wipeConfirmText, setWipeConfirmText] = useState('');
     const [wipeBusy, setWipeBusy] = useState(false);
     const [wipeError, setWipeError] = useState(/** @type {string | null} */ (null));
-    const [activeWalletName, setActiveWalletName] = useState(readActiveWalletName);
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const forgotTriggerRef = useRef(/** @type {HTMLButtonElement | null} */ (null));
     const forgotDialogRef = useRef(/** @type {HTMLDivElement | null} */ (null));
@@ -226,8 +223,9 @@ export function Locked({ onUnlocked, lockReason = null }) {
         return () => document.removeEventListener('pause', onPause);
     }, []);
 
-    // The wallet list is safe metadata, so it can restore the heading before
-    // unlock when an older active-wallet entry contains only the wallet id.
+    // The lock screen shows no wallet name, but the wallet list is safe
+    // metadata: it fills in the remembered active wallet's name when an older
+    // entry holds only its id, for the screens that show it after unlock.
     useEffect(() => {
         const activeWalletId = readActiveWallet();
         if (!activeWalletId || typeof messaging?.listWallets !== 'function') return undefined;
@@ -243,16 +241,11 @@ export function Locked({ onUnlocked, lockReason = null }) {
                 const name = typeof activeWallet?.name === 'string'
                     ? activeWallet.name.trim()
                     : '';
-                setActiveWalletName(name || null);
                 if (name) writeActiveWallet(activeWalletId, name);
             })
             .catch(() => { /* Keep the last known name when metadata is unavailable. */ });
         return () => { cancelled = true; };
     }, [messaging]);
-
-    useEffect(() => subscribeActiveWallet(({ name }) => {
-        setActiveWalletName(name);
-    }), []);
 
     // Probe for biometric availability plus a registered credential. A
     // previously enrolled but unavailable device returns to the password
@@ -565,8 +558,9 @@ export function Locked({ onUnlocked, lockReason = null }) {
                 alt=""
                 className={styles.logo}
             />
+            {/* The lock screen shows only the logo, the product name
+                and the password field; no wallet name or other custom text. */}
             <h1
-                title={!inCaptureStep && activeWalletName ? activeWalletName : undefined}
                 style={{
                     maxWidth: '100%',
                     margin: 0,
@@ -576,7 +570,7 @@ export function Locked({ onUnlocked, lockReason = null }) {
                     overflowWrap: 'anywhere',
                 }}
             >
-                {inCaptureStep ? t('locked.saveWalletPassphrase') : (activeWalletName || t('locked.unlockWallet'))}
+                {inCaptureStep ? t('locked.saveWalletPassphrase') : branding.PRODUCT_NAME}
             </h1>
         </div>
     );
@@ -653,7 +647,7 @@ export function Locked({ onUnlocked, lockReason = null }) {
                                 icon={<Icon.TrashIcon />}
                                 onClick={() => { setDemoWipeError(null); setDemoConfirmOpen(true); }}
                             >
-                                {t('walletDetails.exitDemo')}
+                                {t('walletDetails.exitDemoAction')}
                             </Button>
                             {demoWipeError && !demoConfirmOpen ? (
                                 <StatusMessage variant="error" className={styles.demoExitError}>{demoWipeError}</StatusMessage>

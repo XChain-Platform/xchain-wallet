@@ -10,18 +10,32 @@
 
 import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormNotice, FormPage, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+// Network, From and the fee selector come from the Wallet Form
+// Standard's FromSection and FeeSection.
+import { AddressText, Button, ChainBadge, FormNotice, FormPage, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+// Pay Dividend is laid out on the Wallet Form Standard: From
+// (closed), Dividend (open), Memo (optional, closed), Network fee (the
+// FeesCard with the native-fee switch), the status slot and Pay Dividend.
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    joinSummary,
+    useFormSections,
+} from '../components/formStandard/index.js';
 import {
     registry as registryLib,
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import '../../i18n/locales/en/send.js';
+import '../../i18n/locales/en/components.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useGatedTickNotice, gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
@@ -38,8 +52,7 @@ import {
     exceedsBalance,
 } from '../utils/dividendPerUnit.js';
 import { TokenField } from '../components/TokenField.jsx';
-import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
-import { FeesCard } from '../components/FeesCard.jsx';
+// NativeFeeToggle and FeesCard render inside the standard FeeSection.
 
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
@@ -125,6 +138,12 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
     const [dividendPickerOpen, setDividendPickerOpen] = useState(false);
+    // The standard sections' open state, held above every early
+    // return (pickers, review). Only Dividend opens.
+    const formSections = useFormSections({ from: false, dividend: true, memo: false, fee: false });
+    // Counts Pay Dividend presses, so the section holding the error
+    // reopens on every attempt even after the user closed it.
+    const [reviewAttempt, setReviewAttempt] = useState(0);
 
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
@@ -293,11 +312,10 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
 
     useEffect(() => {
         setTickCheck({ verdict: null, error: null });
-        // A locked TICK arrived from a real token context (Token Detail's
-        // pre-fill), never hand-typed, so the existence check - built for
-        // the manual-entry field this component also renders - stays off;
-        // the field it would annotate isn't even on screen in this mode.
-        if (lockedToken) return undefined;
+        // A preset TICK arrived from a real token context (Token Detail's
+        // pre-fill), never hand-typed, so the existence check stays off while
+        // the field holds that preset; picking another token or network runs it.
+        if (lockedToken && trimmedTick === initialTick && chainId === initialChainId) return undefined;
         if (!chainId || !trimmedTick || trimmedTick.startsWith('^') || tickIsNativeCoin) return undefined;
         if (typeof messaging?.getTokenInfo !== 'function') return undefined;
         let cancelled = false;
@@ -317,7 +335,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 });
         }, 400);
         return () => { cancelled = true; clearTimeout(handle); };
-    }, [trimmedTick, chainId, messaging, tickIsNativeCoin, lockedToken]);
+    }, [trimmedTick, chainId, messaging, tickIsNativeCoin, lockedToken, initialTick, initialChainId]);
 
     const trimmedDividendTick = dividendTick.trim();
     useEffect(() => {
@@ -581,6 +599,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
 
     async function handleReview(event) {
         event.preventDefault();
+        setReviewAttempt((n) => n + 1);
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
         if (feeStop) { setFormError(feeStop.formError); return; }
         if (!chainId || !fromAddress) {
@@ -843,8 +862,8 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 : onBack}
             backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
-                    ? 'Review dividend'
-                    : `Pay dividend`}
+                    ? 'Review Dividend'
+                    : `Pay Dividend`}
         />
     );
     const wrap = (children) => (
@@ -923,6 +942,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                     <Button
                         type="submit"
                         variant="primary"
+                        icon={<Icon.SignIcon />}
                         loading={stage === 'submitting'}
                         disabled={
                             isWatcherMode
@@ -933,10 +953,8 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                         }
                     >
                         {isWatcherMode
-                            ? 'Create unsigned transaction: pay dividend'
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: pay dividend`
-                                : 'Sign: pay dividend'}
+                            ? 'Create Unsigned Transaction: Pay Dividend'
+                            : 'Sign: Pay Dividend'}
                     </Button>
                 )}
             >
@@ -1035,9 +1053,23 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
     // confirm page, rendered in place of the form (the overlay modal
     // didn't fit small/mobile viewports); form state stays intact behind it.
     if (actionConfirm.open) {
+        // The payout leaves in the dividend token, to the holders of the
+        // other; its total shows when the holder preview knows it.
+        const payTick = String(actionParams.DIVIDEND_TICK || '').toUpperCase();
+        const holderTick = String(actionParams.TICK || '').toUpperCase();
+        const dividendSummary = {
+            verb: t('components.confirmSummary.verbPayDividend'),
+            ...(payTick ? { ticker: payTick } : {}),
+            ...(payTick && preview?.total != null ? { amount: String(preview.total) } : {}),
+            ...(holderTick ? { target: t('components.confirmSummary.holdersTarget', { tick: holderTick }) } : {}),
+            direction: 'out',
+            chainId,
+            address: fromAddress?.address,
+        };
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={dividendSummary}
                 screenVariant={variant}
                 chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 feeText={feeEstimate?.coinAmount
@@ -1064,7 +1096,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={chainId}
                 onChainChange={setChainId}
@@ -1082,7 +1114,10 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             <TokenPicker
                 purpose="receive"
                 walletId={walletId}
-                title="Select token"
+                // Holders are counted from the token ledger, which never holds the network coin.
+                kindFilter="tokens"
+                kindLocked
+                title="Select Token"
                 networkFilter={coinFromChainId(chainId)}
                 onSelect={(sel) => {
                     setTick(String(sel.tick || ''));
@@ -1098,7 +1133,10 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             <TokenPicker
                 purpose="send"
                 walletId={walletId}
-                title="Select dividend token"
+                // DIVIDEND_TICK must be a known token, so a dividend is never paid in the network coin.
+                kindFilter="tokens"
+                kindLocked
+                title="Select Dividend Token"
                 networkFilter={coinFromChainId(chainId)}
                 onSelect={(sel) => {
                     setDividendTick(String(sel.tick || ''));
@@ -1109,18 +1147,39 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
         );
     }
 
+    // Which standard section the current error belongs to, and the
+    // closed sections' one-line summaries.
+    const errorSection = (() => {
+        if (!formError) return null;
+        if (/source address/i.test(formError)) return 'from';
+        // A custom fee refusal (the review's fee stop) belongs to Network fee.
+        const feeStopNow = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStopNow && feeStopNow.formError === formError) return 'fee';
+        if (/memo/i.test(formError)) return 'memo';
+        return 'dividend';
+    })();
+    const sectionErrorKey = (id) => (errorSection === id ? reviewAttempt + 1 : 0);
+    const dividendSummary = joinSummary(
+        amount && dividendTick.trim()
+            ? `${formatWithThousands(amount)} ${dividendTick.trim().toUpperCase()} per unit`
+            : (dividendTick.trim() ? dividendTick.trim().toUpperCase() : null),
+        tick.trim() ? `to ${tick.trim().toUpperCase()} holders` : null,
+    ) || null;
+    // No source to default to: no funding address on the network (the default
+    // skips dispenser-delegated ones) and none picked by hand.
+    const sourceMissing = Boolean(addressesByChain) && !fromAddress
+        && (addressesByChain[chainId] || []).filter((a) => a.role !== 'dispenser').length === 0;
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label="Pay dividend"
             onSubmit={handleReview}
             status={(formError || balanceError) ? (
                 <StatusMessage variant="error">{formError || balanceError}</StatusMessage>
             ) : null}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="primary"
+            action={(
+                <FormAction
+                    icon={<Icon.CoinsIcon />}
                     loading={actionConfirm.composing || holderReviewPending}
                     disabled={!fromAddress || !tick || !dividendTick || !amount || actionConfirm.composing
                         || holderReviewPending || !holders.rows || !preview
@@ -1128,34 +1187,64 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                         || dividendTickCheck.verdict === 'missing'
                         || !!amountPrecisionError}
                 >
-                    Pay dividend
-                </Button>
+                    Pay Dividend
+                </FormAction>
+            )}
+            from={(
+                // Network and From live in the closed From section.
+                // Both token pickers list only this network's tokens, so
+                // Network stays selectable (it is never locked by a token).
+                <FromSection
+                    {...formSections.bind('from')}
+                    revealKey={sectionErrorKey('from')}
+                    chainId={chainId}
+                    chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])}
+                    chainRegistry={chainRegistry}
+                    onNetworkChange={setChainId}
+                    networkHelp="The chain the dividend is recorded on. The holder token, dividend token, From address, and fees are on this network."
+                    address={fromAddress?.address || null}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    addressHelp="The address that pays the dividend. It must hold the dividend token and pays the network fee."
+                    missing={sourceMissing ? (
+                        <FormNotice variant="error">
+                            {t('send.source.noAddress')}
+                        </FormNotice>
+                    ) : null}
+                />
+            )}
+            fee={(
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    revealKey={sectionErrorKey('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeCustomEstimate}
+                    // The protocol fee joins the Network fee row's summary.
+                    protocolSummary={protocolFeeText ? `${protocolFeeText} protocol fee` : undefined}
+                    fees={{
+                        quote: protocolFeeQuote,
+                        pending: protocolFeePending,
+                        nativeFeeProps: { ...nativeFee.toggleProps, coinTicker, fee: protocolFeeQuote },
+                    }}
+                />
             )}
         >
-            {lockedToken && chainId ? (
-                <LockedTokenContext chainId={chainId} tick={tick} label="Holder-of token" />
-            ) : (
-                <NetworkField label="Network" help="The chain the dividend is recorded on. The holder token, dividend token, From address, and fees are on this network." value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-            )}
-
-            {fromAddress ? (
-                <AddressField
-                    label="From"
-                    help="The address that pays the dividend. It must hold the dividend token and pays the network fee."
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
-                />
-            ) : (
-                <FormNotice variant="error">
-                    {t('send.source.noAddress')}
-                </FormNotice>
-            )}
-
-            {lockedToken ? null : (
+            <FormSection
+                id="dividend"
+                title="Dividend"
+                icon={Icon.CoinsIcon}
+                {...formSections.bind('dividend')}
+                revealKey={sectionErrorKey('dividend')}
+                summary={dividendSummary}
+            >
+            {/* Always the standard Token fields, even when the token
+                arrives already chosen; the preset token simply fills the
+                Holder-of token field. */}
+            {(
                 <TokenField
                     label="Holder-of token"
                     help="The token whose holders receive this dividend. Each holder is paid according to their balance."
@@ -1190,15 +1279,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                         maxPayable ? ` · up to ${formatWithThousands(maxPerUnit)} per unit` : ''}`
                     : null}
             />
-            <Input
-                label="Memo"
-                optional
-                maxLength={MAX_MEMO_LENGTH}
-                help={MEMO_HINT}
-                value={memo}
-                onChange={(e) => setMemo(e.target.value)}
-                autoComplete="off"
-            />
+            {/* Memo lives in its own optional section below. */}
             {gatedDividendNotice.gated ? (
                 <FormNotice variant="warning" role="alert">
                     {gatedTickWarningCopy(dividendTick, 'dividend recipients')}
@@ -1235,27 +1316,32 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                         ? ` · includes ${protocolFeeText} protocol fee` : ''}
                 </p>
             ) : null}
+            </FormSection>
 
-            <FeesCard
-                chainId={chainId}
-                quote={protocolFeeQuote}
-                pending={protocolFeePending}
-                feeSelector={feeTiers ? (
-                <FeeSelector
-                    chainId={chainId}
-                    label="Network fee"
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
-                ) : null}
+            <FormSection
+                id="memo"
+                title="Memo"
+                icon={Icon.MessageIcon}
+                optional
+                {...formSections.bind('memo')}
+                revealKey={sectionErrorKey('memo')}
+                summary={memo.trim() || 'None'}
             >
-                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} fee={protocolFeeQuote} />
-            </FeesCard>
-
-        </FormPage>,
+                <Input
+                    label="Memo"
+                    // Inside the optional Memo section the field drops
+                    // its own Optional tag.
+                    aria-required="false"
+                    maxLength={MAX_MEMO_LENGTH}
+                    help={MEMO_HINT}
+                    value={memo}
+                    onChange={(e) => setMemo(e.target.value)}
+                    autoComplete="off"
+                />
+            </FormSection>
+            {/* The FeesCard (network fee selector, protocol fee and the
+                pay-in-native switch) opens from the one Network fee section. */}
+        </FormFrame>,
     );
 }
 

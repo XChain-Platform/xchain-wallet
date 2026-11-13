@@ -10,9 +10,23 @@
 
 import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormNotice, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+// Network, From and the fee selector come from the standard
+// FromSection and FeeSection.
+import { AddressText, Button, ChainBadge, FormNotice, FormPage, Icon, Input, ListPage, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+// The Wallet Form Standard frame (From, main section, Network fee,
+// status slot, one action).
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    joinSummary,
+    useFormSections,
+} from '../components/formStandard/index.js';
 import { registry as registryLib } from '@xchain-wallet/core';
 import '../../i18n/locales/en/send.js';
+import '../../i18n/locales/en/components.js';
 import { isDemoWallet, synthesizeDemoContractMeta } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -141,6 +155,12 @@ export function ContractStakeForm({
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const submitInFlightRef = useRef(false);
+    // The standard sections' open state, held above the picker pages
+    // (early returns) so it survives them, and a count of Review presses so
+    // the section holding the refused value reopens on every press.
+    const formSections = useFormSections({ from: false, main: true, fee: false });
+    const [reviewAttempt, setReviewAttempt] = useState(0);
+    const [errorSection, setErrorSection] = useState(/** @type {'from' | 'main' | 'fee' | null} */ (null));
 
     useEffect(() => {
         let cancelled = false;
@@ -327,9 +347,14 @@ export function ContractStakeForm({
 
     function handleReview(event) {
         event.preventDefault();
+        // Every press counts, so the section that holds the refused
+        // value opens again even after the user closed it.
+        setReviewAttempt((n) => n + 1);
+        setErrorSection('main');
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        if (feeStop) { setFormError(feeStop.formError); return; }
+        if (feeStop) { setErrorSection('fee'); setFormError(feeStop.formError); return; }
         if (!fromAddress) {
+            setErrorSection('from');
             setFormError('No Bitcoin address available to stake from.');
             return;
         }
@@ -542,7 +567,7 @@ export function ContractStakeForm({
                 : onBack}
             backDisabled={stage === 'submitting'}
             backLabel={stage === 'review' ? 'Back to edit' : 'Back to contract'}
-            title={`Stake on contract #${contractActionIndex}`}
+            title={`Stake on Contract #${contractActionIndex}`}
         />
     );
     const wrap = (children) => (
@@ -631,6 +656,9 @@ export function ContractStakeForm({
                     <Button
                         type="submit"
                         variant="primary"
+                        icon={isWatcherMode || isHwSource
+                            ? <Icon.SignIcon />
+                            : mode === 'stake' ? <Icon.StakeIcon /> : mode === 'unstake' ? <Icon.UnlinkIcon /> : <Icon.KeyIcon />}
                         loading={stage === 'submitting'}
                         disabled={stage === 'submitting' || (
                             isWatcherMode
@@ -639,10 +667,8 @@ export function ContractStakeForm({
                         )}
                     >
                         {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : `${verb}`}
+                            ? 'Create Unsigned Transaction'
+                            : `${verb}`}
                     </Button>
                 )}
             >
@@ -742,9 +768,30 @@ export function ContractStakeForm({
     // confirm page, rendered in place of the form (the overlay modal
     // didn't fit small/mobile viewports); form state stays intact behind it.
     if (actionConfirm.open) {
+        // A stake moves its amount to the contract; an unstake brings it
+        // back (the whole stake when no amount is set); a delegation moves
+        // nothing.
+        const stakeSummary = {
+            verb: mode === 'stake'
+                ? t('components.confirmSummary.verbStake')
+                : mode === 'unstake'
+                    ? t('components.confirmSummary.verbUnstake')
+                    : t('components.confirmSummary.verbDelegate'),
+            ...(actionParams.TICK ? { ticker: actionParams.TICK.toUpperCase() } : {}),
+            ...(actionParams.AMOUNT && mode !== 'delegate'
+                ? {
+                    amount: actionParams.AMOUNT,
+                    target: t('components.confirmSummary.contractTarget', { index: actionParams.TARGET_CONTRACT_INDEX }),
+                }
+                : {}),
+            direction: mode === 'stake' ? 'out' : mode === 'unstake' ? 'in' : 'none',
+            chainId,
+            address: fromAddress?.address,
+        };
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={stakeSummary}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
@@ -769,7 +816,7 @@ export function ContractStakeForm({
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={chainId}
                 lockNetwork
@@ -789,7 +836,10 @@ export function ContractStakeForm({
             <TokenPicker
                 purpose="send"
                 walletId={walletId}
-                title="Select token"
+                // A contract stake locks a token; the network coin cannot be staked.
+                kindFilter="tokens"
+                kindLocked
+                title="Select Token"
                 networkFilter={coinFromChainId(chainId)}
                 onSelect={(sel) => {
                     setTick(String(sel.tick || '').toUpperCase());
@@ -800,46 +850,78 @@ export function ContractStakeForm({
         );
     }
 
+    // Section helpers. The section holding the last refusal reopens
+    // on every Review press; the main section summarises the action.
+    const errorKey = (id) => (formError && errorSection === id ? reviewAttempt + 1 : 0);
+    const tickUpper = String(tick || '').trim().toUpperCase();
+    const modeLabel = mode === 'stake' ? 'Stake' : mode === 'unstake' ? 'Unstake' : 'Delegate';
+    const mainSummary = joinSummary(
+        modeLabel,
+        mode !== 'delegate' && amount.trim() ? `${amount.trim()} ${tickUpper}`.trim() : tickUpper,
+    ) || null;
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label="Contract stake"
             onSubmit={handleReview}
-            status={formError ? (
-                <StatusMessage variant="error">{formError}</StatusMessage>
-            ) : null}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="success"
+            data-form-standard="contract-stake"
+            status={[formError ? (
+                <StatusMessage key="error" variant="error">{formError}</StatusMessage>
+            ) : null]}
+            action={(
+                <FormAction
                     icon={mode === 'stake' ? <Icon.StakeIcon /> : mode === 'unstake' ? <Icon.UnlinkIcon /> : <Icon.KeyIcon />}
                     loading={actionConfirm.composing}
                     disabled={!fromAddress || actionConfirm.composing}
                 >
-                    {mode === 'stake' ? 'Stake' : mode === 'unstake' ? 'Unstake' : 'Delegate key'}
-                </Button>
+                    {mode === 'stake' ? 'Stake' : mode === 'unstake' ? 'Unstake' : 'Delegate Key'}
+                </FormAction>
+            )}
+            /* From holds the Network (fixed by the target contract)
+               and the address that stakes and signs. */
+            from={(
+                <FromSection
+                    {...formSections.bind('from')}
+                    chainId={chainId}
+                    chainRegistry={chainRegistry}
+                    lockNetwork
+                    networkHelp="The chain this contract lives on. It is fixed by the contract, so your address, the token and the fee are all on this network."
+                    address={fromAddress?.address || null}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    addressHelp="The address that stakes, unstakes or delegates, pays the network fee and signs."
+                    missing={(
+                        <FormNotice variant="error">
+                            {t('send.source.noAddress')}
+                        </FormNotice>
+                    )}
+                    revealKey={errorKey('from')}
+                />
+            )}
+            fee={(
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeCustomEstimate}
+                    revealKey={errorKey('fee')}
+                />
             )}
         >
-            {/* The target contract pins the network, so the field is single-option. */}
-            <NetworkField label="Network" value={chainId} onChange={() => {}} chainIds={[chainId]} chainRegistry={chainRegistry} />
-
-            {fromAddress ? (
-                <AddressField
-                    label="From"
-                    help="The address that stakes, unstakes or delegates, pays the network fee and signs."
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
-                />
-            ) : (
-                <FormNotice variant="error">
-                    {t('send.source.noAddress')}
-                </FormNotice>
-            )}
-
+            {/* The main section holds the contract terms (risk
+                information that stays in view), the action, the token, the
+                amount and the signing key. */}
+            <FormSection
+                id="main"
+                title="Contract Stake"
+                icon={Icon.StakeIcon}
+                {...formSections.bind('main')}
+                revealKey={errorKey('main')}
+                summary={mainSummary}
+            >
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Target</dt>
                 <dd className={styles.detailsValue}>Contract #{contractActionIndex}</dd>
@@ -923,19 +1005,7 @@ export function ContractStakeForm({
                 autoCorrect="off"
                 spellCheck={false}
             />
-
-            {feeTiers ? (
-                <FeeSelector
-                    chainId={chainId}
-                    label="Network fee"
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
-            ) : null}
-
-        </FormPage>,
+            </FormSection>
+        </FormFrame>,
     );
 }

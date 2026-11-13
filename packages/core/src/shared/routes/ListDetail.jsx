@@ -178,7 +178,7 @@ export function ListDetail({ walletId, chainId, actionIndex, onBack, onFork, onS
                 : 'This list is owned by another address, so it is read-only in this wallet.';
 
     const header = (
-        <PageHeader onBack={onBack} title={isTick ? 'Token list' : 'Address list'} />
+        <PageHeader onBack={onBack} title={isTick ? 'Token List' : 'Address List'} />
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
@@ -190,7 +190,7 @@ export function ListDetail({ walletId, chainId, actionIndex, onBack, onFork, onS
         return wrap(
             <StatusMessage
                 variant="error"
-                recovery={{ label: 'Try again', onAction: () => setReload((value) => value + 1) }}
+                recovery={{ label: 'Try Again', onAction: () => setReload((value) => value + 1) }}
             >
                 {loadError}
             </StatusMessage>,
@@ -342,17 +342,17 @@ export function ListDetail({ walletId, chainId, actionIndex, onBack, onFork, onS
                 <div className={styles.actions}>
                     {onShare ? (
                         <Button variant="secondary" icon={<Icon.UsersIcon />} onClick={() => onShare({ chainId, actionIndex })}>
-                            Share list
+                            Share List
                         </Button>
                     ) : null}
                     {onTransfer ? (
                         <Button variant="secondary" onClick={() => onTransfer({ chainId, actionIndex })}>
-                            Transfer list
+                            Transfer List
                         </Button>
                     ) : null}
                     {onRename && metaSupported ? (
                         <Button variant="secondary" onClick={() => onRename({ chainId, actionIndex })}>
-                            Rename list
+                            Rename List
                         </Button>
                     ) : null}
                     <Button
@@ -371,7 +371,7 @@ export function ListDetail({ walletId, chainId, actionIndex, onBack, onFork, onS
                             parentIndex: isFork ? String(data.list_action_index) : null,
                         })}
                     >
-                        Fork &amp; edit
+                        Fork &amp; Edit
                     </Button>
                 </div>
             ) : null}
@@ -418,7 +418,7 @@ function MemberList({ items, isTick, messaging, chainId }) {
                         icon={<Icon.ChevronDownIcon />}
                         onClick={() => setVisibleLimit((limit) => limit + MEMBERS_PAGE_SIZE)}
                     >
-                        Load more members
+                        Load More Members
                     </Button>
                 </div>
             ) : null}

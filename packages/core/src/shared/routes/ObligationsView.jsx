@@ -129,7 +129,7 @@ function ScopedObligationsView({ walletId, activeAccountId, onPay, onBack }) {
     const header = (
         <PageHeader
             onBack={onBack}
-            title="Payments due"
+            title="Payments Due"
         />
     );
 
@@ -160,7 +160,7 @@ function ScopedObligationsView({ walletId, activeAccountId, onPay, onBack }) {
                 )}
                 actions={showOffline ? null : (
                     <Button variant="secondary" icon={<Icon.RefreshIcon />} onClick={refresh} disabled={scanning || offline}>
-                        Refresh payments
+                        Refresh Payments
                     </Button>
                 )}
             >
@@ -279,7 +279,7 @@ function ObligationRow({ row, onPay }) {
                             orderMatchActionIndex: row.orderMatchActionIndex,
                         })}
                     >
-                        Pay now
+                        Pay Now
                     </Button>
                 ) : null}
             </div>

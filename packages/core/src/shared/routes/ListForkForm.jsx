@@ -9,7 +9,9 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, Checkbox, FeeSelector, FieldNote, FormPage, Icon, InfoTip, Input, NetworkField, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+// Network, From and the fee selector come from the standard
+// FromSection and FeeSection (formStandard, below).
+import { AddressText, Button, ChainBadge, Checkbox, FieldNote, FormPage, Icon, InfoTip, Input, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib, airdrop as airdropLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -27,6 +29,8 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/routes.js';
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import forkStyles from './ListForkForm.module.css';
@@ -45,8 +49,37 @@ import { addressReferenceNote } from '../utils/addressReferenceCopy.js';
 import { listTickCoinSupport } from '../../flows/listTickCoinSupport.js';
 import { listActionSize, listActionSizeError } from '../utils/listActionSize.js';
 import { explorerReadFailure } from '../../sdk/explorerErrors.js';
+// The compose stage sits in the Wallet Form Standard frame: From,
+// the Edit section, an optional Memo section, the Network fee row, the
+// status slot and the action.
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    joinSummary,
+    useFormSections,
+} from '../components/formStandard/index.js';
+import { formatCoinBaseUnits } from '../../flows/feesCard.js';
+import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+/**
+ * The protocol fee for the closed Network fee summary, in the coin
+ * the Fees card charges it in, or null while it is unknown or free.
+ */
+function protocolFeeSummary({ quote, pending, payInNative, coinTicker }) {
+    if (pending) return null;
+    const fee = normalizeProtocolFee(quote);
+    if (!fee.known || fee.free) return null;
+    if (payInNative) {
+        const native = formatCoinBaseUnits(quote?.requiredFeeSats);
+        return native ? `${native} ${coinTicker}`.trim() : null;
+    }
+    return fee.amount ? `${fee.amount} XCHAIN` : null;
+}
 const POLL_INTERVAL_MS = 10_000;
 
 /** A long address as its first 8 and last 6 characters. */
@@ -174,6 +207,12 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
     const [listName, setListName] = useState(/** @type {string | null} */ (null));
     const [tickCoinSupported, setTickCoinSupported] = useState(false);
     const [anyCoins, setAnyCoins] = useState(/** @type {string[]} */ ([]));
+    // The standard sections' open state, held above the picker and
+    // review early returns so it survives them; a counter of Publish attempts
+    // reopens the section that holds the error on every attempt.
+    const formSections = useFormSections({ from: false, edit: true, memo: false, fee: false });
+    const [reviewAttempt, setReviewAttempt] = useState(0);
+    const [feeStopped, setFeeStopped] = useState(false);
 
     // Prefer the explorer's current owner, then walk to the root create for
     // older explorers that do not report one.
@@ -579,11 +618,17 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
 
     async function handleReview(event) {
         event.preventDefault();
+        // Each attempt reopens the section holding the error; a
+        // custom fee stop opens the Network fee row even when the fee field
+        // shows the error itself.
+        setReviewAttempt((n) => n + 1);
+        setFeeStopped(false);
         if (!listActionIndexValid) { setFormError('List reference must be a positive whole number.'); return; }
         if (ownershipReason) { setFormError(ownershipReason); return; }
         if (notOwnerPick) { setFormError(notOwnerPick); return; }
         if (!fromAddress) { setFormError('No signing address available on this network.'); return; }
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        setFeeStopped(Boolean(feeStop));
         if (feeStop) { setFormError(feeStop.formError); return; }
         if (additions.invalid.length > 0) {
             const noun = isTick
@@ -732,11 +777,11 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
     const header = (
         <PageHeader
             onBack={onBack}
-            title={stage === 'review-1' ? 'Review list edit'
-                : stage === 'wait-index' ? 'Waiting for fork to be indexed'
-                    : stage === 'review-2' ? 'Review remove'
-                        : stage === 'repoint' ? 'Edit published'
-                            : 'Edit list'}
+            title={stage === 'review-1' ? 'Review List Edit'
+                : stage === 'wait-index' ? 'Waiting for Fork to Be Indexed'
+                    : stage === 'review-2' ? 'Review Remove'
+                        : stage === 'repoint' ? 'Edit Published'
+                            : 'Edit List'}
         />
     );
     const wrap = (children) => (
@@ -780,6 +825,13 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={{
+                    verb: t('components.confirmSummary.verbEditList'),
+                    target: listLabel(oldIndex, listName),
+                    direction: 'none',
+                    chainId,
+                    address: fromAddress?.address,
+                }}
                 screenVariant={variant}
                 chainLabel={null}
                 feeText={feeEstimate?.coinAmount
@@ -882,7 +934,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
             <FormPage
                 as="div"
                 label="Waiting for fork to be indexed"
-                actions={<Button variant="ghost" icon={<Icon.XIcon />} onClick={onBack}>Close (keep waiting)</Button>}
+                actions={<Button variant="ghost" icon={<Icon.XIcon />} onClick={onBack}>Close (Keep Waiting)</Button>}
             >
                 <p className={styles.summary}>{firstDecoded?.summary}</p>
                 <dl className={styles.detailsList}>
@@ -922,7 +974,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                         loading={submitting}
                         disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                     >
-                        {hw ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Publish remove'}
+                        Publish Remove
                     </Button>
                 )}
             >
@@ -1026,7 +1078,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                             loading={submitting}
                             disabled={isWatcherMode ? false : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                         >
-                            {isWatcherMode ? 'Create unsigned transaction' : hw ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : (memoOnly ? 'Publish memo' : needsAdd ? 'Publish add' : 'Publish remove')}
+                            {isWatcherMode ? 'Create Unsigned Transaction' : (memoOnly ? 'Publish Memo' : needsAdd ? 'Publish Add' : 'Publish Remove')}
                         </Button>
                     </>
                 )}
@@ -1126,7 +1178,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={chainId}
                 lockNetwork
@@ -1145,41 +1197,88 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
     const addHelp = `Enter one ${itemNoun} per line. ${resolutionHelp}`
         + (isTick ? '' : ' Added addresses become permanent public on-chain data once the fork is published, the same as creating a new list.');
 
+    // Which section holds the form error, so that section reopens on
+    // every Publish attempt even after the user closed it.
+    const errorSection = feeStopped ? 'fee'
+        : !formError ? null
+            : /^Nothing changed/i.test(formError) ? 'edit'
+            : /memo/i.test(formError) ? 'memo'
+                : /signing address|is owned by/i.test(formError) ? 'from'
+                    : 'edit';
+    const sectionErrorKey = (id) => (errorSection === id ? reviewAttempt + 1 : 0);
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label="Edit list"
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}
             noValidate
-            status={formError
-                ? <StatusMessage variant="error">{formError}</StatusMessage>
-                : notOwnerPick ? <StatusMessage variant="warning">{notOwnerPick}</StatusMessage> : null}
-            actions={(
-                <Button type="submit" variant="success" icon={<Icon.UploadIcon />}>
-                    Publish edit
-                </Button>
+            status={[formError
+                ? <StatusMessage key="error" variant="error">{formError}</StatusMessage>
+                : notOwnerPick ? <StatusMessage key="owner" variant="warning">{notOwnerPick}</StatusMessage> : null]}
+            action={(
+                <FormAction icon={<Icon.UploadIcon />}>
+                    Publish Edit
+                </FormAction>
+            )}
+            /* From (closed) holds the list's locked network and the
+               signing address, which starts as the owner's. */
+            from={(
+                <FromSection
+                    {...formSections.bind('from')}
+                    chainId={chainId}
+                    chainRegistry={chainRegistry}
+                    lockNetwork
+                    networkHelp={t('routes.listFork.networkHelp')}
+                    address={fromAddress?.address || null}
+                    addressLabel="From"
+                    addressHelp="Only the list's owner can edit it, and the network refuses an edit signed from any other address. This starts as the owner's address."
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    revealKey={sectionErrorKey('from')}
+                />
+            )}
+            /* The one Network fee row: the speed picker, then the Fees
+               card (network and protocol fee, native-fee switch). */
+            fee={(
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeCustomEstimate}
+                    revealKey={sectionErrorKey('fee')}
+                    protocolSummary={protocolFeeSummary({
+                        quote: protocolFeeQuote,
+                        pending: protocolFeePending,
+                        payInNative: nativeFee.toggleProps.checked,
+                        coinTicker,
+                    }) || undefined}
+                >
+                    <FeesCard
+                        chainId={chainId}
+                        feeSelector={null}
+                        tiers={feeTiers || undefined}
+                        value={feePick}
+                        customEstimate={feeCustomEstimate}
+                        quote={protocolFeeQuote}
+                        pending={protocolFeePending}
+                    >
+                        <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
+                    </FeesCard>
+                </FeeSection>
             )}
         >
-            <NetworkField
-                label="Network"
-                value={chainId}
-                onChange={() => {}}
-                chainIds={[chainId]}
-                chainRegistry={chainRegistry}
-            />
-            {fromAddress ? (
-                <AddressField
-                    label="From"
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
-                    help="Only the list's owner can edit it, and the network refuses an edit signed from any other address. This starts as the owner's address."
-                />
-            ) : null}
+            <FormSection
+                id="edit"
+                title="List Edit"
+                icon={Icon.TokenListIcon}
+                {...formSections.bind('edit')}
+                revealKey={sectionErrorKey('edit')}
+                summary={joinSummary(`List #${oldIndex}`, `${toAdd.length} to add`, `${toRemove.length} to remove`)}
+            >
             <p className={styles.summary}>
                 Forking {itemNoun} list #{oldIndex}
                 {' '}({currentItems.length} current member{currentItems.length === 1 ? '' : 's'}).
@@ -1236,39 +1335,31 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                         : null}
                 </FieldNote>
             ) : null}
+            {/* The action size describes the edit, so it closes the Edit section. */}
+            <p className={styles.hint}>
+                Action size: {firstActionSize.compiledBytes.toLocaleString('en-US')} / {firstActionSize.maxBytes.toLocaleString('en-US')} bytes.
+            </p>
+            </FormSection>
 
+            {/* Memo is its own optional section, closed until used. */}
+            <FormSection
+                id="memo"
+                title="Memo"
+                icon={Icon.MessageIcon}
+                optional
+                {...formSections.bind('memo')}
+                revealKey={sectionErrorKey('memo')}
+                summary={trimmedMemo || 'None'}
+            >
             <Input
                 label="Memo"
-                optional
                 maxLength={MAX_MEMO_LENGTH}
                 help="A public note saved on the blockchain with this edit. It cannot contain | or ;."
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
                 autoComplete="off"
             />
-
-            <FeesCard
-                chainId={chainId}
-                feeSelector={feeTiers ? (
-                    <FeeSelector
-                        chainId={chainId}
-                        label="Network fee"
-                        coinTicker={coinTicker}
-                        tiers={feeTiers}
-                        value={feePick}
-                        onChange={setFeePick}
-                        customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                    />
-                ) : null}
-                quote={protocolFeeQuote}
-                pending={protocolFeePending}
-            >
-                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
-            </FeesCard>
-            <p className={styles.hint}>
-                Action size: {firstActionSize.compiledBytes.toLocaleString('en-US')} / {firstActionSize.maxBytes.toLocaleString('en-US')} bytes.
-            </p>
-
-        </FormPage>,
+            </FormSection>
+        </FormFrame>,
     );
 }

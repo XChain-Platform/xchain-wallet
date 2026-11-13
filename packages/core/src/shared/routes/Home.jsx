@@ -12,35 +12,31 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, EmptyState, Icon, ListPage, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { useMessagingUnread } from '../hooks/useMessagingUnread.js';
 import { useSharedCoinpayObligations } from '../hooks/useCoinpayObligations.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useWalletSource } from '../hooks/useDemoGuard.jsx';
 import { useEscrowedBalances } from '../hooks/useEscrowedBalances.js';
 import { isNavigatorOnline } from '../hooks/useOnlineStatus.js';
 import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
-import { useReachability } from '../hooks/useReachability.js';
 import { HideReachabilityNotice } from '../components/hideReachabilityNotice.js';
 import { useWalletFilters } from '../hooks/useWalletFilters.js';
 import { HomeTabs } from '../components/HomeTabs.jsx';
 import { buildBalanceRows, detectSpamCandidates } from '../components/BalanceList.jsx';
 import { hasBackupReminderFunds } from '../../flows/backupReminder.js';
-import { useWideLayout } from '../hooks/useWideLayout.js';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import { SPAM_TOKEN_TOAST_KIND, useToast } from '../components/ToastHost.jsx';
 import { BackupReminderCard } from '../components/BackupReminderCard.jsx';
 import { AddressDiscoveryNotice } from '../components/AddressDiscoveryNotice.jsx';
 import { DemoExitConfirm } from '../components/DemoExitConfirm.jsx';
-import { AlertsOverlay } from '../components/AlertsOverlay.jsx';
-import { buildWalletAlerts } from '../walletAlerts.js';
 import { PanicFreezeNotice } from '../safety/PanicFreezeNotice.jsx';
 import { Settings } from './Settings.jsx';
 import { AddAddressModal } from './AddAddressModal.jsx';
 import {
     pinnedTokensForWallet,
     pinnedTokensPatchForWallet,
-    WALLET_MODE_DEFAULT,
 } from '../../schemas/settings.js';
+import { walletModeOf } from '../../schemas/wallet.js';
+import { useWalletMode } from '../hooks/useWalletMode.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import { writeActiveWallet } from '../utils/activeWalletMemory.js';
 import { takeInterruptedView } from '../utils/lastViewMemory.js';
@@ -62,8 +58,7 @@ import {
     NO_CHAINS_TITLE,
 } from '../utils/chainAvailability.js';
 import { t } from '../../i18n/index.js';
-import '../../i18n/locales/en/walletMenu.js';
-import '../../i18n/locales/en/alerts.js';
+import '../../i18n/locales/en/actionsMenu.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -148,8 +143,8 @@ const { BALANCE_POLL_INTERVAL_MS } = flowsLib;
 
 /**
  * Home screen: landing view for an unlocked wallet. Header shows the
- * wallet name; body renders a per-chain balance card grid; the hero
- * exposes Send / Receive and the footer exposes supplementary actions.
+ * wallet name; body renders the balance card, the four quick actions
+ * (Send, Receive, Exchange, More) and the balance tabs.
  *
  * When the wallet has pending §40.9 airdrops (LIST signed but AIRDROP
  * still pending, either waiting for the LIST to be indexed or ready
@@ -170,19 +165,13 @@ const { BALANCE_POLL_INTERVAL_MS } = flowsLib;
  * @param {() => void} [props.onReceive]       navigate to Receive sub-route
  * @param {() => void} [props.onSwap]          navigate to SwapForm sub-route; a quick action only when the shell wires no `onActions`
  * @param {() => void} [props.onExchange]      navigate to the Decentralized Exchange list with BTC preselected (quick action #4)
- * @param {() => void} [props.onCreateToken]   navigate to Token Wizard sub-route (§40.1)
- * @param {() => void} [props.onActions]       navigate to the Token Actions menu (§40.2+); full mode only, see the §40 note below
- * @param {() => void} [props.onMarkets]       navigate to the Markets list (§41.2)
+ * @param {() => void} [props.onActions]       navigate to the Token Actions menu (§40.2+), the More quick action; see the §40 note below
  * @param {(id: string) => void} [props.onResumeAirdrop]  navigate to AirdropForm with a pending id
  * @param {(ref: { chainId: string, address: string, orderMatchActionIndex: string }) => void} [props.onResumeCoinpay]  navigate to CoinpayForm with a pending obligation (§41.4)
- * @param {() => void} [props.onMessaging]     navigate to the Messaging inbox (§41.7.2)
- * @param {() => void} [props.onContracts]     navigate to the Contracts list (§42.2); BTC-only, App.jsx gates the prop
- * @param {() => void} [props.onStaking]       navigate to the Staking dashboard (§42.7.4); BTC-only, App.jsx gates the prop
  * @param {() => void} [props.onHistory]       navigate to the History route (§23 + §23.5 cross-chain threading)
- * @param {() => void} [props.onSignPsbt]      navigate to the PSBT-sign route (§30.4); surfaced as the marquee CTA when `settings.walletMode === 'signer'` (§20 / G041)
+ * @param {() => void} [props.onSignPsbt]      navigate to the PSBT-sign route (§30.4); surfaced as the marquee CTA when the active wallet is an air-gapped signer (§20 / G041)
  * @param {() => void} [props.onSignMessage]   navigate to the user-initiated message-sign route (§17.4)
  * @param {() => void} [props.onVerifySignature]   navigate to the signature-verify route (§17.5)
- * @param {() => void} [props.onMigrateToBip39]           navigate to the §40.13 migration wizard when the active wallet is counterwallet-legacy
  * @param {() => void} [props.onOpenWalletPicker]         Settings row → host navigates to the WalletPicker route
  * @param {() => void} [props.onOpenAccountPicker]        Settings row → host navigates to the AccountPicker route
  * @param {string | null} [props.activeAccountId]          App-level active BIP44 account; when supplied, Home is read-only with respect to account selection
@@ -197,20 +186,14 @@ const { BALANCE_POLL_INTERVAL_MS } = flowsLib;
  * ActionsMenu screen instead: the "All actions" quick action (`onActions`)
  * at every width or the wallet menu. Add entries there, not here.
  */
-export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onSignPsbt, onSignMessage, onVerifySignature, activeWalletId: activeWalletIdProp, activeAccountId: activeAccountIdProp, onSwitchAccount, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp, onCommandPalette, onOpenSettings, onLockWallet, resumeKey = 0 }) {
+export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onActions, onResumeAirdrop, onResumeCoinpay, onHistory, onOpenWalletPicker, onOpenAccountPicker, onSignPsbt, onSignMessage, onVerifySignature, activeWalletId: activeWalletIdProp, activeAccountId: activeAccountIdProp, onSwitchAccount, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp, onCommandPalette, onOpenSettings, onLockWallet, resumeKey = 0 }) {
     useNativeExitRoot();
     const { shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
-    // The quick actions are Send, Receive, Exchange and All actions at every
-    // width; Swap lives in All actions. From 834px up the
-    // supplementary row below the balances is gone when that menu is wired.
-    const isWide = useWideLayout();
+    // The quick actions are Send, Receive, Exchange and More at every width
+    // (G52); Swap and every other action live in More. Home has no row of
+    // action buttons below the balances at any size.
     const hasActionsMenu = typeof onActions === 'function';
-    const {
-        overall: reachabilityOverall,
-        refresh: recheckReachability,
-    } = useReachability({});
     // A corroborated service outage is offline even when the device still has
     // a live Wi-Fi or Ethernet interface.
     const { offline } = useNetworkOffline();
@@ -248,11 +231,14 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
     const activeNetwork = settings.loading
         ? null
         : (settings.settings?.activeNetwork || 'mainnet');
-    // Signing prompts wait for the wallet mode, so a watch-only wallet never
-    // flashes a card it cannot act on; a failed settings read opens in full
-    // mode.
-    const walletModeReady = !settings.loading;
-    const walletMode = settings.settings?.walletMode || WALLET_MODE_DEFAULT;
+    // Signing prompts wait for the active wallet's mode (§20): Home's wallet
+    // list carries it, and the shell's published mode covers the wait.
+    const publishedMode = useWalletMode(activeWalletId);
+    const activeWalletRecord = Array.isArray(wallets)
+        ? wallets.find((w) => w?.id === activeWalletId) || null
+        : null;
+    const walletModeReady = Boolean(activeWalletRecord) || publishedMode.walletModeKnown;
+    const walletMode = activeWalletRecord ? walletModeOf(activeWalletRecord) : publishedMode.walletMode;
     const isSignerMode = walletMode === 'signer';
     const isWatcherMode = walletMode === 'watcher';
     // The wallet source says what the active wallet's data can do: sample
@@ -274,9 +260,6 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
         /** @type {string | null} */ (null),
     );
     const activeAccountId = activeAccountIdProp ?? activeAccountIdLocal;
-    // Unread-message count for the active wallet + account, surfaced as a Home
-    // alert and a dot on the Messaging button (see useMessagingUnread).
-    const messagingUnread = useMessagingUnread(activeWalletId, activeAccountId);
     const initialBalanceCacheRef = useRef(/** @type {{ value: ReturnType<typeof readBalanceCache> } | undefined} */ (undefined));
     if (!initialBalanceCacheRef.current) {
         initialBalanceCacheRef.current = {
@@ -456,7 +439,6 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
     // still runs (a re-load has to happen) but the banner says "a moment"
     // rather than counting down a number the wallet made up.
     const [rateLimitNamedSeconds, setRateLimitNamedSeconds] = useState(false);
-    const [alertsOpen, setAlertsOpen] = useState(false);
     // The full shell controls these values so its header and Home share one
     // model. Compact shells use the same per-wallet model here directly.
     const walletFilters = useWalletFilters(activeWalletId);
@@ -972,11 +954,6 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
         () => runNetworkAction('Refreshing balances', refreshPortfolio),
         [runNetworkAction, refreshPortfolio],
     );
-    // Try again from the "Balances could not be checked" state.
-    const recheckBalances = useCallback(() => {
-        recheckReachability();
-        refreshPortfolioOnline();
-    }, [recheckReachability, refreshPortfolioOnline]);
 
     // Reruns when the active wallet OR active BIP44 account changes.
     // Switching either flushes stale state and refetches. When
@@ -1152,10 +1129,6 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
         }
     }, [activeWallet?.id, activeWallet?.name]);
 
-    // Build the wallet-level alerts from the one shared list (walletAlerts.js);
-    // a new alert is added there, never here.
-    const alerts = buildWalletAlerts({ activeWallet, messagingUnread }, { onMessaging, onMigrateToBip39 });
-
     // Coin families surfaced in the dataset, in canonical order.
     // Drives both the network filter and the per-tab "no balances on
     // this network" empty messages.
@@ -1213,9 +1186,10 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                 {hasActionsMenu ? (
                     <QuickActionTile
                         onClick={onActions}
-                        icon={<Icon.GridIcon />}
+                        aria-label={t('actionsMenu.more')}
+                        icon={<Icon.MoreIcon />}
                     >
-                        {t('walletMenu.row.allActions')}
+                        {t('home.moreShort')}
                     </QuickActionTile>
                 ) : null}
                 {swapFallback ? (
@@ -1355,7 +1329,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                 {!canSpend && demoSendNoticeOpen ? (
                     <StatusMessage
                         recovery={{
-                            label: t('walletDetails.exitDemo'),
+                            label: t('walletDetails.exitDemoAction'),
                             onAction: () => { setDemoExitError(null); setDemoExitConfirmOpen(true); },
                         }}
                     >
@@ -1475,6 +1449,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                 {walletModeReady && !isWatcherMode ? <PanicFreezeNotice surface="home" /> : null}
                 {balances ? (
                     <HomeTabs
+                        walletName={activeWallet?.name || ''}
                         chainRegistry={chainRegistry}
                         balances={balancesView}
                         activeByChain={activeByChain}
@@ -1509,16 +1484,12 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                         hideSmallBalances={hideSmallBalances}
                         onRefresh={refreshPortfolioOnline}
                         refreshing={portfolioRefreshing}
-                        // Offline already has its own message above; a degraded
-                        // check words the empty tabs instead.
-                        balancesUnchecked={!offline && reachabilityOverall === 'degraded'}
                         // Home's own balance notice (offline, a failed or
                         // running refresh) is the page's one message, so an
                         // empty tab does not add "Fund your wallet" or a
-                        // second "could not be checked" from balances that
-                        // are only the last good load.
+                        // second message from balances that are only the
+                        // last good load.
                         balanceNoticeShown={offline || Boolean(balanceStatusText) || cachedBalancesUpdating}
-                        onRecheckBalances={recheckBalances}
                         onCommandPalette={onCommandPalette}
                         // Only shells without a nav surface pass this;
                         // it renders a gear in the hero's control cluster.
@@ -1542,99 +1513,11 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                     <BackupReminderCard
                         walletId={activeWalletId}
                         hasFunds={backupReminderHasFunds}
-                        walletMode={settings.settings ? walletMode : null}
+                        walletMode={walletModeReady ? walletMode : null}
                         onAction={() => { setSettingsSubpage('backup'); setSettingsOpen(true); }}
                     />
                 ) : null}
-
-                {/* Supplementary action grid is full-mode only. In small mode
-                    the actions live in the pancake menu, freeing the body for
-                    the balance list. */}
-                {isFull && !(isWide && hasActionsMenu) ? (
-                <div className={styles.actionsFullWrap}>
-                <div className={styles.actionsFull}>
-                    <QuickActionTile
-                        onClick={() => runNetworkAction('Creating a token', onCreateToken)}
-                        disabled={!onCreateToken}
-                        aria-disabled={!networkActionsAvailable ? 'true' : undefined}
-                        title={!networkActionsAvailable ? t('home.createTokenOffline') : undefined}
-                        icon={<Icon.TokenIcon />}
-                    >
-                        {t('home.createToken')}
-                    </QuickActionTile>
-                    {/* Same rule as Exchange above: absent, not greyed, when
-                        this build has no markets to open. */}
-                    {onMarkets ? (
-                        <QuickActionTile
-                            onClick={onMarkets}
-                            icon={<Icon.MarketIcon />}
-                        >
-                            {t('home.markets')}
-                        </QuickActionTile>
-                    ) : null}
-                    <QuickActionTile
-                        onClick={onMessaging}
-                        disabled={!onMessaging}
-                        icon={<Icon.MessageIcon />}
-                    >
-                        {t('home.messaging')}
-                        {messagingUnread > 0 ? (
-                            <span
-                                aria-label={t('alerts.unreadCount', { count: messagingUnread })}
-                                style={{
-                                    marginInlineStart: '0.4rem',
-                                    padding: '0 0.4rem',
-                                    borderRadius: '999px',
-                                    background: 'var(--xc-accent-primary)',
-                                    color: 'var(--xc-on-accent)',
-                                    fontSize: '0.7rem',
-                                    fontWeight: 700,
-                                }}
-                            >
-                                {messagingUnread > 99 ? '99+' : messagingUnread}
-                            </span>
-                        ) : null}
-                    </QuickActionTile>
-                    <QuickActionTile
-                        onClick={onHistory}
-                        disabled={!onHistory}
-                        icon={<Icon.HistoryIcon />}
-                    >
-                        {t('history.title')}
-                    </QuickActionTile>
-                    <QuickActionTile
-                        onClick={onAddresses}
-                        disabled={!onAddresses}
-                        icon={<Icon.AddressIcon />}
-                    >
-                        {t('home.addresses')}
-                    </QuickActionTile>
-                    {onContracts ? (
-                        <QuickActionTile
-                            onClick={onContracts}
-                            icon={<Icon.ContractIcon />}
-                        >
-                            {t('home.contracts')}
-                        </QuickActionTile>
-                    ) : null}
-                    {onStaking ? (
-                        <QuickActionTile
-                            onClick={onStaking}
-                            icon={<Icon.StakeIcon />}
-                        >
-                            {t('home.staking')}
-                        </QuickActionTile>
-                    ) : null}
-                </div>
-                </div>
-                ) : null}
             </ListPage>
-            {alertsOpen ? (
-                <AlertsOverlay
-                    alerts={alerts}
-                    onClose={() => setAlertsOpen(false)}
-                />
-            ) : null}
         </Screen>
     );
 }
@@ -1753,7 +1636,7 @@ function SignerHomeBody({ onSignPsbt, onSignMessage, onVerifySignature, onOpenSe
                 ) : null}
                 {onLockWallet ? (
                     <Button variant="ghost" onClick={onLockWallet} icon={<Icon.LockIcon />}>
-                        {t('home.lockWallet')}
+                        {t('home.lockWalletAction')}
                     </Button>
                 ) : null}
             </div>

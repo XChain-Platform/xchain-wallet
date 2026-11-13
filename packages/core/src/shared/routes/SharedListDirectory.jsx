@@ -178,7 +178,7 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
     const header = (
         <PageHeader
             onBack={onBack}
-            title={mode === 'pick' ? 'Choose a shared list' : 'Shared lists'}
+            title={mode === 'pick' ? 'Choose a Shared List' : 'Shared Lists'}
         />
     );
     const wrap = (children, toolbar, notices) => (
@@ -191,7 +191,7 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
         return wrap(
             <StatusMessage
                 variant="error"
-                recovery={{ label: 'Try again', onAction: () => setDirectoryReload((value) => value + 1) }}
+                recovery={{ label: 'Try Again', onAction: () => setDirectoryReload((value) => value + 1) }}
             >
                 {loadError}
             </StatusMessage>,
@@ -274,7 +274,7 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
                                 icon={<Icon.ChevronDownIcon />}
                                 onClick={() => setVisibleLimit((limit) => limit + PAGE_SIZE)}
                             >
-                                Load more
+                                Load More
                             </Button>
                         </div>
                     ) : null}
@@ -343,7 +343,7 @@ function SharedListRow({ entry, chainId, pickable, onSelect, onOpenList }) {
                 <>
                     <dt className={styles.detailsLabel}>Select</dt>
                     <dd className={styles.detailsValue}>
-                        <Button type="button" variant="secondary" icon={<Icon.CheckIcon />} onClick={choose}>Choose list</Button>
+                        <Button type="button" variant="secondary" icon={<Icon.CheckIcon />} onClick={choose}>Choose List</Button>
                     </dd>
                 </>
             ) : null}
@@ -356,7 +356,7 @@ function SharedListRow({ entry, chainId, pickable, onSelect, onOpenList }) {
                             variant="secondary"
                             onClick={() => onOpenList(descriptor.id, String(entry.homeListIndex))}
                         >
-                            Open list
+                            Open List
                         </Button>
                     </dd>
                 </>

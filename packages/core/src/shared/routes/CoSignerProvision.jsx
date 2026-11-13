@@ -43,11 +43,14 @@ import {
     CoSignerPolicyEditor,
     emptyPolicyDraft,
     buildPolicyDraft,
+    declarePolicyTokenIds,
 } from './CoSignerPolicyEditor.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { addressValidationError } from '../utils/addressValidation.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
-import { policyNoLimitText } from '../utils/coSignerPolicyLimit.js';
+import { policyNoLimitText, allowedTokensText } from '../utils/coSignerPolicyLimit.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/coSigner.js';
 import styles from './IssueTokenForm.module.css';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 
@@ -108,6 +111,10 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const requestRef = useRef(0);
     const submittingRef = useRef(false);
+    // True while Review looks up the token numbers, so a second press waits.
+    const reviewingRef = useRef(false);
+    // Per-ticker messages from the last token number lookup.
+    const [tokenErrors, setTokenErrors] = useState(/** @type {Record<string, string> | null} */ (null));
 
     useEffect(() => {
         const request = requestRef.current + 1;
@@ -181,6 +188,9 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
         return keys;
     }, [addressesByChain]);
 
+    // Set by a Create press, so the compose problem then shows as an error
+    // and outlines its field.
+    const [attempted, setAttempted] = useState(false);
     const composeError = useMemo(() => {
         if (!chainId) return 'Pick a Bitcoin network.';
         if (!btcChainIds.includes(chainId) || !descriptor) return 'Pick a supported Bitcoin network.';
@@ -204,20 +214,38 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
         return null;
     }, [chainId, daemonAddress, agentPubkey, policyDraft, btcChainIds, descriptor, walletKeyXOnly]);
 
-    function handleReview(event) {
+    async function handleReview(event) {
         event?.preventDefault();
-        if (composeError || !chainId || !daemonAddress) return;
+        setAttempted(true);
+        if (composeError || !chainId || !daemonAddress || reviewingRef.current) return;
         const built = buildPolicyDraft(policyDraft);
         if (built.error) { setSubmitError(built.error); return; }
         const addressError = policyAddressError(built, descriptor);
         if (addressError) { setSubmitError(addressError); return; }
+        // Record the token number of every ticker the rules name before review;
+        // a ticker that cannot be matched stays on this screen with its field marked.
+        const request = requestRef.current;
+        reviewingRef.current = true;
+        let declared;
+        try {
+            declared = await declarePolicyTokenIds({ policy: built.policy, chainId, messaging });
+        } finally {
+            reviewingRef.current = false;
+        }
+        if (requestRef.current !== request) return;
+        if (declared.error) {
+            setTokenErrors(declared.tokenErrors);
+            setSubmitError(declared.error);
+            return;
+        }
+        setTokenErrors(null);
         setReviewPayload({
             walletId,
             chainId,
             agentPubkey: agentPubkey.trim().toLowerCase(),
             daemonPubkey: String(daemonAddress.publicKey).toLowerCase(),
             daemonDerivationPath: daemonAddress.derivationPath,
-            policy: built.policy,
+            policy: declared.policy,
             allowedOutputs: built.allowedOutputs,
             name: name.trim() || 'Agent account',
         });
@@ -258,7 +286,7 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
             onBack={stage === 'review' ? () => setStage('compose') : onBack}
             backLabel={stage === 'review' ? 'Back to form' : undefined}
             backDisabled={stage === 'submitting'}
-            title={stage === 'review' || stage === 'submitting' ? 'Review agent account' : 'New agent account'}
+            title={stage === 'review' || stage === 'submitting' ? 'Review Agent Account' : 'New Agent Account'}
         />
     );
     const wrap = (children) => (
@@ -290,8 +318,7 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="This wallet's key"
-                walletId={walletId}
+                title="This Wallet's Key"                walletId={walletId}
                 chainId={chainId}
                 onChainChange={handleChainChange}
                 onPick={(address) => {
@@ -321,9 +348,9 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
                 <p className={styles.successTitle}>Agent account created</p>
                 <p className={styles.hint}>
                     Fund this address to give the agent a balance to operate on. The
-                    agent and this wallet must both sign every spend; this wallet
-                    signs automatically when a request satisfies the policy, and asks
-                    you to approve each one.
+                    agent and this wallet must both sign every spend, so each request
+                    waits for your approval in this wallet; the rules refuse anything
+                    outside them.
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Name</dt>
@@ -370,6 +397,13 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
                         {reviewedPolicy.allowedActions.map(actionDisplayLabel).join(', ')}
                         {' '}<code>{exactValue(reviewedPolicy.allowedActions)}</code>
                     </dd>
+                    <dt className={styles.detailsLabel}>{t('coSigner.policy.tokens.title')}</dt>
+                    <dd className={styles.detailsValue} data-testid="review-allowed-tokens">
+                        {allowedTokensText(reviewedPolicy)}
+                        {Array.isArray(reviewedPolicy.allowedTicks) ? <>{' '}<code>{exactValue(reviewedPolicy.allowedTicks)}</code></> : null}
+                        {/* The token number each named token is saved with. */}
+                        {reviewedPolicy.tickIds ? <>{' '}<code data-testid="review-token-numbers">{exactValue(reviewedPolicy.tickIds)}</code></> : null}
+                    </dd>
                     <dt className={styles.detailsLabel}>Allowed recipients</dt>
                     <dd className={styles.detailsValue}>{limitValue(reviewedPolicy.allowedDestinations)}</dd>
                     <dt className={styles.detailsLabel}>Per-action limits</dt>
@@ -392,14 +426,13 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
             status={(
                 <>
                     {submitError ? <StatusMessage variant="error">{submitError}</StatusMessage> : null}
-                    {composeError ? <p className={styles.hint}>{composeError}</p> : null}
+                    {attempted && composeError ? <StatusMessage variant="error">{composeError}</StatusMessage> : null}
                 </>
             )}
             actions={(
                 <Button
                     type="submit"
                     variant="primary"
-                    disabled={Boolean(composeError)}
                 >
                     Create agent account
                 </Button>
@@ -423,6 +456,7 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
                 onIconClick={() => setSourcePickerOpen(true)}
                 iconLabel="Choose this wallet's key"
                 placeholder="Select address"
+                error={attempted && composeError && /wallet's key|public key on record|derivation path/.test(composeError) ? composeError : undefined}
                 help="An automated agent shares a 2-of-2 Bitcoin address with this wallet. This wallet signs requests that fit the policy and refuses requests outside it. Pick one of your addresses on this network; its public key becomes this wallet's half of the pair."
             />
 
@@ -431,6 +465,7 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
                 value={agentPubkey}
                 onChange={(e) => setAgentPubkey(e.target.value.trim())}
                 placeholder="02abcdef…"
+                error={attempted && composeError && /agent public key|agent key/i.test(composeError) ? composeError : undefined}
                 help="Enter the agent's compressed public key: 66 hexadecimal characters starting with 02 or 03. The agent shows this key when you set up its wallet connection."
             />
 
@@ -442,7 +477,7 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
                 help="Give this agent account a local label that only you see in this wallet."
             />
 
-            <CoSignerPolicyEditor value={policyDraft} onChange={setPolicyDraft} />
+            <CoSignerPolicyEditor value={policyDraft} onChange={setPolicyDraft} tokenErrors={tokenErrors} />
 
         </FormPage>,
     );

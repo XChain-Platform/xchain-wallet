@@ -23,8 +23,10 @@
 // separate FOLLOWUP and will route through the signer bridge.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, Button, CopyButton, FormPage, Icon, InfoTip, Input, ListPage, NetworkField, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { CopyButton, Icon, InfoTip, Input, ListPage, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+// The Wallet Form Standard frame.
+import { FormAction, FormFrame, FormSection, FromSection, useFormSections } from '../components/formStandard/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -110,6 +112,9 @@ export function SignMessageForm({ walletId, onBack }) {
     const [signing, setSigning] = useState(false);
     const [addressPickerOpen, setAddressPickerOpen] = useState(false);
     const pendingRequestRef = useRef(null);
+    // Section open state, held above the picker page and the early
+    // returns so it survives a trip to the address picker.
+    const formSections = useFormSections({ from: false, message: true });
 
     // §37 / G125: form-draft persistence. Persists chain / address /
     // message; password stays in component state only.
@@ -295,7 +300,7 @@ export function SignMessageForm({ walletId, onBack }) {
     }
 
     const header = (
-        <PageHeader onBack={onBack} backDisabled={signing} title="Sign message" />
+        <PageHeader onBack={onBack} backDisabled={signing} title="Sign Message" />
     );
 
     if (isWatcherMode) {
@@ -333,52 +338,59 @@ export function SignMessageForm({ walletId, onBack }) {
         </StatusMessage>
     ) : null;
 
+    // The closed Message summary is the message's first line.
+    const messageSummary = message.trim() ? message.trim().split('\n')[0] : 'Not set';
+
+    // The Wallet Form Standard. "Signing with" (closed) holds the Network and
+    // the signing address; Message (open) holds the message, signature and
+    // password; notices sit above Sign message. While signing, FromSection's
+    // disabled prop locks both fields.
     const formBody = (
-        <FormPage
+        <FormFrame
             label="Sign message"
             onSubmit={handleSubmit}
             status={[
                 error ? <StatusMessage variant="error">{error}</StatusMessage> : null,
                 draftBanner,
             ]}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="success"
+            action={(
+                <FormAction
                     icon={<Icon.SignIcon />}
                     loading={signing}
                     disabled={signing}
                 >
-                    {signing ? 'Signing...' : 'Sign message'}
-                </Button>
+                    {signing ? 'Signing...' : 'Sign Message'}
+                </FormAction>
+            )}
+            from={(
+                <FromSection
+                    {...formSections.bind('from')}
+                    title="Signing with"
+                    chainId={chainId}
+                    chainIds={chainIds}
+                    chainRegistry={chainRegistry}
+                    disabled={signing}
+                    onNetworkChange={(nextChainId) => {
+                        setAddressId(null);
+                        setChainId(nextChainId);
+                        clearSignature();
+                        if (error) setError(null);
+                    }}
+                    networkHelp="The network for the address whose key signs this message. Changing it also changes the available signing addresses."
+                    address={selectedAddress?.address || null}
+                    addressLabel="Signing address"
+                    addressHelp="The address whose key signs the message. Anyone can check the signature against this address."
+                    onOpenPicker={() => setAddressPickerOpen(true)}
+                    pickerLabel="Choose address"
+                    // Only once the list has loaded and this network has none,
+                    // so a slow read never opens the section for good.
+                    missing={addressesByChain && chainId && addressOptions.length === 0 ? (
+                        <StatusMessage variant="error">No address on this network can sign messages.</StatusMessage>
+                    ) : null}
+                />
             )}
         >
-            <NetworkField
-                chainIds={chainIds}
-                chainRegistry={chainRegistry}
-                value={chainId || ''}
-                disabled={signing}
-                onChange={(nextChainId) => {
-                    setAddressId(null);
-                    setChainId(nextChainId);
-                    clearSignature();
-                    if (error) setError(null);
-                }}
-                label="Network"
-                help="The network for the address whose key signs this message. Changing it also changes the available signing addresses."
-            />
-            <AddressField
-                label="Address"
-                help="The address whose key signs the message. Anyone can check the signature against this address."
-                icon="addresses"
-                value={selectedAddress?.address || ''}
-                placeholder="Choose an address"
-                readOnly
-                disabled={signing}
-                onChange={() => {}}
-                onIconClick={() => setAddressPickerOpen(true)}
-                iconLabel="Choose address"
-            />
+            <FormSection id="message" title="Message" icon={Icon.MessageIcon} {...formSections.bind('message')} summary={messageSummary}>
             <Textarea
                 id="sign-message-text"
                 label="Message"
@@ -413,7 +425,7 @@ export function SignMessageForm({ walletId, onBack }) {
                         <span className={styles.signatureCopy}>
                             <CopyButton
                                 value={signature}
-                                label="Copy signature"
+                                label="Copy Signature"
                                 iconOnly
                             />
                         </span>
@@ -443,14 +455,15 @@ export function SignMessageForm({ walletId, onBack }) {
                     }}
                 />
             ) : null}
-        </FormPage>
+            </FormSection>
+        </FormFrame>
     );
 
     if (addressPickerOpen) {
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="Sign with address"
+                title="Sign with Address"
                 walletId={walletId}
                 chainId={chainId}
                 onChainChange={(nextChainId) => {

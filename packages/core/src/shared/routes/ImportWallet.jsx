@@ -31,7 +31,9 @@ import {
 } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useToast } from '../components/ToastHost.jsx';
+import homeTabsStyles from '../components/HomeTabs.module.css';
 import { AdsNotice } from '../components/AdsNotice.jsx';
+import { WalletModeField } from '../components/WalletModeField.jsx';
 import { useDropZone } from '../hooks/useDropZone.js';
 import { useSupportedChains } from '../hooks/useSupportedChains.js';
 import { detectQrContent } from '../../uri/detectQrContent.js';
@@ -213,6 +215,9 @@ export function ImportWallet({
     // rejects a passphrase, so we don't expose the toggle there.
     const [showPassphrase, setShowPassphrase] = useState(false);
     const [bip39Passphrase, setBip39Passphrase] = useState('');
+    // §20: the imported wallet's mode, chosen once here; Normal by default.
+    // A restored backup carries its own wallet's mode instead.
+    const [walletMode, setWalletMode] = useState(/** @type {'full' | 'watcher' | 'signer'} */ ('full'));
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [validationAttempt, setValidationAttempt] = useState(0);
     const [busy, setBusy] = useState(false);
@@ -707,9 +712,9 @@ export function ImportWallet({
                 if (typeof messaging.addImportedWallet !== 'function') {
                     throw new Error('messaging.addImportedWallet is not available in this shell.');
                 }
-                result = await messaging.addImportedWallet({ password, mnemonic: trimmed, name: walletName, bip39Passphrase: passphraseArg, ...formatArg });
+                result = await messaging.addImportedWallet({ password, mnemonic: trimmed, name: walletName, bip39Passphrase: passphraseArg, walletMode, ...formatArg });
             } else {
-                result = await messaging.importMnemonic({ password, mnemonic: trimmed, name: walletName, bip39Passphrase: passphraseArg, ...formatArg });
+                result = await messaging.importMnemonic({ password, mnemonic: trimmed, name: walletName, bip39Passphrase: passphraseArg, walletMode, ...formatArg });
             }
             finishWalletImport(result, { discover: true });
             const showRestoredLabels = (labelSync) => {
@@ -814,6 +819,7 @@ export function ImportWallet({
                 chainId: effectiveWifChainId,
                 addressType: effectiveWifAddressType,
                 name: walletName,
+                walletMode,
             });
             finishWalletImport(result);
         } catch (err) {
@@ -863,14 +869,20 @@ export function ImportWallet({
         });
     }
 
+    const tabLabel = (IconGlyph, text) => (
+        <span className={homeTabsStyles.tabWithIcon}>
+            <span className={homeTabsStyles.tabIcon} aria-hidden="true"><IconGlyph /></span>
+            {text}
+        </span>
+    );
     const laneSwitcher = !isFreeWallet ? (
         <Tabs
             items={[
-                { id: 'mnemonic', label: t('importWallet.recoveryPhrase') },
+                { id: 'mnemonic', label: tabLabel(Icon.DocumentIcon, t('importWallet.recoveryPhrase')) },
                 ...(mode === 'fresh'
-                    ? [{ id: 'wif', label: t('importWallet.wif.tab') }]
+                    ? [{ id: 'wif', label: tabLabel(Icon.KeyIcon, t('importWallet.wif.tab')) }]
                     : []),
-                { id: 'backup', label: t('importWallet.encryptedBackup') },
+                { id: 'backup', label: tabLabel(Icon.UploadIcon, t('importWallet.encryptedBackup')) },
             ]}
             value={lane}
             onChange={changeLane}
@@ -1062,7 +1074,7 @@ export function ImportWallet({
                                 type="button"
                                 variant="ghost"
                                 size="sm"
-                                icon={null}
+                                icon={<Icon.DocumentIcon />}
                                 onClick={clearBackupPointer}
                                 disabled={busy}
                             >
@@ -1083,7 +1095,7 @@ export function ImportWallet({
                     <Button
                         type="button"
                         variant="secondary"
-                        icon={null}
+                        icon={<Icon.UploadIcon />}
                         onClick={backupDrop.openFilePicker}
                         disabled={busy}
                     >
@@ -1318,6 +1330,7 @@ export function ImportWallet({
                 autoComplete="new-password"
                 disabled={busy}
             />
+            <WalletModeField value={walletMode} onChange={setWalletMode} name="import-wallet-mode" disabled={busy} />
             {!isFreeWallet ? (
                 <div className={styles.advancedRow}>
                     <div className={styles.advancedToggle}>
@@ -1449,6 +1462,7 @@ export function ImportWallet({
                         autoComplete="new-password"
                         disabled={busy}
                     />
+                    <WalletModeField value={walletMode} onChange={setWalletMode} name="import-wif-wallet-mode" disabled={busy} />
                     <Checkbox
                         className={styles.advancedToggle}
                         label={t('importWallet.wif.ack')}

@@ -14,6 +14,18 @@
     border-top: 1px solid var(--xc-border);
 }
 
+/* Network and holdings on one line under the rule line, wrapping at phone width. */
+.rowFacts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 var(--xc-space-2);
+}
+
+.rowFacts > span + span::before {
+    content: '·';
+    margin-inline-end: var(--xc-space-2);
+}
+
 .rowIcon {
     display: inline-flex;
     flex: 0 0 auto;

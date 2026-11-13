@@ -9,21 +9,33 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-    AddressField,
+    // Network and From come from the standard FromSection, and
+    // the sections are the standard collapsible FormSection imported below.
     Button,
     Checkbox,
     EmptyState,
     FormNotice,
     FormPage,
-    FormSection,
     Icon,
     InfoTip,
     Input,
-    NetworkField,
     PageHeader,
     Screen,
     StatusMessage,
 } from '@xchain-wallet/core/ui';
+// The form sits in the Wallet Form Standard frame: From, the Union
+// List section, an optional Memo section, the Network fee row, the status
+// slot and the action.
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    joinSummary,
+    useFormSections,
+} from '../components/formStandard/index.js';
+import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { listFormatSupport } from '../../flows/listFormatSupport.js';
 import { currentListItems } from '../../flows/listMembership.js';
@@ -42,6 +54,9 @@ import { neutralizeControlText } from '../utils/textHardening.js';
 import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import styles from './IssueTokenForm.module.css';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/ui.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const FROM_HELP = 'The address that publishes the union list and pays its network fee. It becomes the list\'s owner.';
@@ -175,6 +190,11 @@ function UnionListFormScreen({ walletId, chainId: initialChainId, activeAccountI
     const [loadError, setLoadError] = useState(null);
     const [formError, setFormError] = useState(null);
     const [result, setResult] = useState(null);
+    // The standard sections' open state, held above the picker
+    // early return so it survives it; a counter of Create attempts reopens
+    // the section that holds the error on every attempt.
+    const formSections = useFormSections({ from: false, union: true, memo: false, fee: false });
+    const [reviewAttempt, setReviewAttempt] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
@@ -238,6 +258,11 @@ function UnionListFormScreen({ walletId, chainId: initialChainId, activeAccountI
     }, [addressesByChain, activeByChain, chainId, fromAddressId]);
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
+    // The standard's Network fee row, display only: the union lane
+    // takes no fee pick, so the row shows the normal-rate estimate the other
+    // list forms show, and the exact fee is set at review.
+    const coinTicker = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' }[descriptor?.coin] || '';
+    const feeEstimate = useMemo(() => (chainId ? estimateNativeSendFee({ chainId, chainRegistry }) : null), [chainId]);
     const fromAddress = useMemo(() => (
         (addressesByChain?.[chainId] || []).find((record) => record.id === fromAddressId) || null
     ), [addressesByChain, chainId, fromAddressId]);
@@ -270,6 +295,7 @@ function UnionListFormScreen({ walletId, chainId: initialChainId, activeAccountI
 
     async function handleReview(event) {
         event.preventDefault();
+        setReviewAttempt((n) => n + 1); // Reopens the section holding an error.
         const trimmedMemo = memo.trim();
         if (sdkSupported !== true) { setFormError(SDK_REASON); return; }
         if (!fromAddress) { setFormError('No signing address available on this network.'); return; }
@@ -299,7 +325,7 @@ function UnionListFormScreen({ walletId, chainId: initialChainId, activeAccountI
         }
     }
 
-    const header = <PageHeader onBack={onBack} title="Create union list" />;
+    const header = <PageHeader onBack={onBack} title="Create Union List" />;
     const buildAnother = () => {
         setResult(null);
         setPicked([]);
@@ -316,6 +342,12 @@ function UnionListFormScreen({ walletId, chainId: initialChainId, activeAccountI
         return (
             <ActionConfirmScreen
                 {...lane.confirmProps}
+                summary={{
+                    verb: t('components.confirmSummary.verbCreateUnionList'),
+                    direction: 'none',
+                    chainId,
+                    address: fromAddress?.address,
+                }}
                 walletId={walletId}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
@@ -374,7 +406,7 @@ function UnionListFormScreen({ walletId, chainId: initialChainId, activeAccountI
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 accountId={activeAccountId}
                 chainId={chainId}
@@ -385,60 +417,96 @@ function UnionListFormScreen({ walletId, chainId: initialChainId, activeAccountI
         );
     }
 
+    // Which section holds the form error, so that section reopens on
+    // every Create attempt even after the user closed it.
+    const errorSection = !formError ? null
+        : /memo/i.test(formError) ? 'memo'
+            : /signing address/i.test(formError) ? 'from'
+                : 'union';
+    const sectionErrorKey = (id) => (errorSection === id ? reviewAttempt + 1 : 0);
+    const trimmedMemoText = memo.trim();
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label="Create union list"
             onSubmit={handleReview}
-            sectioned
-            status={(pickState.overLimit || sdkSupported === false || formError) ? (
-                <>
-                    {pickState.overLimit ? (
-                        <StatusMessage variant="error">The estimated merged membership is over 10,000.</StatusMessage>
-                    ) : null}
-                    {sdkSupported === false ? <StatusMessage variant="error">{SDK_REASON}</StatusMessage> : null}
-                    {formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
-                </>
-            ) : null}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="success"
+            status={[
+                pickState.overLimit ? (
+                    <StatusMessage key="limit" variant="error">The estimated merged membership is over 10,000.</StatusMessage>
+                ) : null,
+                sdkSupported === false ? <StatusMessage key="sdk" variant="error">{SDK_REASON}</StatusMessage> : null,
+                formError ? <StatusMessage key="error" variant="error">{formError}</StatusMessage> : null,
+            ]}
+            action={(
+                <FormAction
                     icon={<Icon.PlusIcon />}
                     loading={lane.composing}
                     disabled={sdkSupported !== true || !fromAddress || pickState.overLimit || lane.composing}
                 >
-                    {lane.isWatcherMode ? 'Create unsigned transaction' : 'Create union list'}
-                </Button>
+                    {lane.isWatcherMode ? 'Create Unsigned Transaction' : 'Create Union List'}
+                </FormAction>
             )}
-        >
-            <FormSection title="Addresses">
-            <NetworkField
-                help="The chain the union list is published on. Only your lists on this network can be combined."
-                value={chainId}
-                onChange={(value) => { setChainId(value); setFromAddressId(null); }}
-                chainIds={Object.keys(addressesByChain)}
-                chainRegistry={chainRegistry}
-                disabled={sdkSupported !== true}
-            />
-            {fromAddress ? (
-                <AddressField
-                    label="From"
-                    icon="addresses"
-                    help={FROM_HELP}
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
+            /* From (closed) holds Network (locked while the SDK cannot build a
+               union here) and the From address. With no address on the
+               network it opens and says so. */
+            from={(
+                <FromSection
+                    {...formSections.bind('from')}
+                    chainId={chainId}
+                    chainIds={Object.keys(addressesByChain)}
+                    chainRegistry={chainRegistry}
+                    onNetworkChange={sdkSupported === true
+                        ? (value) => { setChainId(value); setFromAddressId(null); }
+                        : undefined}
+                    networkHelp="The chain the union list is published on. Only your lists on this network can be combined."
+                    address={fromAddress?.address || null}
+                    addressLabel="From"
+                    addressHelp={FROM_HELP}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    revealKey={sectionErrorKey('from')}
+                    // Only when the network truly has no address; the
+                    // default pick lands one render after the list loads, and
+                    // that gap must not open From for good.
+                    missing={(addressesByChain[chainId] || []).length === 0
+                        ? <FormNotice variant="error">No address on this network. Use Receive to generate one first.</FormNotice>
+                        : null}
                 />
-            ) : (
-                <FormNotice variant="error">No address on this network. Use Receive to generate one first.</FormNotice>
             )}
-            </FormSection>
-
-            <FormSection title="Member lists">
-            <fieldset className={styles.flatFieldset} aria-label="Member lists" disabled={sdkSupported !== true}>
+            fee={feeEstimate ? (
+                // FeeSection's fixed-fee mode (no speed pick on this lane).
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    fixedFee={feeEstimate.coinAmount}
+                    etaMinutes={feeEstimate.etaMinutes}
+                >
+                    <p className={styles.hint}>An estimate. The exact fee is set when the union list is built for review.</p>
+                </FeeSection>
+            ) : null}
+        >
+            {/* The member lists are the main section (open), titled
+                for what the form makes; the estimate sits under the picks. */}
+            <FormSection
+                id="union"
+                title="Union List"
+                icon={Icon.PlusIcon}
+                {...formSections.bind('union')}
+                revealKey={sectionErrorKey('union')}
+                summary={joinSummary(
+                    picked.length ? `${picked.length} member list${picked.length === 1 ? '' : 's'}` : 'No member lists',
+                    picked.length && pickState.mergedCount !== null ? `about ${pickState.mergedCount.toLocaleString()} members` : null,
+                )}
+            >
+            <fieldset className={styles.flatFieldset} disabled={sdkSupported !== true}>
+                <legend>
+                    {t('components.unionList.memberLists')}
+                    <InfoTip
+                        aria={t('ui.field.about', { label: t('components.unionList.memberLists') })}
+                        label={t('components.unionList.memberListsHelp')}
+                    />
+                </legend>
                 {candidates.length === 0 ? (
                     <EmptyState
                         title="No usable lists"
@@ -462,19 +530,6 @@ function UnionListFormScreen({ walletId, chainId: initialChainId, activeAccountI
                     );
                 })}
             </fieldset>
-            </FormSection>
-
-            <FormSection title="Union details">
-            <Input
-                label="Memo"
-                optional
-                maxLength={MAX_MEMO_LENGTH}
-                help={MEMO_HELP}
-                value={memo}
-                onChange={(event) => { setMemo(event.target.value); setFormError(null); }}
-                autoComplete="off"
-                disabled={sdkSupported !== true}
-            />
 
             {picked.length > 0 ? (
                 <div>
@@ -488,6 +543,26 @@ function UnionListFormScreen({ walletId, chainId: initialChainId, activeAccountI
             ) : null}
             </FormSection>
 
-        </FormPage>,
+            {/* Memo is its own optional section. */}
+            <FormSection
+                id="memo"
+                title="Memo"
+                icon={Icon.MessageIcon}
+                optional
+                {...formSections.bind('memo')}
+                revealKey={sectionErrorKey('memo')}
+                summary={trimmedMemoText || 'None'}
+            >
+            <Input
+                label="Memo"
+                maxLength={MAX_MEMO_LENGTH}
+                help={MEMO_HELP}
+                value={memo}
+                onChange={(event) => { setMemo(event.target.value); setFormError(null); }}
+                autoComplete="off"
+                disabled={sdkSupported !== true}
+            />
+            </FormSection>
+        </FormFrame>,
     );
 }

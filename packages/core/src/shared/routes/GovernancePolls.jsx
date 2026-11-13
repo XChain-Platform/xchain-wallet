@@ -8,46 +8,43 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-    Button, EmptyState, Icon, ListPage, ListRow, NetworkField, PageHeader, Screen, StatusMessage,
+    Button, ChainBadge, EmptyState, Icon, ListPage, ListRow, NetworkField, PageHeader, Screen, StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useGovernanceChainIds } from '../hooks/useGovernanceAddressesPresent.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/governance.js';
+import '../../i18n/locales/en/send.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
-import { pollRowForDisplay } from './pollDisplay.js';
+import { pollOutcome, pollRowForDisplay } from './pollDisplay.js';
+// Shared with the poll page, so a decided yes/no poll reads the same in both.
+import { PollStatusPill } from './PollStatusPill.jsx';
+import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
+import { coinFromChainId } from '../components/BalanceList.jsx';
+import addMenuStyles from './AddressList.module.css';
 import styles from './IssueTokenForm.module.css';
 import local from './GovernancePolls.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
-// Poll lifecycle -> pill colour. open = live (amber), finalized = decided (green),
-// failed_quorum = did not pass (red). No shared Badge component, so use a plain span.
-function statusColor(status) {
-    if (status === 'finalized') return { bg: 'color-mix(in srgb, var(--xc-success) 18%, transparent)', fg: 'var(--xc-success)' };
-    if (status === 'failed_quorum') return { bg: 'var(--xc-danger-bg)', fg: 'var(--xc-danger-text)' };
-    return { bg: 'var(--xc-warning-bg)', fg: 'var(--xc-warning-text)' };
-}
-// Poll lifecycle code -> plain-language pill label. Mirrors statusColor:
-// open = live, finalized = decided, failed_quorum = did not pass. Unknown
-// codes degrade to a Title Case humanization rather than a raw token.
-function statusLabel(status) {
-    if (status === 'finalized') return 'Decided';
-    if (status === 'failed_quorum') return 'Did not pass';
-    if (status === 'open' || !status) return 'Open';
-    const words = String(status).trim().toLowerCase().replace(/[_-]+/g, ' ');
-    return words.charAt(0).toUpperCase() + words.slice(1);
-}
-function StatusPill({ status }) {
-    const c = statusColor(status);
-    return (
-        <span style={{ background: c.bg, color: c.fg, borderRadius: '999px', padding: '0.1rem 0.5rem', fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
-            {statusLabel(status)}
-        </span>
-    );
+
+// Relative time text: "Closes in 3 days", "Starts in 2 days", "Closed 5 days ago".
+function whenText(row) {
+    const now = Date.now() / 1000;
+    const span = (secs) => {
+        const a = Math.abs(secs);
+        if (a < 3600) return `${Math.max(1, Math.round(a / 60))} min`;
+        if (a < 86400) return `${Math.round(a / 3600)} h`;
+        const d = Math.round(a / 86400);
+        return `${d} day${d === 1 ? '' : 's'}`;
+    };
+    if (row.poll_status === 'pending' && row.start_time) return `Starts in ${span(row.start_time - now)}`;
+    if (row.end_time && row.end_time > now) return `Closes in ${span(row.end_time - now)}`;
+    if (row.end_time) return `Closed ${span(now - row.end_time)} ago`;
+    return t('governance.closesAtBlock', { block: String(row.end_block ?? t('common.notAvailable')) });
 }
 
 function extractRows(resp) {
@@ -70,9 +67,10 @@ function extractRows(resp) {
  * @param {(chainId: string, pollIndex: string | number) => void} props.onOpenPoll
  * @param {(chainId: string) => void} props.onCreate
  * @param {(chainId: string) => void} props.onDelegate
+ * @param {(chainId: string) => void} [props.onMyDelegations]  opens the address's delegations, each with Clear
  * @param {() => void} props.onBack
  */
-export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, onBack }) {
+export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, onMyDelegations, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const governanceChainIds = useGovernanceChainIds();
@@ -86,6 +84,21 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [addressesReload, setAddressesReload] = useState(0);
     const [pollsReload, setPollsReload] = useState(0);
+    // The standard filter's search text.
+    const [query, setQuery] = useState('');
+    // Home's network filter; 'all' lists polls from every chain.
+    const [networkFilter, setNetworkFilter] = useState('all');
+    // The plus menu (Create poll, Delegate votes).
+    const [addOpen, setAddOpen] = useState(false);
+    const addRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    useEffect(() => {
+        if (!addOpen) return undefined;
+        const close = (event) => { if (!addRef.current?.contains(event.target)) setAddOpen(false); };
+        const onKey = (event) => { if (event.key === 'Escape') setAddOpen(false); };
+        window.addEventListener('mousedown', close);
+        window.addEventListener('keydown', onKey);
+        return () => { window.removeEventListener('mousedown', close); window.removeEventListener('keydown', onKey); };
+    }, [addOpen]);
 
     // Resolve which governance-capable chains the wallet can act on; the
     // first (registry order) seeds the Network field, which lets the user
@@ -111,37 +124,100 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
         return () => { cancelled = true; };
     }, [walletId, messaging, governanceChainIds, addressesReload]);
 
+    const shownChains = (governChains.length ? governChains : (chainId ? [chainId] : []))
+        .filter((cid) => networkFilter === 'all' || coinFromChainId(cid) === networkFilter);
+    const shownKey = shownChains.join(',');
     useEffect(() => {
         if (!chainId) return;
         let cancelled = false;
-        setPollState({ walletId, chainId, rows: null, error: null });
-        messaging.governancePolls({ chainId, opts: { limit: 50 } })
-            .then((resp) => {
-                if (!cancelled) {
-                    const rows = extractRows(resp).map(pollRowForDisplay).filter(Boolean);
-                    setPollState({ walletId, chainId, rows, error: null });
-                }
+        setPollState({ walletId, chainId: shownKey, rows: null, error: null });
+        Promise.all(shownChains.map((cid) => messaging.governancePolls({ chainId: cid, opts: { limit: 50 } })
+            .then((resp) => extractRows(resp).map(pollRowForDisplay).filter(Boolean).map((row) => ({ ...row, chainId: cid })))))
+            .then((lists) => {
+                if (!cancelled) setPollState({ walletId, chainId: shownKey, rows: lists.flat(), error: null });
             })
             .catch((err) => {
                 if (!cancelled) {
-                    setPollState({
-                        walletId,
-                        chainId,
-                        rows: null,
-                        error: userFacingMessage(err, t('governance.error.polls')),
-                    });
+                    setPollState({ walletId, chainId: shownKey, rows: null, error: userFacingMessage(err, t('governance.error.polls')) });
                 }
             });
         return () => { cancelled = true; };
-    }, [walletId, chainId, messaging, pollsReload]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [walletId, chainId, shownKey, messaging, pollsReload]);
 
-    const currentPollState = pollState?.walletId === walletId && pollState?.chainId === chainId
+    const currentPollState = pollState?.walletId === walletId && pollState?.chainId === shownKey
         ? pollState
         : null;
-    const rows = currentPollState?.rows ?? null;
+    const allRows = currentPollState?.rows ?? null;
+    // Search matches the question, the token and the poll number.
+    const q = query.trim().toLowerCase();
+    const rows = allRows && q
+        ? allRows.filter((p) => [p.question, p.tick, String(p.action_index ?? '')].some((v) => String(v || '').toLowerCase().includes(q)))
+        : allRows;
     const pollError = currentPollState?.error ?? null;
 
-    const header = <PageHeader onBack={onBack} title={t('governance.title')} />;
+    // Title line: Delegate votes, the standard filter (search, network) and a plus
+    // for Create poll at the far right.
+    const pollChains = governChains.length ? governChains : (chainId ? [chainId] : []);
+    const header = (
+        <PageHeader
+            onBack={onBack}
+            title={t('governance.title')}
+            trailing={chainId ? (
+                <>
+                    <ListFilterMenu
+                        query={query}
+                        onQueryChange={setQuery}
+                        chainRegistry={chainRegistry}
+                        coinFamilies={[...new Set(pollChains.map((cid) => coinFromChainId(cid)))]}
+                        networkFilter={networkFilter}
+                        onNetworkFilterChange={setNetworkFilter}
+                        label={t('governance.filterPolls')}
+                        searchPlaceholder={t('governance.searchPlaceholder')}
+                        searchLabel={t('governance.searchLabel')}
+                    >
+                    </ListFilterMenu>
+                    <div className={addMenuStyles.addMenuWrap} ref={addRef}>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            icon={<Icon.PlusIcon />}
+                            onClick={() => setAddOpen((open) => !open)}
+                            aria-haspopup="menu"
+                            aria-expanded={addOpen}
+                            aria-label={t('governance.newMenu')}
+                            title={t('governance.newMenu')}
+                        />
+                        {addOpen ? (
+                            <ul className={addMenuStyles.addMenu} role="menu">
+                                <li>
+                                    <Button type="button" role="menuitem" className={addMenuStyles.addMenuItem} onClick={() => { setAddOpen(false); onCreate(shownChains[0] || chainId); }}>
+                                        <span className={addMenuStyles.addMenuIcon} aria-hidden="true"><Icon.PlusIcon /></span>
+                                        {t('governance.createPoll')}
+                                    </Button>
+                                </li>
+                                <li>
+                                    <Button type="button" role="menuitem" className={addMenuStyles.addMenuItem} onClick={() => { setAddOpen(false); onDelegate(shownChains[0] || chainId); }}>
+                                        <span className={addMenuStyles.addMenuIcon} aria-hidden="true"><Icon.UsersIcon /></span>
+                                        {t('governance.delegateVotes')}
+                                    </Button>
+                                </li>
+                                {/* The list of this address's delegations, each with Clear. */}
+                                {onMyDelegations ? (
+                                    <li>
+                                        <Button type="button" role="menuitem" className={addMenuStyles.addMenuItem} onClick={() => { setAddOpen(false); onMyDelegations(shownChains[0] || chainId); }}>
+                                            <span className={addMenuStyles.addMenuIcon} aria-hidden="true"><Icon.UnlinkIcon /></span>
+                                            {t('governance.myDelegations')}
+                                        </Button>
+                                    </li>
+                                ) : null}
+                            </ul>
+                        ) : null}
+                    </div>
+                </>
+            ) : null}
+        />
+    );
     const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
 
     if (noChain) {
@@ -186,13 +262,7 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
             ) : !rows ? (
                 <StatusMessage variant="status" label={t('governance.loadingPollsLabel')} busy>{t('governance.loadingPolls')}</StatusMessage>
             ) : null}
-            toolbar={(
-            <>
-                <NetworkField value={chainId} onChange={setChainId} chainIds={governChains.length ? governChains : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-                <Button variant="success" icon={<Icon.PlusIcon />} onClick={() => onCreate(chainId)}>{t('governance.createPoll')}</Button>
-                <Button variant="secondary" icon={<Icon.UsersIcon />} onClick={() => onDelegate(chainId)}>{t('governance.delegateVotes')}</Button>
-            </>
-        )}>
+        >
 
             {rows && rows.length === 0 ? (
                 <EmptyState title={t('governance.empty.title')} body={t('governance.empty.body')} />
@@ -206,21 +276,27 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
                         const label = p.question || (Array.isArray(p.options) ? p.options.join(' / ') : String(p.options || ''));
                         return (
                             <li key={String(id)}>
+                                {/* Question first; token and network under it; plain time; one status. */}
                                 <ListRow
                                     type="button"
-                                    onClick={() => onOpenPoll(chainId, id)}
+                                    onClick={() => onOpenPoll(p.chainId || chainId, id)}
                                     className={local.pollCard}
-                                    leading={<span className={local.pollIcon} aria-hidden="true"><Icon.HandshakeIcon /></span>}
-                                    title={<span className={local.pollTitle}>#{String(id)} · {p.tick || t('common.notAvailable')}</span>}
+                                    leading={(() => {
+                                        const d = chainRegistry.get(p.chainId || chainId);
+                                        return d ? <ChainBadge descriptor={d} size="md" showName={false} /> : <span className={local.pollIcon} aria-hidden="true"><Icon.HandshakeIcon /></span>;
+                                    })()}
+                                    title={<span className={local.pollTitle}>{label || t('governance.pollNumber', { id: String(id) })}</span>}
                                     subtitle={(
                                         <>
-                                            {label ? <span className={`${styles.hint} ${local.pollText}`} style={{ display: 'block' }}>{String(label).slice(0, 100)}</span> : null}
                                             <span className={`${styles.hint} ${local.pollText}`} style={{ display: 'block' }}>
-                                                {t('governance.closesAtBlock', { block: String(p.end_block ?? t('common.notAvailable')) })}
+                                                {t('governance.pollOnNetwork', { tick: p.tick || t('common.notAvailable'), network: chainRegistry.get(p.chainId || chainId)?.displayName || t('send.rbf.thisChain') })}
+                                            </span>
+                                            <span className={`${styles.hint} ${local.pollText}`} style={{ display: 'block' }}>
+                                                {whenText(p)}
                                             </span>
                                         </>
                                     )}
-                                    trailing={<StatusPill status={p.poll_status} />}
+                                    trailing={<PollStatusPill status={p.poll_status} outcome={pollOutcome(p)} />}
                                 />
                             </li>
                         );

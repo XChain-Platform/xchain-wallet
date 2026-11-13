@@ -49,7 +49,7 @@
     line-height: 1.5;
 }
 
-/* Each onboarding choice has its own colour (review 2026-11-10). */
+/* Each onboarding choice has its own colour. */
 .freeWalletButton {
     --xc-accent-primary: var(--xc-accent-secondary);
     --xc-accent-primary-hover: #64226F;
@@ -169,31 +169,15 @@
     outline-offset: calc(var(--xc-space-1) / 2);
 }
 
+/* The license terms are the shared warning lines (WarningCard), so every
+   warning in the wallet reads like them. The lines inherit the terms' size
+   from .licenseScroll. */
 .licenseParagraph {
-    margin: 0 0 var(--xc-space-2);
-    max-width: none;
-    /* Start-aligned: justified text opens wide gaps between words on a
-       narrow phone. */
-    text-align: start;
-    hyphens: none;
-}
-
-.licenseParagraph:last-child {
-    margin-bottom: 0;
+    composes: paragraph from '../components/WarningCard.module.css';
 }
 
 .licenseParagraphCritical {
-    composes: licenseParagraph;
-    font-weight: 600;
-    color: var(--xc-text);
-    background: var(--xc-danger-bg);
-    /* Keep the critical-copy marker heavier than a hairline without adding a token. */
-    border-inline-start: 3px solid var(--xc-danger);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: 0;
-    border-start-end-radius: var(--xc-radius-sm);
-    border-end-end-radius: var(--xc-radius-sm);
-    margin: var(--xc-space-2) 0;
+    composes: critical from '../components/WarningCard.module.css';
 }
 
 /* The kit Checkbox owns its grid (box and native input share one cell), so
@@ -301,4 +285,13 @@
         /* Keep two short lines visible while leaving room for landscape actions. */
         min-height: 96px;
     }
+}
+
+/* Centres the first-run welcome page top to bottom as well as side to side.
+   Onboarding passes this class to Screen's body (Safari 16 has no :has());
+   tripled to outrank Screen's body rules in any sheet order. */
+.welcomeMain.welcomeMain.welcomeMain {
+    display: flex;
+    flex-direction: column;
+    justify-content: safe center;
 }

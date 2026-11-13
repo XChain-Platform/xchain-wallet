@@ -14,6 +14,8 @@ import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core'
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { isDemoWallet } from '../../flows/demoMode.js';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
+import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
+import { IconSelect } from '../../ui/IconSelect.jsx';
 import { ConfirmModal } from '../components/ConfirmModal.jsx';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import { useToast } from '../components/ToastHost.jsx';
@@ -21,6 +23,7 @@ import { AddAddressModal, addressTypeHint } from './AddAddressModal.jsx';
 import { coinFromChainId, formatAmount, fiatValue, formatFiat } from '../components/BalanceList.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { titleCase } from '../utils/titleCase.js';
 import { offeredAddressType } from '../utils/supportedAddressTypes.js';
 import { useSupportedAddressTypes } from '../hooks/useSupportedAddressTypes.js';
 import { addressTypeLabel } from '../utils/addressTypeLabel.js';
@@ -49,6 +52,9 @@ import {
 } from '../../flows/addressPreferences.js';
 import styles from './History.module.css';
 import local from './AddressList.module.css';
+
+// The coin families the shared filter's network picker offers.
+const NETWORK_FAMILIES = ['bitcoin', 'litecoin', 'dogecoin'];
 import wifStyles from './AddressList.wif.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -874,7 +880,7 @@ export function AddressList({
                 header={(
                     <PageHeader
                         onBack={() => { setShowWifForm(false); resetWifForm(); }}
-                        title={t('routes.addressList.importAddress')}
+                        title={titleCase(t('routes.addressList.importAddress'))}
                     />
                 )}
             >
@@ -998,28 +1004,23 @@ export function AddressList({
         );
     }
 
-    const header = (
-        <PageHeader
-            onBack={onBack}
-            title={title || (pickerMode ? t('routes.addressList.chooseAddress') : t('home.addresses'))}
-        />
-    );
     // The page header holds only the title and Back, so the add and import
     // menu sits in the content actions row, the first item below any notice.
     const addMenu = (
         <div className={local.addMenuWrap} ref={addMenuRef}>
+            {/* An icon-only plus on the title line opens the add or import menu. */}
             <Button
                 type="button"
-                variant="success"
+                variant="ghost"
                 size="sm"
                 icon={<Icon.PlusIcon />}
                 onClick={() => setAddMenuOpen((o) => !o)}
                 aria-haspopup="menu"
                 aria-expanded={addMenuOpen}
+                aria-label={t('routes.addressList.addOrImportAddress')}
+                title={t('routes.addressList.addOrImportAddress')}
                 data-testid="address-add-menu"
-            >
-                {t('routes.addressList.addOrImportAddress')}
-            </Button>
+            />
             {addMenuOpen ? (
                 /* The kit has no menu-list container, so native list semantics group its menu items. */
                 <ul className={local.addMenu} role="menu">
@@ -1076,6 +1077,46 @@ export function AddressList({
             ) : null}
         </div>
     );
+    // The title line holds the plus (add or import) and the standard filter
+    // (search, then network, then address type); the page below is the list.
+    const header = (
+        <PageHeader
+            onBack={onBack}
+            title={title || (pickerMode ? t('routes.addressList.chooseAddress') : t('home.addresses'))}
+            trailing={(
+                <>
+                    {/* Filter first, the plus at the far right, as on every page. */}
+                    <ListFilterMenu
+                        query={query}
+                        onQueryChange={setQuery}
+                        active={sourceFilter !== 'all'}
+                        label={t('routes.addressList.filterAddresses')}
+                        searchPlaceholder={t('routes.addressList.search')}
+                        searchLabel={t('routes.addressList.searchAddresses')}
+                        // Home's network picker, from the shared filter.
+                        chainRegistry={pickerMode && networkLocked ? null : chainRegistry}
+                        coinFamilies={NETWORK_FAMILIES}
+                        networkFilter={network || 'all'}
+                        onNetworkFilterChange={setNetwork}
+                    >
+                        <IconSelect
+                            size="md"
+                            aria-label={t('routes.addressList.filterByAddressType')}
+                            value={sourceFilter}
+                            onChange={setSourceFilter}
+                            options={[
+                                { value: 'all', label: 'All addresses', icon: <Icon.AddressIcon /> },
+                                { value: 'normal', label: 'Normal', icon: <Icon.KeyIcon /> },
+                                { value: 'imported', label: 'Imported', icon: <Icon.DownloadIcon /> },
+                                { value: 'misc', label: 'Misc', icon: <Icon.MoreIcon /> },
+                            ]}
+                        />
+                    </ListFilterMenu>
+                    {addMenu}
+                </>
+            )}
+        />
+    );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>{children}</Screen>
     );
@@ -1084,14 +1125,13 @@ export function AddressList({
         return wrap(
             <ListPage
                 notices={<StatusMessage variant="error">{loadError}</StatusMessage>}
-                actions={addMenu}
             />,
         );
     }
 
     if (!addressesByChain) {
         return wrap(
-            <ListPage actions={addMenu}>
+            <ListPage>
                 <div role="status" aria-label={t('routes.addressList.loadingAddresses')}>
                     <Skeleton.List rows={5} />
                 </div>
@@ -1505,7 +1545,7 @@ export function AddressList({
 
     if (activeChainIds.length === 0 && multisigs.length === 0) {
         return wrap(
-            <ListPage actions={addMenu}>
+            <ListPage>
                 <EmptyState
                     title={t('history.empty.noAddressesTitle')}
                     body={t('routes.addressList.generateAReceiveAddressTo')}
@@ -1518,36 +1558,7 @@ export function AddressList({
     }
 
     return wrap(
-        <ListPage actions={addMenu} toolbar={(
-            <>
-                <div className={local.searchField}>
-                    <Input
-                        type="search"
-                        enterKeyHint="search"
-                        autoCapitalize="off"
-                        placeholder={t('routes.addressList.search')}
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        autoComplete="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                        aria-label={t('routes.addressList.searchAddresses')}
-                    />
-                </div>
-                {pickerMode && networkLocked ? null : <NetworkFilterDropdown value={network} onChange={setNetwork} iconOnly={!pickerMode} fieldTrigger={pickerMode} />}
-            </>
-        )}>
-            <Tabs
-                aria-label={t('routes.addressList.filterByAddressType')}
-                items={[
-                    { id: 'all', label: 'All' },
-                    { id: 'normal', label: 'Normal' },
-                    { id: 'imported', label: 'Imported' },
-                    { id: 'misc', label: 'Misc' },
-                ]}
-                value={sourceFilter}
-                onChange={setSourceFilter}
-            />
+        <ListPage>
             {wifNotice ? (
                 <div className={wifStyles.wifBar}>
                     <p className={wifStyles.wifNotice} role="status">{wifNotice}</p>

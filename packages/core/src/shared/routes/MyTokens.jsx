@@ -13,7 +13,7 @@ import {
     Button,
     Screen,
     PageHeader,
-    Select,
+    IconSelect,
     Skeleton,
     Icon,
     ListPage,
@@ -25,7 +25,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { isDemoWallet } from '../../flows/demoMode.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
-import { ListToolbar } from '../components/ListToolbar.jsx';
+import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
 import { BridgeOriginTick } from './BridgeOriginBadge.jsx';
 import styles from './MyTokens.module.css';
 
@@ -184,16 +184,43 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
         <PageHeader
             onBack={onBack}
             backLabel="Back to home"
-            title="My tokens"
+            title="My Tokens"
             trailing={(
+                <>
+                {/* The standard filter (search, then type) on the title line, left of
+                    Create token. */}
+                <ListFilterMenu
+                    query={query}
+                    onQueryChange={setQuery}
+                    active={mode !== 'all'}
+                    label="Filter tokens"
+                    searchPlaceholder="Search tokens..."
+                    searchLabel="Search your tokens by ticker or description"
+                >
+                    <IconSelect
+                        size="md"
+                        aria-label="Filter tokens by type"
+                        value={mode}
+                        onChange={(value) => setMode(
+                            /** @type {'all' | 'holding' | 'locked' | 'unlocked'} */ (value),
+                        )}
+                        options={[
+                            { value: 'all', label: 'All tokens', icon: <Icon.TokenListIcon /> },
+                            { value: 'holding', label: 'Holding', icon: <Icon.CoinsIcon /> },
+                            { value: 'locked', label: 'Locked', icon: <Icon.LockIcon /> },
+                            { value: 'unlocked', label: 'Unlocked', icon: <Icon.UnlockIcon /> },
+                        ]}
+                    />
+                </ListFilterMenu>
                 <Button
                     variant="ghost"
                     size="sm"
                     icon={<Icon.PlusIcon />}
                     onClick={onIssue}
-                    aria-label="Create token"
-                    title="Create token"
+                    aria-label="Create Token"
+                    title="Create Token"
                 />
+                </>
             )}
         />
     );
@@ -206,7 +233,7 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                         <StatusMessage
                             variant="error"
                             recovery={{
-                                label: 'Try again',
+                                label: 'Try Again',
                                 onAction: () => setAddressesReload((value) => value + 1),
                             }}
                         >
@@ -217,7 +244,7 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                         <StatusMessage
                             variant="error"
                             recovery={{
-                                label: 'Try again',
+                                label: 'Try Again',
                                 onAction: () => setTokensReload((value) => value + 1),
                             }}
                         >
@@ -225,30 +252,7 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                         </StatusMessage>
                     ) : null}
                 </>
-            ) : null} toolbar={(
-                <ListToolbar
-                    query={query}
-                    onQueryChange={setQuery}
-                    searchLabel="Search your tokens by ticker or description"
-                >
-                    <Select
-                        value={mode}
-                        onChange={(event) => setMode(
-                            /** @type {'all' | 'holding' | 'locked' | 'unlocked'} */ (event.target.value),
-                        )}
-                        aria-label="Filter tokens by type"
-                    >
-                        {/* Native options remain because Select renders a native listbox. */}
-                        <option value="all">All</option>
-                        {/* Native options remain because Select renders a native listbox. */}
-                        <option value="holding">Holding</option>
-                        {/* Native options remain because Select renders a native listbox. */}
-                        <option value="locked">Locked</option>
-                        {/* Native options remain because Select renders a native listbox. */}
-                        <option value="unlocked">Unlocked</option>
-                    </Select>
-                </ListToolbar>
-            )}>
+            ) : null}>
 
                 {isLoading ? (
                     <div className={styles.loading} role="status" aria-label="Loading owned tokens">
@@ -260,7 +264,7 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                     <EmptyState
                         title="No owned tokens yet"
                         body="Tokens this wallet owns appear here."
-                        actionLabel="Create token"
+                        actionLabel="Create Token"
                         onAction={onIssue}
                     />
                 ) : null}
@@ -269,7 +273,8 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                     <EmptyState
                         title="No results for these filters"
                         body="Reset the filters to see all tokens."
-                        actionLabel="Reset filters"
+                        actionLabel="Reset Filters"
+                        actionIcon={<Icon.RefreshIcon />}
                         onAction={() => {
                             setQuery('');
                             setMode('all');

@@ -65,44 +65,8 @@
     color: var(--xc-on-accent);
 }
 
-.search {
-    flex: 1 1 160px;
-    /* min-width:0 lets the search field shrink so the search + segments row
-       never overflows (global box-sizing:border-box keeps padding inside). */
-    min-width: 0;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
-}
-
-.searchField > :first-child {
-    flex: 1 1 160px;
-    margin-bottom: 0;
-}
-
-.search::placeholder {
-    color: var(--xc-text-muted);
-}
-
-.networkFilter {
-    flex: 0 1 14rem;
-    min-width: 10rem;
-}
-
-/* The filter shares the toolbar line with the search field and the kind tabs,
-   which both use the small control type, so the filter takes it too (U07).
-   The doubled class outranks the filter's own size class. */
-.networkFilter.networkFilter > * {
-    --network-filter-font: var(--xc-control-font-sm);
-}
-
 /* Narrow shells (Chrome popup, slim mobile web): tighten the segment padding
-   so the search box keeps usable width while search + segments stay on one
-   line. The search field (min-width:0) absorbs the rest. */
+   so the kind tabs keep usable width. */
 @media (max-width: 480px) {
     .kindSegment {
         padding-inline: var(--xc-space-2);

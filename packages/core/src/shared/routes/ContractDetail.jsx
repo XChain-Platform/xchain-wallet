@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
-import { AddressText, Button, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { useEffect, useId, useMemo, useState } from 'react';
+import { AddressText, Button, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import {
     extractSingle,
@@ -26,19 +26,19 @@ import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { revealHiddenText } from '../utils/textHardening.js';
 import styles from './ActionsMenu.module.css';
+// The blue card, What It Does, the action row and the icon tabs.
+import { ContractHero } from './ContractHero.jsx';
+import { contractFunctions, rowsByWallet, whatItDoesText } from './contractDetailModel.js';
+import betStyles from './BetFeedDetail.module.css';
+import local from './ContractDetail.module.css';
 
 /**
  * Contract detail page (§42.3).
  *
- * Layout (per spec):
- *
- *   Escrow v1.0.0 (C:BTC:42)      [chain badge: BTC]
- *     <description>
- *     Owner / Deployed / Gas limit / Status / Code hash
- *     State (expandable)
- *     Balances (tokens held by the contract)
- *     Execution history (paginated)
- *     [Call method]  [Deposit]  [Withdraw]
+ * Laid out as Home is: a blue card (ContractHero) from the first history
+ * page, What It Does, the Call, Deposit and Withdraw buttons, and icon tabs
+ * (Functions, History, Mine, Code). Every panel stays mounted and the
+ * unchosen ones are hidden, so no read moves behind a tab.
  *
  * Loads five queries in parallel on mount:
  *   1. getContractByActionIndex    - header metadata
@@ -115,6 +115,12 @@ export function ContractDetail({
     }));
     const [stateExpanded, setStateExpanded] = useState(false);
     const [walletAddresses, setWalletAddresses] = useState(/** @type {string[]} */ ([]));
+    // The first history page, kept apart from the page on screen so
+    // paging History does not redraw the card's chart or the Mine tab.
+    const [firstPage, setFirstPage] = useState(/** @type {{ key: string, rows: any[] }} */ ({ key: '', rows: [] }));
+    const chartRows = firstPage.key === `${chainId}:${contractActionIndex}` ? firstPage.rows : null;
+    const [tab, setTab] = useState('functions');
+    const tabsId = useId();
     const executionsPage = executionsCursor.chainId === chainId
         && executionsCursor.contractActionIndex === contractActionIndex
         ? executionsCursor.page
@@ -175,6 +181,7 @@ export function ContractDetail({
                 if (cancelled) return;
                 const pageRows = extractRows(resp);
                 setExecutions(pageRows);
+                if (executionsPage === 1) setFirstPage({ key: `${chainId}:${contractActionIndex}`, rows: pageRows });
                 setPageSizeSeen((prev) => {
                     const key = `${chainId}:${contractActionIndex}`;
                     return { key, size: Math.max(prev.key === key ? prev.size : 0, pageRows.length) };
@@ -185,6 +192,7 @@ export function ContractDetail({
             .catch((e) => {
                 if (!cancelled) {
                     setExecutionsError(readFailureMessage(e, 'load the execution history'));
+                    if (executionsPage === 1) setFirstPage({ key: `${chainId}:${contractActionIndex}`, rows: [] });
                     setExecutionsLoading(false);
                 }
             });
@@ -220,8 +228,7 @@ export function ContractDetail({
         <PageHeader
             onBack={onBack}
             backLabel="Back to contracts list"
-            title="Contract detail"
-        />
+            title="Contract Detail"        />
     );
     if (contractError) {
         return (
@@ -264,16 +271,289 @@ export function ContractDetail({
         </>
     ) : null;
 
+    // The card shows the chain-recorded name and version; the rest of
+    // the display label (the address) stays in the heading for screen readers.
+    const meta = contractMetaOf(contract);
+    const visibleName = meta.name ? `${meta.name}${meta.version ? ` v${meta.version}` : ''}` : 'Unnamed contract';
+    const headingRest = heading.startsWith(visibleName) ? heading.slice(visibleName.length) : '';
+    const balanceRows = balances === null || balancesError ? null : contractBalanceRows(balances);
+    const fns = contractFunctions(contract?.abi, chartRows || executions);
+    const aboutText = whatItDoesText(description, fns);
+    const myRows = rowsByWallet(chartRows || [], walletAddresses);
+    const myCalls = walletAddresses.length > 0 && chartRows !== null ? myRows.length : null;
+    const firstPagePartial = executionsTotal !== null && chartRows !== null && executionsTotal > chartRows.length;
+
+    // The four section tabs, each an icon over a short word, so no
+    // label wraps at 360px.
+    const tabLabel = (IconGlyph, text) => (
+        <span className={local.tabLabel}>
+            <span className={local.tabIcon} aria-hidden="true"><IconGlyph /></span>
+            {text}
+        </span>
+    );
+    const tabItems = [
+        { id: 'functions', label: tabLabel(Icon.GridIcon, 'Functions') },
+        { id: 'history', label: tabLabel(Icon.HistoryIcon, 'History') },
+        { id: 'mine', label: tabLabel(Icon.UserIcon, 'Mine') },
+        { id: 'code', label: tabLabel(Icon.DocumentIcon, 'Code') },
+    ];
+    // Every panel stays mounted (its reads and their states already ran);
+    // only the chosen one shows.
+    const panelProps = (id) => ({
+        id: `${tabsId}-panel-${id}`,
+        role: 'tabpanel',
+        'aria-labelledby': `${tabsId}-tab-${id}`,
+        hidden: tab !== id,
+    });
+
+    const executionRow = (row, i) => (
+        <div key={String(row.action_index ?? i) + ':' + i} className={styles.entry}>
+            <span className={styles.entryLabel}>
+                {row.method || row.METHOD || row.method_name || actionDisplayLabel(row.action) || '(method)'} #{row.action_index ?? '?'}
+                {' '}<ExecutionStatusPill status={row.status} />
+            </span>
+            <span className={styles.entryDescription}>
+                {row.gas_used !== undefined && row.gas_used !== null ? (
+                    <>gas {row.gas_used} · </>
+                ) : null}
+                block {row.block_index || '?'}
+            </span>
+        </div>
+    );
+
     return (
         <Screen variant={variant} header={header}>
             <ListPage notices={notices}>
-                <section>
-                    <SectionHeader
-                        title={heading}
-                        description={description}
-                    />
-                    {/* 512 bytes: this is the one surface wide enough for it, so
-                        the list rows carry the name and version alone. */}
+                <ContractHero
+                    name={visibleName}
+                    headingRest={headingRest}
+                    contractAddress={contractAddress}
+                    chainId={chainId}
+                    owner={owner ? String(owner) : null}
+                    isOwner={isOwner}
+                    publishedAt={contract?.timestamp ?? contract?.TIMESTAMP ?? null}
+                    deployBlock={deployBlock}
+                    holdings={balanceRows}
+                    holdingsError={!!balancesError}
+                    callsTotal={executionsTotal}
+                    chartRows={chartRows}
+                    myCalls={myCalls}
+                />
+
+                {/* What It Does, in the publisher's words when the contract
+                    exported a description (512 bytes; the one surface wide
+                    enough for it, so list rows carry name and version alone). */}
+                <section className={local.about} aria-labelledby={`${tabsId}-about`}>
+                    <h2 id={`${tabsId}-about`} className={local.aboutTitle}>
+                        <span className={local.aboutIcon} aria-hidden="true"><Icon.InfoIcon /></span>
+                        What It Does
+                    </h2>
+                    <p className={local.aboutText}>{aboutText}</p>
+                </section>
+
+                <section aria-labelledby={`${tabsId}-actions`}>
+                    <h2 id={`${tabsId}-actions`} className="sr-only">Actions</h2>
+                    <div className={local.actions}>
+                        {/* "Call" on the button so the three fit one
+                            360px row; its accessible name stays "Call method". */}
+                        <Button
+                            variant="success"
+                            className={local.action}
+                            icon={<Icon.ArrowRightIcon />}
+                            aria-label="Call method"
+                            onClick={onExecute ? () => onExecute({ chainId, contractActionIndex }) : undefined}
+                            disabled={!onExecute}
+                        >
+                            Call
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            className={local.action}
+                            icon={<Icon.DownloadIcon />}
+                            onClick={onDeposit ? () => onDeposit({ chainId, contractActionIndex }) : undefined}
+                            disabled={!onDeposit}
+                        >
+                            Deposit
+                        </Button>
+                        {ownerWithdraw === false ? null : (
+                            <Button
+                                variant="secondary"
+                                className={local.action}
+                                icon={<Icon.UploadIcon />}
+                                onClick={onWithdraw ? () => onWithdraw({ chainId, contractActionIndex }) : undefined}
+                                disabled={!onWithdraw}
+                            >
+                                Withdraw
+                            </Button>
+                        )}
+                        {isStakeable ? (
+                            <Button
+                                variant="secondary"
+                                className={`${local.action} ${local.actionWide}`}
+                                icon={<Icon.StakeIcon />}
+                                onClick={onStakeToContract ? () => onStakeToContract({ chainId, contractActionIndex }) : undefined}
+                                disabled={!onStakeToContract}
+                            >
+                                Stake Here
+                            </Button>
+                        ) : null}
+                    </div>
+                    {ownerWithdraw === false ? (
+                        <p className={local.actionNote} data-testid="owner-withdraw-disabled">
+                            {OWNER_WITHDRAW_DISABLED_REASON}
+                        </p>
+                    ) : null}
+                    {!onExecute && !onDeposit && !onWithdraw ? (
+                        <p className={local.actionNote}>
+                            Contract call, deposit, and withdraw forms are coming in
+                            an upcoming release. Viewing is available now.
+                        </p>
+                    ) : null}
+                </section>
+
+                <Tabs
+                    id={tabsId}
+                    items={tabItems}
+                    value={tab}
+                    onChange={setTab}
+                    panelId={(item) => `${tabsId}-panel-${item.id}`}
+                    aria-label="Contract sections"
+                    className={betStyles.sectionTabs}
+                />
+
+                <div {...panelProps('functions')}>
+                    <div className={local.panel}>
+                        {fns.functions.length === 0 ? (
+                            <EmptyState
+                                title="No function list"
+                                body="This contract publishes no function list, but Call method still takes a method name by hand."
+                                titleAs="p"
+                            />
+                        ) : (
+                            <div className={local.listCard}>
+                                <div className={local.listHead}>
+                                    <h3 className={local.listTitle}>
+                                        {fns.functions.length} {fns.source === 'abi'
+                                            ? `Function${fns.functions.length === 1 ? '' : 's'}`
+                                            : `Called Function${fns.functions.length === 1 ? '' : 's'}`}
+                                    </h3>
+                                    {onExecute ? <span className={local.listHint}>Tap one to call it</span> : null}
+                                </div>
+                                <ul className={local.fnList}>
+                                    {fns.functions.map((fn) => {
+                                        const fnBody = (
+                                            <>
+                                                <span className={local.fnText}>
+                                                    <span className={local.fnName}>{fn.name}</span>
+                                                    <span className={local.fnExplain}>{fn.explanation}</span>
+                                                </span>
+                                                {fn.kind ? (
+                                                    <span className={`${local.fnTag} ${fn.kind === 'read' ? local.fnTagRead : ''}`}>
+                                                        {fn.kind === 'read' ? 'Read only' : 'Writes'}
+                                                    </span>
+                                                ) : null}
+                                            </>
+                                        );
+                                        // A page that cannot call methods lists them as plain
+                                        // rows rather than buttons that never enable.
+                                        return (
+                                            <li key={fn.name}>
+                                                {onExecute ? (
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        icon={null}
+                                                        className={local.fnRow}
+                                                        onClick={() => onExecute({ chainId, contractActionIndex, method: fn.name })}
+                                                        aria-label={`Call ${fn.name}`}
+                                                    >
+                                                        {fnBody}
+                                                        <span className={local.fnChevron} aria-hidden="true"><Icon.ForwardIcon /></span>
+                                                    </Button>
+                                                ) : (
+                                                    <div className={local.fnRow}>{fnBody}</div>
+                                                )}
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+                                {fns.source === 'history' ? (
+                                    <p className={local.listNote}>
+                                        This contract publishes no function list, so these are the methods its recent calls used.
+                                    </p>
+                                ) : null}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div {...panelProps('history')}>
+                    <div className={local.panel}>
+                        <Section title="Execution history">
+                            {executionsLoading && executions.length === 0 ? (
+                                <StatusMessage variant="status">Loading execution history…</StatusMessage>
+                            ) : executionsError && executions.length === 0 ? (
+                                <StatusMessage variant="error" className={styles.entryDescription}>
+                                    {executionsError}
+                                </StatusMessage>
+                            ) : executions.length === 0 ? (
+                                <>
+                                    <EmptyState
+                                        title="No contract calls yet"
+                                        body="Calls recorded against this contract appear here."
+                                        titleAs="p"
+                                    />
+                                    {/* A page past the last one is empty; Prev is the way back. */}
+                                    <Pagination
+                                        page={executionsPage}
+                                        total={executionsTotal}
+                                        pageSize={0}
+                                        onChange={(page) => setExecutionsCursor({ chainId, contractActionIndex, page })}
+                                    />
+                                </>
+                            ) : (
+                                <>
+                                    {executions.map(executionRow)}
+                                    <Pagination
+                                        page={executionsPage}
+                                        total={executionsTotal}
+                                        pageSize={executionsPageSize || executions.length}
+                                        onChange={(page) => setExecutionsCursor({ chainId, contractActionIndex, page })}
+                                    />
+                                </>
+                            )}
+                        </Section>
+                    </div>
+                </div>
+
+                {/* Mine is this wallet's rows from the same first
+                    history page; no read of its own. */}
+                <div {...panelProps('mine')}>
+                    <div className={local.panel}>
+                        {isOwner ? (
+                            <p className={local.actionNote}>You published this contract.</p>
+                        ) : null}
+                        {chartRows === null ? (
+                            <StatusMessage variant="status">Loading your calls…</StatusMessage>
+                        ) : myRows.length === 0 ? (
+                            <EmptyState
+                                title="No calls from this wallet"
+                                body={firstPagePartial
+                                    ? `None of the latest ${chartRows.length} calls came from this wallet's addresses.`
+                                    : "Calls this wallet's addresses make to this contract appear here."}
+                                titleAs="p"
+                            />
+                        ) : (
+                            <Section title={firstPagePartial ? `Your calls in the latest ${chartRows.length}` : 'Your calls'}>
+                                {myRows.map(executionRow)}
+                            </Section>
+                        )}
+                    </div>
+                </div>
+
+                <div {...panelProps('code')}>
+                    <div className={local.panel}>
+                <Section title="Details">
                     <dl className={styles.entryDescription} style={{ margin: 0, overflowWrap: 'anywhere' }}>
                         {contractAddress ? (
                             <div><strong>Address:</strong>{' '}<AddressText address={contractAddress} truncate={false} /></div>
@@ -301,10 +581,10 @@ export function ContractDetail({
                             <div><strong>Owner withdraw:</strong> {ownerWithdraw ? 'Allowed' : 'Not allowed'}</div>
                         ) : null}
                     </dl>
-                </section>
+                </Section>
 
                 <Section
-                    title="State (expandable)"
+                    title="State"
                     rightSlot={
                         <Button
                             type="button"
@@ -333,7 +613,7 @@ export function ContractDetail({
                     )}
                 </Section>
 
-                <Section title="Balances (tokens held by the contract)">
+                <Section title="Holdings">
                     {balancesError ? (
                         <StatusMessage variant="error" className={styles.entryDescription}>
                             {balancesError}
@@ -344,104 +624,8 @@ export function ContractDetail({
                         <BalancesTable balances={balances} />
                     )}
                 </Section>
-
-                <Section title="Execution history">
-                    {executionsLoading && executions.length === 0 ? (
-                        <StatusMessage variant="status">Loading execution history…</StatusMessage>
-                    ) : executionsError && executions.length === 0 ? (
-                        <StatusMessage variant="error" className={styles.entryDescription}>
-                            {executionsError}
-                        </StatusMessage>
-                    ) : executions.length === 0 ? (
-                        <>
-                            <EmptyState
-                                title="No contract calls yet"
-                                body="Calls recorded against this contract appear here."
-                                titleAs="p"
-                            />
-                            {/* A page past the last one is empty; Prev is the way back. */}
-                            <Pagination
-                                page={executionsPage}
-                                total={executionsTotal}
-                                pageSize={0}
-                                onChange={(page) => setExecutionsCursor({ chainId, contractActionIndex, page })}
-                            />
-                        </>
-                    ) : (
-                        <>
-                            {executions.map((row, i) => (
-                                <div key={String(row.action_index ?? i) + ':' + i} className={styles.entry}>
-                                    <span className={styles.entryLabel}>
-                                        {row.method || row.METHOD || row.method_name || actionDisplayLabel(row.action) || '(method)'} #{row.action_index ?? '?'}
-                                        {' '}<ExecutionStatusPill status={row.status} />
-                                    </span>
-                                    <span className={styles.entryDescription}>
-                                        {row.gas_used !== undefined && row.gas_used !== null ? (
-                                            <>gas {row.gas_used} · </>
-                                        ) : null}
-                                        block {row.block_index || '?'}
-                                    </span>
-                                </div>
-                            ))}
-                            <Pagination
-                                page={executionsPage}
-                                total={executionsTotal}
-                                pageSize={executionsPageSize || executions.length}
-                                onChange={(page) => setExecutionsCursor({ chainId, contractActionIndex, page })}
-                            />
-                        </>
-                    )}
-                </Section>
-
-                <Section title="Actions">
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                        <Button
-                            variant="success"
-                            icon={<Icon.ContractIcon />}
-                            onClick={onExecute ? () => onExecute({ chainId, contractActionIndex }) : undefined}
-                            disabled={!onExecute}
-                        >
-                            Call method
-                        </Button>
-                        <Button
-                            variant="secondary"
-                            onClick={onDeposit ? () => onDeposit({ chainId, contractActionIndex }) : undefined}
-                            disabled={!onDeposit}
-                        >
-                            Deposit
-                        </Button>
-                        {ownerWithdraw === false ? null : (
-                            <Button
-                                variant="secondary"
-                                onClick={onWithdraw ? () => onWithdraw({ chainId, contractActionIndex }) : undefined}
-                                disabled={!onWithdraw}
-                            >
-                                Withdraw
-                            </Button>
-                        )}
-                        {isStakeable ? (
-                            <Button
-                                variant="secondary"
-                                icon={<Icon.StakeIcon />}
-                                onClick={onStakeToContract ? () => onStakeToContract({ chainId, contractActionIndex }) : undefined}
-                                disabled={!onStakeToContract}
-                            >
-                                Stake here
-                            </Button>
-                        ) : null}
                     </div>
-                    {ownerWithdraw === false ? (
-                        <p className={styles.entryDescription} data-testid="owner-withdraw-disabled">
-                            {OWNER_WITHDRAW_DISABLED_REASON}
-                        </p>
-                    ) : null}
-                    {!onExecute && !onDeposit && !onWithdraw ? (
-                        <p className={styles.entryDescription}>
-                            Contract call, deposit, and withdraw forms are coming in
-                            an upcoming release. Viewing is available now.
-                        </p>
-                    ) : null}
-                </Section>
+                </div>
             </ListPage>
         </Screen>
     );

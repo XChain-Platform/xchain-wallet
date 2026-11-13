@@ -10,10 +10,22 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-    AddressText, Button, ChainBadge, EmptyState, FeeSelector, FormPage, Icon,
+    // The fee selector renders inside the standard FeeSection.
+    AddressText, Button, ChainBadge, EmptyState, FormPage, Icon,
     FormNotice,
     ListPage, PageHeader, Screen, SectionHeader, StatusMessage,
 } from '@xchain-wallet/core/ui';
+// The Wallet Form Standard frame for the selected payment (From,
+// Payment, Network fee, status slot, one action).
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    summaryAddress,
+    useFormSections,
+} from '../components/formStandard/index.js';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -38,6 +50,7 @@ import coinpayStyles from './CoinpayForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { addressValidationError, isValidAddressForChain } from '../utils/addressValidation.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -119,6 +132,11 @@ function ScopedCoinpayForm({
         /** @type {{ loading: boolean, baseUnits: bigint | null }} */
         ({ loading: false, baseUnits: null }),
     );
+    // The standard sections' open state for the selected payment, and
+    // a count of Review presses so the section holding a refusal reopens.
+    const formSections = useFormSections({ from: false, main: true, fee: false });
+    const [reviewAttempt, setReviewAttempt] = useState(0);
+    const [errorSection, setErrorSection] = useState(/** @type {'main' | 'fee' | null} */ (null));
 
     useEffect(() => {
         let cancelled = false;
@@ -311,8 +329,12 @@ function ScopedCoinpayForm({
     // Signs nothing; just gates stage transition.
     function handleReview(event) {
         event.preventDefault();
+        // Every press counts, so the section holding the refused
+        // value (the fee, else the payment) reopens even after being closed.
+        setReviewAttempt((n) => n + 1);
+        setErrorSection('main');
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        if (feeStop) { setSubmitError(feeStop.formError); return; }
+        if (feeStop) { setErrorSection('fee'); setSubmitError(feeStop.formError); return; }
         if (!selected || !summary) {
             setSubmitError('Choose a payment before continuing.');
             return;
@@ -451,8 +473,8 @@ function ScopedCoinpayForm({
     }
 
     const titleText = (stage === 'review' || stage === 'submitting')
-        ? 'Review payment'
-        : 'Pay for matched order';
+        ? 'Review Payment'
+        : 'Pay for Matched Order';
     const header = (
         <PageHeader
             onBack={stage === 'review'
@@ -479,9 +501,20 @@ function ScopedCoinpayForm({
     }
 
     if (ownerLane.open) {
+        // The coin payment the matched order is owed, to its payee.
+        const payCoins = summary?.coinAmount != null ? baseUnitsToCoinText(String(summary.coinAmount)) : null;
+        const paySummary = {
+            verb: t('components.confirmSummary.verbPay'),
+            ...(payCoins && coinTicker ? { amount: payCoins, ticker: coinTicker } : {}),
+            direction: 'out',
+            chainId: selected?.chainId,
+            address: selected?.addr?.address,
+            ...(summary?.payeeAddress ? { recipient: summary.payeeAddress } : {}),
+        };
         return (
             <ActionConfirmScreen
                 {...ownerLane.confirmProps}
+                summary={paySummary}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || selected?.chainId}
                 signerReady={signerReady}
@@ -547,9 +580,11 @@ function ScopedCoinpayForm({
                         icon={ownerLane.isWatcherMode ? <Icon.SignIcon /> : <Icon.TokenIcon />}
                         loading={stage === 'submitting' || ownerLane.composing}
                     >
+                        {/* A verb only, never the amount or ticker
+                            (the rows above state what is paid). */}
                         {ownerLane.isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : `Pay ${amountLabel}`}
+                            ? 'Create Unsigned Transaction'
+                            : 'Pay'}
                     </Button>
                 )}
             >
@@ -673,45 +708,67 @@ function ScopedCoinpayForm({
             ) : null}
 
             {selected && summary ? (
-                <FormPage
+                <FormFrame
                     demoGuard={demoGuard}
                     label="Selected payment"
                     onSubmit={handleReview}
-                    status={(submitError || validationError || insufficientBalanceMessage) ? (
-                        <StatusMessage variant="error">
+                    data-form-standard="coinpay"
+                    status={[(submitError || validationError || insufficientBalanceMessage) ? (
+                        <StatusMessage key="error" variant="error">
                             {submitError || validationError || insufficientBalanceMessage}
                         </StatusMessage>
                     ) : nativeBalance.loading ? (
-                        <StatusMessage>Checking available balance…</StatusMessage>
-                    ) : null}
-                    actions={(
-                        <Button
-                            type="submit"
-                            variant="success"
+                        <StatusMessage key="balance">Checking available balance…</StatusMessage>
+                    ) : null]}
+                    action={(
+                        <FormAction
                             icon={<Icon.TokenIcon />}
                             disabled={!selected || !summary || nativeBalance.loading
                                 || Boolean(validationError) || insufficientBalance}
                         >
-                            Pay order
-                        </Button>
+                            Pay Order
+                        </FormAction>
+                    )}
+                    /* From holds the network and the paying address.
+                       Both are fixed by the matched order, so the Network is
+                       locked and the address has no picker to open. */
+                    from={(
+                        <FromSection
+                            {...formSections.bind('from')}
+                            chainId={selected.chainId}
+                            chainRegistry={chainRegistry}
+                            lockNetwork
+                            networkHelp="The chain this order is paid on. It is fixed by the matched order."
+                            address={selected.address}
+                            addressHelp="The address that owes this payment. It is fixed by the matched order."
+                        />
+                    )}
+                    fee={(
+                        <FeeSection
+                            {...formSections.bind('fee')}
+                            chainId={selected.chainId}
+                            coinTicker={coinTicker}
+                            tiers={feeTiers}
+                            value={feePick}
+                            onChange={setFeePick}
+                            customEstimate={feeCustomEstimate}
+                            revealKey={submitError && errorSection === 'fee' ? reviewAttempt + 1 : 0}
+                        />
                     )}
                 >
+                    <FormSection
+                        id="main"
+                        title="Payment"
+                        icon={Icon.TokenIcon}
+                        {...formSections.bind('main')}
+                        revealKey={submitError && errorSection === 'main' ? reviewAttempt + 1 : 0}
+                        summary={[amountLabel, summary.payeeAddress ? `to ${summaryAddress(summary.payeeAddress)}` : null]
+                            .filter(Boolean).join(' ') || null}
+                    >
                     <dl className={styles.detailsList}>
-                        {descriptor ? (
-                            <>
-                                <dt className={styles.detailsLabel}>Network</dt>
-                                <dd className={styles.detailsValue}>
-                                    <ChainBadge descriptor={descriptor} size="sm" showName={false} />
-                                </dd>
-                            </>
-                        ) : null}
                         <dt className={styles.detailsLabel}>Matched order</dt>
                         <dd className={styles.detailsValue}>
                             <code>{summary.actionIndex}</code>
-                        </dd>
-                        <dt className={styles.detailsLabel}>From</dt>
-                        <dd className={styles.detailsValue}>
-                            <AddressText address={selected.address} />
                         </dd>
                         <dt className={styles.detailsLabel}>Paying to</dt>
                         <dd className={styles.detailsValue}>
@@ -730,20 +787,8 @@ function ScopedCoinpayForm({
                             </>
                         ) : null}
                     </dl>
-
-                    {feeTiers ? (
-                        <FeeSelector
-                            chainId={selected.chainId}
-                            label="Network fee"
-                            coinTicker={coinTicker}
-                            tiers={feeTiers}
-                            value={feePick}
-                            onChange={setFeePick}
-                            customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                        />
-                    ) : null}
-
-                </FormPage>
+                    </FormSection>
+                </FormFrame>
             ) : null}
         </>,
     );

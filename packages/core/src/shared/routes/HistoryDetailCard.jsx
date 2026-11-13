@@ -31,6 +31,7 @@ import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useMessaging } from '../useMessaging.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useFiatRate } from '../hooks/useFiatRate.js';
 import { formatFiat } from '../components/BalanceList.jsx';
 import { coinToFiatExact } from '../../flows/priceLookup.js';
@@ -62,6 +63,7 @@ import { formatFiatAmountForSpeech } from '../utils/fiatAmountFormat.js';
 import { RelativeTime } from '../components/RelativeTime.jsx';
 import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import styles from './History.module.css';
+import homeTabsStyles from '../components/HomeTabs.module.css';
 import { NATIVE_TICKER_BY_COIN, OFFLINE_ACTION_REASON, PENDING_WARNING_STATES, chainRegistry, coinOfChainId, describePendingAction, formatTimestamp, historyAmountDirection, peerAddressOfEntry, peerCacheKey, pendingCopyFor, pendingStateOf } from './HistoryShared.jsx';
 
 // Image sources here are bundled assets. Third-party explorers use the local
@@ -89,12 +91,11 @@ function ExplorerFavicon({ src, label }) {
 export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walletId, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed, networkAvailable = true }) {
     const { messaging, shell } = useMessaging();
     const { showToast } = useToast();
-    const { settings, loading: settingsLoading } = useSettings();
+    const { settings } = useSettings();
     // Speed up and Cancel sign a replacement, which a watch-only wallet
-    // cannot do, so they wait for the wallet mode; a failed settings read
-    // opens in full mode.
-    const walletModeReady = settings !== null || !settingsLoading;
-    const isWatcherMode = settings?.walletMode === 'watcher';
+    // cannot do, so they wait for this wallet's mode; a wallet list that
+    // cannot say opens in full mode.
+    const { isWatcherMode, walletModeKnown: walletModeReady } = useWalletMode(walletId);
     const [balancesHidden] = useBalancesHidden();
     const rbfConfirm = useConfirmModal();
     const [activeDetailTab, setActiveDetailTab] = useState(/** @type {'status' | 'details' | 'raw'} */ ('status'));
@@ -210,9 +211,9 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
     // returns the same shape so the JSON pretty-printer indents identically.
     const rawForDisplay = balancesHidden ? redactAmountFields(entry.raw) : entry.raw;
     const detailTabs = [
-        { id: 'status',  label: 'Status'  },
-        { id: 'details', label: 'Details' },
-        { id: 'raw',     label: 'Raw data' },
+        { id: 'status',  label: 'Status',   icon: <Icon.CheckIcon /> },
+        { id: 'details', label: 'Details',  icon: <Icon.InfoIcon /> },
+        { id: 'raw',     label: 'Raw data', icon: <Icon.DocumentIcon /> },
     ];
 
     // Compute Save-as-contact saveability + assemble the More menu so
@@ -581,7 +582,10 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                         className={`${styles.detailTab} ${activeDetailTab === t.id ? styles.detailTabActive : ''}`}
                         onClick={() => setActiveDetailTab(t.id)}
                     >
-                        {t.label}
+                        <span className={homeTabsStyles.tabWithIcon}>
+                            <span className={homeTabsStyles.tabIcon} aria-hidden="true">{t.icon}</span>
+                            {t.label}
+                        </span>
                     </button>
                 ))}
             </div>

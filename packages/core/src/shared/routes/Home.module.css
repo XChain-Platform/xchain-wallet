@@ -11,15 +11,26 @@
        four tiles at 360 and stop growing at the tile measure, so a wide window
        keeps square tiles of the same size instead of stretching them. */
     grid-auto-flow: column;
-    grid-auto-columns: minmax(0, 7.5rem);
+    /* The phone tile measure (about 88px) at every width. */
+    grid-auto-columns: minmax(0, 5.5rem);
     justify-content: center;
     align-items: start;
     gap: var(--xc-space-2);
-    margin-top: calc(var(--xc-space-2) - var(--xc-space-3));
+    /* The Home stack gap is already 8px, so no pull-up. */
+    margin-top: 0;
+}
+
+/* On phone widths the four tiles share the full row, so the first and last
+   tiles sit on the cards' edges, not inset by what the 88px measure leaves. */
+@media (max-width: 480px) {
+    .quickActions {
+        grid-auto-columns: minmax(0, 1fr);
+        justify-content: stretch;
+    }
 }
 
 .quickActionsReason {
-    margin: calc(var(--xc-space-2) - var(--xc-space-3)) 0 var(--xc-space-2);
+    margin: 0 0 var(--xc-space-2);
     color: var(--xc-text-muted);
     font-size: var(--xc-text-xs);
     overflow-wrap: anywhere;
@@ -41,72 +52,6 @@
     .quickActions > button:last-child:nth-child(odd) {
         justify-self: center;
         width: calc(50% - var(--xc-space-1));
-    }
-}
-
-/* Keep the complete action set even on phone layouts, then use one row once
-   every label has enough room. The room is the width of the content beside
-   the sidebar, not the window, so the wrapper is the query container. */
-.actionsFullWrap {
-    margin-top: var(--xc-space-4);
-}
-
-/* A WebView without container queries keeps the four-column grid. */
-@supports (container-type: inline-size) and (width: 1cqw) {
-    .actionsFullWrap {
-        container-type: inline-size;
-    }
-}
-
-.actionsFull {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: var(--xc-space-2);
-}
-
-/* These are the shared quick-action tiles, but not square: a grid cell is
-   wider than it is tall. Labels wrap only between whole words; a narrower
-   inline padding leaves the eight-column row room for its longest single
-   word. In the four-column grid the icon sits above its label, so a label gets
-   the whole tile width and never runs into the next tile. Tiles start at the
-   top so a two-line label leaves every icon in the row on one line. The
-   wrapper class lifts these rules over the shared tile's two-class rule. */
-.actionsFullWrap .actionsFull > button {
-    aspect-ratio: auto;
-    width: 100%;
-    padding-inline: var(--xc-space-1);
-    flex-direction: column;
-    justify-content: flex-start;
-    gap: var(--xc-space-1);
-    padding-block: var(--xc-space-2);
-    white-space: normal;
-    text-align: center;
-}
-
-.actionsFullWrap .actionsFull > button,
-.actionsFullWrap .actionsFull > button > span {
-    overflow-wrap: normal;
-    word-break: keep-all;
-    hyphens: none;
-}
-
-/* When the content is wide enough for every label beside its icon, all tiles
-   share one row at equal width. Narrower content keeps the equal-tile grid
-   above, so a second row never stretches. */
-@supports (container-type: inline-size) and (width: 1cqw) {
-    @container (min-width: 1180px) {
-        .actionsFull {
-            grid-template-columns: none;
-            grid-auto-flow: column;
-            grid-auto-columns: minmax(0, 1fr);
-        }
-
-        .actionsFullWrap .actionsFull > button {
-            flex-direction: row;
-            justify-content: center;
-            gap: var(--xc-space-2);
-            padding-inline: var(--xc-space-2);
-        }
     }
 }
 

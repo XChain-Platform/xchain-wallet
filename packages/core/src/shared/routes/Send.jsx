@@ -19,7 +19,7 @@ import {
     AddressField,
     ChainBadge,
     AddressText,
-    FeeSelector,
+    // FeeSelector renders inside the standard FeeSection.
     FieldNote,
     FormNotice,
     FormPage,
@@ -31,6 +31,7 @@ import {
     FormErrorSummary,
     Checkbox,
     Switch,
+    // Network and From come from the standard FromSection.
 } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
@@ -41,6 +42,7 @@ import {
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import {
     coinFromChainId,
+    formatFiat,
     isAssetImageSourceAllowed,
     tickerColor,
 } from '../components/BalanceList.jsx';
@@ -51,6 +53,7 @@ import { buildRecentDestinations } from '../../flows/recentDestinations.js';
 import { addressValidationError, detectAddressCoin, isValidAddressForChain } from '../utils/addressValidation.js';
 import { neutralizeControlText, ZERO_WIDTH } from '../utils/textHardening.js';
 import { findLookalike } from '../utils/lookalike.js';
+import { titleCase } from '../utils/titleCase.js';
 import { checkPasteIntegrity } from '../utils/pasteIntegrity.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import {
@@ -62,6 +65,9 @@ import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/history.js';
 import '../../i18n/locales/en/scan.js';
 import '../../i18n/locales/en/send.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/home.js';
+import '../../i18n/locales/en/firstPaint.js';
 import '../../i18n/locales/en/transactionStatus.js';
 import '../../i18n/locales/en/ui.js';
 import '../../i18n/locales/en/undoSend.js';
@@ -69,6 +75,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useDeveloperMode } from '../hooks/useDeveloperMode.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { useWalletMode } from '../hooks/useWalletMode.js';
 import { getActiveNetwork } from '../../flows/effectiveNetwork.js';
 import { activeNetworkLabel } from '../utils/activeNetworkSwitch.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
@@ -218,6 +225,7 @@ import {
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { coinToFiatExact, fiatToCoin } from '../../flows/priceLookup.js';
 import { useTickFiatRate } from '../hooks/useFiatRate.js';
+import { useFeeFiat } from '../hooks/useFeeFiat.js';
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
 import { BalanceChanges } from '../components/BalanceChanges.jsx';
 import { RawPsbtViewer } from '../components/RawPsbtViewer.jsx';
@@ -226,6 +234,8 @@ import { AmountField } from '../components/AmountField.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { DraftDiscardButton } from '../components/DraftDiscardButton.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
+// The standard token chooser, in place of a big coin icon hero.
+import { TokenField } from '../components/TokenField.jsx';
 import { useHaptic } from '../hooks/useHaptic.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
@@ -246,6 +256,8 @@ import {
 } from '../hooks/useDispenserDestination.js';
 import {
     formatWithThousands,
+    formatDisplayAmount,
+    sumDecimalStrings,
     countNonCommaBefore,
     indexAfterNonCommaCount,
     compareDecimalStrings,
@@ -260,6 +272,18 @@ import { encoderFieldError } from '../../sdk/encoderFieldErrors.js';
 // of Button.module.css.
 import buttonStyles from '../../ui/Button.module.css';
 import styles from './Send.module.css';
+// Send is the reference form of the Wallet Form Standard; its
+// sections, fee row, status slot and action come from the shared frame.
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    summaryAddress,
+    useFormSections,
+} from '../components/formStandard/index.js';
+import { selectedNetworkFee } from '../../flows/feesCard.js';
 import { normalizeHistoryRow } from '../utils/historyRow.js';
 import { pendingTxToEntry } from '../utils/pendingHistory.js';
 import { classifyEntryStatusWithoutMempool } from '../utils/historyFilter.js';
@@ -290,6 +314,9 @@ const FIRST_BALANCE_GATE_MS = 1500;
 // for seconds; Select all still takes every input, listed or not.
 export const COIN_CONTROL_ROW_LIMIT = 200;
 const chainRegistry = registryLib.defaultRegistry();
+// The single-send Token field reuses the recipient token picker
+// state; this sentinel marks the picker as open for the first recipient.
+const PRIMARY_TOKEN_PICKER = '__primary__';
 
 // Descriptor.coin is the long-form coin name ('bitcoin' / 'litecoin' /
 // 'dogecoin'); the user-facing native ticker is the short symbol the SDK
@@ -489,14 +516,15 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const { developerMode } = useDeveloperMode();
-    const { settings, loading: settingsLoading } = useSettings();
-    // Watcher mode still composes unsigned PSBTs, so balance-based Send
-    // empty states never replace its form. Mode and readiness come from one
-    // settings snapshot, so the signing form never renders before a
-    // watch-only mode is known; a failed settings read opens in full mode.
-    const walletModeReady = settings !== null || !settingsLoading;
-    const isWatcherMode = settings?.walletMode === 'watcher';
-    const isSignerMode = settings?.walletMode === 'signer';
+    const { settings } = useSettings();
+    // This wallet's own mode (§20); the form waits until it is known. Watcher
+    // mode composes unsigned PSBTs, so balance empty states never replace it.
+    const {
+        walletMode,
+        isWatcherMode,
+        isSignerMode,
+        walletModeKnown: walletModeReady,
+    } = useWalletMode(walletId);
     // A demo wallet holds fixture balances and cannot move funds: the form
     // opens at once with an inline note instead of waiting on a balance read.
     const isDemo = isDemoWallet(walletId);
@@ -518,8 +546,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             setDemoExitBusy(false);
         }
     }, [demoExitBusy, messaging, walletId, onBack]);
-    const allowRemoteImages = Boolean(settings)
-        && settings.privacy?.metadataFetchEnabled !== false;
     const { showToast, dismissToast, clearGeneration } = useToast();
     const haptic = useHaptic();
     const [undoHoldActive, setUndoHoldActive] = useState(false);
@@ -651,6 +677,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // picked address does not exist) but never overwrites a deliberate choice.
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [changeAddressPickerOpen, setChangeAddressPickerOpen] = useState(false);
+    // The standard sections' open state, held here so it survives the
+    // picker pages (each an early return below). From starts closed, Payment
+    // open, the rest closed.
+    const formSections = useFormSections({ from: false, payment: true, memo: false, advanced: false, fee: false });
     const [pickedSourceChain, setPickedSourceChain] = useState(
         /** @type {string | null} */ (null),
     );
@@ -868,8 +898,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // The settings read rides the address load so the last-used chain is
     // known in the render that first shows the form. Best-effort: a host
     // without `getSettings`, or a failed read, still yields a usable form.
+    // Reset per wallet at mount, before the active-address, prefill and draft
+    // effects below; only the load waits for the wallet mode, which decides
+    // which addresses can send.
     useEffect(() => {
-        let cancelled = false;
         setAddressesByChain(null);
         setLoadError(null);
         setChainId(prefillChainIdRef.current);
@@ -877,6 +909,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         setActiveByChain({});
         setPickedSourceChain(null);
         setHistoryRows([]);
+    }, [walletId, accountId, messaging, addressLoadAttempt]);
+    useEffect(() => {
+        if (!walletModeReady) return undefined;
+        let cancelled = false;
         Promise.all([
             messaging.getAddressesByChain(walletId, accountId),
             typeof messaging.getSettings === 'function'
@@ -885,7 +921,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         ])
             .then(([loadedByChain, loadedSettings]) => {
                 if (cancelled) return;
-                const byChain = signingAddressesByChain(loadedByChain, loadedSettings);
+                const byChain = signingAddressesByChain(loadedByChain, walletMode);
                 setAddressesByChain(byChain);
                 if (!Object.keys(byChain)[0]) {
                     setLoadError(hasAnyAddress(loadedByChain)
@@ -907,7 +943,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 }
             });
         return () => { cancelled = true; };
-    }, [walletId, accountId, messaging, addressLoadAttempt]);
+    }, [walletId, accountId, messaging, addressLoadAttempt, walletMode, walletModeReady]);
 
     // §18.4 firmware-warning support. When the source address is HW we
     // need vendor / model / firmwareVersion to render the warning banner
@@ -1476,6 +1512,14 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
         enabled: chainRegistry.get(chainId || '')?.networkKind === 'mainnet',
     });
+    // The confirm page's cost card prices the fee as the other forms' do.
+    const { formatNativeFee: formatConfirmFeeFiat } = useFeeFiat({
+        chainId: chainId || undefined,
+        // A demo wallet reads no prices, as the amount rate above.
+        chainCoin: !isDemo && chainId ? chainRegistry.get(chainId)?.coin : undefined,
+        nativeTicker: nativeTickerFor(chainId ? chainRegistry.get(chainId) : null),
+        settings,
+    });
 
     // Switching from the coin to a token while typing in fiat would leave the
     // field in a mode it can no longer convert, so fall back to coin entry.
@@ -1502,6 +1546,34 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         setExtraLegs((rows) => rows.map((row) => (sharesToken(row) ? { ...row, amount: '' } : row)));
         setAssetSwitchNotice('Token changed. The amount was cleared because the new token may use different decimal places.');
     }, [amount, extraLegs, perRecipientToken, tick, cancelMax]);
+
+    // A network switch (Network field or From picker) moves the whole form to
+    // the new chain, as a pasted payment link does: From and Token re-default,
+    // amount, fee and extra recipients reset; To stays only if valid there.
+    const onNetworkChange = useCallback((cid) => {
+        if (!cid || cid === chainId) return;
+        const nextDescriptor = chainRegistry.get(cid);
+        setChainId(cid);
+        setFromAddressId(null);
+        setMultisigSource(null);
+        setTick(nativeTickerFor(nextDescriptor) || '');
+        cancelMax();
+        const hadAmount = Boolean(amount) || extraLegs.length > 0;
+        setAmount('');
+        setFiatAmount('');
+        setAmountInputMode('coin');
+        setExtraLegs([]);
+        setPerRecipientToken(false);
+        setRecipientErrors({});
+        if (toAddress.trim() && destinationAddressError(toAddress, nextDescriptor)) setToAddress('');
+        setToError(null);
+        setPastedRecipient(null);
+        setPasteHint(null);
+        setPasteWarning(null);
+        setAssetSwitchNotice(hadAmount
+            ? 'Network changed. The amount and network fee were reset because they may not be valid on the new network.'
+            : null);
+    }, [chainId, amount, extraLegs, toAddress, cancelMax]);
 
     const amountInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
@@ -3228,11 +3300,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         return wrap(<ListPage><p className={styles.hint}>{t('common.loading')}</p></ListPage>);
     }
 
-    // §20: signer mode does not spend. The Wallet Mode screen
-    // promises "Send / receive screens are hidden; this wallet does not
-    // broadcast", so the form is refused rather than rendered - and the
-    // refusal names the way back, because the mode is a setting the same
-    // user chose and can unset.
+    // §20: an air-gapped signer wallet does not spend, so the form is
+    // refused rather than rendered. The mode belongs to the wallet and is
+    // fixed at create, import or pair, so the refusal points at Wallet
+    // Details, where it is shown.
     if (isSignerMode) {
         return wrap(
             <ListPage>
@@ -3329,20 +3400,86 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         );
     }
 
-    // confirm page, rendered in place of the form (operator
-    // direction 2026-07-22: the overlay modal didn't fit small/mobile
-    // viewports). All other form state stays intact behind it.
-    //
-    // This renders through the SHARED <ActionConfirmScreen>, not a hand-rolled
-    // <ConfirmActionModal>. Send piloted the pipeline before that adapter
-    // existed, and the copy it kept had quietly fallen behind: the adapter is
-    // where §5.2.5's exact-fee-from-the-composed-PSBT and §5.2.3's balance
-    // deltas live, so the most-used form in the wallet was showing a rate
-    // ESTIMATE and no deltas while ~24 slice-2 forms showed both.
+    // The confirm page renders in place of the form (an overlay modal did not
+    // fit small viewports); all other form state stays intact behind it. It goes
+    // through the SHARED <ActionConfirmScreen>, which owns the exact fee and deltas.
     if (confirmModalOpen) {
+        // Hero and before and after, from what this form already holds:
+        // the amount, the recipient, the source's balances (unless hidden or
+        // unchecked) and the composed fee, else the form's fee estimate.
+        const sendTick = tick.trim().toUpperCase();
+        const nativeTick = nativeTickerFor(descriptor) || '';
+        const composedFeeSats = confirmAction.composed?.networkFeeSats;
+        const sendFeeAmount = Number.isSafeInteger(composedFeeSats) && composedFeeSats >= 0
+            ? decimalStringFromSats(BigInt(composedFeeSats), descriptor)
+            : (feeEstimate?.coinAmount ? String(feeEstimate.coinAmount) : null);
+        const sendAmount = String(amount).trim();
+        // A hidden balance stays hidden here too. An unchecked one (the
+        // network could not confirm it is current) is still the balance the
+        // form shows, so it is the "before" this page shows.
+        const showBalances = !balancesHidden && !isMultiSend;
+        const sendChanges = [];
+        const nativeBefore = showBalances && nativeSourceBalance?.amount != null
+            ? String(nativeSourceBalance.amount).trim()
+            : '';
+        if (showBalances && isNativeSend && nativeBefore && sendFeeAmount && sendAmount) {
+            const nativeAfter = sumDecimalStrings([nativeBefore, `-${sendAmount}`, `-${sendFeeAmount}`]);
+            sendChanges.push({
+                label: t('components.confirmSummary.your', { tick: nativeTick }),
+                before: formatDisplayAmount(nativeBefore),
+                after: formatDisplayAmount(nativeAfter),
+                tick: nativeTick,
+            });
+            const rateValue = Number(amountFiatRate?.rate);
+            if (Number.isFinite(rateValue) && rateValue > 0) {
+                const code = String(amountFiatRate?.fiatCurrency || fiatCurrency).toUpperCase();
+                const fiatOf = (coin) => {
+                    const value = Number(coinToFiatExact(coin, amountFiatRate));
+                    return Number.isFinite(value) ? formatFiat(value, code) : null;
+                };
+                const valueBefore = fiatOf(nativeBefore);
+                const valueAfter = fiatOf(nativeAfter);
+                if (valueBefore && valueAfter) {
+                    sendChanges.push({
+                        label: t('home.tabs.value'),
+                        before: valueBefore,
+                        after: valueAfter,
+                    });
+                }
+            }
+        } else if (showBalances && !isNativeSend && sourceBalance?.amount != null && sendAmount) {
+            const tokenBefore = String(sourceBalance.amount).trim();
+            sendChanges.push({
+                label: t('components.confirmSummary.your', { tick: sendTick }),
+                before: formatDisplayAmount(tokenBefore),
+                after: formatDisplayAmount(sumDecimalStrings([tokenBefore, `-${sendAmount}`])),
+                tick: sendTick,
+            });
+            if (nativeBefore && sendFeeAmount) {
+                sendChanges.push({
+                    label: t('components.confirmSummary.your', { tick: nativeTick }),
+                    before: formatDisplayAmount(nativeBefore),
+                    after: formatDisplayAmount(sumDecimalStrings([nativeBefore, `-${sendFeeAmount}`])),
+                    tick: nativeTick,
+                });
+            }
+        }
+        const sendSummary = {
+            verb: t('send.title'),
+            amount: isMultiSend ? '' : sendAmount,
+            ticker: sendTick,
+            chainId,
+            direction: 'out',
+            address: fromAddress?.address,
+            recipient: isMultiSend ? undefined : (toAddress.trim() || undefined),
+            changes: sendChanges,
+            networkFee: feeEstimate?.coinAmount ? { amount: String(feeEstimate.coinAmount), ticker: nativeTick } : undefined,
+        };
         return (
             <ActionConfirmScreen
                 confirmAction={confirmAction}
+                summary={sendSummary}
+                formatNativeFee={formatConfirmFeeFiat}
                 walletId={walletId}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
@@ -3370,16 +3507,20 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 getSignerStatus={messaging.getSignerStatus}
                 hwRequireExplicitConfirm={signRisk.requireExplicitConfirm}
                 hwRequireExplicitConfirmReason={signRisk.reason}
+                // K6: memo, fee bumping, coin control and change address are
+                // review detail, so they sit under Technical details.
+                technicalDetails={(
+                    <dl className={styles.advancedReviewList} aria-label={t('send.advanced.label')}>
+                        <DetailRow label={t('send.memo')} value={trimmedMemo || t('send.advanced.none')} />
+                        <DetailRow label={t('send.advanced.feeBumping')} value={rbfForSend ? t('send.advanced.allowed') : t('send.advanced.notAllowed')} />
+                        <DetailRow label={t('send.advanced.coinControl')} value={coinControlLabel} />
+                        <DetailRow label={t('send.advanced.changeAddress')} value={changeAddressLabel} />
+                    </dl>
+                )}
                 extraCredentials={(
                     <>
                         {unusualSendWarningBlock}
                         {dispenserNoticeBlock}
-                        <dl className={styles.advancedReviewList} aria-label={t('send.advanced.label')}>
-                            <DetailRow label={t('send.memo')} value={trimmedMemo || t('send.advanced.none')} />
-                            <DetailRow label={t('send.advanced.feeBumping')} value={rbfForSend ? t('send.advanced.allowed') : t('send.advanced.notAllowed')} />
-                            <DetailRow label={t('send.advanced.coinControl')} value={coinControlLabel} />
-                            <DetailRow label={t('send.advanced.changeAddress')} value={changeAddressLabel} />
-                        </dl>
                         <UndoSendToast
                             status={undoHoldActive ? undoSendStatus : 'idle'}
                             remaining={undoSendRemaining}
@@ -3612,7 +3753,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                             </Button>
                             <Button
                                 type="submit"
-                                variant="secondary"
+                                variant="success"
                                 icon={<Icon.SaveIcon />}
                                 disabled={contactSaveStage === 'saving'}
                             >
@@ -3686,6 +3827,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     <Button
                         type="submit"
                         variant="primary"
+                        icon={<Icon.SendIcon />}
                         loading={stage === 'submitting'}
                         disabled={
                             networkOffline
@@ -3836,7 +3978,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // form routes its From field to. Rendered in place of the form; all other
     // form state stays intact behind it.
     if (sourcePickerOpen) {
-        // A pick on another chain switches the form network first (U60), so
+        // A pick on another chain switches the form network first, so
         // the pick is recorded against the chain it was made on and the
         // source default effect keeps it. The form chain's multisig sources
         // ride above the address list as picker rows, so a wallet with a
@@ -3848,7 +3990,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 title={t('send.fromAddress')}
                 walletId={walletId}
                 chainId={chainId}
-                onChainChange={(cid) => { pickChain = cid; setChainId(cid); }}
+                // A network switch here moves Token and the rest of
+                // the form with it, as the Network field does.
+                onChainChange={(cid) => { pickChain = cid; onNetworkChange(cid); }}
                 pickerActions={multisigAddresses.map((entry) => ({
                     key: `multisig-${entry.multisigConfigId}`,
                     label: t('send.source.multisigTitle', {
@@ -3893,7 +4037,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title={t('send.advanced.changeAddress')}
+                title={titleCase(t('send.advanced.changeAddress'))}
                 walletId={walletId}
                 chainId={chainId}
                 lockNetwork
@@ -3924,6 +4068,34 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 variant={variant}
                 onPick={handlePickContact}
                 onBack={() => setContactsPickerOpen(false)}
+            />
+        );
+    }
+
+    // The Token field opens the standard TokenPicker on the form's network. A
+    // pick on another chain moves the form there first; onTickInputChange then
+    // clears amounts and says so, as typing a new ticker does.
+    if (tokenPickerRecipientId === PRIMARY_TOKEN_PICKER) {
+        return (
+            <TokenPicker
+                purpose="send"
+                walletId={walletId}
+                accountId={accountId}
+                // A picker offering the native coin and tokens is "Asset".
+                title={t('send.asset')}
+                networkFilter={coinFromChainId(chainId)}
+                chainIdFilter={chainId || undefined}
+                onSelect={(selection) => {
+                    const picked = String(selection.tick || '').toUpperCase();
+                    if (selection.chainId && selection.chainId !== chainId) {
+                        onNetworkChange(selection.chainId);
+                        setTick(picked);
+                    } else {
+                        onTickInputChange(picked);
+                    }
+                    setTokenPickerRecipientId(null);
+                }}
+                onBack={() => setTokenPickerRecipientId(null)}
             />
         );
     }
@@ -3973,12 +4145,19 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     if (formError) {
         let id;
         let label;
-        if (toError || /destination address/i.test(formError)) {
+        // The empty-To message ("Enter a recipient address.") links
+        // to To as well, so its section reopens on Send like any field error.
+        if (toError || /destination address|recipient address/i.test(formError)) {
             id = 'send-destination';
             label = t('send.fields.to');
+        } else if (/address to send from/i.test(formError)) {
+            // A missing source links to the From address and opens From.
+            id = 'send-from';
+            label = 'From address';
         } else if (/token ticker/i.test(formError)) {
             id = 'send-token';
-            label = t('send.fields.token');
+            // The field is labelled Asset (coin or token).
+            label = 'Asset';
         } else if (/amount|dust/i.test(formError)) {
             id = 'send-amount';
             label = t('send.fields.amount');
@@ -4006,8 +4185,47 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             });
         }
     }
+    // Section helpers. A section holding an error gets a key that
+    // changes on every Send attempt, so it reopens even after being closed.
+    const sendFormErrorIds = new Set(sendFormErrors.map((entry) => entry.id).filter(Boolean));
+    const sectionErrorKey = (hasError) => (hasError ? validationAttempt + 1 : 0);
+    // Closed-section summaries and the fee totals of the standard frame.
+    const tickUpper = tick.trim().toUpperCase();
+    const nativeTick = nativeTickerFor(descriptor) || '';
+    const multiTotals = extraLegs.length > 0 && sendTotals.length > 0 && !nativeMultiSendBlock;
+    const amountSummary = multiTotals
+        ? sendTotals.map((item) => `${formatWithThousands(item.amount)} ${item.tick}`).join(' + ')
+        : (amount ? `${amount} ${tickUpper}`.trim() : tickUpper);
+    const toSummary = toAddress.trim()
+        ? `to ${summaryAddress(toAddress)}${extraLegs.length > 0 ? ` +${extraLegs.length}` : ''}`
+        : '';
+    const paymentSummary = [amountSummary, toSummary].filter(Boolean).join(' ') || null;
+    const advancedSummary = [
+        rbfSupported ? (rbfForSend ? 'RBF on' : 'RBF off') : null,
+        coinControlEnabled ? `${selectedUtxos.length} coins chosen` : 'auto coins',
+    ].filter(Boolean).join(', ');
+    const networkFeeAmount = selectedNetworkFee({ tiers: feeTiers, value: feePick, customEstimate: feeEstimate })
+        || (feeEstimate?.coinAmount != null ? String(feeEstimate.coinAmount) : null);
+    // Amount, Network fee and, when both are in the same coin, Total.
+    const feeTotals = (() => {
+        if (!networkFeeAmount) return [];
+        const rows = [];
+        if (amountSummary && (amount || multiTotals)) {
+            rows.push({ key: 'amount', label: t('send.fields.amount'), value: amountSummary });
+        }
+        rows.push({ key: 'network', label: t('send.networkFee'), value: `${networkFeeAmount} ${nativeTick}`.trim() });
+        const sameCoin = isNativeSend && amount && !multiTotals && tickUpper === nativeTick;
+        if (sameCoin) {
+            const total = sumDecimalStrings([amount, networkFeeAmount]);
+            if (total) rows.push({ key: 'total', label: 'Total', value: `${total} ${nativeTick}`, strong: true });
+        }
+        return rows;
+    })();
+    const paymentHasError = Boolean(toError || amountBalanceError
+        || [...sendFormErrorIds].some((id) => id === 'send-destination' || id === 'send-amount'
+            || id === 'send-token' || String(id).startsWith('send-recipient-')));
     return wrap(
-        <FormPage
+        <FormFrame
             id="send-form"
             label={t('send.title')}
             onSubmit={handleReview}
@@ -4016,6 +4234,12 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 if (submitError) setSubmitError(null);
                 if (submitFieldError) setSubmitFieldError(null);
             }}
+            /*
+              * State the signing freeze at the TOP of the form, so a duress observer
+              * never watches a transaction get composed first. Duress-armed freezes
+              * render nothing here, by design. It stays above the sections.
+              */
+            lead={!isWatcherMode ? <PanicFreezeNotice key={panicNoticeKey} surface="send" /> : null}
             status={[isDemo ? (
                 <StatusMessage
                     variant="info"
@@ -4054,44 +4278,20 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     </span>
                 </StatusMessage>
             ) : null]}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="primary"
+            action={(
+                <FormAction
+                    icon={<Icon.SendIcon />}
                     loading={confirmAction.composing}
                     disabled={isDemo || networkOffline || !!testSendGate || maxUnavailable || !!amountBalanceError}
                     title={networkOffline ? t('send.offline.title') : undefined}
                 >
                     {t('send.title')}
-                </Button>
+                </FormAction>
             )}
-        >
-            {/*
-              * State the signing freeze at the TOP of the form, before
-              * the user picks a destination and an amount. The refusal used to
-              * arrive only on Approve & Sign, by which point a duress observer
-              * has already watched the whole transaction get composed.
-              * Duress-armed freezes render nothing here, by design.
-              */}
-            {!isWatcherMode ? <PanicFreezeNotice key={panicNoticeKey} surface="send" /> : null}
-            {assetSwitchNotice ? (
-                <FormNotice variant="status">{assetSwitchNotice}</FormNotice>
-            ) : null}
-            <SelectedTokenHero
-                chainId={chainId}
-                tick={tick}
-                descriptor={descriptor}
-                prefill={prefill}
-                allowRemoteImages={allowRemoteImages}
-                onChangeAsset={onChangeAsset ? () => onChangeAsset({
-                    chainId,
-                    tick: tick.trim(),
-                    address: toAddress,
-                    amount,
-                    feeSelection: feePick,
-                }) : undefined}
-            />
-            {/*
+            /* The standard order: From (Network and address), Payment (To, Asset,
+               Amount, extra recipients), optional Memo and Advanced, then the
+               Network fee row. A section holding an error reopens on every Send. */
+            /*
               * The funding address, shown and changeable.
               *
               * Send resolves its source to the chain's ACTIVE address and used to
@@ -4107,26 +4307,64 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
               * Rendering it also puts the balance line underneath in context: the
               * "available" figure has always been this address's balance, not the
               * wallet's.
-              */}
-            {fromAddress ? (
-                <AddressField
-                    size="md"
-                    label={t('send.fields.from')}
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel={t('send.source.choose')}
-                    help={t('send.source.hint')}
+              */
+            from={(
+                <FromSection
+                    {...formSections.bind('from')}
+                    chainId={chainId}
+                    chainIds={addressesByChain && Object.keys(addressesByChain).length
+                        ? Object.keys(addressesByChain)
+                        : (chainId ? [chainId] : [])}
+                    chainRegistry={chainRegistry}
+                    onNetworkChange={onNetworkChange}
+                    networkHelp="The chain this payment is sent on. Your From address, the token and the network fee are all on this network."
+                    address={fromAddress?.address || null}
+                    addressId="send-from"
+                    revealKey={sectionErrorKey(sendFormErrorIds.has('send-from'))}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel={t('send.source.choose')}
+                    addressHelp={t('send.source.hint')}
+                    /* No balance note here; the Amount field already
+                       states this address's balance, and one figure in two
+                       places reads as two balances. */
+                    // Only once the address list has loaded, so a slow
+                    // read does not open From for good.
+                    missing={addressesByChain ? (
+                        <FormNotice variant="error">
+                            {otherNetworkKind
+                                ? t('send.source.otherNetwork', { network: activeNetworkLabel(otherNetworkKind) })
+                                : t('send.source.noAddress')}
+                        </FormNotice>
+                    ) : null}
                 />
-            ) : (
-                <FormNotice variant="error">
-                    {otherNetworkKind
-                        ? t('send.source.otherNetwork', { network: activeNetworkLabel(otherNetworkKind) })
-                        : t('send.source.noAddress')}
-                </FormNotice>
             )}
+            fee={(
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    chainId={chainId}
+                    coinTicker={nativeTick}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeEstimate}
+                    etaMinutes={Number.isFinite(feeEstimate?.etaMinutes) ? feeEstimate.etaMinutes : undefined}
+                    error={submitFieldError?.field === 'fee' ? submitFieldError.message : null}
+                    revealKey={sectionErrorKey(submitFieldError?.field === 'fee')}
+                    totals={feeTotals}
+                />
+            )}
+        >
+            <FormSection
+                id="payment"
+                title={t('send.section.payment')}
+                icon={Icon.SendIcon}
+                {...formSections.bind('payment')}
+                revealKey={sectionErrorKey(paymentHasError)}
+                summary={paymentSummary}
+            >
+            {assetSwitchNotice ? (
+                <FormNotice variant="status">{assetSwitchNotice}</FormNotice>
+            ) : null}
             <AddressCombobox
                 size="md"
                 id="send-destination"
@@ -4165,17 +4403,19 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             {lookalikeWarning ? (
                 <FieldNote variant="warning" role="alert">{lookalikeWarning}</FieldNote>
             ) : null}
-            {!onChangeAsset ? (
-                <Input
-                    id="send-token"
-                    label={t('send.fields.token')}
-                    help={t('send.token.hint')}
-                    value={tick}
-                    onChange={(e) => onTickInputChange(e.target.value)}
-                    autoComplete="off"
-                    autoCapitalize="characters"
-                />
-            ) : null}
+            {/* The standard Token field (TokenField opening TokenPicker); it
+                keeps the send-token id the error summary focuses. */}
+            <TokenField
+                size="md"
+                id="send-token"
+                // It offers the native coin and tokens, so it is "Asset".
+                label={t('send.asset')}
+                placeholder={t('send.selectAsset')}
+                help={t('send.token.hint')}
+                value={chainId && tick.trim() ? { chainId, tick: tick.trim().toUpperCase() } : null}
+                onOpenPicker={() => setTokenPickerRecipientId(PRIMARY_TOKEN_PICKER)}
+                disabled={!chainId}
+            />
             <AmountField
                 size="md"
                 id="send-amount"
@@ -4311,6 +4551,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                             token: tick.trim().toUpperCase() || t('send.recipient.tokenAbove'),
                         })}
                         aria-label={t('send.recipient.differentToken')}
+                        help={t('send.recipient.differentTokenHelp')}
                         checked={perRecipientToken}
                         onChange={(e) => setPerRecipientToken(e.target.checked)}
                     />
@@ -4405,38 +4646,23 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     )}
                 </>
             ) : null}
-            {/* The tiers seed in an effect after the chain is set, so the field
-                waits for them rather than opening on Custom for one render. */}
-            {feeTiers ? (
-                <FeeSelector
-                    chainId={chainId}
-                    label={t('send.networkFee')}
-                    coinTicker={nativeTickerFor(descriptor)}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeEstimate : null}
-                    error={submitFieldError?.field === 'fee' ? submitFieldError.message : null}
-                />
-            ) : null}
-            <details
-                className={styles.details}
-                style={{ marginTop: 'var(--xc-space-6)' }}
-            >
-                <summary className={styles.detailsToggle}>{t('send.advanced')}</summary>
-                {/* No memo on a native-coin send. It only ever existed
-                    as a field of an XChain SEND action, and the chain rejects
-                    that action outright for a native tick (there is no BTC
-                    ledger), so the memo was never recorded or queryable - it
-                    was an input that silently did nothing. A native send is now
-                    a plain payment with no action at all, so there is nowhere
-                    left to put one. Token sends keep it. */}
-                {isNativeSend ? null : (
-                    <>
+            </FormSection>
+            {/* No memo on a native-coin send: a memo belongs to an XChain SEND action,
+                which the chain rejects for a native tick, so the input would do nothing.
+                Token sends keep it, as its own optional section. */}
+            {isNativeSend ? null : (
+                <FormSection
+                    id="memo"
+                    title={t('send.memo')}
+                    icon={Icon.MessageIcon}
+                    optional
+                    {...formSections.bind('memo')}
+                    revealKey={sectionErrorKey(sendFormErrorIds.has('send-memo') || Boolean(memoTooLong))}
+                    summary={memo.trim() ? memo.trim() : t('send.advanced.none')}
+                >
                         <Input
                             id="send-memo"
                             label={t('send.memo')}
-                            optional
                             maxLength={MAX_MEMO_LENGTH}
                             value={memo}
                             onChange={(e) => setMemo(e.target.value)}
@@ -4444,8 +4670,43 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                             help={t('send.memo.help')}
                             error={memoTooLong || (/[|;]/.test(memo) ? t('send.memoForbiddenChars') : undefined)}
                         />
-                    </>
-                )}
+                </FormSection>
+            )}
+            {/* Advanced is an optional closed section in the standard
+                style: fee bumping, coin control, then the change address. */}
+            <FormSection
+                id="advanced"
+                title={t('send.advanced')}
+                icon={Icon.GearIcon}
+                optional
+                {...formSections.bind('advanced')}
+                summary={advancedSummary}
+            >
+                {/* §44.3 per-send RBF toggle. Default seeds from
+                    settings.fees[chainId].rbfByDefault (see the effect
+                    above); the live value flows into the send payload as
+                    `rbf: rbfForSend`, off and disabled where the chain has no RBF. */}
+                <Switch
+                    className={styles.rbfRow}
+                    label={(
+                        <>
+                            {t('send.rbf.label')}
+                            <InfoTip
+                                aria={t('send.rbf.helpLabel')}
+                                label={t('send.rbf.help')}
+                            />
+                        </>
+                    )}
+                    description={rbfSupported
+                        ? t('send.rbf.enabledHint')
+                        : t('send.rbf.unsupported', {
+                            chain: t('send.rbf.thisChain'),
+                        })}
+                    aria-label={t('send.rbf.label')}
+                    checked={rbfForSend}
+                    disabled={!rbfSupported}
+                    onChange={(e) => setRbfEnabled(e.target.checked)}
+                />
                 <Switch
                     className={styles.rbfRow}
                     label={(
@@ -4463,13 +4724,20 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                             : t('send.advanced.coinControlUnavailable')}
                     aria-label={t('send.advanced.coinControlEnabled')}
                     aria-labelledby="send-coin-control-enabled-label"
+                    help={t('send.advanced.coinControlHelp')}
                     checked={coinControlEnabled}
                     disabled={utxoLoadState !== 'ready'}
                     onChange={(e) => setCoinControlEnabled(e.target.checked)}
                 />
                 {coinControlEnabled ? (
                     <fieldset className={styles.coinControlList}>
-                        <legend>{t('send.advanced.inputs')}</legend>
+                        <legend>
+                            {t('send.advanced.inputs')}
+                            <InfoTip
+                                aria={t('ui.field.about', { label: t('send.advanced.inputs') })}
+                                label={t('send.advanced.inputsHelp')}
+                            />
+                        </legend>
                         <div className={styles.coinControlToolbar}>
                             <span>{t('send.advanced.availableCount', { count: availableUtxos.length })}</span>
                             <span className={styles.coinControlActions}>
@@ -4578,33 +4846,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     iconLabel={t('send.advanced.changeAddress')}
                     help={t('send.advanced.changeHint')}
                 />
-                {/* §44.3 per-send RBF toggle. Default seeds from
-                    settings.fees[chainId].rbfByDefault (see the effect
-                    above); the live value flows into the send payload as
-                    `rbf: rbfForSend`, off and disabled where the chain has no RBF. */}
-                <Switch
-                    className={styles.rbfRow}
-                    label={(
-                        <>
-                            {t('send.rbf.label')}
-                            <InfoTip
-                                aria={t('send.rbf.helpLabel')}
-                                label={t('send.rbf.help')}
-                            />
-                        </>
-                    )}
-                    description={rbfSupported
-                        ? t('send.rbf.enabledHint')
-                        : t('send.rbf.unsupported', {
-                            chain: t('send.rbf.thisChain'),
-                        })}
-                    aria-label={t('send.rbf.label')}
-                    checked={rbfForSend}
-                    disabled={!rbfSupported}
-                    onChange={(e) => setRbfEnabled(e.target.checked)}
-                />
-            </details>
-        </FormPage>,
+            </FormSection>
+        </FormFrame>,
     );
 }
 

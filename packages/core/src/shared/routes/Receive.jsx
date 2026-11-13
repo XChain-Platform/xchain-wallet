@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
-import { AddressField, AddressText, Button, CopyButton, EmptyState, FormNotice, FormPage, Icon, Input, ListPage, MultisigBadge, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, CopyButton, EmptyState, FormNotice, FormPage, Icon, ListPage, MultisigBadge, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     uri as uriLib,
@@ -27,7 +27,11 @@ import { copyText } from '../clipboard.js';
 import { shareContent, ShareOutcome, toWebShareData } from '../share.js';
 import { dataUrlToBlob } from '../dataUrl.js';
 import { AmountField } from '../components/AmountField.jsx';
-import { TickerIcon } from '../components/TickerIcon.jsx';
+// Receive picks its coin or token with the standard Token field and the
+// shared TokenPicker.
+import { TokenField } from '../components/TokenField.jsx';
+import { TokenPicker } from './TokenPicker.jsx';
+import { coinFromChainId } from '../components/BalanceList.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { AddAddressModal } from './AddAddressModal.jsx';
 import {
@@ -41,7 +45,6 @@ import { addressTypeLabel } from '../utils/addressTypeLabel.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
 import { unsupportedAddressTypeMessage } from '../utils/userFacingMessage.js';
 import { loadSupportedAddressTypes, offeredAddressType } from '../utils/supportedAddressTypes.js';
-import { useSupportedAddressTypes } from '../hooks/useSupportedAddressTypes.js';
 import { Settings } from './Settings.jsx';
 import {
     hasAvailableChain,
@@ -58,6 +61,7 @@ import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/history.js';
 import '../../i18n/locales/en/multisig.js';
 import '../../i18n/locales/en/receive.js';
+import '../../i18n/locales/en/send.js';
 import '../../i18n/locales/en/verifySignature.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -202,7 +206,7 @@ function preferredAddressOfType(addresses, addressType, chainId, usageByKey) {
  *        chain's native ticker (no point encoding `?tick=BTC` on a
  *        BTC-native QR).
  * @param {() => void} [props.onBack]
- * @param {() => void} [props.onChangeAsset]   tapped from the asset card; should navigate to the picker. Falls back to `onBack` when omitted.
+ * @param {() => void} [props.onChangeAsset]   Unused; the Token field opens TokenPicker inside Receive.
  */
 export function Receive({ walletId, accountId, prefill = null, onBack, onChangeAsset }) {
     const { messaging, shell } = useMessaging();
@@ -210,10 +214,10 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     const { showToast } = useToast();
     const settingsState = useSettings();
     const { settings } = settingsState;
-    // The Wallet Mode screen promises the receive screen is hidden in
-    // signer mode. Refused here as well as in the nav, because the palette and
+    // An air-gapped signer wallet promises the receive screen is hidden.
+    // Refused here as well as in the nav, because the palette and
     // `xchain:` URI intents both reach this route without a nav click.
-    const { isSignerMode } = useWalletMode();
+    const { isSignerMode } = useWalletMode(walletId);
     const [chainsByWallet, setChainsByWallet] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
@@ -237,13 +241,12 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     const addressUsageRef = useRef(/** @type {Record<string, boolean>} */ ({}));
     const addressTypeRef = useRef('');
     const addressManuallySelectedRef = useRef(false);
-    const [labelDraft, setLabelDraft] = useState(
-        /** @type {{ addressId: string | null, value: string }} */ ({ addressId: null, value: '' }),
+    // Labels are not edited on Receive. The Token field's pick lives here; a pick made on another chain
+    // (before an address-picker chain switch) falls back to the native coin.
+    const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
+    const [tokenPick, setTokenPick] = useState(
+        /** @type {{ chainId: string, tick: string, divisibility?: number | null } | null} */ (null),
     );
-    const [labelSave, setLabelSave] = useState(
-        /** @type {{ request: number, addressId: string } | null} */ (null),
-    );
-    const [labelError, setLabelError] = useState(/** @type {string | null} */ (null));
     const [qrPixelSize, setQrPixelSize] = useState(QR_FALLBACK_PIXEL_SIZE);
     const qrSurfaceRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     const qrActionsRef = useRef(/** @type {HTMLDivElement | null} */ (null));
@@ -256,7 +259,6 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     const [generateError, setGenerateError] = useState(/** @type {string | null} */ (null));
     const generateRequestRef = useRef(0);
     const generateBusyRef = useRef(false);
-    const labelRequestRef = useRef(0);
     const verifyRequestRef = useRef(0);
 
     const requestedChainId = prefill?.chainId || activeChainId;
@@ -268,10 +270,6 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         && address.address.length > 0;
     const currentAddressIdRef = useRef(address?.id || null);
     currentAddressIdRef.current = address?.id || null;
-    const labelDraftValue = labelDraft.addressId === address?.id
-        ? labelDraft.value
-        : address?.label || '';
-    const labelSaving = labelSave?.addressId === address?.id;
 
     // "the account holds no address anywhere" is a state, not an
     // error. It used to render as a red alert string and nothing else, so
@@ -326,20 +324,19 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         addressUsageRef.current = {};
         addressManuallySelectedRef.current = false;
         setAddAddressOpen(false);
+        setTokenPickerOpen(false);
+        setTokenPick(null);
     }, [walletId, accountId, prefill?.chainId]);
 
     useEffect(() => {
         generateRequestRef.current += 1;
         generateBusyRef.current = false;
-        labelRequestRef.current += 1;
         verifyRequestRef.current += 1;
         setGenerating(false);
-        setLabelSave(null);
     }, [receiveContextKey]);
 
     useEffect(() => () => {
         generateRequestRef.current += 1;
-        labelRequestRef.current += 1;
         verifyRequestRef.current += 1;
     }, []);
 
@@ -503,11 +500,6 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     useEffect(() => {
         setHwVerify({ status: 'idle', message: '' });
     }, [address?.id]);
-
-    useEffect(() => {
-        setLabelDraft({ addressId: address?.id || null, value: address?.label || '' });
-        setLabelError(null);
-    }, [address?.id, address?.label]);
 
     useEffect(() => {
         const surface = qrSurfaceRef.current;
@@ -694,7 +686,6 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     // address + active chain + the optional amount/tick customization.
 
     const descriptor = activeChainId ? chainRegistry.get(activeChainId) : null;
-    const offeredTypes = useSupportedAddressTypes(descriptor);
     const addressExplorerUrl = explorerPageUrl({
         chainId: activeChainId,
         kind: 'address',
@@ -708,7 +699,10 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     // so the QR encodes the requested token without manual entry.
     const [reqAmount, setReqAmount] = useState('');
     const [amountError, setAmountError] = useState(/** @type {string | null} */ (null));
-    const reqTick = requestTickFor(prefill);
+    // The Token field pick wins over the ReceivePicker prefill while it
+    // is on the shown chain; the native coin is the empty request tick.
+    const pickedToken = tokenPick?.chainId === activeChainId ? tokenPick : null;
+    const reqTick = requestTickFor(pickedToken || prefill);
 
     // Fiat-aware amount entry, mirrors Send. Canonical `reqAmount` stays
     // coin-scale (it's what the QR/URI encodes); when the user toggles
@@ -734,7 +728,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     // The live explorer omits divisibility, so TokenInfo carries null. Number(null)
     // is 0, which would cap a divisible token at whole units and erase a valid
     // amount; an unknown divisibility keeps the coin-precision fallback instead.
-    const divisibilityRaw = prefill?.divisibility ?? requestTokenInfo?.divisibility;
+    const divisibilityRaw = (pickedToken ? pickedToken.divisibility : prefill?.divisibility)
+        ?? requestTokenInfo?.divisibility;
     const selectedDivisibility = divisibilityRaw == null || divisibilityRaw === ''
         ? Number.NaN
         : Number(divisibilityRaw);
@@ -867,20 +862,6 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
 
     const qrDataUrl = renderedQr?.uri === qrUri ? renderedQr.dataUrl : null;
 
-    const changeAddressType = useCallback((nextType) => {
-        addressManuallySelectedRef.current = false;
-        addressTypeRef.current = nextType;
-        setAddressType(nextType);
-        setGenerateError(null);
-        setAddress(preferredAddressOfType(
-            chainsByWallet?.[activeChainId] || [],
-            nextType,
-            activeChainId,
-            addressUsageRef.current,
-        ));
-        setAddressContextKey(receiveContextKey);
-    }, [chainsByWallet, activeChainId, receiveContextKey]);
-
     const generateNewAddress = useCallback(async () => {
         if (!activeChainId || !addressType || generateBusyRef.current) return;
         if (typeof messaging.generateReceiveAddress !== 'function') {
@@ -928,61 +909,6 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             }
         }
     }, [activeChainId, addressType, messaging, walletId, accountId, receiveContextKey]);
-
-    const saveAddressLabel = useCallback(async () => {
-        if (!address?.id || labelSaving || labelDraftValue.trim() === (address.label || '')) return;
-        if (typeof messaging.setAddressLabel !== 'function') {
-            setLabelError('This app cannot save a label for this address.');
-            return;
-        }
-        const addressId = address.id;
-        const contextKey = receiveContextKey;
-        const next = labelDraftValue.trim();
-        const request = ++labelRequestRef.current;
-        setLabelSave({ request, addressId });
-        setLabelError(null);
-        try {
-            const result = await messaging.setAddressLabel(addressId, next);
-            if (labelRequestRef.current !== request || receiveContextRef.current !== contextKey) return;
-            const savedLabel = typeof result?.label === 'string'
-                ? result.label
-                : (next || 'Address');
-            setAddress((current) => (
-                current?.id === addressId ? { ...current, label: savedLabel } : current
-            ));
-            setChainsByWallet((current) => Object.fromEntries(
-                Object.entries(current || {}).map(([chainId, records]) => [
-                    chainId,
-                    Array.isArray(records)
-                        ? records.map((record) => record?.id === addressId
-                            ? { ...record, label: savedLabel }
-                            : record)
-                        : records,
-                ]),
-            ));
-        } catch {
-            if (
-                labelRequestRef.current === request
-                && receiveContextRef.current === contextKey
-                && currentAddressIdRef.current === addressId
-            ) {
-                setLabelError('Could not save the address label. Try again.');
-            }
-        } finally {
-            if (labelRequestRef.current === request) setLabelSave(null);
-        }
-    }, [address?.id, labelDraftValue, labelSaving, messaging, receiveContextKey]);
-
-    const onLabelKeyDown = useCallback((event) => {
-        if (event.key === 'Enter') {
-            event.preventDefault();
-            saveAddressLabel();
-        } else if (event.key === 'Escape') {
-            event.preventDefault();
-            setLabelDraft({ addressId: address?.id || null, value: address?.label || '' });
-            setLabelError(null);
-        }
-    }, [address?.id, address?.label, saveAddressLabel]);
 
     // QR image actions. Copy writes the rendered PNG when the clipboard can
     // accept images. Share always offers the payment request, and attaches
@@ -1150,6 +1076,32 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             />
         );
     }
+    // The Token field opens the shared TokenPicker for the shown
+    // address's network only (its coin or any token on it); changing chain is
+    // the address picker's job.
+    if (tokenPickerOpen && activeChainId) {
+        return (
+            <TokenPicker
+                purpose="receive"
+                walletId={walletId}
+                accountId={accountId}
+                chainIdFilter={activeChainId}
+                networkFilter={coinFromChainId(activeChainId)}
+                // A picker of the coin and its tokens is titled Asset.
+                title={t('send.asset')}
+                onSelect={(sel) => {
+                    if (sel?.chainId === activeChainId && sel?.tick) {
+                        setTokenPick({ chainId: sel.chainId, tick: String(sel.tick), divisibility: sel.divisibility ?? null });
+                        setReqAmount('');
+                        setFiatAmount('');
+                        setAmountError(null);
+                    }
+                    setTokenPickerOpen(false);
+                }}
+                onBack={() => setTokenPickerOpen(false)}
+            />
+        );
+    }
     if (addAddressOpen) {
         return (
             <AddAddressModal
@@ -1187,7 +1139,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 icon={<Icon.CopyIcon />}
                 aria-label={canCopyImages ? t('receive.copyQrCode') : t('receive.copyPaymentLink')}
             >
-                {t('receive.copyQr')}
+                {/* Short labels so four buttons fit one row at 360px. */}
+                {t('common.copy')}
             </Button>
             <Button
                 size="md"
@@ -1197,7 +1150,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 icon={<Icon.UploadIcon />}
                 aria-label={t('receive.shareQrPaymentLink')}
             >
-                {t('receive.shareQr')}
+                {t('multisig.signingLink.share')}
             </Button>
             {addressExplorerUrl ? (
                 <a
@@ -1207,7 +1160,10 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     rel="noopener noreferrer"
                     aria-label={t('receive.viewAddressInBlockExplorer')}
                 >
-                    {t('receive.explorer')} <span aria-hidden="true">↗</span>
+                    {/* The same icon and label spans as Button, so the link
+                        matches the other three. */}
+                    <span className={buttonStyles.icon} aria-hidden="true"><Icon.ExternalLinkIcon /></span>
+                    <span className={buttonStyles.label}>{t('receive.explore')}</span>
                 </a>
             ) : null}
             {generateAddressButton}
@@ -1243,21 +1199,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 />
             ) : null}
 
-            {offeredTypes.length > 1 ? (
-                <Select
-                    size="md"
-                    label={t('receive.addressType')}
-                    help={t('receive.addressTypeHelp')}
-                    value={addressType}
-                    onChange={(event) => changeAddressType(event.target.value)}
-                    disabled={generating || !addressType}
-                >
-                    {offeredTypes.map((type) => (
-                        <option key={type} value={type}>{addressTypeLabel(type)}</option>
-                    ))}
-                </Select>
-            ) : null}
-
+            {/* No Address type select; Receive uses the wallet's default
+                type (the newest address's type, else the chain default). */}
             {!hasReceiveAddress && descriptor && addressType && !generating && !generateError ? (
                 <FormNotice variant="status">
                     {`${t('receive.thereIsNo')} ${addressTypeLabel(addressType)} ${t('receive.addressYetCreateOneTo')}`}
@@ -1287,87 +1230,35 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     </div>
                     <AddressField
                         size="md"
-                        // The visible label is the accessible name; the hint says a tap
-                        // copies the address. A name about a payment link went stale when
-                        // the tap stopped copying one.
-                        label={address.label || t('verifySignature.address')}
+                        // Receive shows only what the user can change: the plain
+                        // Address label (never the address's own name), no help tip
+                        // and no tooltip. A tap still copies the address quietly; the
+                        // list icon is the one way to change the address and its chain.
+                        label={t('verifySignature.address')}
                         icon="addresses"
                         value={address.address}
                         readOnly
                         onChange={() => {}}
                         onClick={copyAddress}
                         onKeyDown={onAddressKeyDown}
-                        title={t('receive.tapToCopyAddress')}
-                        help={t('receive.tapTheAddressToCopy')}
                         style={{ cursor: 'text', userSelect: 'text' }}
-                        wrapReadOnlyAddress
+                        // No wrapReadOnlyAddress, so the field is the standard
+                        // one-line size of every other form's address field.
                         onIconClick={() => setAddressPickerOpen(true)}
                         iconLabel={t('receive.chooseReceiveAddress')}
                         data-testid="receive-address"
                     />
-                    {qrActionsContent}
-                </div>
-            ) : null}
-
-            {!hasReceiveAddress && generateAddressButton ? (
-                <div className={styles.generateAddressAction}>{generateAddressButton}</div>
-            ) : null}
-
-            {hasReceiveAddress && address.id ? (
-                <div className={styles.labelEditor}>
-                    <Input
-                        size="md"
-                        label={t('receive.addressLabel')}
-                        help={t('receive.addressLabelHelp')}
-                        value={labelDraftValue}
-                        onChange={(event) => setLabelDraft({
-                            addressId: address.id,
-                            value: event.target.value,
-                        })}
-                        onKeyDown={onLabelKeyDown}
-                        placeholder={t('receive.addALabel')}
-                        maxLength={REQUEST_LABEL_MAX}
-                        autoComplete="off"
-                        error={labelError || undefined}
+                    <TokenField
+                        // The native coin or a token, so the field is Asset.
+                        label={t('send.asset')}
+                        placeholder={t('send.selectAsset')}
+                        value={activeChainId ? { chainId: activeChainId, tick: reqTick || nativeTicker || '' } : null}
+                        onOpenPicker={() => setTokenPickerOpen(true)}
                     />
-                    <Button
-                        size="md"
-                        type="button"
-                        variant="secondary"
-                        loading={labelSaving}
-                        disabled={labelSaving || labelDraftValue.trim() === (address.label || '')}
-                        onClick={saveAddressLabel}
-                    >
-                        {t('receive.saveLabel')}
-                    </Button>
-                </div>
-            ) : null}
-
-            {descriptor ? (() => {
-                const prefillTickUpper = prefill?.tick ? prefill.tick.toUpperCase() : '';
-                const isTokenSelection = !!prefillTickUpper
-                    && nativeTicker
-                    && prefillTickUpper !== nativeTicker;
-                const selectedTick = isTokenSelection ? prefillTickUpper : (nativeTicker || '');
-                return (
-                    <Button
-                        variant="link"
-                        size="lg"
-                        className={styles.assetCard}
-                        onClick={onChangeAsset || onBack}
-                        // Icon-only control: the accessible name carries the chain the icon overlay shows.
-                        aria-label={t('receive.changeAssetCurrentlyOn', { selectedTick, displayName: descriptor.displayName })}
-                    >
-                        <TickerIcon chainId={descriptor.id} tick={selectedTick} size={48} />
-                    </Button>
-                );
-            })() : null}
-
-            {hasReceiveAddress ? (
-                <>
                     <div className={styles.amountEditor}>
                         <AmountField
                             size="md"
+                            optional
                             amount={reqAmount}
                             fiatAmount={fiatAmount}
                             tick={reqTick.trim() || nativeTicker || ''}
@@ -1382,6 +1273,18 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                             help={t('receive.amountHelp')}
                         />
                     </div>
+                    {qrActionsContent}
+                </div>
+            ) : null}
+
+            {!hasReceiveAddress && generateAddressButton ? (
+                <div className={styles.generateAddressAction}>{generateAddressButton}</div>
+            ) : null}
+
+            {/* No Address label editor (labels are not edited on
+                Receive) and no chain icon button (the Token field covers it). */}
+            {hasReceiveAddress ? (
+                <>
                     {isHwAddress ? (
                         <section
                             role="group"

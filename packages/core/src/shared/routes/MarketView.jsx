@@ -8,21 +8,31 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useId, useMemo, useState } from 'react';
-import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, SegmentedControl, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/market.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/settings.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { MarketChart } from '../components/MarketChart.jsx';
 import { OrderbookPanel } from '../components/OrderbookPanel.jsx';
 import { RecentTradesPanel } from '../components/RecentTradesPanel.jsx';
-import { PlaceOrderPanel } from '../components/PlaceOrderPanel.jsx';
 import { OpenOrdersPanel } from '../components/OpenOrdersPanel.jsx';
 import { TradeHistoryPanel } from '../components/TradeHistoryPanel.jsx';
+import { BuyGlyph, SellGlyph } from '../components/marketTradeParts.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { RouteErrorBoundary } from '../components/RouteErrorBoundary.jsx';
 import { PageLoadFailureScope, andList, usePageLoadFailures } from '../components/pageLoadFailures.jsx';
+// The Token detail page's blue card with the price chart behind it,
+// built from the same pieces (hero, chart-behind styles, Sparkline, range tabs).
+import { Sparkline } from '../components/Sparkline.jsx';
+import { BEHIND_CHART_FILL, BEHIND_CHART_STROKE, ChartRangeTabs, RANGES as CHART_RANGES, defaultRangeId } from '../components/PortfolioChart.jsx';
+import portfolioChartStyles from '../components/PortfolioChart.module.css';
+import heroStyles from '../components/TotalBalanceHero.module.css';
+import homeTabsStyles from '../components/HomeTabs.module.css';
+import { bucketizeMatches } from '../../market/bucketize.js';
+import { MarketTrade } from './MarketTrade.jsx';
 import { sampleMatchesFor } from '../../market/sampleMarketData.js';
 import { normalizeMarketHistoryRowExact } from '../../market/history_rows.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
@@ -35,30 +45,16 @@ import {
     subtractDecimalStrings,
     sumDecimalStrings,
 } from '../utils/amountFormat.js';
-import styles from './IssueTokenForm.module.css';
 import receivePickerStyles from './TokenPicker.module.css';
+import styles from './MarketView.module.css';
 
 /**
  * Market view (§41.3). Trading surface for a single market.
  *
- * Four panels laid out in the spec's ASCII mock:
- *
- *   ┌──────────────────┬──────────────────────────┬──────────────────┐
- *   │   Chart (§41.3.1)│   Orderbook (§41.3.2)    │  Trades (§41.3.3)│
- *   ├──────────────────┴──────────────────────────┴──────────────────┤
- *   │   Place order + My open orders (§41.3.4 + §41.3.5)             │
- *   └────────────────────────────────────────────────────────────────┘
- *
- * Each panel lands as its own component in subsequent steps (this is
- * the Step 2 shell). Live data comes in per-step; for now the header
- * renders the market-summary line (last price / 24h change / depth)
- * pulled from `messaging.getMarket` so the scaffold demonstrates the
- * end-to-end passthrough without waiting for the charting libs.
- *
- * Popup vs full variant:
- *   - `full` (extension full-screen, web, desktop): four-panel grid.
- *   - `popup`: stacks panels vertically; the popup form-factor is
- *     too narrow for a trading grid, but all panels remain reachable.
+ * Top to bottom: the blue card (pair, last price, range move, 24h figures, chart behind it
+ * with range, star and reverse-pair buttons), full-width Buy and Sell buttons, then the
+ * Book, Trades and My orders tabs. Buy, Sell and a tapped book price open the Trade page
+ * (route `market-trade`, MarketTrade.jsx), where the order form lives.
  *
  * @param {object} props
  * @param {string} props.walletId
@@ -67,11 +63,16 @@ import receivePickerStyles from './TokenPicker.module.css';
  * @param {string} props.tick2
  * @param {() => void} props.onBack
  * @param {() => void} [props.onSwap] renders the reverse-pair control; reopens the market with tick1/tick2 flipped
+ * @param {(trade: { side: 'buy' | 'sell', mode: 'swap' | 'market', price?: string, pick?: number }) => void} [props.onTrade]
+ *   Opens the Trade page route (web, desktop and the extension popup route it).
+ *   A host that leaves it out (an embedded Market view) opens the page in place here.
  */
-export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) {
+export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap, onTrade }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const tabsId = useId();
+    const captionId = useId();
+    const chartPanelId = useId();
     // Demo wallets get sample feeds so the trading surface is fully
     // populated without live liquidity. Real wallets show live data and
     // the panels' own empty states, never fabricated prices/trades.
@@ -80,14 +81,13 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
     const [summaryLoading, setSummaryLoading] = useState(true);
     const [summaryError, setSummaryError] = useState(/** @type {string | null} */ (null));
     const [marketMissing, setMarketMissing] = useState(false);
-    // A book row pick carries a count, so picking the same price again after
-    // editing it fills the field again.
-    const [prefill, setPrefill] = useState(/** @type {{ price: string, pick: number } | null} */ (null));
-    // The Place panel mounts on its first visit and then stays mounted, so a
-    // look at another tab keeps the typed order; a new pair remounts it by key.
-    const [placeOpened, setPlaceOpened] = useState(false);
-    const prefillPrice = prefill?.price ?? null;
-    const [tab, setTab] = useState(/** @type {'book' | 'trades' | 'place' | 'orders' | 'history'} */ ('book'));
+    // A book pick carries a count, so picking the same price again
+    // after editing it fills the field again on the Trade page.
+    const pickRef = useRef(0);
+    const [tab, setTab] = useState(/** @type {'book' | 'trades' | 'orders'} */ ('book'));
+    const [ordersView, setOrdersView] = useState(/** @type {'open' | 'filled'} */ ('open'));
+    // The Trade page shown in place, for a shell with no route for it.
+    const [localTrade, setLocalTrade] = useState(/** @type {any} */ (null));
     // The market, price and order-book loads share one page error and one reload.
     const loadFailures = usePageLoadFailures();
     const [reloadKey, setReloadKey] = useState(0);
@@ -114,11 +114,12 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
     }, [messaging, chainId, tick1, tick2, reloadKey]);
 
     useEffect(() => {
-        setPrefill(null);
+        setLocalTrade(null);
     }, [chainId, tick1, tick2]);
-    const openTab = (id) => {
-        if (id === 'place') setPlaceOpened(true);
-        setTab(id);
+
+    const openTrade = (trade) => {
+        if (typeof onTrade === 'function') onTrade(trade);
+        else setLocalTrade(trade);
     };
 
     // Header 24h stats (last / change / high / low / volume) derive from
@@ -150,11 +151,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
     const lastPrice = stats.lastPrice;
     const priceIsStale = stats.lastTimestamp !== null
         && stats.lastTimestamp < Math.floor(Date.now() / 1000) - 86400;
-    const changePct = stats.changePct;
-    const changeDisplay = percentChangeDisplay(changePct);
-    const changeColor = changeDisplay?.direction === 'positive'
-        ? 'var(--xc-success)'
-        : changeDisplay?.direction === 'negative' ? 'var(--xc-danger-fg)' : 'var(--xc-text-muted)';
+    const changeDisplay = percentChangeDisplay(stats.changePct);
     const marketKey = `${chainId}:${tick1}:${tick2}`;
     const panelKey = `${marketKey}:${reloadKey}`;
     const { report: reportFailure } = loadFailures;
@@ -164,6 +161,60 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
     }, [reportFailure, summaryError, historyError]);
     const failedLoads = LOAD_ORDER.filter((label) => loadFailures.failed.includes(label));
 
+    // The chart behind the card plots the trade history's closing
+    // prices over the selected range, and the card's pill shows that range's move.
+    const [rangeId, setRangeId] = useState(defaultRangeId());
+    const range = MARKET_RANGES.find((r) => r.id === rangeId) || MARKET_RANGES[1];
+    const series = useMemo(() => rangeSeries(historyRows, tick1, tick2, range), [historyRows, tick1, tick2, range]);
+    const rangeMove = useMemo(() => seriesMove(series), [series]);
+
+    // The card's star is the Markets list's watchlist star.
+    const canStar = typeof messaging.listWatchlistForWallet === 'function'
+        && typeof messaging.saveWatchlistEntry === 'function'
+        && typeof messaging.clearWatchlistEntry === 'function';
+    const [starEntries, setStarEntries] = useState(/** @type {any[]} */ ([]));
+    const [starBusy, setStarBusy] = useState(false);
+    const loadStars = useCallback(async () => {
+        if (!canStar) return;
+        try {
+            const rows = await messaging.listWatchlistForWallet({ walletId });
+            setStarEntries((Array.isArray(rows) ? rows : []).filter(
+                (e) => e.chainId === chainId && e.tick1 === tick1 && e.tick2 === tick2,
+            ));
+        } catch { /* keep the star as it was; a failed read says nothing about it */ }
+    }, [canStar, messaging, walletId, chainId, tick1, tick2]);
+    useEffect(() => { loadStars(); }, [loadStars]);
+    const starred = starEntries.length > 0;
+    const toggleStar = async () => {
+        if (starBusy) return;
+        setStarBusy(true);
+        try {
+            if (starred) {
+                for (const e of starEntries) await messaging.clearWatchlistEntry({ id: e.id });
+            } else {
+                await messaging.saveWatchlistEntry({ walletId, chainId, tick1, tick2 });
+            }
+            await loadStars();
+        } catch { /* the star shows the stored state on the next read */ }
+        finally { setStarBusy(false); }
+    };
+
+    if (localTrade) {
+        return (
+            <MarketTrade
+                walletId={walletId}
+                chainId={chainId}
+                tick1={tick1}
+                tick2={tick2}
+                side={localTrade.side}
+                mode={localTrade.mode}
+                price={localTrade.price ?? null}
+                pick={localTrade.pick}
+                onBack={() => setLocalTrade(null)}
+            />
+        );
+    }
+
     const header = (
         <PageHeader
             onBack={onBack}
@@ -172,7 +223,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            <ListPage>
+            <ListPage className={styles.page}>
                 {failedLoads.length > 0 ? (
                     <StatusMessage
                         variant="error"
@@ -186,83 +237,104 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
         </Screen>
     );
 
+    const pillClass = rangeMove?.direction === 'positive'
+        ? heroStyles.changePositive
+        : rangeMove?.direction === 'negative' ? heroStyles.changeNegative : heroStyles.changeNeutral;
     const headerCard = (
-        <div style={{
-            background: 'var(--xc-card-bg)',
-            border: 'var(--xc-card-border)',
-            borderRadius: 'var(--xc-card-radius)',
-            padding: 'var(--xc-card-pad)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--xc-space-2)',
-        }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)' }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-                    <TickerIcon chainId={chainId} tick={tick1} size={32} />
-                    <TickerIcon chainId={chainId} tick={tick2} size={32} />
-                </span>
-                <span style={{ flex: 1, fontSize: 'var(--xc-text-md)', fontWeight: 700, color: 'var(--xc-text)' }}>
-                    {tick1} <span style={{ color: 'var(--xc-text-muted)', fontWeight: 500 }}>/</span> {tick2}
-                </span>
-                {typeof onSwap === 'function' ? (
-                    <Button
-                        type="button"
-                        icon={<Icon.SwapIcon />}
-                        onClick={() => {
-                            setPrefill(null);
-                            onSwap();
-                        }}
-                        aria-label={t('market.reversePair', { pair: `${tick2}/${tick1}` })}
-                        title={t('market.reverseTitle', { pair: `${tick2}/${tick1}` })}
-                        style={{
-                            appearance: 'none',
-                            background: 'var(--xc-surface-raised)',
-                            border: '1px solid var(--xc-border)',
-                            borderRadius: '50%',
-                            // The button's own inline padding left no room
-                            // for the icon inside 32px, so it drew an empty
-                            // circle; square and unpadded, the icon shows.
-                            width: 36,
-                            minWidth: 36,
-                            height: 36,
-                            padding: 0,
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: 'var(--xc-text)',
-                            cursor: 'pointer',
-                            flex: '0 0 auto',
-                        }}
-                    />
-                ) : null}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 'var(--xc-space-2)' }}>
-                <span style={{ fontSize: 'var(--xc-text-lg)', fontWeight: 700, color: 'var(--xc-text)' }}>
-                    {formatPrice(lastPrice)} <span style={{ fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)', fontWeight: 500 }}>{tick2}</span>
-                </span>
-                {changeDisplay ? (
-                    <span
-                        aria-label={t('market.change24hLabel', { change: changeDisplay.label })}
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 'var(--xc-text-sm)', fontWeight: 600, color: changeColor }}
-                    >
-                        {changeDisplay.text}
-                        {changeDisplay.direction !== 'neutral' ? (
-                            <span aria-hidden="true" style={{ fontSize: '0.8em', lineHeight: 1 }}>
-                                {changeDisplay.direction === 'positive' ? '▲' : '▼'}
-                            </span>
-                        ) : null}
+        <div className={`${homeTabsStyles.heroStack} ${homeTabsStyles.heroStackWithChart}`}>
+            <section className={heroStyles.hero} aria-labelledby={captionId}>
+                <div className={`${heroStyles.row} ${heroStyles.rowWithActions}`}>
+                    <span id={captionId} className={`${heroStyles.label} ${heroStyles.walletLabel} ${styles.caption}`}>
+                        <span className={styles.pairIcons} aria-hidden="true">
+                            <TickerIcon chainId={chainId} tick={tick1} size={28} />
+                            <TickerIcon chainId={chainId} tick={tick2} size={28} />
+                        </span>
+                        <span className={styles.captionText}>{tick1} / {tick2}</span>
                     </span>
-                ) : null}
-            </div>
-            <div style={{ height: 1, background: 'var(--xc-border)' }} />
-            <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 'var(--xc-space-3)', rowGap: 2, fontSize: 'var(--xc-text-xs)' }}>
-                <dt style={{ color: 'var(--xc-text-muted)' }}>{t('market.stats.high24h')}</dt>
-                <dd style={{ margin: 0, color: 'var(--xc-text)' }}>{formatPrice(stats.high)} {tick2}</dd>
-                <dt style={{ color: 'var(--xc-text-muted)' }}>{t('market.stats.low24h')}</dt>
-                <dd style={{ margin: 0, color: 'var(--xc-text)' }}>{formatPrice(stats.low)} {tick2}</dd>
-                <dt style={{ color: 'var(--xc-text-muted)' }}>{t('market.stats.volume24h')}</dt>
-                <dd style={{ margin: 0, color: 'var(--xc-text)' }}>{formatVolume(stats.volume)} {tick1}</dd>
-            </dl>
+                    <div className={heroStyles.amount} aria-label={`${formatPrice(lastPrice)} ${tick2}`}>
+                        <span className={heroStyles.amountValue}>{formatPrice(lastPrice)}</span>
+                        <span className={heroStyles.amountCode}>{tick2}</span>
+                    </div>
+                    <div className={`${heroStyles.actions} ${heroStyles.inlineActions}`}>
+                        {canStar ? (
+                            <Button
+                                type="button"
+                                className={heroStyles.eye}
+                                onClick={toggleStar}
+                                disabled={starBusy}
+                                aria-pressed={starred ? 'true' : 'false'}
+                                aria-label={starred ? t('market.removeFromWatchlist') : t('market.addToWatchlist')}
+                                title={starred ? t('market.removeFromWatchlist') : t('market.addToWatchlist')}
+                                icon={<StarGlyph filled={starred} />}
+                            >
+                                {null}
+                            </Button>
+                        ) : null}
+                        {typeof onSwap === 'function' ? (
+                            <Button
+                                type="button"
+                                className={heroStyles.eye}
+                                icon={<Icon.SwapIcon />}
+                                onClick={onSwap}
+                                aria-label={t('market.reversePair', { pair: `${tick2}/${tick1}` })}
+                                title={t('market.reverseTitle', { pair: `${tick2}/${tick1}` })}
+                            >
+                                {null}
+                            </Button>
+                        ) : null}
+                    </div>
+                </div>
+                <div className={heroStyles.meta}>
+                    <span className={heroStyles.metaLeft}>
+                        {rangeMove ? (
+                            <span className={pillClass} aria-label={t('market.rangeChangeLabel', { range: range.label, change: rangeMove.label })}>
+                                {rangeMove.text}
+                            </span>
+                        ) : (
+                            <span className={`${heroStyles.hiddenChange} ${styles.pillIdle}`} aria-hidden="true">••••</span>
+                        )}
+                    </span>
+                </div>
+                {/* The 24h figures the old summary card listed, on one line. */}
+                <p className={styles.heroStats}>
+                    <span>{t('market.stats.high24h')} {formatPrice(stats.high)}</span>
+                    <span>{t('market.stats.low24h')} {formatPrice(stats.low)}</span>
+                    <span>{t('market.stats.volume24h')} {formatVolume(stats.volume)} {tick1}</span>
+                    {changeDisplay ? (
+                        <span aria-label={t('market.change24hLabel', { change: changeDisplay.label })}>{t('market.change24hShort', { change: changeDisplay.text })}</span>
+                    ) : null}
+                </p>
+            </section>
+            <section
+                className={`${portfolioChartStyles.wrap} ${portfolioChartStyles.behind}`}
+                data-chart-behind="true"
+                aria-label={t('market.priceChartLabel', { pair: `${tick1}/${tick2}` })}
+            >
+                <div id={chartPanelId} role="tabpanel" aria-labelledby={`${chartPanelId}-tab-${range.id}`}>
+                    <div className={portfolioChartStyles.slot}>
+                        {series ? (
+                            <div className={portfolioChartStyles.chart}>
+                                <Sparkline
+                                    series={series}
+                                    height="100%"
+                                    strokeColor={BEHIND_CHART_STROKE}
+                                    areaFill={BEHIND_CHART_FILL}
+                                    edgeToEdge
+                                    rangeLabel={range.label}
+                                    label={t('market.priceLabel', { pair: `${tick1}/${tick2}` })}
+                                    formatValue={(value) => `${formatPrice(String(value))} ${tick2}`}
+                                />
+                            </div>
+                        ) : null}
+                    </div>
+                </div>
+                <ChartRangeTabs
+                    panelId={chartPanelId}
+                    ranges={MARKET_RANGES}
+                    rangeId={range.id}
+                    onSelect={setRangeId}
+                />
+            </section>
         </div>
     );
 
@@ -276,19 +348,20 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
     }
 
     return wrap(
-        <>
-            {/* The page's own gap spaces the summary, chart, panel tabs and
-                panel; a stale or failed-price notice under the summary card
-                takes the same gap inside this region. */}
+        <div className={styles.layout}>
+            {/* Two columns on a wide screen (card and Buy / Sell on the left, the tabs and
+                their panel on the right), one column otherwise. A stale or failed-price
+                notice under the card takes the column's gap. */}
+            <div className={styles.column}>
             <div
                 role="region"
                 aria-label={t('market.summary')}
                 aria-busy={summaryLoading || undefined}
-                style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-3)' }}
+                className={styles.summary}
             >
                 {summaryLoading ? (
                     <div role="status" aria-label={t('market.loading')}>
-                        <Skeleton height={159} />
+                        <Skeleton height={190} />
                     </div>
                 ) : (
                     <>
@@ -309,24 +382,42 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                 )}
             </div>
 
-            <div>
-                <RouteErrorBoundary variant="compact" resetKey={`${marketKey}:chart`}>
-                    <MarketChart key={panelKey} chainId={chainId} tick1={tick1} tick2={tick2} demo={demo} />
-                </RouteErrorBoundary>
+            {/* Buy and Sell open the Trade page on that side. */}
+            <div className={styles.tradeButtons}>
+                <Button
+                    type="button"
+                    variant="success"
+                    block
+                    icon={<BuyGlyph />}
+                    className={styles.tradeButton}
+                    onClick={() => openTrade({ side: 'buy', mode: 'swap' })}
+                >
+                    {t('components.placeOrderPanel.buy')}
+                </Button>
+                <Button
+                    type="button"
+                    variant="danger"
+                    block
+                    icon={<SellGlyph />}
+                    className={styles.tradeButton}
+                    onClick={() => openTrade({ side: 'sell', mode: 'swap' })}
+                >
+                    {t('components.placeOrderPanel.sell')}
+                </Button>
+            </div>
             </div>
 
+            <div className={styles.column}>
             <div
-                className={receivePickerStyles.kindSegments}
+                className={`${receivePickerStyles.kindSegments} ${styles.panelTabs}`}
                 role="tablist"
                 aria-label={t('market.panels')}
                 style={{ width: '100%' }}
             >
                 {[
-                    { id: 'book',    label: 'Book',    icon: <Icon.BookIcon /> },
-                    { id: 'trades',  label: 'Trades',  icon: <Icon.SwapIcon /> },
-                    { id: 'place',   label: 'Place',   icon: <Icon.PlusIcon /> },
-                    { id: 'orders',  label: 'Orders',  icon: <Icon.MarketIcon /> },
-                    { id: 'history', label: 'History', icon: <Icon.HistoryIcon /> },
+                    { id: 'book',   label: 'Book',      icon: <Icon.BookIcon /> },
+                    { id: 'trades', label: 'Trades',    icon: <Icon.SwapIcon /> },
+                    { id: 'orders', label: 'My Orders', icon: <Icon.TokenListIcon /> },
                 ].map((opt) => {
                     const active = tab === opt.id;
                     return (
@@ -340,7 +431,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                             tabIndex={active ? 0 : -1}
                             className={`${receivePickerStyles.kindSegment} ${active ? receivePickerStyles.kindSegmentActive : ''}`}
                             style={{ flex: 1 }}
-                            onClick={() => openTab(opt.id)}
+                            onClick={() => setTab(/** @type {any} */ (opt.id))}
                             icon={opt.icon}
                         >
                             {opt.label}
@@ -353,6 +444,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                 id={`${tabsId}-panel`}
                 role="tabpanel"
                 aria-labelledby={`${tabsId}-tab-${tab}`}
+                className={styles.panel}
             >
                 <RouteErrorBoundary variant="compact" resetKey={`${marketKey}:${tab}`}>
                     {tab === 'book' ? (
@@ -362,9 +454,14 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                             tick1={tick1}
                             tick2={tick2}
                             demo={demo}
-                            onPickPrice={(price) => {
-                                setPrefill((last) => ({ price, pick: (last?.pick ?? 0) + 1 }));
-                                openTab('place');
+                            layout="split"
+                            lastPrice={lastPrice}
+                            lastDirection={changeDisplay?.direction ?? 'neutral'}
+                            onPickPrice={(price, side) => {
+                                // A tapped ask buys at it and a tapped bid
+                                // sells into it, as a Limit order at that price.
+                                pickRef.current += 1;
+                                openTrade({ side: side === 'bid' ? 'sell' : 'buy', mode: 'market', price, pick: pickRef.current });
                             }}
                         />
                     ) : null}
@@ -372,46 +469,105 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                         <RecentTradesPanel key={panelKey} chainId={chainId} tick1={tick1} tick2={tick2} demo={demo} />
                     ) : null}
                     {tab === 'orders' ? (
-                        <OpenOrdersPanel
-                            key={marketKey}
-                            walletId={walletId}
-                            chainId={chainId}
-                            tick1={tick1}
-                            tick2={tick2}
-                        />
-                    ) : null}
-                    {tab === 'history' ? (
-                        <TradeHistoryPanel
-                            key={marketKey}
-                            walletId={walletId}
-                            chainId={chainId}
-                            tick1={tick1}
-                            tick2={tick2}
-                        />
+                        <>
+                            {/* Open | Filled sits right above the list it switches. */}
+                            <SegmentedControl
+                                className={styles.ordersSwitch}
+                                aria-label={t('market.myOrders')}
+                                value={ordersView}
+                                onChange={setOrdersView}
+                                items={[
+                                    { id: 'open', label: <span className={styles.segLabel}><Icon.ClockIcon />{t('settings.developer.open')}</span> },
+                                    { id: 'filled', label: <span className={styles.segLabel}><Icon.CheckIcon />{t('components.openOrdersPanel.filled')}</span> },
+                                ]}
+                            />
+                            {ordersView === 'open' ? (
+                                <OpenOrdersPanel
+                                    key={marketKey}
+                                    walletId={walletId}
+                                    chainId={chainId}
+                                    tick1={tick1}
+                                    tick2={tick2}
+                                />
+                            ) : (
+                                <TradeHistoryPanel
+                                    key={marketKey}
+                                    walletId={walletId}
+                                    chainId={chainId}
+                                    tick1={tick1}
+                                    tick2={tick2}
+                                />
+                            )}
+                        </>
                     ) : null}
                 </RouteErrorBoundary>
-                {placeOpened ? (
-                    <div hidden={tab !== 'place'}>
-                        <RouteErrorBoundary variant="compact" resetKey={`${marketKey}:place`}>
-                            <PlaceOrderPanel
-                                key={marketKey}
-                                walletId={walletId}
-                                chainId={chainId}
-                                tick1={tick1}
-                                tick2={tick2}
-                                prefillPrice={prefillPrice}
-                                prefillPick={prefill?.pick}
-                            />
-                        </RouteErrorBoundary>
-                    </div>
-                ) : null}
             </div>
-        </>,
+            </div>
+        </div>,
     );
 }
 
 // The order the page error names what could not load.
 const LOAD_ORDER = ['market details', 'prices', 'order book', 'recent trades'];
+
+// The card's range buttons, each with the window it plots and the
+// bucket its closes are taken at. YTD is left out.
+const RANGE_WINDOWS = {
+    '24h': { window: 86400, bucket: 3600 },
+    '1w': { window: 7 * 86400, bucket: 4 * 3600 },
+    '1m': { window: 30 * 86400, bucket: 86400 },
+    '3m': { window: 90 * 86400, bucket: 86400 },
+    '6m': { window: 180 * 86400, bucket: 2 * 86400 },
+    '1y': { window: 365 * 86400, bucket: 7 * 86400 },
+    all: { window: Infinity, bucket: 7 * 86400 },
+};
+const MARKET_RANGES = CHART_RANGES.filter((r) => RANGE_WINDOWS[r.id]);
+
+/**
+ * Closing prices over the range. A range with fewer than two
+ * buckets starts from the close before it, so a quiet market still draws a
+ * line from its last trade. Null with no trades at all.
+ */
+function rangeSeries(rows, tick1, tick2, range) {
+    const spec = RANGE_WINDOWS[range.id];
+    if (!spec) return null;
+    const candles = bucketizeMatches(rows, { tick1, tick2, periodSeconds: spec.bucket });
+    if (candles.length === 0) return null;
+    const since = Math.floor(Date.now() / 1000) - spec.window;
+    const inside = candles.filter((c) => c.time >= since).map((c) => c.close);
+    const before = candles.filter((c) => c.time < since);
+    const lead = before.length > 0 ? [before[before.length - 1].close] : [];
+    const out = inside.length >= 2 ? inside : [...lead, ...inside];
+    if (out.length === 0) return null;
+    return out.length === 1 ? [out[0], out[0]] : out;
+}
+
+/** First-to-last move of the plotted series, as the card's pill text. */
+function seriesMove(series) {
+    if (!Array.isArray(series) || series.length < 2) return null;
+    const first = series[0];
+    const last = series[series.length - 1];
+    if (!(first > 0) || !Number.isFinite(last)) return null;
+    const pct = ((last - first) / first) * 100;
+    const display = percentChangeDisplay(pct);
+    if (!display) return null;
+    const diff = Math.abs(last - first);
+    const arrow = display.direction === 'positive' ? '▲ ' : display.direction === 'negative' ? '▼ ' : '';
+    return {
+        direction: display.direction,
+        label: display.label,
+        text: `${arrow}${formatPrice(diff.toFixed(12))} (${display.text})`,
+    };
+}
+
+// The watchlist star (outline, or filled when starred).
+function StarGlyph({ filled }) {
+    return (
+        <svg viewBox="0 0 24 24" width="1em" height="1em" fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinejoin="round" aria-hidden="true" focusable="false">
+            <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9L12 3Z" />
+        </svg>
+    );
+}
 
 /** Normalize the explorer's getMarketHistory response into a row array. */
 function extractHistoryRows(resp) {

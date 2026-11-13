@@ -120,7 +120,7 @@ const WIPE_COPY = {
             + ' you can import your wallet again. It changes nothing on'
             + ' the blockchain. Without your recovery phrase it cannot be'
             + ' undone.',
-        button: 'Remove damaged data',
+        button: 'Remove Damaged Data',
         failed: 'Could not remove the damaged wallet data. Try again, or contact support before clearing anything else.',
     },
     evicted: {
@@ -128,8 +128,8 @@ const WIPE_COPY = {
         note: 'This clears the remaining record of the old wallet on this'
             + ' device so you can import your wallet again from its recovery'
             + ' phrase. It changes nothing on the blockchain. If you would'
-            + ' rather check first whether the data comes back, use Try again.',
-        button: 'Clear and start over',
+            + ' rather check first whether the data comes back, use Try Again.',
+        button: 'Clear and Start Over',
         failed: 'Could not clear the old wallet data. Try again, or contact support before clearing anything else.',
     },
 };
