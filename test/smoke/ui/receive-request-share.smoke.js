@@ -105,10 +105,12 @@ assert.ok(webShare < copyFallback, 'Web Share precedes clipboard fallback');
 
 // --- buttons ---------------------------------------------------------
 
-// The smoke runner reads wallet source with each t() key replaced by its
-// English copy, so the buttons are matched by the label a user reads.
-assert.match(recvSrc, /Copy QR\b/, 'Copy QR button');
-assert.match(recvSrc, /Share QR\b/, 'Share QR button is always offered for a rendered request');
+// The buttons read Copy and Share so four fit one row at 360px; their
+// accessible names say what is copied and shared.
+assert.match(recvSrc, /aria-label=\{canCopyImages \? t\('receive\.copyQrCode'\) : t\('receive\.copyPaymentLink'\)\}/, 'Copy QR button');
+assert.match(recvSrc, /\{t\('common\.copy'\)\}/, 'Copy QR button shows the short Copy label');
+assert.match(recvSrc, /aria-label=\{t\('receive\.shareQrPaymentLink'\)\}/, 'Share QR button is always offered for a rendered request');
+assert.match(recvSrc, /\{t\('multisig\.signingLink\.share'\)\}/, 'Share QR button shows the short Share label');
 assert.doesNotMatch(
     recvSrc,
     /\{canShareFiles \? \(/,
@@ -117,8 +119,10 @@ assert.doesNotMatch(
 
 // --- CSS hooks -------------------------------------------------------
 
-for (const cls of ['qrSurface', 'qr', 'qrActions', 'assetCard']) {
+for (const cls of ['qrSurface', 'qr', 'qrActions']) {
     assert.match(recvCss, new RegExp(`\\.${cls}\\s*\\{`), `CSS hook .${cls}`);
 }
+// The asset picker card went with the retired receive picker.
+assert.doesNotMatch(recvCss, /\.assetCard\b/, 'the retired asset card hook is gone');
 
 console.log('receive-request-share smoke OK');

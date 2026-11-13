@@ -24,14 +24,14 @@ const CONTENT_ACTION_ROUTES = [
     { paletteName: 'Contacts', heading: 'Contacts', actionName: 'Add contact' },
     { paletteName: 'Lists', heading: 'My lists', actionName: 'Create list' },
     { paletteName: 'Dispensers', heading: 'My dispensers', actionName: 'Create dispenser' },
-    { paletteName: 'Messaging', heading: 'Messaging', actionName: 'New conversation' },
+    { paletteName: 'Messaging', heading: 'Messaging', actionName: 'New Conversation' },
     { paletteName: 'History', heading: 'History', actionName: 'Refresh history' },
     { paletteName: 'Addresses', heading: 'Addresses', actionName: 'Add or import address' },
-    { paletteName: 'Staking', heading: 'Staking', actionName: 'New stake' },
+    { paletteName: 'Staking', heading: 'Staking', actionName: 'New Stake' },
     // An empty list offers Create from its empty state and a list with rows offers New from the actions row.
     { paletteName: 'My orders', heading: 'My orders', actionName: /^(Create an order|New order)$/ },
     { paletteName: 'My swaps', heading: 'My swaps', actionName: /^(Create a swap|New swap)$/ },
-    { paletteName: 'Payments due', heading: 'Payments due', actionName: 'Refresh payments' },
+    { paletteName: 'Payments due', heading: 'Payments due', actionName: 'Refresh Payments' },
     // Rename forms name their submit (U63).
     { open: 'wallet-rename', heading: 'Rename wallet', actionName: 'Rename wallet' },
     { open: 'account-rename', heading: 'Rename account', actionName: 'Rename account' },
@@ -59,7 +59,7 @@ async function openRoute(page, route) {
     if (route.open === 'wallet-rename') {
         await openWalletPicker(page);
         await expect(page.getByRole('heading', { level: 1, name: 'Wallets' })).toBeVisible();
-        await page.getByRole('button', { name: 'Manage wallet', exact: true }).click();
+        await page.getByRole('button', { name: 'Manage Wallet', exact: true }).click();
         await expect(page.getByRole('heading', { level: 1, name: 'Wallet details' })).toBeVisible();
         await page.getByRole('main').getByRole('button', { name: 'Rename wallet' }).click();
         return;

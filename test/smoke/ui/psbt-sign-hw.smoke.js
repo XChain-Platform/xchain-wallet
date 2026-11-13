@@ -167,10 +167,15 @@ assert.match(
     /\(isHwSource \? hwStatus !== 'available' : \(!signerReady && password\.length === 0\)\)/,
     'PsbtSignForm gates submit on HW status when HW, password length when software',
 );
+assert.doesNotMatch(
+    formSrc,
+    /Sign on \$\{/,
+    'submit button keeps one label on both paths, with no per-vendor suffix',
+);
 assert.match(
     formSrc,
-    /isHwSource && selectedAddress\s*\?\s*`Sign on \$\{selectedAddress\.source === 'trezor' \? 'Trezor' : 'Ledger'\}`/,
-    'submit button copy switches per HW vendor',
+    /Sign Transaction\s*<\/FormAction>/,
+    'submit button reads Sign Transaction on the hardware path too',
 );
 assert.match(
     formSrc,

@@ -81,7 +81,7 @@ assert.match(
 );
 assert.match(
     aboutSrc,
-    /\{licenseOpen \? 'Hide full text' : 'Show full text'\}/,
+    /\{licenseOpen \? 'Hide Full Text' : 'Show Full Text'\}/,
     'toggle button label flips on licenseOpen',
 );
 assert.match(

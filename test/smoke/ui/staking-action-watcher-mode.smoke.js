@@ -29,5 +29,5 @@ assert.match(formSrc, /const \{ isWatcherMode \} = useWalletMode\(\);/);
 assert.match(formSrc, /const action = isUnstake \? 'UNSTAKE' : 'COLLECT';/);
 assert.match(formSrc, /messaging\.buildActionPsbtRequest\(\{[\s\S]+?action, params: actionParams/);
 assert.match(formSrc, /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<ResultScreen/);
-assert.match(formSrc, /Create unsigned transaction/);
+assert.match(formSrc, /Create Unsigned Transaction/);
 console.log('staking-action-watcher-mode smoke OK');

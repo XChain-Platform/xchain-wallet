@@ -77,7 +77,6 @@ const SETTINGS_SUBPAGES = [
     'Display',
     'Privacy',
     'Safety',
-    'Wallet mode',
     'Backup',
     'Fees',
     'Connected sites',

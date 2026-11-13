@@ -23,7 +23,7 @@
 //     `action.send.psbt`.
 //   - All three messaging shims expose `buildSendPsbtRequest` calling
 //     `action.send.psbt`.
-//   - Send.jsx waits for settings and reads walletMode from that snapshot,
+//   - Send.jsx waits for and reads this wallet's own walletMode (§20),
 //     branches the submit handler to `messaging.buildSendPsbtRequest`,
 //     swaps the password / HW block for an explanatory hint at review,
 //     and renders the shared `<ResultScreen>` in the done stage
@@ -137,8 +137,8 @@ assert.match(
 );
 assert.match(
     sendSrc,
-    /const walletModeReady = settings !== null \|\| !settingsLoading;\s*const isWatcherMode = settings\?\.walletMode === 'watcher';/,
-    'waits for and derives watcher mode from the same settings snapshot',
+    /walletModeKnown: walletModeReady,\s*\} = useWalletMode\(walletId\);/,
+    'waits for and derives watcher mode from this wallet\'s own mode (§20)',
 );
 assert.match(
     sendSrc,

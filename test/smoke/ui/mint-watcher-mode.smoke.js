@@ -63,8 +63,8 @@ assert.match(
 );
 assert.match(
     formSrc,
-    /Create unsigned transaction/,
-    'submit button reads "Create unsigned transaction" in watcher mode',
+    /Create Unsigned Transaction/,
+    'submit button reads "Create Unsigned Transaction" in watcher mode',
 );
 
 console.log('mint-watcher-mode smoke OK');

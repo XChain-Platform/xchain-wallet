@@ -53,7 +53,6 @@ const ROUTE_NAMES = [
     'CreateWallet',
     'CrossChainOrderForm',
     'CrossChainSwapForm',
-    'CrossChainTemplates',
     'DelegateVoteForm',
     'DelegationActionForm',
     'DeployContractForm',

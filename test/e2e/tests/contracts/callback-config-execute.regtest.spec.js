@@ -60,10 +60,11 @@ import {
     REGTEST_COIN,
     expectConfirmModal,
     fundAddress,
+    issuePlainToken,
+    readIssueSource,
     healVenueClock,
     mintXchain,
     nudgeChain,
-    selectVenueChain,
     seedPrices,
     switchToRegtest,
     unlockAfterReload,
@@ -194,8 +195,7 @@ test.describe(`Callback config and execute on ${REGTEST_CHAIN_LABEL}`, () => {
             await openPaletteCommand(page, 'Issue token');
             let main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(main);
-            owner = await main.getByLabel('From').inputValue();
+            owner = await readIssueSource(main);
             expect(owner, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`).toMatch(REGTEST_ADDRESS_RE);
 
             await fundAddress(owner, FUNDING);
@@ -214,11 +214,8 @@ test.describe(`Callback config and execute on ${REGTEST_CHAIN_LABEL}`, () => {
             await openPaletteCommand(page, 'Issue token');
             main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(main);
-            expect(await main.getByLabel('From').inputValue(), 'still signing with the funded address').toBe(owner);
-            await main.getByLabel('Ticker').fill(TICK);
-            await main.getByLabel('Supply', { exact: true }).fill(SUPPLY);
-            await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+            expect(await readIssueSource(main), 'still signing with the funded address').toBe(owner);
+            await issuePlainToken(main, { ticker: TICK, supply: SUPPLY });
 
             await approveConfirm(page, 'the ISSUE');
             const txid = await readDoneTxid(page);
@@ -270,7 +267,7 @@ test.describe(`Callback config and execute on ${REGTEST_CHAIN_LABEL}`, () => {
             // (assetInfo, the indexer watermark), so re-opening from My Tokens
             // is what proves the BLOCK GATE lifted rather than assuming it did.
             const main = await openExecuteCallbackWhenConfigured(page, TICK);
-            const execute = main.getByRole('button', { name: 'Execute callback', exact: true });
+            const execute = main.getByRole('button', { name: 'Execute Callback', exact: true });
             await expect(execute, 'Execute callback never became available (block gate or missing config)')
                 .toBeEnabled({ timeout: 60_000 });
             await execute.click();

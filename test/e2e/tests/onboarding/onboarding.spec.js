@@ -84,7 +84,7 @@ test.describe('onboarding', () => {
 
         // Still on the verification stage; no wallet, no Home.
         await expect(
-            page.getByRole('heading', { name: 'Verify your recovery phrase' }),
+            page.getByRole('heading', { name: 'Verify Your Recovery Phrase' }),
         ).toBeVisible();
         await expect(lockButton(page)).toHaveCount(0);
     });

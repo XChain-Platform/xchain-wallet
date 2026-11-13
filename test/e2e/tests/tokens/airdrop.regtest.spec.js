@@ -82,6 +82,8 @@ import {
     expectConfirmModal as sharedConfirmModal,
     EXPLORER_URL,
     fundAddress,
+    issuePlainToken,
+    readIssueSource,
     minerRpc,
     mintXchain,
     payProtocolFeeInCoin,
@@ -95,6 +97,7 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     REGTEST_CHAIN_ID,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -412,14 +415,11 @@ async function issueToken(page, tick, supply, source) {
     await openPaletteCommand(page, 'Issue token');
     const form = page.getByRole('main');
     await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(form);
-    expect(await form.getByLabel('From', { exact: true }).inputValue(),
+    expect(await readIssueSource(form),
         'the Issue form is not signing with the funded address')
         .toBe(source);
-    await form.getByLabel('Ticker').fill(tick);
-    await form.getByLabel('Supply', { exact: true }).fill(String(supply));
-    const submit = form.getByRole('button', { name: 'Issue token', exact: true });
-    await submit.click();
+    const submit = form.getByRole('button', { name: 'Issue Token', exact: true });
+    await issuePlainToken(form, { ticker: tick, supply });
 
     await expectConfirmModal(page, submit);
     const issued = await waitForIndexedAction(await approveAndGetTxid(page));
@@ -447,9 +447,7 @@ async function onboardAndIssue(page, ticks = [[TICK, SUPPLY]], walletName = 'Air
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(main);
-
-    const source = await main.getByLabel('From', { exact: true }).inputValue();
+    const source = await readIssueSource(main);
     expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
         .toMatch(REGTEST_ADDRESS_RE);
 
@@ -555,7 +553,7 @@ async function publishAddressList(page, source, members) {
     await expect(main.getByLabel('List type')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
     await readChainAddresses(page, source);
-    expect(await main.getByLabel('From', { exact: true }).inputValue(),
+    expect(await (await openFromAddress(main)).inputValue(),
         'the list would be published from an address holding no coin')
         .toBe(source);
 
@@ -565,7 +563,7 @@ async function publishAddressList(page, source, members) {
     await expect(main, `the list form did not accept all ${members.length} addresses for this chain`)
         .toContainText(`${members.length} valid ${plural}`);
 
-    const submit = main.getByRole('button', { name: 'Publish list', exact: true });
+    const submit = main.getByRole('button', { name: 'Publish List', exact: true });
     await submit.click();
     await expectConfirmModal(page, submit);
     const published = await waitForIndexedAction(await approveAndGetTxid(page));
@@ -657,7 +655,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             recipients = others.slice(0, 2);
             [control] = others.slice(2);
 
-            expect(await main.getByLabel('From', { exact: true }).inputValue(),
+            expect(await (await openFromAddress(main)).inputValue(),
                 'the airdrop would be signed by an address that is not the token issuer, so it '
                 + 'would be paid for by an address holding no coin and no supply')
                 .toBe(issuer);
@@ -912,7 +910,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             await pickDropToken(page, DROP_TICK);
             await selectVenueChain(main);
             await readChainAddresses(page, issuer);
-            expect(await main.getByLabel('From', { exact: true }).inputValue(),
+            expect(await (await openFromAddress(main)).inputValue(),
                 'the drop would be signed by an address that is not the issuer')
                 .toBe(issuer);
 

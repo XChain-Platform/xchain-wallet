@@ -53,6 +53,7 @@ import {
     REGTEST_DESTINATION,
     switchToRegtest,
     unlockAfterReload,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -137,7 +138,7 @@ test.describe(`Native-coin send lifecycle on ${REGTEST_CHAIN_LABEL} regtest`, ()
         await test.step(`send ${SEND_AMOUNT} ${COIN} with the chain held still`, async () => {
             await gotoSection(page, 'Send');
             await pickAssetByChainAndTick(page, REGTEST_CHAIN_LABEL, REGTEST_CHAIN_ID, COIN);
-            await expect(page.getByRole('main').getByLabel('From', { exact: true })).toHaveValue(own);
+            await expect(await openFromAddress(page.getByRole('main'))).toHaveValue(own);
             await page.getByLabel('To', { exact: true }).fill(REGTEST_DESTINATION);
             await page.getByRole('textbox', { name: `Amount (${COIN})` }).fill(SEND_AMOUNT);
             await mainButton(page, 'Send').click();

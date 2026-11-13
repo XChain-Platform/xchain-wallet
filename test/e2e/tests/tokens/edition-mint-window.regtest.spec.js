@@ -53,7 +53,7 @@
 //       --config=playwright.regtest.config.js tests/tokens/edition-mint-window.regtest.spec.js
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, openPaletteCommand, submitTokenWizard, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openIssueSection, openPaletteCommand, pickIssuePreset, submitTokenWizard, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
     explorerJson,
@@ -71,6 +71,7 @@ import {
     waitForTokenBalance,
     expectConfirmModal as sharedConfirmModal,
     REGTEST_CHAIN_ID,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -340,7 +341,7 @@ async function composeMint(page, amount, tick = TICK, signAs = null) {
         await expect(row, `the source picker does not offer ${signAs}`)
             .toBeVisible({ timeout: 30_000 });
         await row.click();
-        await expect(page.getByLabel('From', { exact: true })).toHaveValue(signAs, { timeout: 30_000 });
+        await expect(await openFromAddress(page)).toHaveValue(signAs, { timeout: 30_000 });
     }
 
     // The AmountField's balance line, whatever it currently says: it carries the
@@ -368,8 +369,13 @@ async function onboardAndCreateEdition(page, {
     await openPaletteCommand(page, 'Issue token');
     const probe = page.getByRole('main');
     await expect(probe.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    // The network and the signer sit in the From section, closed until opened.
+    await openIssueSection(probe, 'From');
     await selectVenueChain(probe);
-    const source = await probe.getByLabel('From', { exact: true }).inputValue();
+    await expect.poll(async () => probe.getByLabel('From address').inputValue().catch(() => ''),
+        { timeout: 30_000, message: 'the Issue Token form names no signing address' })
+        .toMatch(REGTEST_ADDRESS_RE);
+    const source = await probe.getByLabel('From address').inputValue();
     expect(source, `the wallet has no ${REGTEST_CHAIN_LABEL} address to sign with`)
         .toMatch(REGTEST_ADDRESS_RE);
 
@@ -390,22 +396,28 @@ async function onboardAndCreateEdition(page, {
 
     await openPaletteCommand(page, 'Create a token');
     const main = page.getByRole('main');
-    await main.getByRole('button', { name: /^Limited edition/ }).click();
+    await pickIssuePreset(main, /^Limited edition/);
+    // The network sits in the From section, closed until opened.
+    await openIssueSection(main, 'From');
     await selectVenueChain(main);
-    await main.getByRole('button', { name: 'Next', exact: true }).click();
 
-    await expect(main.getByLabel('Token name (ticker)')).toBeVisible({ timeout: 30_000 });
-    await main.getByLabel('Token name (ticker)').fill(tick);
-    await main.getByLabel('Edition size').fill(String(EDITION));
-    await main.getByLabel('Copies per mint').fill(String(PER_TX));
-    await main.getByLabel('Image URL').fill(IMAGE_URL);
-    await main.getByLabel('Limit per address', { exact: true }).fill(String(PER_ADDRESS));
+    await expect(main.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
+    await main.getByLabel('Ticker', { exact: true }).fill(tick);
+    await main.getByLabel('Max supply', { exact: true }).fill(String(EDITION));
+    // The per-transaction and per-address caps and the window blocks sit in
+    // the Public minting section.
+    await openIssueSection(main, 'Public minting');
+    await main.getByLabel('Max per transaction', { exact: true }).fill(String(PER_TX));
+    await main.getByLabel('Max per address', { exact: true }).fill(String(PER_ADDRESS));
     if (startBlock !== null) {
-        await main.getByLabel('Minting opens at block', { exact: true }).fill(String(startBlock));
+        await main.getByLabel('Start block', { exact: true }).fill(String(startBlock));
     }
     if (stopBlock !== null) {
-        await main.getByLabel('Minting closes at block', { exact: true }).fill(String(stopBlock));
+        await main.getByLabel('Stop block', { exact: true }).fill(String(stopBlock));
     }
+    // The artwork URL sits in the Description section.
+    await openIssueSection(main, 'Description');
+    await main.getByLabel('Image URL').fill(IMAGE_URL);
     await submitTokenWizard(page);
 
     await expectConfirmScreen(page);

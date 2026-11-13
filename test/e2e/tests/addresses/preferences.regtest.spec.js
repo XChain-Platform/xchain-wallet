@@ -66,7 +66,7 @@ test.describe('ADDRESS v0 preferences on regtest', () => {
             await expect(main).toContainText('Destroy the fee (reduces supply) - CHANGED');
             await expect(main).toContainText('Memo required on incoming sends - CHANGED');
             await expect(main).toContainText('Anyone may open a dispenser here - CHANGED');
-            await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
+            await main.getByRole('button', { name: 'Continue to Confirmation', exact: true }).click();
             await expectConfirmModal(page, 'address preferences');
             const password = page.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible().catch(() => false)) {

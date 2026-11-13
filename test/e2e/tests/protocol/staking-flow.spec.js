@@ -12,6 +12,7 @@ import {
     createWallet,
     dismissIntroCarousel,
     expect,
+    openFromSection,
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
@@ -45,21 +46,6 @@ async function openPaletteItem(page, title, subtitle) {
     await expect(option).toBeVisible();
     await option.click();
     await expect(palette).toBeHidden();
-}
-
-async function setWatcherMode(page) {
-    await openPaletteItem(page, 'Settings', 'Open settings');
-    const walletMode = page.getByRole('main').getByRole('button', { name: /^Wallet mode/ });
-    await expect(walletMode).toBeVisible();
-    await walletMode.click();
-    const watcher = page.getByRole('radio', { name: /^Watcher/ });
-    await expect(watcher).toBeVisible();
-    await watcher.click();
-    // Switching mode asks for confirmation in a modal that blocks the palette.
-    const confirmation = page.getByRole('dialog', { name: 'Switch to Watcher (watch-only) mode?' });
-    await confirmation.getByRole('button', { name: 'Confirm mode change' }).click();
-    await expect(confirmation).toBeHidden();
-    await expect(watcher).toBeChecked();
 }
 
 async function expectScreenFits(page, heading, label) {
@@ -130,7 +116,7 @@ async function releaseStakeBalanceLookup(page) {
 /** Opens Validator staking from Staking and fills a new stake. */
 async function fillNewStake(page, viewport) {
     // New stake sits in the content, in the actions row or, on an empty list, the empty state.
-    await page.getByRole('main').getByRole('button', { name: 'New stake', exact: true }).click();
+    await page.getByRole('main').getByRole('button', { name: 'New Stake', exact: true }).click();
     await expectScreenFits(page, 'New stake', `${viewport.name} new stake chooser`);
 
     await page.getByRole('button', { name: /^Validator staking/ }).click();
@@ -139,6 +125,7 @@ async function fillNewStake(page, viewport) {
     await expect(page.getByRole('form', { name: 'Stake XCHAIN' })).toBeVisible();
 
     await expectScreenFits(page, 'Stake XCHAIN', `${viewport.name} new stake form`);
+    await openFromSection(page.getByRole('main'));
     await expect(page.getByRole('button', { name: 'Network: Bitcoin' }))
         .toBeVisible();
 
@@ -154,8 +141,9 @@ for (const viewport of VIEWPORTS) {
     test(`staking positions, detail, and the demo stake form fit the ${viewport.name} viewport`, async ({ page }) => {
         test.slow();
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
+        // The demo wallet keeps its own Normal mode (mode is fixed per wallet);
+        // its stake form is asserted below with either submit label.
         await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
-        await setWatcherMode(page);
 
         await test.step('Your staking positions', async () => {
             await openPaletteItem(page, 'Staking', 'Your staking positions');
@@ -203,8 +191,7 @@ for (const viewport of VIEWPORTS) {
     test(`stake review fits the ${viewport.name} viewport`, async ({ page }) => {
         test.slow();
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
-        await createWallet(page);
-        await setWatcherMode(page);
+        await createWallet(page, { walletMode: 'watcher' });
         await openPaletteItem(page, 'Staking', 'Your staking positions');
         await expectScreenFits(page, 'Staking', `${viewport.name} empty staking positions`);
 
@@ -213,7 +200,7 @@ for (const viewport of VIEWPORTS) {
             const form = await fillNewStake(page, viewport);
             const main = page.getByRole('main');
             await main.evaluate((element) => { element.scrollTop = 0; });
-            await form.getByRole('button', { name: 'Review stake', exact: true })
+            await form.getByRole('button', { name: 'Review Stake', exact: true })
                 .evaluate((button) => button.click());
         });
 

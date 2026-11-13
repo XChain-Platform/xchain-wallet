@@ -30,6 +30,7 @@ import {
     switchToRegtest,
     unlockAfterReload,
     waitForValidAction,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -49,7 +50,7 @@ async function onboardOntoBroadcastForm(page, walletName) {
     let main = page.getByRole('main');
     await expect(main.getByLabel('Message', { exact: true })).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
-    const address = await main.getByLabel('From', { exact: true }).inputValue();
+    const address = await (await openFromAddress(main)).inputValue();
     expect(address, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`).toMatch(REGTEST_ADDRESS_RE);
 
     await fundAddress(address, FUNDING);
@@ -60,7 +61,7 @@ async function onboardOntoBroadcastForm(page, walletName) {
     main = page.getByRole('main');
     await expect(main.getByLabel('Message', { exact: true })).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
-    expect(await main.getByLabel('From', { exact: true }).inputValue(), 'still signing with the funded address').toBe(address);
+    expect(await (await openFromAddress(main)).inputValue(), 'still signing with the funded address').toBe(address);
     return { main, address };
 }
 

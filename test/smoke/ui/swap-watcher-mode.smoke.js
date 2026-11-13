@@ -24,8 +24,8 @@ const formSrc = readFileSync(
 
 assert.match(formSrc, /import \{ useWalletMode \} from '\.\.\/hooks\/useWalletMode\.js';/);
 assert.match(formSrc, /import \{ ResultScreen \} from '\.\.\/components\/ResultScreen\.jsx';/);
-assert.match(formSrc, /const \{ isWatcherMode \} = useWalletMode\(\);/);
+assert.match(formSrc, /const \{ walletMode, isWatcherMode \} = useWalletMode\(\);/);
 assert.match(formSrc, /messaging\.buildActionPsbtRequest\(\{[\s\S]+?action: 'SWAP'/);
 assert.match(formSrc, /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<ResultScreen/);
-assert.match(formSrc, /Create unsigned swap transaction/);
+assert.match(formSrc, /Create Unsigned Swap Transaction/);
 console.log('swap-watcher-mode smoke OK');

@@ -117,7 +117,7 @@ assert.ok(
 );
 assert.ok(!/\.VALUE\s*=|\.FEE\s*=|\.MEMO\s*=|toISOString/.test(src),
     'BroadcastForm does not compose feed, oracle, memo, or timestamp fields');
-assert.ok(/variant="success"[\s\S]*?icon=\{<Icon\.BroadcastIcon \/>\}[\s\S]*?>\s*Broadcast/.test(src),
+assert.ok(/<FormAction\s+icon=\{<Icon\.BroadcastIcon \/>\}[\s\S]*?>\s*Broadcast\s*<\/FormAction>/.test(src),
     'BroadcastForm uses the green Broadcast button and broadcast icon');
 
 // --- 7. Core flow -----------------------------------------------------

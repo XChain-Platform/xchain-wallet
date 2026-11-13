@@ -6,7 +6,9 @@
 import {
     dismissIntroCarousel,
     expect,
+    FROM_ADDRESS_LABEL,
     gotoSection,
+    openFromSection,
     openSettings,
     test,
     unlockedShell,
@@ -183,7 +185,7 @@ test('controls sharing a row match at phone and desktop widths', async ({ page }
                 ['coin', main.getByRole('combobox', { name: 'Coin' })],
                 ['direction', main.getByRole('combobox', { name: 'Direction' })],
                 ['target price', main.getByRole('textbox', { name: 'Target price' })],
-                ['add alert', main.getByRole('button', { name: 'Add alert' })],
+                ['add alert', main.getByRole('button', { name: 'Add Alert' })],
             ]);
         });
 
@@ -197,7 +199,7 @@ test('controls sharing a row match at phone and desktop widths', async ({ page }
             });
             await expectMatchingControlSizes(`Settings dApp permissions at ${width}px`, [
                 ['blocked origin', origin],
-                ['block', blockForm.getByRole('button', { name: 'Block origin', exact: true })],
+                ['block', blockForm.getByRole('button', { name: 'Block Origin', exact: true })],
             ]);
         });
 
@@ -237,16 +239,18 @@ for (const width of VIEWPORTS) {
             await openPaletteRoute(page, 'Move a token', /^Move a token/);
             // The ChainPicker trigger and the TokenField button stack in one
             // column with the address field, so all three share one height.
+            // The chain picker and the address sit in the closed From section.
+            await openFromSection(main);
             await expectMatchingHeights(`Bridge move pickers at ${width}px`, [
-                ['chain picker trigger', main.getByRole('button', { name: /^Move from:/ })],
-                ['source address', main.getByRole('textbox', { name: 'From', exact: true })],
+                ['chain picker trigger', main.getByRole('button', { name: /^Network:/ })],
+                ['source address', main.getByRole('textbox', { name: FROM_ADDRESS_LABEL })],
                 ['token field', main.getByRole('button', { name: /^Token:/ })],
             ]);
         });
 
         await test.step(`${width}px / Fee selector ticks and help tip`, async () => {
             await gotoSection(page, 'Messaging');
-            await main.getByRole('button', { name: 'New conversation' }).click();
+            await main.getByRole('button', { name: 'New Conversation' }).click();
             // The tier ticks are pointer-only labels under the slider; each
             // tick in the row keeps one height.
             const ticks = main.locator('button[class*="_sliderTick_"]');

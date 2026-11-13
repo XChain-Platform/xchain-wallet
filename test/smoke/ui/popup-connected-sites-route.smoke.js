@@ -54,7 +54,7 @@ assert.ok(
     'the route renders the section with no props of its own, so behaviour cannot drift',
 );
 assert.ok(
-    /<PageHeader onBack=\{onBack\} title="Connected sites" \/>/.test(route),
+    /<PageHeader onBack=\{onBack\} title="Connected Sites" \/>/.test(route),
     'the route owns its header and hands back to the shell',
 );
 // Its own screen means its own state: nothing about Settings may leak in.
@@ -78,8 +78,8 @@ assert.ok(
     'popup renders a standalone connected-sites view',
 );
 assert.ok(
-    /<ConnectedSites onBack=\{\(\) => setUnlockedView\('home'\)\} \/>/.test(popupApp),
-    'the popup view hands back to Home, the screen it was reached from',
+    /<ConnectedSites onBack=\{goBack\} \/>/.test(popupApp),
+    'the popup view hands back through the one navigation history, to the screen it was reached from',
 );
 
 // --- 3. The deep-link helper prefers the top-level route --------------

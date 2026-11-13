@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
 import { Settings } from '../../../packages/core/src/shared/routes/Settings.jsx';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
@@ -15,26 +15,29 @@ const sectionModules = import.meta.glob(
     '../../../packages/core/src/shared/components/settings/*Section.jsx',
 );
 const DRILLDOWN_SECTIONS = [
-    { id: 'this-wallet', title: 'This wallet', component: 'ThisWalletSection' },
+    // Settings does not list This wallet on its own; its removal part is the
+    // page Wallet Details opens.
+    { id: 'wallet-remove', title: 'Remove Wallet', component: 'ThisWalletSection' },
     { id: 'display', title: 'Display', component: 'DisplaySection' },
     { id: 'keyboard', title: 'Keyboard', component: 'KeyboardSection' },
     { id: 'privacy', title: 'Privacy', component: 'PrivacySection' },
     { id: 'safety', title: 'Safety', component: 'SafetySection' },
-    { id: 'wallet-mode', title: 'Wallet mode', component: 'WalletModeSection' },
     { id: 'backup', title: 'Backup', component: 'BackupSection' },
     { id: 'fees', title: 'Fees', component: 'FeesSection' },
-    { id: 'network-endpoints', title: 'Network & endpoints', component: 'NetworkEndpointsSection' },
-    { id: 'connected-sites', title: 'Connected sites', component: 'ConnectedSitesSection' },
-    { id: 'ads', title: 'Automatic donation system', component: 'AdsSection' },
-    { id: 'developer', title: 'Developer mode', component: 'DeveloperModeSection' },
+    { id: 'network-endpoints', title: 'Network & Endpoints', component: 'NetworkEndpointsSection' },
+    { id: 'connected-sites', title: 'Connected Sites', component: 'ConnectedSitesSection' },
+    { id: 'ads', title: 'Automatic Donation System', component: 'AdsSection' },
+    { id: 'developer', title: 'Developer Mode', component: 'DeveloperModeSection' },
     { id: 'about', title: 'About', component: 'AboutSection' },
 ];
-const INLINE_SECTIONS = [
-    { query: 'theme reduced motion', title: 'Appearance', component: 'AppearanceSection' },
-    { query: 'fiat locale custom iso', title: 'Language & region', component: 'LanguageRegionSection' },
-    { query: 'active mainnet', title: 'Network', component: 'NetworkSection' },
-    { query: 'desktop permission quiet hours', title: 'Notifications', component: 'NotificationsSection' },
-    { query: 'contacts address book export import', title: 'Contacts', component: 'ContactsSection' },
+// These sections are parts of a grouped page (or a row page) rather than a
+// page of their own, so each opens through the page that holds it.
+const GROUPED_SECTIONS = [
+    { id: 'g-appearance', title: 'Appearance', component: 'AppearanceSection' },
+    { id: 'g-appearance', title: 'Appearance', component: 'LanguageRegionSection' },
+    { id: 'g-network', title: 'Network and Fees', component: 'NetworkSection' },
+    { id: 'g-notifications', title: 'Notifications', component: 'NotificationsSection' },
+    { id: 'backup-contacts', title: 'Export or Import Contacts', component: 'ContactsSection' },
 ];
 
 function pending() {
@@ -80,7 +83,7 @@ afterEach(() => {
 
 describe('Settings route accessibility', () => {
     it('accounts for every settings section component', () => {
-        const renderedComponents = [...DRILLDOWN_SECTIONS, ...INLINE_SECTIONS]
+        const renderedComponents = [...DRILLDOWN_SECTIONS, ...GROUPED_SECTIONS]
             .map(({ component }) => component)
             .sort();
         const sectionComponents = Object.keys(sectionModules)
@@ -96,13 +99,10 @@ describe('Settings route accessibility', () => {
         await expectNoSeriousAxeViolations(container);
     });
 
-    it.each(INLINE_SECTIONS)('scans $component', async ({ query, title }) => {
-        const { container } = renderSettings();
-        await screen.findByText('Primary Wallet');
-        fireEvent.change(screen.getByRole('searchbox', { name: 'Search settings' }), {
-            target: { value: query },
-        });
-        await screen.findByRole('heading', { name: title });
+    it.each(GROUPED_SECTIONS)('scans $component', async ({ id, title }) => {
+        const { container } = renderSettings({ initialSubpageId: id });
+        // A grouped page repeats its own title as the heading of its first part.
+        await screen.findAllByRole('heading', { name: title });
         await expectNoSeriousAxeViolations(container);
     });
 });

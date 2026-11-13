@@ -36,7 +36,7 @@
 // `warmPreflight` in fixtures/regtest.js.
 
 import { readShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openIssueSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal,
     fundAddress,
@@ -94,6 +94,8 @@ function feeToggle(scope) {
 }
 
 async function setFeeLane(scope, nativeFee) {
+    // The switch sits in the Network fee section, closed until opened.
+    await openIssueSection(scope, 'Network fee');
     const toggle = feeToggle(scope);
     await expect(toggle, 'Bitcoin does not offer the fee choice this walk needs')
         .toBeVisible({ timeout: 30_000 });
@@ -108,10 +110,10 @@ async function composeIssue(page, { nativeFee, reuseForm = false }) {
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     if (!reuseForm) {
         await main.getByLabel('Ticker').fill(ISSUE_TICK);
-        await main.getByLabel('Supply', { exact: true }).fill(ISSUE_SUPPLY);
+        await main.getByLabel('Max supply', { exact: true }).fill(ISSUE_SUPPLY);
     }
     await setFeeLane(main, nativeFee);
-    await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
     await expectConfirmModal(page, `the ISSUE of ${ISSUE_TICK}`, 30_000);
 }
 

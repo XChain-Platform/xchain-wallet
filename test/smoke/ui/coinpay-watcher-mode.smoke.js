@@ -74,7 +74,7 @@ assert.doesNotMatch(
     'watcher-mode COINPAY must not call the generic (unverified) PSBT builder',
 );
 
-assert.match(formSrc, /Create unsigned transaction/);
+assert.match(formSrc, /Create Unsigned Transaction/);
 
 // The route the form calls must actually exist on every shell's messaging
 // surface, and the host must register it.

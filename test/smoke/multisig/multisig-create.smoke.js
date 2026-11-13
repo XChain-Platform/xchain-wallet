@@ -228,8 +228,8 @@ assert.ok(/<Select[\s\S]*?id="multisig-type"[\s\S]*?<option/.test(route),
     'MultisigCreate offers its schemes through the Type dropdown');
 assert.doesNotMatch(route, /How multisig setup works/,
     'MultisigCreate omits the old setup disclosure');
-assert.ok(/Create multisig/.test(route),
-    'MultisigCreate names the primary action Create multisig');
+assert.ok(/Create Multisig/.test(route),
+    'MultisigCreate names the primary action Create Multisig');
 
 // --- App.jsx wiring (all three shells) ---
 

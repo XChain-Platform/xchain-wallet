@@ -28,5 +28,5 @@ assert.match(formSrc, /import \{ ResultScreen \} from '\.\.\/components\/ResultS
 assert.match(formSrc, /const \{ isWatcherMode \} = useWalletMode\(\);/);
 assert.match(formSrc, /const action = isDeposit \? 'DEPOSIT' : 'WITHDRAW';/);
 assert.match(formSrc, /messaging\.buildActionPsbtRequest\(\{[\s\S]+?action, params: actionParams/);
-assert.match(formSrc, /Create unsigned transaction/);
+assert.match(formSrc, /Create Unsigned Transaction/);
 console.log('contract-funds-watcher-mode smoke OK');

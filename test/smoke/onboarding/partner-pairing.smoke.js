@@ -47,8 +47,8 @@ for (const name of [
 
 // The two call-to-action strings are the user-visible contract of the
 // lane; §20.5 names them, so pin them rather than leaving them free.
-assert.ok(flow.includes("'Pair a signer'"), 'the watcher half offers "Pair a signer"');
-assert.ok(flow.includes("'Pair a watcher'"), 'the signer half offers "Pair a watcher"');
+assert.ok(flow.includes("'Pair a Signer'"), 'the watcher half offers "Pair a Signer"');
+assert.ok(flow.includes("'Pair a Watcher'"), 'the signer half offers "Pair a Watcher"');
 
 // Nothing private may ride the pairing payload.
 assert.ok(
@@ -122,7 +122,7 @@ for (const stage of ['role', 'seed', 'exchange']) {
 const onboarding = read('packages', 'core', 'src', 'shared', 'routes', 'Onboarding.jsx');
 assert.ok(
     // The smoke runner swaps t('key') for its English text; a direct run reads the key.
-    /onPairPartner/.test(onboarding) && /Pair an offline signer|pairAnOfflineSigner/.test(onboarding),
+    /onPairPartner/.test(onboarding) && /Pair an Offline Signer|t\('onboarding\.pairAnOfflineSigner'\)/.test(onboarding),
     'Onboarding exposes the pairing lane behind an onPairPartner prop',
 );
 

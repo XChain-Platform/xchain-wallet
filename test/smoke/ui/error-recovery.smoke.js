@@ -74,7 +74,7 @@ assert.ok(/label: 'Browse'[\s\S]*backupDrop\.openFilePicker/.test(importSrc),
 //    where retry is pointless).
 assert.ok(/StatusMessage/.test(pairSrc),
     'PairSignerForm imports StatusMessage');
-assert.ok(/label: 'Try again'[\s\S]*handlePickVendor\(vendor\)/.test(pairSrc),
+assert.ok(/label: 'Try Again'[\s\S]*handlePickVendor\(vendor\)/.test(pairSrc),
     'PairSignerForm Try-again recovery re-runs handlePickVendor');
 assert.ok(/!\/WebHID\|not supported\|not available\/i\.test\(error\)/.test(pairSrc),
     'PairSignerForm Try-again recovery is suppressed for WebHID-unsupported errors');

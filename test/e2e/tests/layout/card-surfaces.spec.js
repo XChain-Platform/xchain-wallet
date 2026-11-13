@@ -87,7 +87,7 @@ async function palette(page, destination, query = destination) {
 async function issueForm(page) {
     await palette(page, 'Choose a token template', 'Issue token');
     await page.getByRole('main').getByRole('button', { name: /^Custom/ }).click();
-    await expect(page.getByRole('form', { name: 'Issue token', exact: true })).toBeVisible();
+    await expect(page.getByRole('form', { name: 'Issue Token', exact: true })).toBeVisible();
 }
 
 /** Opens a section and then the first item its list offers. */
@@ -374,7 +374,7 @@ test('every card in the confirm stack is the same width at every size', async ({
     const amounts = main.getByLabel('Amount', { exact: true });
     await amounts.first().fill('2');
     await amounts.last().fill('1');
-    await main.getByRole('button', { name: 'Place order', exact: true }).click();
+    await main.getByRole('button', { name: 'Place Order', exact: true }).click();
     await expect(page.getByTestId('confirm-modal')).toBeVisible();
     for (const viewport of VIEWPORTS) {
         await page.setViewportSize(viewport);

@@ -87,6 +87,7 @@ import {
     waitForValidAction,
     selectDispenserOnSource,
     selectPickerAsset,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
 import { fundXchain } from '../../fixtures/gasToken.js';
 
@@ -357,14 +358,14 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
             //     unique to this screen. Asking for a heading here costs the
             //     whole action timeout and reports nothing useful.
             //   - The chain picker is a NetworkField, visible label "Network".
-            //   - The source is a READ-ONLY AddressField labelled "From" whose
+            //   - The source is a READ-ONLY AddressField labelled "From address" (in the From section) whose
             //     trailing icon ("Choose source address") opens the own-address
             //     picker; that picker's rows are labelled "View address <addr>".
             await expect(main.getByText(/Sweep moves everything selected at once/).first(),
                 'the palette did not land on the sweep form').toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
 
-            const fromField = main.getByRole('textbox', { name: 'From', exact: true });
+            const fromField = await openFromAddress(main);
             await expect(fromField, 'the sweep form defaulted to an address that is not the one '
                 + 'this run funded, so it would sweep the wrong address')
                 .toHaveValue(source, { timeout: 30_000 });

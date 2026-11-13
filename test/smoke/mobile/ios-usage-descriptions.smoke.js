@@ -24,7 +24,9 @@ const biometricSource = read(
     'packages/mobile/ios/App/App/vault/VaultBiometricSidecar.swift',
 );
 // The attachment hint (PNG, JPEG, ...) lives in the English dictionary.
-const attachmentSource = read('packages/core/src/shared/routes/ComposeMessage.jsx') + englishDictionarySource();
+// The file input itself is the shared FileField, which ComposeMessage mounts.
+const attachmentSource = read('packages/core/src/shared/routes/ComposeMessage.jsx')
+    + read('packages/core/src/shared/components/FileField.jsx') + englishDictionarySource();
 const endpointSource = read(
     'packages/core/src/shared/components/settings/NetworkEndpointsSection.jsx',
 ) + englishDictionarySource();

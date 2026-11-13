@@ -350,7 +350,7 @@ test.describe('BET unhappy stakes', () => {
             // The button stays enabled and answers a blank stake in words, so the
             // proof that it never reaches compose is the refusal plus no confirm
             // screen.
-            await main.getByRole('button', { name: 'Place bet', exact: true }).click();
+            await main.getByRole('button', { name: 'Place Bet', exact: true }).click();
             await expect(page.getByRole('alert').filter({ hasText: /positive bet amount/ }),
                 'a blank stake was not refused in words')
                 .toBeVisible({ timeout: 30_000 });
@@ -365,7 +365,7 @@ test.describe('BET unhappy stakes', () => {
             await main.getByLabel(/^Stake/).fill('0');
             await fillPasswordIfPresent(main);
 
-            const review = main.getByRole('button', { name: 'Place bet', exact: true });
+            const review = main.getByRole('button', { name: 'Place Bet', exact: true });
             await expect(review,
                 'a zero stake is blocked by the same disabled-button rule as a blank one, so this '
                 + 'case is not testing what it claims to (update the spec, not the wallet)')
@@ -391,7 +391,7 @@ test.describe('BET unhappy stakes', () => {
             await main.getByRole('button', { name: 'Yes', exact: true }).click();
             await main.getByLabel(/^Stake/).fill(OVER_STAKE);
             await fillPasswordIfPresent(main);
-            await main.getByRole('button', { name: 'Place bet', exact: true }).click();
+            await main.getByRole('button', { name: 'Place Bet', exact: true }).click();
 
             // Either outcome is defensible - refused at the form, or carried to
             // a confirm screen that says it will fail. What is NOT defensible is

@@ -40,12 +40,14 @@ const SWEEP_FORMS = [
 for (const f of SWEEP_FORMS) {
     const src = routes(f);
     assert.match(src, /import \{ useNativeFee \}/, `${f} uses the useNativeFee hook`);
-    assert.match(src, /<NativeFeeToggle/, `${f} renders the toggle`);
+    // The toggle renders inside the standard Network fee section: either the
+    // form mounts it directly, or it hands its toggle props to the fee card.
+    assert.match(src, /<NativeFeeToggle|nativeFeeProps:/, `${f} renders the toggle`);
     assert.match(src, /payFeeInNativeCoin: nativeFee\.flag/, `${f} threads nativeFee.flag into its payloads`);
     // The spread is what carries `mandatory` to the toggle; hand-picking
     // checked/onChange instead would silently drop it and re-open the opt-in on
     // a chain that has no other fee lane.
-    assert.match(src, /\{\.\.\.nativeFee\.toggleProps\}/, `${f} spreads the whole toggleProps`);
+    assert.match(src, /(\.\.\.|nativeFeeProps: )nativeFee\.toggleProps\b/, `${f} passes the whole toggleProps`);
 }
 
 const FEELESS_FORMS = [
@@ -72,7 +74,7 @@ assert.doesNotMatch(mint, /payFeeInNativeCoin/, 'MintForm does not send a native
 // ---- pre-PC-51 toggle forms migrated onto the shared hook ----
 const MIGRATED = [
     ['routes', 'IssueTokenForm.jsx'], ['routes', 'SwapForm.jsx'],
-    ['routes', 'DispenserForm.jsx'], ['routes', 'TokenWizard.jsx'],
+    ['routes', 'DispenserForm.jsx'],
     ['routes', 'AdvancedActionsForm.jsx'],
     ['components', 'PlaceOrderPanel.jsx'],
 ];
@@ -85,7 +87,7 @@ for (const [dir, f] of MIGRATED) {
     );
     // A form that hides `mandatory` would render an unticked opt-in on
     // LTC/DOGE, which is the pre-fix bug wearing the post-fix hook.
-    assert.match(src, /mandatory=\{nativeFeeMandatory\}/, `${f} passes mandatory to the toggle`);
+    assert.match(src, /mandatory(=\{|: )nativeFeeMandatory/, `${f} passes mandatory to the toggle`);
 }
 
 // ----: no form may call the hook without naming its chain ----
@@ -163,7 +165,7 @@ for (const f of BET_FORMS) {
     const src = routes(f);
     assert.match(src, /import \{ useNativeFee \}/, `${f} uses the useNativeFee hook`);
     assert.doesNotMatch(src, /useNativeFee\(\s*\)/, `${f} passes its chain to useNativeFee`);
-    assert.match(src, /<NativeFeeToggle \{\.\.\.nativeFee\.toggleProps\}/,
+    assert.match(src, /<NativeFeeToggle \{\.\.\.nativeFee\.toggleProps\}|nativeFeeProps: nativeFee\.toggleProps\b/,
         `${f} renders the toggle with the whole toggleProps (so `
         + 'mandatory survives)');
     // BOTH lanes: the flag has to be in the composed PSBT the user approves AND

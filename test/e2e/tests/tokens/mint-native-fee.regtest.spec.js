@@ -1,8 +1,9 @@
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openIssueSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal,
     fundAddress,
     mintXchain,
+    readIssueSource,
     readReceiveAddress,
     REGTEST_CHAIN_LABEL,
     REGTEST_TICKER,
@@ -58,12 +59,14 @@ test.describe(`MINT native-fee payment on ${REGTEST_CHAIN_LABEL} regtest`, () =>
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(main);
-            await main.getByLabel('Ticker').fill(TICK);
-            await main.getByLabel('Supply', { exact: true }).fill('1000');
+            await readIssueSource(main);
+            await main.getByLabel('Ticker', { exact: true }).fill(TICK);
+            await main.getByLabel('Max supply', { exact: true }).fill('1000');
+            await openIssueSection(main, 'Initial mint');
             await main.getByLabel('Initial mint', { exact: true }).fill(String(INITIAL_MINT));
-            await main.getByLabel('Max mint per transaction', { exact: true }).fill('100');
-            await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+            await openIssueSection(main, 'Public minting');
+            await main.getByLabel('Max per transaction', { exact: true }).fill('100');
+            await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
 
             await expectConfirmModal(page, 'the ISSUE');
             const issued = await waitForValidAction(await approveAndReadTxid(page));

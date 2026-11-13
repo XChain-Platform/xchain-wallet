@@ -33,7 +33,7 @@ import { chromium, devices, expect } from '@playwright/test';
 import {
     EXPLORER_URL, REGTEST_COIN, REGTEST_DESTINATION,
     switchToRegtest, unlockAfterReload, readReceiveAddress,
-    expectConfirmModal, approveConfirm, mintXchain,
+    expectConfirmModal, approveConfirm, mintXchain, openFromAddress,
 } from './regtest.js';
 import { selectNamedChain } from './crossChain.js';
 import {
@@ -296,7 +296,7 @@ export async function fundXchain(page, { address, amount, password }) {
     }
     const held = await railTokenBalance(REGTEST_COIN, address);
     const main = await openBitcoinAdvancedAction(page, 'MINT');
-    const source = await main.getByLabel('From', { exact: true }).inputValue();
+    const source = await (await openFromAddress(main)).inputValue();
     await fundRailAddress(BTC_COIN, source, 1);
     await page.reload();
     await unlockAfterReload(page, password);
@@ -351,7 +351,7 @@ export async function ensureGasToken({ baseURL, log = console.log }) {
         const destination = bridged ? await readReceiveAddress(page) : null;
 
         const main = await openBitcoinAdvancedAction(page, 'ISSUE');
-        source = await main.getByLabel('From', { exact: true }).inputValue();
+        source = await (await openFromAddress(main)).inputValue();
         await fundRailAddress(BTC_COIN, source, 1);
         await page.reload();
         await unlockAfterReload(page, BOOTSTRAP_PASSWORD);

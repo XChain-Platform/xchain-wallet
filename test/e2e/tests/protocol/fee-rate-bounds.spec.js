@@ -26,7 +26,7 @@ test('a custom fee rate above the chain maximum is refused on a 360 px compose f
     await page.setViewportSize({ width: 360, height: 780 });
     await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
     await gotoSection(page, 'Messaging');
-    await page.getByRole('button', { name: 'New conversation' }).click();
+    await page.getByRole('button', { name: 'New Conversation' }).click();
 
     const main = page.getByRole('main');
     await main.getByLabel('Address', { exact: true }).fill(RECIPIENT);

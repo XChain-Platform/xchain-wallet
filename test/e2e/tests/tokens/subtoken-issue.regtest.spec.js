@@ -53,7 +53,7 @@
 //       --config=playwright.regtest.config.js tests/tokens/subtoken-issue.regtest.spec.js
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, openPaletteCommand, submitTokenWizard, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openIssueSection, openPaletteCommand, pickIssuePreset, submitTokenWizard, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
@@ -61,8 +61,10 @@ import {
     REGTEST_COIN,
     encoderRpc,
     fundAddress,
+    issuePlainToken,
     minerRpc,
     payProtocolFeeInCoin,
+    readIssueSource,
     seedPrices,
     selectVenueChain,
     switchToRegtest,
@@ -254,9 +256,7 @@ async function onboardAndIssueParent(page, walletName, parentTick = PARENT) {
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(main);
-
-    const source = await main.getByLabel('From').inputValue();
+    const source = await readIssueSource(main);
     expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
         .toMatch(REGTEST_ADDRESS_RE);
 
@@ -268,15 +268,11 @@ async function onboardAndIssueParent(page, walletName, parentTick = PARENT) {
     await openPaletteCommand(page, 'Issue token');
     const form = page.getByRole('main');
     await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(form);
-    expect(await form.getByLabel('From').inputValue(),
+    expect(await readIssueSource(form),
         'the Issue form changed its From address between the two visits')
         .toBe(source);
-    await form.getByLabel('Ticker').fill(parentTick);
-    await form.getByLabel('Supply', { exact: true }).fill(String(PARENT_SUPPLY));
     // The coin lane, the one this spec measures the fee on (no XCHAIN needed).
-    await payProtocolFeeInCoin(form);
-    await form.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await issuePlainToken(form, { ticker: parentTick, supply: PARENT_SUPPLY, feeInCoin: true });
 
     await expectConfirmScreen(page);
     const issued = await waitForIndexedAction(await approveAndGetTxid(page));
@@ -289,7 +285,7 @@ async function onboardAndIssueParent(page, walletName, parentTick = PARENT) {
 }
 
 /**
- * Fills the wizard's Subtoken template and submits it, WITHOUT assuming what
+ * Fills the Issue Token form's Subtoken preset and submits it, WITHOUT assuming what
  * happens next: a refused action never reaches the confirm screen at all (the
  * parent lookup or native-fee pre-flight answers in the wizard), so the caller
  * waits for whichever of the two outcomes it is asserting.
@@ -304,23 +300,25 @@ async function fillSubtoken(page, { parent, child, supply, signAs }) {
     await openPaletteCommand(page, 'Create a token');
 
     const main = page.getByRole('main');
-    await main.getByRole('button', { name: /^Subtoken/ }).click();
+    await pickIssuePreset(main, /Subtoken/);
+    // The network and the signer sit in the From section, closed until opened.
+    await openIssueSection(main, 'From');
 
     await selectVenueChain(main);
 
     // POLLED, not read once: the signer is resolved by an effect that re-runs
     // when the chain changes, so a single read straight after picking the
     // network catches the render before it and returns "" - which reads
-    // exactly like a wizard that names no signer at all. Cost a run.
-    const signerField = () => main.getByLabel('Fee paid by');
+    // exactly like a form that names no signer at all. Cost a run.
+    const signerField = () => main.getByLabel('From address');
     let feePaidBy = '';
     await expect.poll(async () => {
         feePaidBy = await signerField().inputValue().catch(() => '');
         return feePaidBy;
     }, {
         timeout: 30_000,
-        message: 'the wizard\'s chain step names no signing address at all, so there is nothing '
-            + 'to check the parent\'s owner against',
+        message: 'the Issue Token form\'s From section names no signing address at all, so there '
+            + 'is nothing to check the parent\'s owner against',
     }).toMatch(REGTEST_ADDRESS_RE);
 
     if (signAs && signAs !== feePaidBy) {
@@ -338,12 +336,10 @@ async function fillSubtoken(page, { parent, child, supply, signAs }) {
         }, { timeout: 30_000 }).toBe(signAs);
     }
 
-    await main.getByRole('button', { name: 'Next', exact: true }).click();
-
     await expect(main.getByLabel('Parent ticker')).toBeVisible({ timeout: 30_000 });
     await main.getByLabel('Parent ticker').fill(parent);
     await main.getByLabel('Subtoken name').fill(child);
-    await main.getByLabel('Supply', { exact: true }).fill(String(supply));
+    await main.getByLabel('Max supply', { exact: true }).fill(String(supply));
     // The coin lane: the screen's native fee line and the payer's coin delta
     // are what this spec measures.
     await payProtocolFeeInCoin(main);

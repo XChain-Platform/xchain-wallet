@@ -86,7 +86,7 @@ async function fillDispenserAndReject(page, label) {
     await expectNoHorizontalOverflow(page, `${label} create dispenser`);
 
     // The main action names what it does (U63).
-    await main.getByRole('button', { name: 'Create dispenser', exact: true }).click();
+    await main.getByRole('button', { name: 'Create Dispenser', exact: true }).click();
     const confirm = page.getByTestId('confirm-modal');
     await expect(confirm).toBeVisible({ timeout: 30_000 });
 

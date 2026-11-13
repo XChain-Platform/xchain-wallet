@@ -95,7 +95,7 @@ async function signAndVerify(page, viewportName) {
     await switchToRegtest(page, PASSWORD);
     const address = await readReceiveAddress(page);
 
-    await openPaletteRoute(page, 'Sign a message', 'Sign message', 'Sign message');
+    await openPaletteRoute(page, 'Sign a message', 'Sign Message', 'Sign message');
     const signForm = page.getByRole('form', { name: 'Sign message', exact: true });
     await selectVenueChain(signForm, 'Network');
     const addressField = signForm.getByLabel('Address', { exact: true });
@@ -110,8 +110,8 @@ async function signAndVerify(page, viewportName) {
     // page (ruling U92); the Signature box is on the form from the start.
     const signatureBox = signForm.getByRole('textbox', { name: 'Signature', exact: true });
     await expect(signatureBox).toContainText('The signature appears here after you sign.');
-    await signForm.getByRole('button', { name: 'Sign message', exact: true }).click();
-    const copySignature = signForm.getByRole('button', { name: 'Copy signature', exact: true });
+    await signForm.getByRole('button', { name: 'Sign Message', exact: true }).click();
+    const copySignature = signForm.getByRole('button', { name: 'Copy Signature', exact: true });
     await expect(copySignature).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
     await expectScreen(page, 'Sign message', `${viewportName} signed result`);
@@ -121,7 +121,7 @@ async function signAndVerify(page, viewportName) {
     await copySignature.click();
     // The copied state renames the button to its confirmation ("Copied:
     // signature") for about 1.5 s, so it is found by that name; a failed copy
-    // keeps the "Copy signature" name with data-state="failed".
+    // keeps the "Copy Signature" name with data-state="failed".
     await expect(page.getByRole('button', { name: 'Copied: signature', exact: true }))
         .toHaveAttribute('data-state', 'copied');
     await expect.poll(() => page.evaluate(() => navigator.clipboard.readText()))
@@ -130,10 +130,10 @@ async function signAndVerify(page, viewportName) {
     await openPaletteRoute(
         page,
         'Verify a signature',
-        'Verify signature',
-        'Verify signature',
+        'Verify Signature',
+        'Verify Signature',
     );
-    const verifyForm = page.getByRole('form', { name: 'Verify signature', exact: true });
+    const verifyForm = page.getByRole('form', { name: 'Verify Signature', exact: true });
     await selectVenueChain(verifyForm, 'Network');
     await verifyForm.getByLabel('Address', { exact: true }).fill(address);
     await verifyForm.getByLabel('Message', { exact: true }).fill(MESSAGE);
@@ -143,7 +143,7 @@ async function signAndVerify(page, viewportName) {
     await expect(signatureField).toHaveValue(signature);
     await expectScreen(page, 'Verify signature', `${viewportName} verify form`);
 
-    await verifyForm.getByRole('button', { name: 'Verify signature', exact: true }).click();
+    await verifyForm.getByRole('button', { name: 'Verify Signature', exact: true }).click();
     // FormPage draws a plain form's notices just above the form, as a sibling
     // of it, so the verdict is read from the screen's main content and not
     // from inside the form landmark.

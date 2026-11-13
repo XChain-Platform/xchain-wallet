@@ -68,7 +68,7 @@ test.describe(`Publish file over 8 KB on ${REGTEST_CHAIN_LABEL}`, () => {
             // The form offers the envelope ceiling on this chain and says why.
             await expect(main).toContainText('compact Taproot encoding', { timeout: 30_000 });
 
-            await main.getByLabel('Choose file to publish').setInputFiles({
+            await main.getByLabel('File to publish').setInputFiles({
                 name: FILE_NAME,
                 mimeType: 'application/octet-stream',
                 buffer: randomBytes(FILE_BYTES),
@@ -76,8 +76,7 @@ test.describe(`Publish file over 8 KB on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(main).toContainText(`${FILE_BYTES.toLocaleString('en-US')} bytes`);
             await main.getByLabel('Title', { exact: true }).fill(TITLE);
             await main.getByLabel('Memo', { exact: true }).fill(MEMO);
-            await main.getByRole('checkbox', { name: /on-chain forever/ }).check();
-            await main.getByRole('button', { name: 'Publish file', exact: true }).click();
+            await main.getByRole('button', { name: 'Publish File', exact: true }).click();
         });
 
         let revealTxid;

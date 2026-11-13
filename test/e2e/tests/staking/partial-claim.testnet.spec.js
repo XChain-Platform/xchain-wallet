@@ -124,7 +124,7 @@ test.describe('partial validator reward claim on Bitcoin testnet', () => {
             // COLLECT|0 paid 130).
             await expect(main.getByText(/XCHAIN available$/)).toBeVisible({ timeout: 120_000 });
             await main.getByRole('textbox', { name: /^Amount/ }).fill(amount);
-            await main.getByRole('button', { name: 'Claim rewards', exact: true }).click();
+            await main.getByRole('button', { name: 'Claim Rewards', exact: true }).click();
             await approve(page);
             await expect(main.getByText(/Claim broadcast\./)).toBeVisible({ timeout: 120_000 });
             const claimTxid = await readDoneTxid(page);

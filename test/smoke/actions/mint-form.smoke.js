@@ -140,7 +140,7 @@ assert.ok(
     'MintForm renders the SHARED confirm screen (the adapter that carries the §5.2.5 exact fee and §5.2.3 deltas), not its own modal copy',
 );
 assert.ok(
-    />\s*Mint\s*<\/Button>/.test(src),
+    /<FormAction\s+icon=\{<Icon\.MintIcon \/>\}[\s\S]*?>\s*Mint\s*<\/FormAction>/.test(src),
     'the primary button reads the action verb on every wallet mode',
 );
 assert.ok(

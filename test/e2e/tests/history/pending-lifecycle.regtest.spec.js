@@ -134,6 +134,7 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -235,7 +236,7 @@ test.describe(`Pending transaction lifecycle on ${REGTEST_CHAIN_LABEL} regtest`,
         await test.step(`send ${SEND_AMOUNT} ${TICK} with the chain held still`, async () => {
             await gotoSection(page, 'Send');
             await pickAssetByChainAndTick(page, TICK, REGTEST_CHAIN_ID, TICK);
-            await expect(page.getByRole('main').getByLabel('From', { exact: true }))
+            await expect(await openFromAddress(page.getByRole('main')))
                 .toHaveValue(own);
             await page.getByLabel('To', { exact: true }).fill(REGTEST_DESTINATION);
             await page.getByRole('textbox', { name: `Amount (${TICK})` }).fill(SEND_AMOUNT);

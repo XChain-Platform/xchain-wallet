@@ -42,18 +42,17 @@ const { Settings } = await import('../../packages/core/src/shared/routes/Setting
 const originalInnerWidth = Object.getOwnPropertyDescriptor(window, 'innerWidth');
 
 const INTERNAL_SETTINGS_PAGES = [
-    ['this-wallet', 'This wallet'],
+    ['wallet-remove', 'Remove Wallet'],
     ['display', 'Display'],
     ['keyboard', 'Keyboard'],
     ['privacy', 'Privacy'],
     ['safety', 'Safety'],
-    ['wallet-mode', 'Wallet mode'],
     ['backup', 'Backup'],
     ['fees', 'Fees'],
-    ['network-endpoints', 'Network & endpoints'],
-    ['connected-sites', 'Connected sites'],
-    ['ads', 'Automatic donation system'],
-    ['developer', 'Developer mode'],
+    ['network-endpoints', 'Network & Endpoints'],
+    ['connected-sites', 'Connected Sites'],
+    ['ads', 'Automatic Donation System'],
+    ['developer', 'Developer Mode'],
     ['about', 'About'],
 ];
 
@@ -150,6 +149,13 @@ describe('regression/desktop-nav-marketplace', () => {
             expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument();
         },
     );
+
+    it('[REGRESSION P1] has no wallet-mode Settings sub-page', () => {
+        renderSettingsPage('wallet-mode');
+
+        expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: 'Wallet Mode' })).toBeNull();
+    });
 
     it('[REGRESSION P1] returns from Accounts & addresses with Back to settings', () => {
         const onBack = vi.fn();

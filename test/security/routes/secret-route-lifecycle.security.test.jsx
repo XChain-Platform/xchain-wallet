@@ -128,7 +128,7 @@ describe('sensitive route lifecycle', () => {
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
         fireEvent.change(screen.getByLabelText(/^Confirm/), { target: { value: PASSWORD } });
         fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Reveal recovery phrase' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal Recovery Phrase' }));
         expect(within(screen.getByRole('list', { name: 'Recovery phrase' })).getByText('yellow'))
             .toBeInTheDocument();
 
@@ -175,17 +175,21 @@ describe('sensitive route lifecycle', () => {
             </MessagingProvider>,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: 'I understand, continue' }));
+        // The warning and the password share one form; the key shows as soon
+        // as the password is accepted, and the header back arrow is the only
+        // way off the key page.
         fireEvent.change(screen.getByLabelText('Wallet password'), {
             target: { value: PASSWORD },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Confirm password' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Tap to reveal private key' }));
-        expect(screen.getByText(PRIVATE_KEY)).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+        fireEvent.click(screen.getByRole('button', { name: 'I Understand' }));
+        expect(await screen.findByRole('textbox', { name: 'Private key' })).toHaveValue(PRIVATE_KEY);
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
 
         expect(onBack).toHaveBeenCalledOnce();
-        expect(screen.getByText('Before you continue')).toBeInTheDocument();
+        expect(screen.getByRole('form', { name: 'Before you continue' })).toBeInTheDocument();
+        expect(screen.queryByRole('textbox', { name: 'Private key' })).not.toBeInTheDocument();
+        // The key's QR is a copy of the key the text checks cannot see.
+        expect(screen.queryByAltText('Private key QR code')).not.toBeInTheDocument();
         expectSecretsAbsent([PASSWORD, PRIVATE_KEY]);
     });
 
@@ -205,16 +209,18 @@ describe('sensitive route lifecycle', () => {
             </MessagingProvider>,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: 'I understand, continue' }));
         fireEvent.change(screen.getByLabelText('Wallet password'), {
             target: { value: PASSWORD },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Confirm password' }));
+        fireEvent.click(screen.getByRole('button', { name: 'I Understand' }));
+        expect(exportPrivateKey).toHaveBeenCalledOnce();
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         await act(async () => { finishExport({ wif: PRIVATE_KEY }); });
 
         expect(onBack).toHaveBeenCalledOnce();
-        expect(screen.getByText('Before you continue')).toBeInTheDocument();
+        expect(screen.getByRole('form', { name: 'Before you continue' })).toBeInTheDocument();
+        expect(screen.queryByRole('textbox', { name: 'Private key' })).not.toBeInTheDocument();
+        expect(screen.queryByAltText('Private key QR code')).not.toBeInTheDocument();
         expectSecretsAbsent([PASSWORD, PRIVATE_KEY]);
     });
 });

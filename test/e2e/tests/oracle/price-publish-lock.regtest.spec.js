@@ -326,7 +326,7 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
             // is also the operator's real path, and it is the one that has to
             // reload the feed list.
             const main = page.getByRole('main');
-            await main.getByRole('button', { name: 'Publish another' }).click();
+            await main.getByRole('button', { name: 'Publish Another' }).click();
             await expect(main.getByLabel(/^Token ticker/)).toBeVisible({ timeout: 30_000 });
 
             // The list is loaded by an effect keyed on (chain, address), and the

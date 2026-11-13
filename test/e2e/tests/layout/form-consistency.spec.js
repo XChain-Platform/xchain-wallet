@@ -62,7 +62,7 @@ const PALETTE_ROUTES = [
 ];
 
 const SETTINGS_SECTIONS = [
-    'This wallet', 'Accounts & addresses', 'Display', 'Keyboard', 'Privacy', 'Safety', 'Wallet mode',
+    'This wallet', 'Accounts & addresses', 'Display', 'Keyboard', 'Privacy', 'Safety',
     'Backup', 'Fees', 'Network & endpoints', 'Connected sites', 'Automatic donation system', 'Developer', 'About',
 ];
 
@@ -399,7 +399,7 @@ async function walk(page, size, out) {
     for (let i = 0; i < 3; i += 1) await page.keyboard.press('Escape').catch(() => {});
     if (await palette(page, 'Choose a token template')) {
         await page.getByRole('main').getByRole('button', { name: /^Custom/ }).click();
-        await expect(page.getByRole('form', { name: 'Issue token', exact: true })).toBeVisible();
+        await expect(page.getByRole('form', { name: 'Issue Token', exact: true })).toBeVisible();
         await record('Issue token');
     } else {
         results.push({ route: 'Issue token', skipped: true, faults: [], counts: {} });

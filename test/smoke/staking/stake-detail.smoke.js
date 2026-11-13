@@ -52,7 +52,7 @@ for (const label of [
 ]) {
     assert.ok(src.includes(label), `StakeDetail renders "${label}"`);
 }
-for (const action of ['Claim', 'Unstake', 'Delegate', 'Revoke delegation', 'Operator view']) {
+for (const action of ['Claim', 'Unstake', 'Delegate', 'Revoke Delegation', 'Operator View']) {
     assert.ok(src.includes(action), `StakeDetail offers "${action}"`);
 }
 for (const tab of ["id: 'rewards'", "id: 'delegation'", "id: 'details'"]) {
@@ -61,7 +61,7 @@ for (const tab of ["id: 'rewards'", "id: 'delegation'", "id: 'details'"]) {
 
 // 4. Contract variant: positions/slashes tabs + slash destination
 // surfaced prominently + contract actions.
-for (const action of ['Add stake', 'View contract']) {
+for (const action of ['Add Stake', 'View Contract']) {
     assert.ok(src.includes(action), `StakeDetail offers "${action}"`);
 }
 for (const tab of ["id: 'positions'", "id: 'slashes'"]) {
@@ -102,8 +102,8 @@ for (const call of ['isDemoWallet', 'synthesizeDemoStaking', 'synthesizeDemoCont
 
 // 7. 3-shell App.jsx wiring: stake-detail view fed by stakingRef,
 // validator actions to the existing forms, contract actions through
-// contractRef with origin + initialMode, forms' onBack returning to
-// the detail page.
+// contractRef with initialMode, forms' onBack popping the shell's history
+// so they return to the detail page they were opened from.
 for (const [shell, appPath] of [
     ['popup', join(ext, 'src', 'popup', 'App.jsx')],
     ['web', join(web, 'src', 'App.jsx')],
@@ -124,11 +124,12 @@ for (const [shell, appPath] of [
         `${shell} wires StakeDetail.onOpenOperatorDashboard → operator-dashboard`);
     assert.ok(/initialMode:\s*'unstake'/.test(app),
         `${shell} preselects unstake mode for contract-position Unstake`);
-    // The write forms launched from the detail page return to it.
+    // The write forms launched from the detail page return to it by Back,
+    // never by naming a page that may not be where the user came from.
     for (const view of ['staking-unstake', 'staking-claim', 'staking-delegate', 'staking-revoke']) {
         const block = app.split(`unlockedView === '${view}'`)[1]?.split('unlockedView ===')[0] || '';
-        assert.ok(block.includes("setUnlockedView('stake-detail')"),
-            `${shell} returns from ${view} to stake-detail`);
+        assert.ok(/onBack=\{goBack\}/.test(block) && !block.includes('setUnlockedView('),
+            `${shell} returns from ${view} to the page it was opened from`);
     }
 }
 

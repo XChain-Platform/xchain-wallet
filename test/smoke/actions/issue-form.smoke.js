@@ -143,16 +143,21 @@ assert.ok(
     !/TICK:\s*ticker\.trim\(\)\.toUpperCase\(\)/.test(src),
     'IssueTokenForm does not uppercase the ticker on the wire',
 );
-// U80: an empty supply reserves the ticker (the button reads Reserve
-// ticker), and zero max supply is the indexer's uncapped sentinel, so only
-// a malformed max supply is refused.
+// U80: an empty supply still issues the ticker, and zero max supply is the
+// indexer's uncapped sentinel, so only a malformed max supply is refused.
 assert.ok(
     /Max supply must be zero or a positive number/.test(src),
     'IssueTokenForm refuses a malformed max supply',
 );
+// Walk ruling: the submit always reads Issue Token with the Issue action's
+// PlusIcon; there is no separate Reserve ticker label or path.
 assert.ok(
-    /Reserve ticker|issue\.reserveTicker/.test(src),
-    'IssueTokenForm offers Reserve ticker when no supply is set',
+    !/Reserve ticker|issue\.reserveTicker/.test(src),
+    'IssueTokenForm has no Reserve ticker label or path',
+);
+assert.ok(
+    /<FormAction[\s\S]{0,80}icon=\{<Icon\.PlusIcon \/>\}[\s\S]{0,400}\{t\('issue\.title'\)\}\s*<\/FormAction>/.test(src),
+    'IssueTokenForm submit always reads Issue Token with the PlusIcon',
 );
 
 // --- 6. Params composer: ISSUE v0 shape ------------------------------
@@ -165,8 +170,11 @@ assert.ok(
 // chain records a tick exactly as written, so upper-casing here is the half
 // of the coercion a user cannot see, silently reaching the ledger under a
 // different name than typed. It passes through trimmed only.
+// The wire tick is `issueTick`: the trimmed ticker, or PARENT.CHILD for a
+// subtoken, with neither half recased.
 assert.ok(
-    /TICK:\s*ticker\.trim\(\),/.test(src),
+    /TICK:\s*issueTick,/.test(src)
+        && /const issueTick = isSubtoken && parentToken\.trim\(\)\s*\?\s*`\$\{parentToken\.trim\(\)\}\.\$\{ticker\.trim\(\)\}`\s*:\s*ticker\.trim\(\);/.test(src),
     'composer sends the ticker as typed, trimmed and not recased',
 );
 assert.ok(
@@ -230,8 +238,8 @@ assert.ok(
     'Home accepts + wires onActions for the Actions menu',
 );
 assert.ok(
-    home.includes("t('walletMenu.row.allActions')") && home.includes('<Icon.GridIcon />'),
-    'Home exposes an "All actions" button with the catalogue icon',
+    home.includes("aria-label={t('actionsMenu.more')}") && home.includes('<Icon.MoreIcon />'),
+    'Home exposes a More quick action with the more icon that opens the Actions menu',
 );
 
 // --- 9. Both shells wire the new sub-routes ---------------------------

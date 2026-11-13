@@ -162,11 +162,10 @@ for (const [path, re] of Object.entries(named)) {
 
 // --- 7. the carve-outs are still real, not stale -----------------------
 
-// The four warning-box copies (Send, TokenWizard, IssueTokenForm and
+// The warning-box copies (Send, IssueTokenForm and
 // ActionIntentSummary) are gone: their warnings render through the primitive.
 for (const path of [
     'routes/Send.module.css',
-    'routes/TokenWizard.module.css',
     'routes/IssueTokenForm.module.css',
     'components/ActionIntentSummary.module.css',
 ]) {

@@ -122,7 +122,7 @@ test('Home quick actions are four square tiles with the icon above the label', a
         await expect(page.getByRole('group', { name: 'Quick actions' })).toBeVisible();
         const tiles = await page.evaluate(quickActionTiles);
         expect(tiles.map((tile) => tile.name), `names at ${width}`)
-            .toEqual(['Send', 'Receive', 'Exchange', 'All actions']);
+            .toEqual(['Send', 'Receive', 'Exchange', 'More']);
         for (const { name, tile, icon, label } of tiles) {
             const where = `${name} at ${width}`;
             expect(Math.abs(tile.width - tile.height), `${where} square`).toBeLessThanOrEqual(1);

@@ -37,7 +37,7 @@ assert.match(admin, /setAllowListIdx\('0'\)/,
     'allow-list removal sends the zero sentinel');
 assert.match(admin, /setBlockListIdx\('0'\)/,
     'block-list removal sends the zero sentinel');
-assert.match(admin, /Remove list/,
+assert.match(admin, /Remove List/,
     'list removal choice is visible');
 assert.match(admin, /<ListPickerScreen/, 'uses the shared list picker');
 assert.match(admin, /filterType="2"/, 'picker restricted to TYPE=2 address lists');

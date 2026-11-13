@@ -83,9 +83,10 @@ assert.match(form, /listGatedKeys\(\{ walletId, chainId: selectedChainId, gateTi
 assert.match(form, /existingKeyHash: packChoice/, 'pack reuse threads existingKeyHash');
 // User-facing copy lives in the English locale; the form renders it through t().
 const { en } = await import(join(wsRoot, 'packages', 'core', 'src', 'i18n', 'locales', 'en', 'index.js'));
-assert.match(form, /t\('gatedPublish\.ackForever'\)/, 'acknowledgment renders through t()');
-assert.match(en['gatedPublish.ackForever'], /published on-chain forever/, 'irreversibility acknowledgment copy');
-assert.match(form, /ackForever/, 'publish blocked until acknowledged');
+// Permanence is stated on the confirm screen, not gated by a checkbox.
+assert.doesNotMatch(form, /ackForever|<Checkbox/, 'no acknowledgement checkbox gates the publish');
+assert.match(form, /notice: t\('gatedPublish\.confirmNotice', \{ tick: gateTick \}\)/, 'confirm screen carries the permanence notice');
+assert.match(en['gatedPublish.confirmNotice'], /stays on the blockchain for good/, 'permanence notice copy');
 assert.match(form, /buildGatedPublishPsbtRequest\(base\)/, 'watcher branch uses the encode-only path');
 assert.match(form, /useActionConfirmFlow\(\{ messaging, walletId \}\)/, 'full wallets use the shared confirm flow');
 assert.match(form, /composeGatedPublishForConfirm\(base\)/, 'confirm compose prepares the encrypted action host-side');

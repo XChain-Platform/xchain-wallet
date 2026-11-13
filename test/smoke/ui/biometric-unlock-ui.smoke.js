@@ -94,7 +94,7 @@ assert.equal(
 
 assert.match(
     lockedSrc,
-    /\{biometricAvailable \?[\s\S]*Use biometrics[\s\S]*\) : null\}/,
+    /\{biometricAvailable \?[\s\S]*Use Biometrics[\s\S]*\) : null\}/,
     'biometric button renders only when available',
 );
 assert.match(
@@ -175,7 +175,7 @@ assert.match(
 );
 assert.match(
     rowSrc,
-    /label: 'Try again', onAction: retryRef\.current/,
+    /label: 'Try Again', onAction: retryRef\.current/,
     'Enable-form error offers a Try again recovery affordance',
 );
 assert.match(

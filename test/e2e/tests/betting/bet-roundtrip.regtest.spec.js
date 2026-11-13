@@ -586,7 +586,7 @@ test.describe('BET round trip on regtest', () => {
             await yes.click();
             await main.getByLabel(/^Stake/).fill(STAKE);
             await fillPasswordIfPresent(main);
-            await main.getByRole('button', { name: 'Place bet', exact: true }).click();
+            await main.getByRole('button', { name: 'Place Bet', exact: true }).click();
             await approveConfirm(page);
 
             // The pool is the settlement predicate itself (§7 sums only
@@ -666,7 +666,7 @@ test.describe('BET round trip on regtest', () => {
             await main.getByRole('button', { name: 'Resolve', exact: true }).first().click();
             await main.getByRole('button', { name: 'Yes', exact: true }).click();
             await fillPasswordIfPresent(main);
-            await main.getByRole('button', { name: 'Publish result', exact: true }).click();
+            await main.getByRole('button', { name: 'Publish Result', exact: true }).click();
             await approveConfirm(page);
 
             const feed = await waitForFeed(feedIndex, (f) => f?.feed_status === 'resolved', 'resolved');

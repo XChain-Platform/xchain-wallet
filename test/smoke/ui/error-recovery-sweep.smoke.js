@@ -37,7 +37,7 @@ assert.ok(/Cluster P FOLLOWUP 4/.test(issueSrc),
 assert.ok(/\(isWatcherMode \|\| isHwSource\) && submitError \?[\s\S]{0,500}<StatusMessage[\s\S]{0,800}\{ label: 'Edit', onAction: \(\) => \{ setSubmitError\(null\); setStage\('form'\); \} \}/.test(issueSrc),
     'IssueTokenForm wraps post-submit error in StatusMessage with an Edit recovery');
 // Field validation uses the focusable summary and its direct field links.
-assert.ok(/status=\{\[<FormErrorSummary key="errors" errors=\{issueErrors\} focusKey=\{validationAttempt\} \/>/.test(issueSrc),
+assert.ok(/status=\{\[offlineNotice, <FormErrorSummary key="errors" errors=\{issueErrors\} focusKey=\{validationAttempt\} \/>/.test(issueSrc),
     'IssueTokenForm renders formError through FormErrorSummary');
 // Inline div role="alert" for those two error sites is gone (modulo
 // the warnings + chain-empty fallback row, which are not recovery

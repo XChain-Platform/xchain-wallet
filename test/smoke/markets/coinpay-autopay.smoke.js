@@ -99,8 +99,9 @@ assert.match(panel, /Enable auto-pay/, 'consent checkbox present');
 assert.match(panel, /useState\(true\)/, 'checkbox defaults ON');
 assert.match(panel, /giveIsNative && !isWatcherMode && !isHwSource\(fromAddress\)/,
     'checkbox only for software signers on a native-GIVE order');
-assert.match(panel, /I understand the wallet must stay open for auto-pay to work\./,
-    'web keep-open acknowledgment copy');
+assert.match(panel, /notice: confirmNotice/,
+    'web keep-open fact rides the confirm screen as a notice');
+assert.doesNotMatch(panel, /keepOpenAck/, 'no keep-open acknowledgement gate on the panel');
 assert.match(panel, /autopay: autopayArm \? \{ enabled: true \} : undefined/,
     'consent flag threads through the submit paths');
 assert.match(panel, /Outstanding auto-pay exposure/, 'aggregate exposure shown when armed');
@@ -111,9 +112,10 @@ assert.match(createOrder, /Enable auto-pay/, 'create-order consent switch presen
 assert.match(createOrder, /const \[autopayEnabled, setAutopayEnabled\] = useState\(true\)/, 'create-order switch defaults ON');
 assert.match(createOrder, /const autopayEligible = giveIsNative && !isWatcherMode && !isHwSource;/,
     'create-order switch only for software signers on a native-GIVE order');
-assert.match(createOrder, /I understand this web wallet only auto-pays while it is open and unlocked\./,
-    'create-order web keep-open acknowledgment copy');
-assert.match(createOrder, /if \(ackRequired && !keepOpenAck\) \{/, 'create-order refuses an unacknowledged web arm');
+assert.match(createOrder, /Auto-pay runs inside this wallet: a match is paid only while the wallet is open and unlocked\./,
+    'create-order web keep-open fact on the confirm screen');
+assert.match(createOrder, /notice: confirmNotice/, 'create-order hands the fact to the confirm screen');
+assert.doesNotMatch(createOrder, /keepOpenAck/, 'create-order carries no keep-open acknowledgement gate');
 assert.match(createOrder, /\.\.\.\(autopayArm \? \{ autopay: \{ enabled: true \} \} : \{\}\)/,
     'create-order consent flag threads through the submit path');
 

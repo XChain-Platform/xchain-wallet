@@ -91,8 +91,10 @@ for (const [label, ...p] of [
     assert.doesNotMatch(app, /badges=/, `${label}: no badge is fed to nav`);
     assert.doesNotMatch(app, /useCoinpayObligations\(activeWalletId/, `${label}: no second scan beside the provider`);
     assert.match(app, /unlockedView === 'obligations' && activeWalletId/, `${label}: obligations view routed`);
-    assert.match(app, /setResumeCoinpay\(\{ \.\.\.ref, from: 'obligations' \}\)/, `${label}: Pay now prefills CoinpayForm`);
-    assert.match(app, /from === 'obligations'\s*\?\s*'obligations'/, `${label}: CoinpayForm backs out to the queue`);
+    assert.match(app, /onPay=\{\(ref\) => \{\s*setResumeCoinpay\(ref\);\s*setUnlockedView\('coinpay'\);/, `${label}: Pay now prefills CoinpayForm`);
+    // Back pops the shell's history, so CoinpayForm returns to the queue
+    // when Pay now opened it there.
+    assert.match(app, /setResumeCoinpay\(null\);\s*goBack\(\);/, `${label}: CoinpayForm backs out to the page it came from`);
     assert.match(app, /'coinpay' \| 'obligations' \|/, `${label}: view union includes obligations`);
 }
 

@@ -189,7 +189,7 @@ test.describe('multisig flow', () => {
         let share = page.getByRole('region', { name: 'Share this wallet as a cosigner' });
         await share.locator('summary').click();
         await share.getByRole('button', { name: 'Choose address to share', exact: true }).click();
-        await expect(page.getByRole('heading', { name: 'Address to share', exact: true })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Address to Share', exact: true })).toBeVisible();
         const sharedAddress = await pickFirstAddress(page);
         share = page.getByRole('region', { name: 'Share this wallet as a cosigner' });
         await share.locator('summary').click();
@@ -197,7 +197,7 @@ test.describe('multisig flow', () => {
         // The share details are offered as a QR code and a copy action; the
         // page shows no textarea repeating their raw text.
         await expect(share.getByRole('img', { name: 'QR code for multisig cosigner share details' })).toBeVisible();
-        await expect(share.getByRole('button', { name: /Copy cosigner share details/ })).toBeVisible();
+        await expect(share.getByRole('button', { name: /Copy Cosigner Share Details/ })).toBeVisible();
 
         for (const viewport of VIEWPORTS) {
             await test.step(`${viewport.name}: create and cosigner share`, async () => {
@@ -228,18 +228,18 @@ test.describe('multisig flow', () => {
 
         const second = createForm.getByRole('group', { name: 'Cosigner 2', exact: true });
         await fillExternalHardware(second, EXTERNAL_COSIGNERS[0]);
-        await createForm.getByRole('button', { name: 'Add cosigner', exact: true }).click();
+        await createForm.getByRole('button', { name: 'Add Cosigner', exact: true }).click();
         const third = createForm.getByRole('group', { name: 'Cosigner 3', exact: true });
         await fillExternalHardware(third, EXTERNAL_COSIGNERS[1]);
         await expect(createForm.getByRole('group', { name: 'Signatures required' }).locator('output'))
             .toHaveText('2');
         await expect(createForm).toContainText('of 3 cosigners');
-        await expect(createForm.getByRole('button', { name: 'Create multisig', exact: true })).toBeEnabled();
+        await expect(createForm.getByRole('button', { name: 'Create Multisig', exact: true })).toBeEnabled();
 
         for (const viewport of VIEWPORTS) {
             await test.step(`${viewport.name}: review`, async () => {
                 await page.setViewportSize({ width: viewport.width, height: viewport.height });
-                await createForm.getByRole('button', { name: 'Create multisig', exact: true }).click();
+                await createForm.getByRole('button', { name: 'Create Multisig', exact: true }).click();
 
                 const review = page.getByRole('form', { name: 'Review multisig' });
                 await expect(review).toBeVisible();
@@ -259,7 +259,7 @@ test.describe('multisig flow', () => {
         }
 
         await page.getByRole('form', { name: 'Review multisig' })
-            .getByRole('button', { name: 'Confirm multisig', exact: true }).click();
+            .getByRole('button', { name: 'Confirm Multisig', exact: true }).click();
         await expect(page.getByText('Multisig configured', { exact: true })).toBeVisible();
 
         const session = await createSigningSession(page);
@@ -283,7 +283,7 @@ test.describe('multisig flow', () => {
                     'Signatures collected: 0 of 2',
                 );
                 await page.getByRole('main')
-                    .getByRole('button', { name: 'Back to sessions', exact: true }).click();
+                    .getByRole('button', { name: 'Back to Sessions', exact: true }).click();
                 await expect(sessions).toBeVisible();
             });
         }

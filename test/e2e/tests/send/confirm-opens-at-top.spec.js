@@ -78,7 +78,7 @@ async function openIssueConfirm(page) {
     // The availability lookup starts after a 350 ms debounce.
     await page.waitForTimeout(500);
     await scrollFormToBottom(page);
-    await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
 }
 
 async function openDispenserConfirm(page) {
@@ -95,7 +95,7 @@ async function openDispenserConfirm(page) {
     await main.getByRole('textbox', { name: /^Trigger price/ }).fill('0.004');
     await scrollFormToBottom(page);
     // The main action names what it does (U63).
-    await main.getByRole('button', { name: 'Create dispenser', exact: true }).click();
+    await main.getByRole('button', { name: 'Create Dispenser', exact: true }).click();
 }
 
 const FLOWS = [

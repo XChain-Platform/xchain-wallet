@@ -68,6 +68,7 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -214,7 +215,7 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             // SHAPE without switching first (the previous fix) can only turn a
             // wrong-chain run into a 30s timeout, never into a right one.
             await selectVenueChain(deployMain, 'Network');
-            const fromField = deployMain.getByLabel('From', { exact: true });
+            const fromField = await openFromAddress(deployMain);
             await expect(fromField, `the deploy form has no ${REGTEST_CHAIN_LABEL} source address`)
                 .toHaveValue(REGTEST_ADDRESS_RE, { timeout: 30_000 });
             deployer = await fromField.inputValue();
@@ -246,7 +247,7 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             // on the venue chain the same way; the equality check is what makes
             // that a re-selection of the funded address rather than a new one.
             await selectVenueChain(main, 'Network');
-            expect(await main.getByLabel('From', { exact: true }).inputValue(),
+            expect(await (await openFromAddress(main)).inputValue(),
                 'the form still signs with the funded address').toBe(deployer);
 
             // No Name field any more: the form shows what the chain is about
@@ -263,7 +264,7 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             // source the validator rejects can never deploy, so a green
             // validation is the cheap precondition that keeps a later failure
             // meaningful.
-            await main.getByRole('button', { name: 'Validate code' }).click();
+            await main.getByRole('button', { name: 'Validate Code' }).click();
             await expect(main.getByText('Syntax OK.')).toBeVisible({ timeout: 30_000 });
 
             await main.getByLabel('Gas limit').fill(DEPLOY_GAS);
@@ -365,7 +366,7 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             // method name and pipe-delimited params. `inc` takes none.
             await main.getByLabel('Method', { exact: true }).fill('inc');
             // No gas-limit field: EXECUTE runs at the protocol gas ceiling.
-            await main.getByRole('button', { name: 'Call contract', exact: true }).click();
+            await main.getByRole('button', { name: 'Call Contract', exact: true }).click();
             await approveConfirm(page);
 
             await expect(main.getByText('Method call broadcast.')).toBeVisible({ timeout: 120_000 });

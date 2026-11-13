@@ -118,11 +118,14 @@
 
 import { randomBytes } from 'node:crypto';
 
-import { createWallet, expect, gotoSection, mainButton, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import {
+    createWallet, expect, gotoSection, mainButton, openIssueSection, openPaletteCommand, test,
+} from '../../fixtures/wallet.js';
 import {
     expectConfirmModal,
     EXPLORER_URL,
     fundAddress,
+    readIssueSource,
     mintXchain,
     readReceiveAddress,
     REGTEST_CHAIN_ID,
@@ -134,6 +137,7 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
 import { pickAssetByChainAndTick, waitForShownTxid } from '../../fixtures/pendingHistory.js';
 
@@ -362,7 +366,7 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
         await test.step(`send ${SEND_AMOUNT} ${TICK} to a real destination`, async () => {
             await gotoSection(page, 'Send');
             await pickAssetByChainAndTick(page, TICK, REGTEST_CHAIN_ID, TICK);
-            await expect(page.getByRole('main').getByLabel('From', { exact: true }))
+            await expect(await openFromAddress(page.getByRole('main')))
                 .toHaveValue(own);
             await page.getByLabel('To', { exact: true }).fill(DESTINATION);
             await page.getByRole('textbox', { name: `Amount (${TICK})` }).fill(SEND_AMOUNT);
@@ -636,11 +640,12 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(main);
+            await readIssueSource(main);
             await main.getByLabel('Ticker').fill(tick);
-            await main.getByLabel('Supply', { exact: true }).fill(ISSUE_SUPPLY);
-            await main.getByLabel(/Initial mint/).fill(INITIAL_MINT);
-            await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+            await main.getByLabel('Max supply', { exact: true }).fill(ISSUE_SUPPLY);
+            await openIssueSection(main, 'Initial mint');
+            await main.getByLabel('Initial mint', { exact: true }).fill(INITIAL_MINT);
+            await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
             await expectConfirmModal(page, 'this action', 30_000);
             await waitForValidAction(await approveAndGetTxid(page));
             await reloadToHome(page);

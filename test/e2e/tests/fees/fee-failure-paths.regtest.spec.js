@@ -45,12 +45,13 @@
 // spec is about - which on this spec would be a false PASS, since both lanes
 // assert that something was refused.
 
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openIssueSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
     REGTEST_COIN,
     fundAddress,
+    readIssueSource,
     minerRpc,
     encoderRpc,
     switchToRegtest,
@@ -117,8 +118,10 @@ async function submitIssue(page, tick, { nativeFee }) {
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await main.getByLabel('Ticker').fill(tick);
-    await main.getByLabel('Supply', { exact: true }).fill(SUPPLY);
+    await main.getByLabel('Max supply', { exact: true }).fill(SUPPLY);
 
+    // The fee switch sits in the Network fee section, closed until opened.
+    await openIssueSection(main, 'Network fee');
     const toggle = feeToggle(main);
     await expect(toggle, 'Bitcoin does not offer the fee choice this spec is about')
         .toBeVisible({ timeout: 30_000 });
@@ -127,7 +130,7 @@ async function submitIssue(page, tick, { nativeFee }) {
 
     const password = main.getByLabel('Password', { exact: true });
     if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-    await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
     return main;
 }
 
@@ -159,7 +162,7 @@ test.describe('§11.5 fee failure paths: the payer cannot afford the protocol fe
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            source = await main.getByLabel('From').inputValue();
+            source = await readIssueSource(main);
             expect(source, 'the form has no Bitcoin address to sign with').toMatch(REGTEST_ADDRESS_RE);
 
             const q = new URLSearchParams({ action: 'ISSUE', params: `0|${TICK_NATIVE}|${SUPPLY}|0|8` });

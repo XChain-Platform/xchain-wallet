@@ -49,7 +49,7 @@ assert.match(
 
 assert.match(
     formSrc,
-    /const \{ isWatcherMode \} = useWalletMode\(\);/,
+    /const \{ walletMode, isWatcherMode \} = useWalletMode\(\);/,
     'derives isWatcherMode via the shared hook',
 );
 
@@ -99,8 +99,8 @@ assert.match(
 );
 assert.match(
     formSrc,
-    /Create transaction for signing/,
-    'submit button reads "Create transaction for signing" in watcher mode',
+    /Create Transaction for Signing/,
+    'submit button reads "Create Transaction for Signing" in watcher mode',
 );
 
 console.log('issue-watcher-mode smoke OK');

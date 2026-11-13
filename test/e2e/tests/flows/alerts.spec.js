@@ -184,7 +184,7 @@ for (const viewport of VIEWPORTS) {
                 `${viewport.name} add price alert row`,
             );
             await main.getByLabel('Target price', { exact: true }).fill('71000');
-            await main.getByRole('button', { name: 'Add alert' }).click();
+            await main.getByRole('button', { name: 'Add Alert' }).click();
 
             await expect(main.getByText('Bitcoin rises above $71,000', { exact: true })).toBeVisible();
             await expectScreen(page, `${viewport.name} created price alert`, 'Settings');
@@ -204,8 +204,8 @@ for (const viewport of VIEWPORTS) {
 
             await main.getByLabel('Direction', { exact: true }).selectOption('below');
             await main.getByLabel('Target price', { exact: true }).fill('65000');
-            // Editing keeps the form's one action name, Add alert (U51).
-            await main.getByRole('button', { name: 'Add alert' }).click();
+            // Editing keeps the form's one action name, Add Alert (U51).
+            await main.getByRole('button', { name: 'Add Alert' }).click();
 
             await expect(main.getByText('Bitcoin falls below $65,000', { exact: true })).toBeVisible();
             await expect(main.getByText('Bitcoin rises above $71,000', { exact: true })).toHaveCount(0);

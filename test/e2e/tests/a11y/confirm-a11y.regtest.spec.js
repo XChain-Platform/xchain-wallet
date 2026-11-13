@@ -34,6 +34,7 @@
 import {
     createWallet,
     expect,
+    openIssueSection,
     openPaletteCommand,
     test,
 } from '../../fixtures/wallet.js';
@@ -67,12 +68,14 @@ async function composeIssue(page, { nativeFee }) {
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await main.getByLabel('Ticker').fill(ISSUE_TICK);
-    await main.getByLabel('Supply', { exact: true }).fill(ISSUE_SUPPLY);
+    await main.getByLabel('Max supply', { exact: true }).fill(ISSUE_SUPPLY);
+    // The fee switch sits in the Network fee section, closed until opened.
+    await openIssueSection(main, 'Network fee');
     const toggle = feeToggle(main);
     await expect(toggle).toBeVisible({ timeout: 30_000 });
     if (nativeFee !== (await toggle.isChecked())) await toggle.click();
     await expect(toggle).toBeChecked({ checked: nativeFee });
-    await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
     await expectConfirmModal(page, `the ISSUE of ${ISSUE_TICK}`, 30_000);
 }
 

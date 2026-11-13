@@ -47,10 +47,10 @@ assert.ok(
     'Home threads balancesFetchedAt into <HomeTabs>',
 );
 
-// --- 2. HomeTabs threads balancesFetchedAt into the balance hero --------
-// The staleness label moved out of the tab strip and into
-// <TotalBalanceHero>, which sits above the tabs and always reflects the
-// rolled-up balance freshness. HomeTabs now just forwards the timestamp.
+// --- 2. The balance card carries no last-updated line ---------------------
+// Home's balance card shows no "Updated ..." time; Settings, About shows when
+// balances last loaded, from the same balancesFetchedAt stamp. HomeTabs keeps
+// the stamp only to refresh rates after a balance load.
 
 const homeTabsSrc = readFileSync(join(components, 'HomeTabs.jsx'), 'utf8');
 assert.ok(
@@ -58,25 +58,22 @@ assert.ok(
     'HomeTabs accepts balancesFetchedAt prop',
 );
 assert.ok(
-    /<TotalBalanceHero[\s\S]+?lastSyncedAt=\{balancesFetchedAt\}/.test(homeTabsSrc),
-    'HomeTabs threads balancesFetchedAt into <TotalBalanceHero lastSyncedAt={...}>',
+    !/<TotalBalanceHero[^>]*lastSyncedAt=/.test(homeTabsSrc),
+    'HomeTabs passes no lastSyncedAt to <TotalBalanceHero>',
 );
 
 const heroSrc = readFileSync(join(components, 'TotalBalanceHero.jsx'), 'utf8');
 assert.ok(
-    /from\s*['"]\.\/StalenessLabel\.jsx['"]/.test(heroSrc),
-    'TotalBalanceHero imports StalenessLabel',
+    !/StalenessLabel/.test(heroSrc),
+    'TotalBalanceHero renders no StalenessLabel',
 );
+
+const settingsSrc = readFileSync(join(routes, 'Settings.jsx'), 'utf8');
+const aboutSrc = readFileSync(join(components, 'settings', 'AboutSection.jsx'), 'utf8');
 assert.ok(
-    /<StalenessLabel\s+lastSyncedAt=\{portfolioUpdatedAt\}/.test(heroSrc),
-    'TotalBalanceHero renders one <StalenessLabel> for balance and price freshness',
-);
-assert.ok(
-    /oldestFreshnessTimestamp\(\s*lastSyncedAt,\s*pricesFetchedAt,\s*stalePriceAsOf,\s*staleChangeAsOf,?\s*\)/.test(heroSrc)
-        // Test networks show no prices, so only the balance age counts there.
-        && /testCoinsOnly\s*\?\s*oldestFreshnessTimestamp\(lastSyncedAt\)/.test(heroSrc)
-        && /hasUpdate \?/.test(heroSrc),
-    'TotalBalanceHero uses the oldest successful balance or price update',
+    /Component:\s*AboutSection,\s*props:\s*\{\s*balancesFetchedAt\s*\}/.test(settingsSrc)
+        && /settings\.about\.balancesUpdated/.test(aboutSrc),
+    'Settings, About shows when balances were last updated',
 );
 
 // --- 3. History.jsx tracks historyFetchedAt -----------------------------

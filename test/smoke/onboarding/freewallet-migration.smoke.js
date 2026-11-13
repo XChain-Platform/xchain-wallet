@@ -59,7 +59,7 @@ assert.ok(
     /isFreeWallet\s*=\s*importVariant\s*===\s*['"]freewallet['"]/.test(importWallet),
     'ImportWallet derives isFreeWallet from variant prop',
 );
-assert.ok(/Import from FreeWallet/.test(importWallet), 'ImportWallet renders FreeWallet branded title');
+assert.ok(/Import From FreeWallet/.test(importWallet), 'ImportWallet renders FreeWallet branded title');
 assert.ok(/12-word FreeWallet recovery phrase/.test(importWallet), 'ImportWallet renders FreeWallet branded subtitle');
 assert.ok(
     /acceptedWordCounts\s*=\s*isFreeWallet\s*\?\s*\[12\]/.test(importWallet),
@@ -127,8 +127,10 @@ assert.ok(/Legacy FreeWallet format|Counterwallet/.test(migrate), 'MigrateToBip3
 // --- 4. Home legacy alert -------------------------------------------
 
 const home = readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8');
-assert.ok(/onMigrateToBip39/.test(home), 'Home.jsx accepts onMigrateToBip39 prop');
-// The legacy alert is defined once in core and built by Home and the web menu.
+// Home takes no migration prop; the legacy alert reaches the user through the
+// menu's Alerts panel each shell builds, and through Wallet details.
+assert.ok(!/onMigrateToBip39/.test(home), 'Home.jsx takes no onMigrateToBip39 prop');
+// The legacy alert is defined once in core and built by each shell's menu.
 const walletAlerts = readFileSync(join(core, 'src', 'shared', 'walletAlerts.js'), 'utf8');
 assert.ok(
     /activeWallet\?\.format\s*===\s*['"]counterwallet-legacy['"]/.test(walletAlerts),
@@ -136,11 +138,17 @@ assert.ok(
 );
 assert.ok(/legacy-format/.test(walletAlerts), 'walletAlerts.js registers the legacy-format alert entry');
 assert.ok(/onMigrateToBip39/.test(walletAlerts), 'walletAlerts.js arms the legacy alert with onMigrateToBip39');
-assert.ok(/buildWalletAlerts\(/.test(home), 'Home.jsx builds its alerts from walletAlerts.js');
-assert.ok(
-    /buildWalletAlerts\(/.test(readFileSync(join(web, 'src', 'App.jsx'), 'utf8')),
-    'web App.jsx builds the menu Alerts panel from walletAlerts.js',
-);
+for (const [shell, appPath] of [
+    ['popup', join(ext, 'src', 'popup', 'App.jsx')],
+    ['web', join(web, 'src', 'App.jsx')],
+    ['desktop', join(desktop, 'renderer', 'App.jsx')],
+]) {
+    const shellSrc = readFileSync(appPath, 'utf8');
+    assert.ok(
+        /buildWalletAlerts\(\{[^}]*\},\s*\{[\s\S]*?onMigrateToBip39: \(\) => setUnlockedView\('migrate-bip39'\)/.test(shellSrc),
+        `${shell} App.jsx builds the menu Alerts panel from walletAlerts.js and arms the legacy alert`,
+    );
+}
 
 // --- 5. Three-shell App.jsx wiring ----------------------------------
 
@@ -168,8 +176,8 @@ for (const [shell, appPath] of [
         `${shell} App.jsx wires Onboarding.onImportFromFreeWallet`,
     );
     assert.ok(
-        /onMigrateToBip39=\{/.test(app),
-        `${shell} App.jsx threads onMigrateToBip39 to Home`,
+        /<WalletDetails[\s\S]*?onMigrateToBip39=\{/.test(app),
+        `${shell} App.jsx threads onMigrateToBip39 to Wallet details`,
     );
     assert.ok(
         /unlockedView\s*===\s*['"]migrate-bip39['"]/.test(app),

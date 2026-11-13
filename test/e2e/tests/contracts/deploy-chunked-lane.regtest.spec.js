@@ -53,6 +53,7 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -216,7 +217,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
             await switchToRegtest(page, PASSWORD);
 
             main = await openDeployForm(page);
-            const from = await main.getByLabel('From').inputValue();
+            const from = await (await openFromAddress(main)).inputValue();
             expect(from, 'the deploy form has no Bitcoin address').toMatch(REGTEST_ADDRESS_RE);
             await fundAddress(from, 1);
             await page.reload();
@@ -369,7 +370,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
             await switchToRegtest(page, PASSWORD);
 
             main = await openDeployForm(page);
-            payer = await main.getByLabel('From').inputValue();
+            payer = await (await openFromAddress(main)).inputValue();
             expect(payer, `the deploy form has no ${REGTEST_COIN} address`).toMatch(REGTEST_ADDRESS_RE);
 
             // Every leg spends the previous leg's confirmed change from this
@@ -586,7 +587,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
             await switchToRegtest(page, PASSWORD);
 
             main = await openDeployForm(page);
-            payer = await main.getByLabel('From').inputValue();
+            payer = await (await openFromAddress(main)).inputValue();
             expect(payer, `the deploy form has no ${REGTEST_COIN} address`).toMatch(REGTEST_ADDRESS_RE);
             await fundAddress(payer, FUNDING);
             await page.reload();
@@ -692,12 +693,12 @@ test.describe('§11.3: the chunked deploy lane', () => {
             // ExecuteContractForm's network field is fixed to the contract's
             // own chain. The From address is what proves the call signs on
             // the venue chain, and from the address that deployed.
-            await expect(scope.getByLabel('From', { exact: true }),
+            await expect(await openFromAddress(scope),
                 `the call form is not signing from this run's ${REGTEST_COIN} address`)
                 .toHaveValue(payer, { timeout: 30_000 });
             await scope.getByLabel('Method', { exact: true }).fill('inc');
             // No gas-limit field: EXECUTE runs at the protocol gas ceiling.
-            await scope.getByRole('button', { name: 'Call contract', exact: true }).click();
+            await scope.getByRole('button', { name: 'Call Contract', exact: true }).click();
 
             const confirm = page.getByTestId('confirm-modal');
             await expect(confirm).toBeVisible({ timeout: 60_000 });
@@ -782,7 +783,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
             await createWallet(page, { password: PASSWORD, name: 'Chunked Resume Wallet' });
             await switchToRegtest(page, PASSWORD);
             main = await openDeployForm(page);
-            payer = await main.getByLabel('From').inputValue();
+            payer = await (await openFromAddress(main)).inputValue();
             expect(payer).toMatch(REGTEST_ADDRESS_RE);
             await fundAddress(payer, FUNDING);
             await page.reload();
@@ -857,7 +858,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
                 'the banner counted zero sent chunks over a run whose chunk 0 is on chain and paid for')
                 .toBeGreaterThanOrEqual(1);
 
-            await main.getByRole('button', { name: 'Resume publishing', exact: true }).click();
+            await main.getByRole('button', { name: 'Resume Publishing', exact: true }).click();
 
             // The resume must restore the whole plan, not just the source.
             // The flow assembles phase 2 from the record, so a blank field here

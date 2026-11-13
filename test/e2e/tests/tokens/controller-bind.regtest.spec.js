@@ -83,6 +83,8 @@ import {
     expectConfirmModal as sharedConfirmModal,
     explorerJson,
     fundAddress,
+    issuePlainToken,
+    readIssueSource,
     minerRpc,
     mintXchain,
     REGTEST_ADDRESS_RE,
@@ -95,6 +97,7 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     REGTEST_CHAIN_ID,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -440,13 +443,10 @@ async function issueToken(page, tick, source) {
     await openPaletteCommand(page, 'Issue token');
     const form = page.getByRole('main');
     await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(form);
-    expect(await form.getByLabel('From').inputValue(),
+    expect(await readIssueSource(form),
         'the Issue form is not signing with the funded address')
         .toBe(source);
-    await form.getByLabel('Ticker').fill(tick);
-    await form.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
-    await form.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await issuePlainToken(form, { ticker: tick, supply: SUPPLY });
 
     await expectConfirmModal(page);
     const issued = await waitForIndexedAction(await approveAndGetTxid(page));
@@ -464,9 +464,7 @@ async function onboardAndIssue(page, ticks = [TICK, CONTROL_TICK], walletName = 
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(main);
-
-    const source = await main.getByLabel('From').inputValue();
+    const source = await readIssueSource(main);
     expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
         .toMatch(REGTEST_ADDRESS_RE);
 
@@ -501,14 +499,14 @@ async function deployGuard(page, source, guardSource = GUARD_SOURCE) {
     const main = page.getByRole('main');
     await expect(main.getByLabel('Code source')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
-    expect(await main.getByLabel('From', { exact: true }).inputValue(),
+    expect(await (await openFromAddress(main)).inputValue(),
         'the deploy would be signed by an address this spec never funded')
         .toBe(source);
 
     await main.getByLabel('Code source').fill(guardSource);
     // A source the validator rejects can never deploy, so a green validation is
     // the cheap precondition that keeps a later failure meaningful.
-    await main.getByRole('button', { name: 'Validate code' }).click();
+    await main.getByRole('button', { name: 'Validate Code' }).click();
     await expect(main.getByText('Syntax OK.')).toBeVisible({ timeout: 30_000 });
     await main.getByLabel('Gas limit').fill(DEPLOY_GAS);
     await main.getByRole('button', { name: 'Publish', exact: true }).click();
@@ -596,7 +594,7 @@ async function bindController(page, source, contractIndex, { tick = TICK, action
     // destination generated below - not the token owner. An ISSUE v6 signed by
     // anyone but the owner is refused, so this is a correction, not a check.
     await readChainAddresses(page, source);
-    expect(await form.getByLabel('From').inputValue(),
+    expect(await (await openFromAddress(form)).inputValue(),
         'the bind would be signed by an address that does not own the token')
         .toBe(source);
 
@@ -632,18 +630,44 @@ async function bindController(page, source, contractIndex, { tick = TICK, action
     return { bound, live };
 }
 
-/** Drops the transfer-class binding through the same form and waits for release. */
+/**
+ * Opens Manage Token -> Unbind controller for `tick`: the Unbind form, opened
+ * with the token already chosen and its owner as the signer.
+ */
+async function gotoUnbindControllerForm(page, tick) {
+    await openPaletteCommand(page, 'My tokens');
+    const row = page.getByRole('main').getByRole('button').filter({ hasText: tick }).first();
+    await expect(row, `${tick} is on chain but My Tokens does not list it`)
+        .toBeVisible({ timeout: 60_000 });
+    await row.click();
+
+    await expect(page.getByRole('heading', { name: 'Manage Token' })
+        .or(page.getByText('Manage Token').first()))
+        .toBeVisible({ timeout: 30_000 });
+    await clickManageTokenAction(page.getByRole('main'), 'Unbind controller');
+
+    const form = page.getByRole('main');
+    await expect(form.getByRole('group', { name: 'Action class' }),
+        'Unbind controller did not open the Unbind form')
+        .toBeVisible({ timeout: 30_000 });
+    return form;
+}
+
+/** Drops the transfer-class binding through the Unbind form and waits for release. */
 async function unbindController(page, source, tick = TICK) {
     await seedPrices();
-    const form = await gotoControllerForm(page, tick);
-    await readChainAddresses(page, source);
+    const form = await gotoUnbindControllerForm(page, tick);
 
-    await form.getByLabel(/^Unbind/).check();
+    // The form opens on the token, which it signs from as the token's owner, so
+    // there is no source to pick; the chain's verdict below proves the owner signed.
+    await expect(form.getByLabel('What to unbind'),
+        'opened from Manage Token, the Unbind form does not default to the token')
+        .toHaveValue('token');
     // The cooldown field belongs to a bind and must not be offered on a drop:
     // the friction a drop serves was committed when the binding was made, so a
     // second field here would invite an owner to think they can lower it.
     await expect(form.getByLabel(/^Cooldown blocks/),
-        'the Unbind path still offers a cooldown field, which a drop cannot set')
+        'the Unbind form still offers a cooldown field, which a drop cannot set')
         .toHaveCount(0);
     await chooseActionClass(form, 'transfer');
     await form.getByRole('button', { name: 'Unbind', exact: true }).click();
@@ -689,7 +713,7 @@ async function gotoAddressControllerForm(page, source) {
 
     await selectVenueChain(form);
     await readChainAddresses(page, source);
-    expect(await form.getByLabel('From').inputValue(),
+    expect(await (await openFromAddress(form)).inputValue(),
         'the binding would be attached to a different address than the one this test sends from')
         .toBe(source);
     return form;
@@ -760,8 +784,17 @@ async function bindAddressController(page, source, contractIndex) {
 /** Drops the address's transfer binding and waits for release. */
 async function unbindAddressController(page, source) {
     await reloadToHome(page);
-    const form = await gotoAddressControllerForm(page, source);
-    await form.getByLabel(/^Unbind/).check();
+    await seedPrices();
+    // Opened from the palette with no token context, so the form unbinds an address.
+    await openPaletteCommand(page, 'Unbind a controller');
+    const form = page.getByRole('main');
+    await expect(form.getByLabel('What to unbind'), 'the palette did not open the Unbind form')
+        .toBeVisible({ timeout: 30_000 });
+    await expect(form.getByLabel('What to unbind'),
+        'opened without a token, the Unbind form still defaults to a token')
+        .toHaveValue('address');
+    await selectVenueChain(form);
+    await readChainAddresses(page, source);
     await chooseActionClass(form, 'transfer');
     await form.getByRole('button', { name: 'Unbind', exact: true }).click();
 

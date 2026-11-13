@@ -59,7 +59,11 @@ import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 
 import { expect } from '@playwright/test';
-import { openSettings, gotoSection, openPaletteCommand, unlockedAnyScreen } from './wallet.js';
+import {
+    openSettings, gotoSection, openPaletteCommand, unlockedAnyScreen, openIssueSection, openFromSection, openFromAddress, revealChainPicker, FROM_ADDRESS_LABEL,
+} from './wallet.js';
+
+export { openFromAddress, FROM_ADDRESS_LABEL };
 import { kdfStepTimeout } from '../timeout-budget.js';
 import { rateLimitDelayMs, venueVerdict } from './venueHealth.js';
 import { compareDecimal, subtractDecimal } from '../../../packages/core/src/shared/utils/mintHeadroom.js';
@@ -1149,8 +1153,7 @@ export function actionStatuses(detail) {
  */
 export async function selectVenueChain(scope, field = 'Network') {
     const trigger = scope.getByRole('button', { name: new RegExp(`^${field}:`) }).first();
-    await expect(trigger, `no "${field}" chain picker on this screen`)
-        .toBeVisible({ timeout: 30_000 });
+    await revealChainPicker(scope, trigger, field);
     if (!((await trigger.getAttribute('aria-label')) || '').includes(REGTEST_CHAIN_LABEL)) {
         await trigger.click();
         await trigger.page().getByRole('dialog', { name: field })
@@ -1179,11 +1182,89 @@ export async function selectVenueChain(scope, field = 'Network') {
 export async function payProtocolFeeInCoin(scope) {
     if (REGTEST_COIN !== 'RBTC') return;
     const toggle = scope.getByRole('switch', { name: /^Pay protocol fee in \S+ instead of XCHAIN$/ });
+    // The switch lives in the Network fee section, which starts closed.
+    if (!(await toggle.isVisible().catch(() => false))) {
+        const header = scope.getByRole('button', { name: /^Network fee\b/ }).first();
+        if ((await header.count()) > 0 && (await header.getAttribute('aria-expanded')) !== 'true') {
+            await header.click();
+        }
+    }
     await expect(toggle, 'the form offers no switch to pay its protocol fee in the coin')
         .toBeVisible({ timeout: 30_000 });
     if (!(await toggle.isChecked())) await toggle.click();
     await expect(toggle).toBeChecked({ timeout: 15_000 });
 }
+
+/**
+ * Opens a form's From section, points its Network picker at this run's chain
+ * and returns the From address field.
+ *
+ * Both controls sit in the From section, closed until opened.
+ *
+ * @param {import('@playwright/test').Locator | import('@playwright/test').Page} main  the open form
+ * @param {string} [field]  the picker's visible label, "Network" by default
+ * @returns {Promise<import('@playwright/test').Locator>}
+ */
+export async function selectFormNetwork(main, field = 'Network') {
+    await openFromSection(main);
+    await selectVenueChain(main, field);
+    return main.getByLabel(FROM_ADDRESS_LABEL);
+}
+
+/**
+ * Opens a form's From section, points its network at this run's chain and
+ * returns the address the form signs with.
+ *
+ * The signer resolves in an effect that re-runs when the chain changes, so it
+ * is polled rather than read once: a read straight after picking the network
+ * catches the render before it and returns an empty string.
+ *
+ * @param {import('@playwright/test').Locator | import('@playwright/test').Page} main  the open form
+ * @returns {Promise<string>}
+ */
+export async function readFromAddress(main) {
+    const field = await selectFormNetwork(main);
+    await expect.poll(async () => field.inputValue().catch(() => ''),
+        { timeout: 30_000, message: 'the form names no signing address' })
+        .toMatch(REGTEST_ADDRESS_RE);
+    return field.inputValue();
+}
+
+/**
+ * Fills a plain (no template) Issue Token form and presses Issue Token.
+ *
+ * Fills the ticker and the Max supply field, optionally puts the protocol fee
+ * on the coin lane (its switch sits in the Network fee section, which this
+ * opens), and clicks the Issue Token button. It does not wait for the
+ * confirmation screen: callers assert that outcome themselves, because a
+ * refused submission stays on the form with an alert.
+ *
+ * @param {import('@playwright/test').Locator} main  the open Issue Token form
+ * @param {{ ticker: string, supply: string | number, description?: string,
+ *   feeInCoin?: boolean, password?: string }} opts
+ * `description` opens the Description section and fills Token description;
+ * `password` is typed into the form's Password field when one is showing.
+ */
+export async function issuePlainToken(main, { ticker, supply, description, feeInCoin = false, password }) {
+    await main.getByLabel('Ticker', { exact: true }).fill(ticker);
+    await main.getByLabel('Max supply', { exact: true }).fill(String(supply));
+    if (description !== undefined) {
+        await openIssueSection(main, 'Description');
+        await main.getByLabel('Token description', { exact: true }).fill(description);
+    }
+    if (feeInCoin) {
+        await openIssueSection(main, 'Network fee');
+        await payProtocolFeeInCoin(main);
+    }
+    if (password !== undefined) {
+        const field = main.getByLabel('Password', { exact: true });
+        if (await field.count() > 0 && await field.isVisible()) await field.fill(password);
+    }
+    await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
+}
+
+/** The Issue Token specs' name for {@link readFromAddress}. */
+export const readIssueSource = readFromAddress;
 
 /**
  * Fails when a form's From address is not this venue's regtest shape.
@@ -1196,7 +1277,7 @@ export async function payProtocolFeeInCoin(scope) {
  * check above as its only guard.
  */
 async function expectVenueSourceAddress(scope, field) {
-    const from = scope.getByLabel('From', { exact: true });
+    const from = scope.getByLabel(FROM_ADDRESS_LABEL);
     if (await from.count() !== 1) return;
     const tag = await from.evaluate((el) => el.tagName, undefined, { timeout: 5_000 }).catch(() => '');
     if (tag !== 'INPUT') return;

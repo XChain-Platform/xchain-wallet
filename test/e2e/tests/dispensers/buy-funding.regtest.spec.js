@@ -84,6 +84,7 @@ import {
     REGTEST_COIN,
     expectConfirmModal,
     fundAddress,
+    readIssueSource,
     mintXchain,
     nudgeChain,
     switchToRegtest,
@@ -330,9 +331,7 @@ test.describe('dispenser buy funding gate on regtest', () => {
             // to Bitcoin, so the `From` read below is a BITCOIN address unless
             // the chain is chosen first - which is exactly what the address-shape
             // assertion then catches, several lines after the real cause.
-            await selectVenueChain(seller.getByRole('main'), 'Network');
-            sellerAddress = await seller.getByRole('main')
-                .getByLabel('From', { exact: true }).inputValue();
+            sellerAddress = await readIssueSource(seller.getByRole('main'));
             // The VENUE's address shape, not Bitcoin's: a hardcoded `bcrt1`
             // alternative happens to pass on Litecoin (both accept `[mn2]`)
             // and hides a wrong-chain address on a chain that does not.
@@ -357,20 +356,18 @@ test.describe('dispenser buy funding gate on regtest', () => {
             // to Bitcoin, so the `From` read below is a BITCOIN address unless
             // the chain is chosen first - which is exactly what the address-shape
             // assertion then catches, several lines after the real cause.
-            await selectVenueChain(seller.getByRole('main'), 'Network');
-
             const main = seller.getByRole('main');
             // The address that signs must still be the one that was funded.
-            expect(await main.getByLabel('From', { exact: true }).inputValue(),
+            expect(await readIssueSource(main),
                 'the issue form still signs with the funded address').toBe(sellerAddress);
 
             await main.getByLabel('Ticker', { exact: true }).fill(GIVE_TICK);
-            await main.getByLabel('Supply', { exact: true }).fill(GIVE_SUPPLY);
+            await main.getByLabel('Max supply', { exact: true }).fill(GIVE_SUPPLY);
             // "Initial mint" left blank mints the whole supply now, and
             // "Divisible" is unchecked by default, so the token carries 0
             // decimals and every amount below stays a whole number.
             await fillPasswordIfPresent(main);
-            await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+            await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
             await approveConfirm(seller, `the ISSUE of the throwaway give token ${GIVE_TICK}`);
 
             // The chain's answer, not the app's.
@@ -438,9 +435,7 @@ test.describe('dispenser buy funding gate on regtest', () => {
             // to Bitcoin, so the `From` read below is a BITCOIN address unless
             // the chain is chosen first - which is exactly what the address-shape
             // assertion then catches, several lines after the real cause.
-            await selectVenueChain(page.getByRole('main'), 'Network');
-            buyerAddress = await page.getByRole('main')
-                .getByLabel('From', { exact: true }).inputValue();
+            buyerAddress = await readIssueSource(page.getByRole('main'));
             expect(buyerAddress, 'the buyer wallet has a signing address')
                 .toMatch(REGTEST_ADDRESS_RE);
             expect(buyerAddress, 'the buyer is a different wallet from the seller')

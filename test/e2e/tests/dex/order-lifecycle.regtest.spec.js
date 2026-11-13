@@ -53,6 +53,7 @@ import {
     switchToRegtest,
     tokenBalance,
     unlockAfterReload,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -207,13 +208,13 @@ async function onboardFundMint(page, walletName) {
 
     await openPaletteCommand(page, 'Create order');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('From address')).toBeVisible({ timeout: 30_000 });
+    await expect(await openFromAddress(main)).toBeVisible({ timeout: 30_000 });
     // Every action form carries its own chain picker and they all default to
     // Bitcoin (§3.5), so a form without one composes on whatever chain the
     // wallet happens to list first - which on a regtest wallet is not this
     // venue. This form had no picker at all until this spec asked for one.
     await selectVenueChain(main);
-    const source = await main.getByLabel('From address').inputValue();
+    const source = await (await openFromAddress(main)).inputValue();
     expect(source, `the Create order form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
         .toMatch(REGTEST_ADDRESS_RE);
 
@@ -233,7 +234,7 @@ async function onboardFundMint(page, walletName) {
 async function placeOrder(page) {
     await openPaletteCommand(page, 'Create order');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('From address')).toBeVisible({ timeout: 30_000 });
+    await expect(await openFromAddress(main)).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
 
     // The default sides are exactly the pair this spec is about (give a
@@ -326,7 +327,7 @@ test.describe(`the DEX ORDER lane on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(main, 'the cancel panel is pointed at a different order')
                 .toContainText(`#${orderIndex}`);
             // Signed on the shared confirm page, after its network dry run.
-            await page.getByRole('button', { name: 'Cancel order' }).click();
+            await page.getByRole('button', { name: 'Cancel Order' }).click();
             await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
             await page.getByTestId('confirm-approve').click();
@@ -407,7 +408,7 @@ test.describe(`the DEX ORDER lane on ${REGTEST_CHAIN_LABEL}`, () => {
             // A blank edit is refused before anything is signed: the wire has
             // no way to say "change nothing", so an empty submit would spend a
             // miner fee to say nothing.
-            await main.getByRole('button', { name: 'Update order' }).click();
+            await main.getByRole('button', { name: 'Update Order' }).click();
             await expect(main, 'a blank edit was not refused with the no-change notice')
                 .toContainText('Change at least one field', { timeout: 30_000 });
             await expect(page.getByTestId('confirm-approve'),
@@ -415,7 +416,7 @@ test.describe(`the DEX ORDER lane on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toHaveCount(0);
 
             await expiration.fill(localInput);
-            await main.getByRole('button', { name: 'Update order' }).click();
+            await main.getByRole('button', { name: 'Update Order' }).click();
             await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
             await page.getByTestId('confirm-approve').click();

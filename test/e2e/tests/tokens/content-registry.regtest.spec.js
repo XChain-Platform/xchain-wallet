@@ -42,6 +42,8 @@ import {
     explorerJson,
     expectConfirmModal,
     fundAddress,
+    issuePlainToken,
+    readIssueSource,
     mintXchain,
     nudgeChain,
     REGTEST_ADDRESS_RE,
@@ -133,16 +135,11 @@ async function issueToken(page, source, tick) {
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(main);
-    expect(await main.getByLabel('From', { exact: true }).inputValue(),
+    expect(await readIssueSource(main),
         `the Issue token form defaulted away from ${source}, so the issued token would not be owned `
         + 'by the address this test funded')
         .toBe(source);
-    await main.getByLabel('Ticker').fill(tick);
-    await main.getByLabel('Supply', { exact: true }).fill(SUPPLY);
-    const password = main.getByLabel('Password', { exact: true });
-    if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-    await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await issuePlainToken(main, { ticker: tick, supply: SUPPLY, password: PASSWORD });
 
     await expectConfirmModal(page, 'this action', 60_000);
     await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
@@ -169,8 +166,7 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             await openPaletteCommand(page, 'Issue token');
             const issueMain = page.getByRole('main');
             await expect(issueMain.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(issueMain);
-            source = await issueMain.getByLabel('From', { exact: true }).inputValue();
+            source = await readIssueSource(issueMain);
             expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
             await fundAddress(source, FUNDING);
@@ -194,14 +190,14 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
                 mimeType: 'image/svg+xml',
                 buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>'),
             });
-            await page.getByRole('button', { name: 'Attach artwork', exact: true }).click();
+            await page.getByRole('button', { name: 'Attach Artwork', exact: true }).click();
 
             const fileMain = page.getByRole('main');
-            await expect(fileMain.getByRole('button', { name: 'Upload file', exact: true }))
+            await expect(fileMain.getByRole('button', { name: 'Upload File', exact: true }))
                 .toBeVisible({ timeout: 30_000 });
             const filePassword = fileMain.getByLabel('Password', { exact: true });
             if (await filePassword.count() > 0 && await filePassword.isVisible()) await filePassword.fill(PASSWORD);
-            await fileMain.getByRole('button', { name: 'Upload file', exact: true }).click();
+            await fileMain.getByRole('button', { name: 'Upload File', exact: true }).click();
 
             await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
@@ -210,7 +206,7 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             // before a check for it runs. So nothing is read here: the wait is on
             // the LINK leg's button, and both txids come off the done screen.
             await page.getByTestId('confirm-approve').click();
-            const linkButton = page.getByRole('button', { name: `Link artwork to ${TICK}`, exact: true });
+            const linkButton = page.getByRole('button', { name: `Link Artwork to ${TICK}`, exact: true });
             const deadline = Date.now() + 300_000;
             while (Date.now() < deadline) {
                 if (await linkButton.isVisible().catch(() => false)) break;
@@ -290,7 +286,7 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             // members go in the paste area, which has no label of its own.
             await main.getByPlaceholder('Paste addresses, one per line or comma-separated.').fill(source);
             await expect(main).toContainText('1 valid address');
-            await main.getByRole('button', { name: 'Publish list', exact: true }).click();
+            await main.getByRole('button', { name: 'Publish List', exact: true }).click();
 
             await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
@@ -309,17 +305,17 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBeVisible({ timeout: 30_000 });
             await expect(page.getByRole('main')).toContainText(source);
 
-            await page.getByRole('button', { name: 'Fork & edit', exact: true }).click();
+            await page.getByRole('button', { name: 'Fork & Edit', exact: true }).click();
             const forkMain = page.getByRole('main');
-            await expect(forkMain.getByRole('button', { name: 'Publish edit', exact: true }))
+            await expect(forkMain.getByRole('button', { name: 'Publish Edit', exact: true }))
                 .toBeVisible({ timeout: 30_000 });
             // The fork adds a member the parent does not already hold: ListForkForm
             // drops additions that are already on the list, so re-adding `source`
             // would leave nothing to publish and Publish edit disabled.
             await forkMain.getByLabel(/^Add addresses/).fill(REGTEST_DESTINATION);
-            await forkMain.getByRole('button', { name: 'Publish edit', exact: true }).click();
+            await forkMain.getByRole('button', { name: 'Publish Edit', exact: true }).click();
 
-            const publishAdd = forkMain.getByRole('button', { name: 'Publish add', exact: true });
+            const publishAdd = forkMain.getByRole('button', { name: 'Publish Add', exact: true });
             await expect(publishAdd).toBeVisible({ timeout: 30_000 });
             const forkPassword = forkMain.getByLabel('Password', { exact: true });
             if (await forkPassword.count() > 0 && await forkPassword.isVisible()) await forkPassword.fill(PASSWORD);
@@ -361,10 +357,10 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             await openManagedList();
             // List details read through the shared host gate, which holds every
             // read while the venue's per-IP limit is paused after a 429.
-            await page.getByRole('button', { name: 'Rename list', exact: true }).click({ timeout: 90_000 });
+            await page.getByRole('button', { name: 'Rename List', exact: true }).click({ timeout: 90_000 });
             const renameMain = page.getByRole('main');
             await renameMain.getByLabel('Name', { exact: true }).fill(NAME);
-            await renameMain.getByRole('button', { name: 'Rename list', exact: true }).click();
+            await renameMain.getByRole('button', { name: 'Rename List', exact: true }).click();
             const renamePassword = renameMain.getByLabel('Password', { exact: true });
             if (await renamePassword.count() > 0 && await renamePassword.isVisible()) await renamePassword.fill(PASSWORD);
             await expectConfirmModal(page, 'this action', 60_000);
@@ -382,11 +378,11 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
                 'ListDetail does not show the name the rename published')
                 .toContainText(NAME, { timeout: 30_000 });
 
-            await page.getByRole('button', { name: 'Transfer list', exact: true }).click();
+            await page.getByRole('button', { name: 'Transfer List', exact: true }).click();
             const transferMain = page.getByRole('main');
             await transferMain.getByLabel('New owner', { exact: true }).fill(REGTEST_DESTINATION);
             await transferMain.getByLabel('Type TRANSFER to confirm').fill('TRANSFER');
-            await transferMain.getByRole('button', { name: 'Transfer list', exact: true }).click();
+            await transferMain.getByRole('button', { name: 'Transfer List', exact: true }).click();
             const transferPassword = transferMain.getByLabel('Password', { exact: true });
             if (await transferPassword.count() > 0 && await transferPassword.isVisible()) await transferPassword.fill(PASSWORD);
             await expectConfirmModal(page, 'this action', 60_000);
@@ -404,18 +400,27 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openManageTokenAction(page, PROJECT, 'Official list');
             const rosterMain = page.getByRole('main');
-            await expect(rosterMain.getByLabel('Tokens (one per line)')).toBeVisible({ timeout: 30_000 });
+            const addToken = rosterMain.getByRole('button', { name: 'Add Token', exact: true });
+            await expect(addToken).toBeVisible({ timeout: 30_000 });
             await expect(rosterMain.getByText('No list published yet. This will be the first.', { exact: true }),
                 'the wallet never finished checking the current official-token list')
                 .toBeVisible({ timeout: 60_000 });
-            await rosterMain.getByLabel('Tokens (one per line)').fill(MEMBER);
-            await rosterMain.getByRole('button', { name: 'Save roster', exact: true }).click();
+            // Each project token is a row added through the token picker.
+            await addToken.click();
+            await expect(page.locator('[data-balance-key]').first(),
+                'the token picker listed nothing at all, so its balances never arrived')
+                .toBeVisible({ timeout: 60_000 });
+            await page.getByLabel('Search coins or tokens').fill(MEMBER);
+            await page.getByRole('button', { name: new RegExp(`^Select ${MEMBER}( on |$)`) }).first().click();
+            await expect(rosterMain.getByRole('listitem').filter({ hasText: MEMBER })).toBeVisible({ timeout: 30_000 });
+            await expect(rosterMain.getByRole('button', { name: `Remove ${MEMBER}`, exact: true })).toBeVisible();
+            await rosterMain.getByRole('button', { name: 'Create Project Tokens', exact: true }).click();
 
-            await expect(rosterMain.getByRole('button', { name: 'Publish list', exact: true }))
+            await expect(rosterMain.getByRole('button', { name: 'Publish List', exact: true }))
                 .toBeVisible({ timeout: 30_000 });
             const listPassword = rosterMain.getByLabel('Password', { exact: true });
             if (await listPassword.count() > 0 && await listPassword.isVisible()) await listPassword.fill(PASSWORD);
-            await rosterMain.getByRole('button', { name: 'Publish list', exact: true }).click();
+            await rosterMain.getByRole('button', { name: 'Publish List', exact: true }).click();
 
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
             await page.getByTestId('confirm-approve').click();
@@ -423,7 +428,7 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             // After Approve the form shows "List is on its way", which the index
             // poll can clear before a check for it runs, so the wait is on the next
             // leg's button.
-            const officialButton = page.getByRole('button', { name: 'Make it official', exact: true });
+            const officialButton = page.getByRole('button', { name: 'Make It Official', exact: true });
             const deadline = Date.now() + 300_000;
             while (Date.now() < deadline) {
                 if (await officialButton.isVisible().catch(() => false)) break;

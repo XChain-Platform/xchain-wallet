@@ -72,7 +72,8 @@ for (const rel of [
     'src/shared/routes/Receive.jsx',
     'src/shared/routes/Receive.module.css',
     'src/shared/routes/TokenWizard.jsx',
-    'src/shared/routes/TokenWizard.module.css',
+    'src/shared/routes/IssueTokenForm.jsx',
+    'src/shared/routes/IssueTokenForm.module.css',
 ]) {
     assert.ok(existsSync(join(core, rel)), `shared file exists: ${rel}`);
 }
@@ -132,7 +133,8 @@ const routeMessagingCalls = {
         'messaging.getAddressesByChain',
         'messaging.getNewestAddress',
     ],
-    TokenWizard: [
+    // The Issue a Token route hosts IssueTokenForm, which owns the messaging calls.
+    IssueTokenForm: [
         'messaging.getAddressesByChain',
         'messaging.issueToken',
     ],

@@ -41,6 +41,9 @@ import { guardOutbound, stubOutboundHosts } from './outboundGuard.js';
 // See test/e2e/timeout-budget.js.
 const KDF_STEP_MS = kdfStepTimeout();
 
+/** The create form's wallet-mode radios, by the start of their names. */
+const WALLET_MODE_RADIO = { watcher: /^Watch-only/, signer: /^Air-gapped signer/ };
+
 /** Home's message when it is offline with no balances read yet (home.offline.empty). */
 const OFFLINE_HOME_EMPTY = 'You are offline. Connect to load balances and use network actions.';
 
@@ -306,15 +309,49 @@ export async function switchToWallet(page, name, { timeoutMs = 30_000 } = {}) {
  *
  * @returns {Promise<string[]>} the new wallet's recovery phrase
  */
-export async function addWallet(page, { name, password = DEFAULT_PASSWORD, ads = 'off' } = {}) {
+export async function addWallet(page, {
+    name, password = DEFAULT_PASSWORD, ads = 'off', walletMode = 'full',
+} = {}) {
     if (!name) throw new Error('addWallet needs a name, so the switch to it can be confirmed');
     await openWalletPicker(page);
-    await page.getByRole('button', { name: 'Add wallet', exact: true }).click();
+    await page.getByRole('button', { name: 'Add Wallet', exact: true }).click();
     // navigate:false: the add flow starts at the onboarding welcome inside the
     // unlocked shell, and a goto('/') would drop the session.
-    const words = await createWallet(page, { password, name, ads, navigate: false });
+    const words = await createWallet(page, { password, name, ads, navigate: false, walletMode });
     await switchToWallet(page, name);
     return words;
+}
+
+/**
+ * Adds a second wallet from an existing recovery phrase, chosen in the given
+ * mode, then switches to it. A wallet's mode is fixed when it is set up, so a
+ * spec that needs the same addresses in watch-only (or signer) mode imports
+ * the phrase again as a new wallet instead of flipping the first one.
+ *
+ * @param {string[]} words the recovery phrase of the wallet to mirror
+ */
+export async function addWalletFromPhrase(page, words, {
+    name, password = DEFAULT_PASSWORD, ads = 'off', walletMode = 'watcher',
+} = {}) {
+    if (!name) throw new Error('addWalletFromPhrase needs a name, so the switch to it can be confirmed');
+    await openWalletPicker(page);
+    await page.getByRole('button', { name: 'Add Wallet', exact: true }).click();
+    await page.getByRole('button', { name: 'Import wallet' }).click();
+    await page.getByRole('textbox', { name: /^Recovery phrase/ }).fill(words.join(' '));
+    await page.getByLabel('Wallet name', { exact: true }).fill(name);
+    await page.getByLabel('Password', { exact: true }).fill(password);
+    await page.getByLabel(/^Confirm( password)?$/).fill(password);
+    if (walletMode !== 'full') {
+        const radio = page.getByRole('radio', { name: WALLET_MODE_RADIO[walletMode] });
+        await expect(radio, `the import form has no "${walletMode}" wallet-mode choice`)
+            .toBeVisible({ timeout: 30_000 });
+        await radio.click();
+        await expect(radio).toBeChecked();
+    }
+    await page.getByRole('button', { name: 'Import', exact: true }).click();
+    await acknowledgeImportNotice(page, ads);
+    await expect(createdWalletShell(page, false)).toBeVisible({ timeout: KDF_STEP_MS });
+    await switchToWallet(page, name);
 }
 
 /**
@@ -501,40 +538,112 @@ export async function expectMyTokensRow(main, row, message, { timeout = 60_000 }
     const loadFailed = main.getByRole('alert').filter({ hasText: 'Could not load your owned tokens' });
     await expect(async () => {
         if (await loadFailed.isVisible().catch(() => false)) {
-            await loadFailed.getByRole('button', { name: 'Try again', exact: true }).click();
+            await loadFailed.getByRole('button', { name: 'Try Again', exact: true }).click();
         }
         await expect(row, message).toBeVisible({ timeout: 2_000 });
     }, message).toPass({ timeout, intervals: [3_000, 5_000, 10_000] });
 }
 
 /**
- * Submits the token wizard's Details step and advances through Review when the
- * details are accepted. A refused submission stays on Details with an alert,
- * so callers that exercise a refusal can assert that verdict without waiting
- * for a review-stage button that will never be rendered.
+ * Picks a "Start from" preset on the one Issue Token form (Meme token, Utility
+ * token, Collectible, Limited edition or Subtoken). The picker is a button
+ * named after its placeholder, opening a list of options.
+ *
+ * @param {import('@playwright/test').Locator} main
+ * @param {RegExp} name  the option's accessible name, such as /^Subtoken/
+ */
+export async function pickIssuePreset(main, name) {
+    await main.getByRole('button', { name: /^Select template/ }).click();
+    await main.page().getByRole('option', { name }).click();
+}
+
+/**
+ * Opens a collapsed section of any Form Standard form by its title (From,
+ * Network fee, Initial mint, Public minting, Locks, Callback, ...) and waits
+ * for it to report open. Sections that are already open are left alone.
+ *
+ * @param {import('@playwright/test').Locator} main
+ * @param {string} title
+ */
+export async function openFormSection(main, title) {
+    const header = main.getByRole('button', { name: new RegExp(`^${title}\\b`) }).first();
+    if ((await header.getAttribute('aria-expanded')) !== 'true') await header.click();
+    await expect(header).toHaveAttribute('aria-expanded', 'true');
+}
+
+/** The Issue Token specs' name for {@link openFormSection}. */
+export const openIssueSection = openFormSection;
+
+/**
+ * Opens a form's source section, the one that holds Network and the From
+ * address. Most forms title it "From"; the signing forms title it "Signing
+ * with".
+ *
+ * @param {import('@playwright/test').Locator} main
+ */
+export async function openFromSection(main) {
+    await openFormSection(main, '(?:From|Signing with)');
+}
+
+/**
+ * The From address field's label. A form names it "From address" (the Form
+ * Standard default) or plain "From"; anchoring the pattern keeps it off the
+ * section header and off labels such as "From (token owner)".
+ */
+export const FROM_ADDRESS_LABEL = /^From(?: address)?$/;
+
+/**
+ * Opens a Form Standard form's From section and returns the From address
+ * field inside it, without waiting for a value.
+ *
+ * @param {import('@playwright/test').Locator | import('@playwright/test').Page} main  the open form
+ * @returns {import('@playwright/test').Locator}
+ */
+export async function openFromAddress(main) {
+    await openFromSection(main);
+    return main.getByLabel(FROM_ADDRESS_LABEL);
+}
+
+/**
+ * Waits for a chain picker and, when it is not showing because a Form
+ * Standard form keeps it inside the closed From section, opens that section.
+ * Screens that carry the picker outside such a section (a modal, a settings
+ * panel) show it at once and are left alone.
+ *
+ * @param {import('@playwright/test').Locator | import('@playwright/test').Page} scope
+ * @param {import('@playwright/test').Locator} trigger  the picker's trigger button
+ * @param {string} field  the picker's visible label, for the failure message
+ */
+export async function revealChainPicker(scope, trigger, field) {
+    const sourceHeader = scope.getByRole('button', { name: /^(?:From|Signing with)\b/ }).first();
+    await expect(trigger.or(sourceHeader).first(), `no "${field}" chain picker on this screen`)
+        .toBeVisible({ timeout: 30_000 });
+    if (!(await trigger.isVisible())) await openFromSection(scope);
+    await expect(trigger, `no "${field}" chain picker on this screen`)
+        .toBeVisible({ timeout: 30_000 });
+}
+
+/**
+ * Submits the Issue Token form with its Issue Token button. A wallet that can
+ * sign goes straight to the shared confirmation screen; a refused submission
+ * stays on the form with an alert, so callers that exercise a refusal can
+ * assert that verdict without waiting for a confirmation that never opens.
  *
  * @param {import('@playwright/test').Page} page
- * @param {{ onReview?: (main: import('@playwright/test').Locator) => Promise<void> }} [options]
- * @returns {Promise<boolean>} true when Review advanced toward confirmation,
- * false when the Details step displayed a refusal
+ * @returns {Promise<boolean>} true when the confirmation screen opened, false
+ * when the form displayed a refusal
  */
-export async function submitTokenWizard(page, { onReview } = {}) {
+export async function submitTokenWizard(page) {
     const main = page.getByRole('main');
-    await main.getByRole('button', { name: 'Review token', exact: true }).click();
+    await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
 
-    const continueButton = main.getByRole('button', {
-        name: 'Issue token',
-        exact: true,
-    });
+    const confirm = page.getByTestId('confirm-approve');
     const refusal = main.getByRole('alert');
-    await expect(continueButton.or(refusal).first(),
-        'the token wizard neither opened Review nor explained why Details were refused')
+    await expect(confirm.or(refusal).first(),
+        'the Issue Token form neither opened confirmation nor explained why it was refused')
         .toBeVisible({ timeout: 90_000 });
 
-    if (!(await continueButton.isVisible().catch(() => false))) return false;
-    if (onReview) await onReview(main);
-    await continueButton.click();
-    return true;
+    return confirm.isVisible().catch(() => false);
 }
 
 /**
@@ -640,12 +749,22 @@ export async function completeRecoveryPhraseChallenge(page, words) {
 export async function createWallet(page, options = {}) {
     const {
         password = DEFAULT_PASSWORD, name, ads = 'off', navigate = true,
-        bip39Passphrase = null, waitForBalances = true,
+        bip39Passphrase = null, waitForBalances = true, walletMode = 'full',
     } = options;
 
     if (navigate) await page.goto('/');
     await dismissIntroCarousel(page);
     await page.getByRole('button', { name: 'Create new wallet' }).click();
+
+    // Wallet mode is chosen once, here, and is final for the wallet. Normal is
+    // the form's default, so only the other two are clicked.
+    if (walletMode !== 'full') {
+        const radio = page.getByRole('radio', { name: WALLET_MODE_RADIO[walletMode] });
+        await expect(radio, `the create form has no "${walletMode}" wallet-mode choice`)
+            .toBeVisible({ timeout: 30_000 });
+        await radio.click();
+        await expect(radio, `the "${walletMode}" wallet-mode choice did not take`).toBeChecked();
+    }
 
     // Exact: every create wallet field's 'About ...' help tip (U57) carries its label too.
     if (name) await page.getByLabel('Wallet name', { exact: true }).fill(name);

@@ -30,5 +30,5 @@ assert.match(formSrc, /actionData: \{ action: 'DELEGATE'/);
 assert.match(formSrc, /messaging\.buildActionPsbtRequest\(\{[\s\S]+?action: 'DELEGATE', params: actionParams/);
 // Revoke mode builds DELEGATE v2 params itself; v0 has no SIGNING_PUBKEY slot.
 assert.match(formSrc, /return \{ VERSION: '2', SIGNING_PUBKEY: pk \};/);
-assert.match(formSrc, /Create unsigned transaction/);
+assert.match(formSrc, /Create Unsigned Transaction/);
 console.log('delegation-watcher-mode smoke OK');

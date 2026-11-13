@@ -216,7 +216,7 @@ test('rtl sweep', async ({ page }, testInfo) => {
         ['Home', 'home'], ['History', 'history'], ['Send', 'send'], ['Receive', 'receive'],
         ['Scan', 'scan'], ['My tokens', 'my-tokens'], ['Addresses', 'addresses'], ['DEX', 'markets'],
         ['Marketplace', 'market-activity'], ['Dispensers', 'dispensers-list'],
-        ['Cross-chain', 'cross-chain-templates'], ['Payments due', 'obligations'],
+        ['Payments due', 'obligations'],
         ['Contracts', 'contracts-list'], ['Staking', 'staking-dashboard'],
         ['Multisig', 'multisig-create'], ['Lists', 'lists'], ['All actions', 'actions'],
         ['Messaging', 'messaging'], ['Contacts', 'contacts'], ['Alerts', 'alerts'],

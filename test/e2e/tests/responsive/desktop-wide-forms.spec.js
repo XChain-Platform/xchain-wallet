@@ -175,7 +175,7 @@ test('desktop forms use the available width and keep shared geometry', async ({ 
 
         await test.step(`${viewport.name} / Create token`, async () => {
             await gotoPalette(page, 'Create a token');
-            await expect(page.getByRole('heading', { name: 'Issue a token', exact: true }))
+            await expect(page.getByRole('heading', { name: 'Issue Token', exact: true }))
                 .toBeVisible({ timeout: 30_000 });
             // Custom opens the full Issue form (ruling U79); the other
             // templates keep the wizard's network step this walk measures.
@@ -205,7 +205,7 @@ test('desktop forms use the available width and keep shared geometry', async ({ 
             await page.getByRole('main').getByRole('button', { name: /^About v?\d/ }).click();
             await expect(page.getByRole('heading', { name: 'About', exact: true }))
                 .toBeVisible({ timeout: 30_000 });
-            await page.getByRole('button', { name: 'Show full text', exact: true }).click();
+            await page.getByRole('button', { name: 'Show Full Text', exact: true }).click();
             const terms = page.locator('#full-license-text');
             await expect(terms).toBeVisible();
             await expectTermsUseContentWidth(terms, `${viewport.name} license or terms`);

@@ -17,7 +17,7 @@
 //   2. The hash is stable across runs (same URL → same prefix) so the
 //      same user's repeated dumps stay comparable, but the prefix is
 //      short enough that the original is not recoverable.
-//   3. AboutSection ships a "Show preview" expander and renders the
+//   3. AboutSection ships a "Show Preview" expander and renders the
 //      pretty-printed JSON before the user copies it.
 
 import { strict as assert } from 'node:assert';
@@ -103,16 +103,16 @@ const btcB = dumpB.endpoints.find((e) => e.chainId === 'BTC.mainnet');
 assert.equal(btc.explorerUrl, btcB.explorerUrl,
     'redaction is deterministic: same URL → same hash prefix across runs');
 
-// --- 3. AboutSection has a "Show preview" expander ---------------------
+// --- 3. AboutSection has a "Show Preview" expander ---------------------
 
 const aboutSrc = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'settings', 'AboutSection.jsx'),
     'utf8',
 );
-assert.ok(/Show preview/.test(aboutSrc),
-    'AboutSection ships a "Show preview" trigger label');
-assert.ok(/Hide preview/.test(aboutSrc),
-    'AboutSection toggles label to "Hide preview" while open');
+assert.ok(/Show Preview/.test(aboutSrc),
+    'AboutSection ships a "Show Preview" trigger label');
+assert.ok(/Hide Preview/.test(aboutSrc),
+    'AboutSection toggles label to "Hide Preview" while open');
 assert.ok(/aria-controls="diagnostic-dump-preview"/.test(aboutSrc),
     'preview trigger associates with the preview region via aria-controls');
 assert.ok(/id="diagnostic-dump-preview"/.test(aboutSrc),
@@ -132,5 +132,5 @@ assert.ok(/redactCustomUrl/.test(dumpSrc),
     'diagnosticDump exposes a redactCustomUrl helper for endpoint URLs');
 
 console.log(
-    'OK: diagnostic-dump-redaction smoke (§50 / Cluster L FOLLOWUP 3: custom endpoint URLs land as redacted:sha256:<hex>; AboutSection ships Show preview expander wired with aria-expanded + aria-controls; redaction is deterministic so a single user\'s dumps stay comparable)',
+    'OK: diagnostic-dump-redaction smoke (§50 / Cluster L FOLLOWUP 3: custom endpoint URLs land as redacted:sha256:<hex>; AboutSection ships Show Preview expander wired with aria-expanded + aria-controls; redaction is deterministic so a single user\'s dumps stay comparable)',
 );

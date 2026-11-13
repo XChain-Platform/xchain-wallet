@@ -49,12 +49,13 @@
 // was still editing for while this was written; asserting on
 //     half-written copy would report on their draft rather than on the product.
 
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openIssueSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     encoderRpc,
     expectConfirmModal,
     EXPLORER_URL,
     fundAddress,
+    readIssueSource,
     minerRpc,
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
@@ -180,8 +181,7 @@ test.describe(`the mandatory native-fee lane on ${REGTEST_CHAIN_LABEL}`, () => {
             // Every form has its OWN chain picker and they all default to
             // Bitcoin (§3.5): without this the run would compose on the wrong
             // chain and the address funded below would never be the payer.
-            await selectVenueChain(main);
-            source = await main.getByLabel('From').inputValue();
+            source = await readIssueSource(main);
             expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
 
@@ -207,9 +207,12 @@ test.describe(`the mandatory native-fee lane on ${REGTEST_CHAIN_LABEL}`, () => {
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(main);
+            await readIssueSource(main);
             await main.getByLabel('Ticker').fill(TICK);
-            await main.getByLabel('Supply', { exact: true }).fill(SUPPLY);
+            await main.getByLabel('Max supply', { exact: true }).fill(SUPPLY);
+            // The fee row sits in the Network fee section, closed until opened,
+            // so the absence check below reads the open section.
+            await openIssueSection(main, 'Network fee');
 
             // There is nothing to opt into on this chain, and that is the
             // premise of the whole file: a later change forces the coin lane, so the
@@ -222,7 +225,7 @@ test.describe(`the mandatory native-fee lane on ${REGTEST_CHAIN_LABEL}`, () => {
 
             const password = main.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-            await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+            await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
 
             await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });

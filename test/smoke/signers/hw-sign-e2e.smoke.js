@@ -567,7 +567,7 @@ assert.ok(
     'action.send.hw looks up the transport via signerBridge',
 );
 assert.ok(
-    /Hardware signer is not connected\./.test(bgSrc),
+    /Hardware wallet is not connected\./.test(bgSrc),
     'action.send.hw has a clear "not connected" error message',
 );
 

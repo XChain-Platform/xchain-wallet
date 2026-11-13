@@ -112,7 +112,7 @@ describe('regression/preflight-findings-copy', () => {
 
         fireEvent.change(await screen.findByLabelText('Ticker'), { target: { value: 'REGCOPY' } });
         fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '1000' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
 
         await waitFor(() => expect(screen.getByTestId('preflight-panel'))
             .toHaveAttribute('data-verdict', 'fail'));

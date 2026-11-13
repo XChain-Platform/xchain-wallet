@@ -67,16 +67,18 @@ for (const [shell, appPath] of [
     assert.ok(app.includes("'stake-new'"), `${shell} tracks the stake-new view`);
     assert.ok(/onPickValidator=\{\(chainId\)\s*=>\s*\{\s*setStakingRef\(\{ kind: 'validator', chainId, address: '' \}\);\s*setUnlockedView\('stake-form'\)/.test(app),
         `${shell} wires StakeNew.onPickValidator → stake-form with a validator ref`);
-    assert.ok(/onPickContract=\{\(\)\s*=>\s*\{\s*setStakeContractPickerActive\(true\);\s*setUnlockedView\('contracts-list'\)/.test(app),
-        `${shell} wires StakeNew.onPickContract → contracts-list with the picker flag`);
-    assert.ok(/stakeContractPickerActive\s*\?\s*'stake-picker'\s*:\s*'contracts-browse'/.test(app),
-        `${shell} stamps contractRef.origin from the picker flag`);
-    assert.ok(/origin === 'stake-picker'/.test(app),
-        `${shell} contract-stake back-nav branches on the stake-picker origin`);
-    assert.ok(/origin === 'stake-detail'/.test(app),
-        `${shell} contract-stake back-nav branches on the stake-detail origin`);
+    assert.ok(/onPickContract=\{\(\) => setUnlockedView\('contracts-list'\)\}/.test(app),
+        `${shell} wires StakeNew.onPickContract → contracts-list`);
+    // Back from the contract browser and the stake form pops the shell's
+    // history, so it reaches the chooser or the detail page it came from
+    // without a per-origin branch.
+    assert.ok(!/stakeContractPickerActive|origin === 'stake-(picker|detail)'/.test(app),
+        `${shell} keeps no per-origin back-nav for contract staking`);
+    const stakeBlock = app.split("unlockedView === 'contract-stake'")[1]?.split('unlockedView ===')[0] || '';
+    assert.ok(/onBack=\{goBack\}/.test(stakeBlock),
+        `${shell} contract-stake Back returns to the page it was opened from`);
 }
 
 console.log(
-    'OK: stake new smoke (StakeNew two-arm chooser + BTC gate + inline chain step + ContractStakeForm.initialMode + 3-shell wiring with origin-based back-nav)',
+    'OK: stake new smoke (StakeNew two-arm chooser + BTC gate + inline chain step + ContractStakeForm.initialMode + 3-shell wiring with history Back)',
 );

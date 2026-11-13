@@ -121,8 +121,10 @@ for (const [shell, appPath] of [
         `${shell} tracks the contract-execute sub-route`);
     assert.ok(/onExecute=\{\(\)\s*=>\s*setUnlockedView\('contract-execute'\)\}/.test(app),
         `${shell} wires ContractDetail.onExecute → contract-execute`);
-    assert.ok(/onBack=\{\(\)\s*=>\s*setUnlockedView\('contract-detail'\)\}/.test(app),
-        `${shell} ExecuteContractForm back returns to contract-detail`);
+    // Back pops the shell's history, so the form returns to the contract
+    // detail page it was opened from rather than naming that page.
+    assert.ok(/onBack=\{\(\) => \{ setExecutePrefill\(null\); goBack\(\); \}\}/.test(app),
+        `${shell} ExecuteContractForm Back clears its prefill and returns to the page it came from`);
 }
 
 // --- Deep-link prefill props + ABI lane (Contract_ABI.md FOLLOWUP 2) ----
@@ -163,7 +165,7 @@ assert.ok(
 assert.ok(/\bCall contract\b/.test(formSrc),
     'ExecuteContractForm labels the primary action Call contract in every wallet mode');
 assert.ok(
-    /Enter method manually/.test(formSrc) && /Use declared methods/.test(formSrc),
+    /Enter Method Manually/.test(formSrc) && /Use Declared Methods/.test(formSrc),
     'both lane-toggle affordances exist (abi is self-declared; manual stays available)',
 );
 assert.ok(

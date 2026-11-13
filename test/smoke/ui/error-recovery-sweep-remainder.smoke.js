@@ -63,7 +63,7 @@ assert.ok(
     'MultisigSigningSession funnels errors through a fail(message, retryFn) helper',
 );
 assert.ok(
-    /const errorRecovery = retryRef\.current[\s\S]{0,120}label: 'Try again', onAction: retryRef\.current/.test(multisigSrc),
+    /const errorRecovery = retryRef\.current[\s\S]{0,120}label: 'Try Again', onAction: retryRef\.current/.test(multisigSrc),
     'MultisigSigningSession builds a Try again recovery from retryRef',
 );
 
@@ -105,7 +105,7 @@ assert.ok(
     'BiometricRow records the pairing attempt as the retry action on failure',
 );
 assert.ok(
-    /recovery=\{retryRef\.current \? \{ label: (?:'Try again'|t\('common\.tryAgain'\)), onAction: retryRef\.current \} : undefined\}/.test(biometricSrc),
+    /recovery=\{retryRef\.current \? \{ label: (?:'Try Again'|t\('common\.tryAgain'\)), onAction: retryRef\.current \} : undefined\}/.test(biometricSrc),
     'BiometricRow surfaces a Try again recovery affordance',
 );
 
@@ -127,7 +127,7 @@ assert.ok(
     'DuressPassphraseRow records the set attempt as the retry action on storage failure',
 );
 assert.ok(
-    /recovery=\{retryRef\.current \? \{ label: (?:'Try again'|t\('common\.tryAgain'\)), onAction: retryRef\.current \} : undefined\}/.test(duressSrc),
+    /recovery=\{retryRef\.current \? \{ label: (?:'Try Again'|t\('common\.tryAgain'\)), onAction: retryRef\.current \} : undefined\}/.test(duressSrc),
     'DuressPassphraseRow surfaces a Try again recovery affordance (storage-failure only)',
 );
 // Validation messages leave retryRef null: they precede the try block and
@@ -157,7 +157,7 @@ assert.ok(
     'AboutSection records the preview action as retry on preview failure',
 );
 assert.ok(
-    /recovery=\{retryRef\.current \? \{ label: (?:'Try again'|t\('common\.tryAgain'\)), onAction: retryRef\.current \} : undefined\}/.test(aboutSrc),
+    /recovery=\{retryRef\.current \? \{ label: (?:'Try Again'|t\('common\.tryAgain'\)), onAction: retryRef\.current \} : undefined\}/.test(aboutSrc),
     'AboutSection surfaces a Try again recovery affordance',
 );
 

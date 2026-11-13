@@ -14,7 +14,6 @@ import { ActionIntentSummary } from '../../../packages/core/src/shared/component
 import { ActivityRow } from '../../../packages/core/src/shared/components/ActivityRow.jsx';
 import { AddressDiscoveryNotice } from '../../../packages/core/src/shared/components/AddressDiscoveryNotice.jsx';
 import { AdsNotice } from '../../../packages/core/src/shared/components/AdsNotice.jsx';
-import { AlertsOverlay } from '../../../packages/core/src/shared/components/AlertsOverlay.jsx';
 import { AmountField } from '../../../packages/core/src/shared/components/AmountField.jsx';
 import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
 import { BackupReminderCard } from '../../../packages/core/src/shared/components/BackupReminderCard.jsx';
@@ -22,7 +21,21 @@ import { BalanceChanges } from '../../../packages/core/src/shared/components/Bal
 import { BalanceHeroMenu } from '../../../packages/core/src/shared/components/BalanceHeroMenu.jsx';
 import { BalanceList } from '../../../packages/core/src/shared/components/BalanceList.jsx';
 import { BalancesUncheckedState } from '../../../packages/core/src/shared/components/BalancesUncheckedState.jsx';
+import { BetMarketCard } from '../../../packages/core/src/shared/components/BetMarketCard.jsx';
+import { BetMyBetsPanel } from '../../../packages/core/src/shared/components/BetMyBetsPanel.jsx';
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
+import {
+    ConfirmAddressCard,
+    ConfirmChangesCard,
+    ConfirmCostCard,
+    ConfirmHero,
+    ConfirmNotice,
+} from '../../../packages/core/src/shared/components/ConfirmSummary.jsx';
+import { DispenserExplorerCard } from '../../../packages/core/src/shared/components/DispenserExplorerCard.jsx';
+import { FileField } from '../../../packages/core/src/shared/components/FileField.jsx';
+import { ListFilterMenu } from '../../../packages/core/src/shared/components/ListFilterMenu.jsx';
+import { ListFilterPopover } from '../../../packages/core/src/shared/components/ListFilterPopover.jsx';
+import { ListSearchField } from '../../../packages/core/src/shared/components/ListSearchField.jsx';
 import { CollectiblesView } from '../../../packages/core/src/shared/components/CollectiblesView.jsx';
 import { ConfirmActionModal } from '../../../packages/core/src/shared/components/ConfirmActionModal.jsx';
 import { ConfirmModal } from '../../../packages/core/src/shared/components/ConfirmModal.jsx';
@@ -163,18 +176,6 @@ const fixtures = [
         </MessagingContext.Provider>
     ), () => screen.findByTestId('address-discovery-status')],
     ['AdsNotice', () => <AdsNotice onContinue={noop} />],
-    ['AlertsOverlay', () => (
-        <AlertsOverlay
-            alerts={[{
-                id: 'backup',
-                severity: 'warning',
-                title: 'Back up your wallet',
-                message: 'Save a recovery copy.',
-                action: { label: 'Review backup', onSelect: noop },
-            }]}
-            onClose={noop}
-        />
-    )],
     ['AmountField', () => (
         <AmountField
             amount="1"
@@ -218,6 +219,31 @@ const fixtures = [
     ['BalancesUncheckedState', () => (
         <BalancesUncheckedState onRetry={noop} onReceive={noop} />
     )],
+    ['BetMarketCard', () => (
+        <BetMarketCard
+            market={{
+                action_index: 7,
+                label: 'Will it rain tomorrow?',
+                tick: 'XCHAIN',
+                feed_status: 'open',
+                deadline: Math.floor(Date.now() / 1000) + 86400 * 3,
+                pools: [{ outcome: 0, pool: '2' }, { outcome: 1, pool: '1' }],
+            }}
+            onOpen={noop}
+        />
+    )],
+    ['BetMyBetsPanel', () => (
+        <BetMyBetsPanel
+            rows={[
+                { chainId: 'bitcoin-mainnet', action_index: 1, feed_action_index: 7, outcome: 0, bet_status: 'open', amount: '1', tick: 'XCHAIN', owner: address },
+                { chainId: 'bitcoin-mainnet', action_index: 2, feed_action_index: 8, outcome: 1, bet_status: 'won', amount: '2', tick: 'XCHAIN', owner: address, settled_block: 12 },
+            ]}
+            error={null}
+            onRetry={noop}
+            messaging={{ betFeed: vi.fn().mockResolvedValue(null) }}
+            onOpenMarket={noop}
+        />
+    )],
     ['BottomTabBar', () => (
         <BottomTabBar currentView="home" onSelect={noop} onOpenSettings={noop} />
     )],
@@ -246,6 +272,22 @@ const fixtures = [
             credentials={<label>Password<input type="password" /></label>}
             credentialsReady
         />
+    )],
+    ['ConfirmSummary', () => (
+        <main>
+            <ConfirmHero
+                summary={{ verb: 'Send', amount: '1', ticker: 'BTC', direction: 'out', chainId: 'bitcoin-mainnet', recipient: address }}
+            />
+            <ConfirmAddressCard address={address} />
+            <ConfirmChangesCard rows={[{ label: 'Balance', before: '2 BTC', after: '1 BTC' }]} />
+            <ConfirmCostCard
+                rows={[
+                    { key: 'fee', label: 'Network fee', value: '0.000015 BTC', fiat: '~$0.98' },
+                    { key: 'total', label: 'Total', value: '1.000015 BTC', total: true },
+                ]}
+            />
+            <ConfirmNotice text="The network checks this before it is sent." />
+        </main>
     )],
     ['ConfirmModal', () => (
         <ConfirmModal title="Delete item?" message="This cannot be undone." onConfirm={noop} onCancel={noop} />
@@ -293,6 +335,17 @@ const fixtures = [
     )],
     // The protocol-fee layout: network fee, protocol fee with its pay-in-native
     // switch, and the total.
+    ['DispenserExplorerCard', () => (
+        <DispenserExplorerCard
+            chainId="bitcoin-mainnet"
+            row={{ give_tick: 'XCHAIN', give_amount: '10', give_escrow: '100', escrow_remaining: '40', source: address, timestamp: Math.floor(Date.now() / 1000) - 3600 }}
+            priceLabel="0.001 BTC"
+            onSelect={noop}
+        />
+    )],
+    ['FileField', () => (
+        <FileField label="File (up to 7,792 bytes)" fileName="notes.txt" onFile={noop} onClear={noop} />
+    )],
     ['FeesCard', () => (
         <FeesCard
             feeSelector={<div>Network fee selector</div>}
@@ -396,6 +449,15 @@ const fixtures = [
             onSelect={noop}
             onBack={noop}
         />
+    )],
+    ['ListFilterMenu', () => (
+        <ListFilterMenu query="" onQueryChange={noop} searchPlaceholder="Search items" searchLabel="Search items" />
+    )],
+    ['ListFilterPopover', () => (
+        <ListFilterPopover label="Filter list"><p>Panel controls</p></ListFilterPopover>
+    )],
+    ['ListSearchField', () => (
+        <ListSearchField value="" onChange={noop} placeholder="Search items" />
     )],
     ['ListToolbar', () => (
         <ListToolbar query="" onQueryChange={noop} searchLabel="Search items" />

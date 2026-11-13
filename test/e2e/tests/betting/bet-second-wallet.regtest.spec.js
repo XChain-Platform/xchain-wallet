@@ -13,7 +13,7 @@
 // WHY THE DISTINCTION IS THE POINT. The existing round trip and the deadline
 // race both bet from a second ADDRESS inside one wallet, which is enough to
 // satisfy the protocol rule that an oracle may not bet its own market. What it
-// cannot exercise is the WALLET boundary: MyBets and OracleConsole are scoped
+// cannot exercise is the WALLET boundary: Bet Markets' My bets and My markets tabs are scoped
 // per wallet, the bettor's wallet has never seen the market's creation, and
 // nothing in one wallet's vault knows the other exists. A market that only ever
 // works when both roles share a seed would pass every test written so far.
@@ -256,7 +256,7 @@ test.describe('BET across two wallets', () => {
             await main.getByRole('button', { name: 'Yes', exact: true }).click();
             await main.getByLabel(/^Stake/).fill(STAKE);
             await fillPasswordIfPresent(main);
-            await main.getByRole('button', { name: 'Place bet', exact: true }).click();
+            await main.getByRole('button', { name: 'Place Bet', exact: true }).click();
             // On Bitcoin a bet pays its protocol fee in XCHAIN, out of the same
             // balance the stake leaves, so the debit below is stake plus this
             // fee. Read off the screen the user approved rather than hardcoded:
@@ -318,13 +318,14 @@ test.describe('BET across two wallets', () => {
                 'the oracle wallet paid for the bettor stake').toBe(MINT_XCHAIN);
         });
 
-        await test.step('MyBets is scoped to the wallet that placed the bet', async () => {
-            // Wallet B placed it, so wallet B lists it.
+        await test.step('the My bets tab is scoped to the wallet that placed the bet', async () => {
+            // Wallet B placed it, so wallet B lists it. The palette's My bets
+            // opens Bet Markets on its My bets tab.
             await openPaletteCommand(page, 'My bets');
             await expect(page.getByRole('main').getByText(new RegExp(`#${feedIndex}\\b`)),
                 'wallet B does not list a bet it placed').toBeVisible({ timeout: 30_000 });
 
-            // Wallet A did not, so wallet A must not: a MyBets that reads the
+            // Wallet A did not, so wallet A must not: a My bets tab that reads the
             // chain rather than the wallet would show every bet on the venue.
             await switchToWallet(page, 'Oracle Wallet');
 

@@ -96,11 +96,11 @@ assert.ok(/Contracts can only be published on \$\{where\}/.test(formSrc),
     'DeployContractForm names the allowed chains from the registry in the no-address state');
 
 // Action buttons
-for (const label of ['Validate code', 'Estimate size', 'Suggest gas']) {
+for (const label of ['Validate Code', 'Estimate Size', 'Suggest Gas']) {
     assert.ok(formSrc.includes(label), `DeployContractForm renders "${label}" button`);
 }
-assert.ok(/variant="success"[\s\S]*?>\s*Publish contract\s*<\/Button>/.test(formSrc),
-    'DeployContractForm labels its main action Publish contract, green, in every mode');
+assert.ok(/<FormAction\s+icon=\{<Icon\.UploadIcon \/>\}[\s\S]*?>\s*Publish Contract\s*<\/FormAction>/.test(formSrc),
+    'DeployContractForm labels its main action Publish Contract, the standard green full-width action, in every mode');
 assert.ok(formSrc.includes('Contract published.'),
     'DeployContractForm confirms a successful publication');
 

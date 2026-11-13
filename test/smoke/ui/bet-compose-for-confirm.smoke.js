@@ -160,16 +160,21 @@ assert.match(actionsSrc, /actionData: \{ action: 'BET', params \}/,
         'OracleConsole only offers resolve before the refund window ends');
 }
 
-// --- 7. MyBets aggregates across every address ------------------------
+// --- 7. My bets aggregates across every address ------------------------
 
 {
-    const src = read('packages', 'core', 'src', 'shared', 'routes', 'MyBets.jsx');
+    // My bets is a Bet Markets tab: BetFeedsList reads the wallet's addresses
+    // once and BetMyBetsPanel's loader asks for each address's bets.
+    const list = read('packages', 'core', 'src', 'shared', 'routes', 'BetFeedsList.jsx');
+    const panel = read('packages', 'core', 'src', 'shared', 'components', 'BetMyBetsPanel.jsx');
     // Address-aggregated, not active-address-scoped: bets are keyed to the
     // address that placed them and payouts credit that same address, so a
     // per-address view would quietly hide money.
-    assert.match(src, /getAddressesByChain\(walletId, accountId\)/,
-        'MyBets enumerates every address rather than the active one');
-    assert.match(src, /type: 'address'/, 'MyBets queries bets by bettor address');
+    assert.match(list, /getAddressesByChain\(walletId\)/,
+        'My bets enumerates every address rather than the active one');
+    assert.match(panel, /for \(const \[chainId, addrs\] of Object\.entries\(chains\)\)/,
+        'My bets reads every address on every chain');
+    assert.match(panel, /type: 'address'/, 'My bets queries bets by bettor address');
 }
 
 // --- 8. the confirm screen decodes BET rather than falling back --------
@@ -237,13 +242,18 @@ for (const [shell, ...p] of [
     ['desktop', 'packages', 'desktop', 'renderer', 'App.jsx'],
 ]) {
     const src = read(...p);
-    for (const c of ['BetFeedsList', 'BetFeedDetail', 'CreateBetFeedForm', 'MyBets', 'OracleConsole', 'OracleRecord']) {
+    // My bets and My markets (the oracle console) are BetFeedsList tabs that
+    // BetFeedsList draws itself, so neither has a component of its own here.
+    for (const c of ['BetFeedsList', 'BetFeedDetail', 'CreateBetFeedForm', 'OracleRecord']) {
         // Startup code split: a route may load lazily on first open.
         assert.ok(src.includes(`import { ${c} }`) || new RegExp(`const\\s+${c}\\s*=\\s*lazyRoute\\(\\s*\\(\\)\\s*=>\\s*import\\([^)]*${c}\\.jsx`).test(src), `${shell}: imports ${c}`);
         assert.ok(src.includes(`<${c}`), `${shell}: renders ${c}`);
     }
-    for (const view of ['bet-markets', 'bet-market-detail', 'bet-create', 'my-bets', 'bet-oracle-console', 'bet-oracle-record']) {
+    for (const view of ['bet-markets', 'bet-market-detail', 'bet-create', 'bet-oracle-record']) {
         assert.ok(src.includes(`'${view}'`), `${shell}: routes the ${view} view`);
+    }
+    for (const retired of ['my-bets', 'bet-oracle-console']) {
+        assert.ok(!src.includes(`'${retired}'`), `${shell}: no longer routes the retired ${retired} view`);
     }
     // Reachable from the menu, not merely present in the bundle.
     assert.match(src, /onBetting: \(\) => setUnlockedView\('bet-markets'\)/,

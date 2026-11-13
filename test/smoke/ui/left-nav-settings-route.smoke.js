@@ -82,8 +82,10 @@ for (const [label, src] of [['web', webApp], ['desktop', desktopApp]]) {
     );
     assert.ok(/initialSubpageId=\{[\s\S]*?'connected-sites'[\s\S]*?\}/.test(src),
         `${label} App threads initialSubpageId through to Settings on the connected-sites alias`);
-    assert.ok(/const handleOpenSettings = \(\)\s*=>\s*setUnlockedView\('settings'\)/.test(src),
-        `${label} App declares handleOpenSettings → setUnlockedView('settings')`);
+    // Settings is a tab-bar root, so opening it starts the history over and
+    // Back from it lands on Home.
+    assert.ok(/const handleOpenSettings = \(\)\s*=>\s*\{[^}]*resetNav\('settings'\);\s*\}/.test(src),
+        `${label} App declares handleOpenSettings → resetNav('settings')`);
     assert.ok(/onOpenSettings=\{handleOpenSettings\}/.test(src),
         `${label} App passes onOpenSettings into both LeftNav and BottomTabBar`);
     assert.ok(

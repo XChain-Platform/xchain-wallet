@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { IssueTokenForm } from '../../../packages/core/src/shared/routes/IssueTokenForm.jsx';
 import { DispenserForm } from '../../../packages/core/src/shared/routes/DispenserForm.jsx';
@@ -54,7 +54,7 @@ describe('protocol form accessibility', () => {
         const { container } = renderRoute(
             <IssueTokenForm walletId="wallet-1" onBack={() => {}} />,
         );
-        await screen.findByRole('form', { name: 'Issue token' });
+        await screen.findByRole('form', { name: 'Issue Token' });
         await expectNoSeriousAxeViolations(container);
     });
 
@@ -93,6 +93,8 @@ describe('protocol form accessibility', () => {
             <BetFeedDetail walletId="wallet-1" chainId={CHAIN} feedIndex={17} onBack={() => {}} />,
             host,
         );
+        // The market opens on Details; the bet form is the Bet tab.
+        fireEvent.click(await screen.findByRole('tab', { name: 'Bet' }));
         await screen.findByRole('form', { name: 'Place a bet' });
         await expectNoSeriousAxeViolations(container);
     });

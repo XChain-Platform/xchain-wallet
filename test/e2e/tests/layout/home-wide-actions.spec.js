@@ -39,7 +39,7 @@ test('Home has no bottom action row and four quick actions from 834px up', async
         await page.setViewportSize({ width, height: 900 });
         const where = `${width}px`;
         await expect.poll(() => quickActionLabels(page), { message: `${where}: quick actions` })
-            .toEqual(['Send', 'Receive', 'Exchange', 'All actions']);
+            .toEqual(['Send', 'Receive', 'Exchange', 'More']);
         expect(await bottomRowButtons(page), `${where}: bottom action row buttons`).toEqual([]);
         await expect(page.getByRole('main').getByRole('button', { name: 'Swap', exact: true }), `${where}: Swap`)
             .toHaveCount(0);
@@ -53,5 +53,5 @@ test('Home keeps its phone layout at 360px', async ({ page }) => {
 
     // U66: the same four quick actions at every size; Swap sits in All actions.
     await expect.poll(() => quickActionLabels(page), { message: '360px: quick actions' })
-        .toEqual(['Send', 'Receive', 'Exchange', 'All actions']);
+        .toEqual(['Send', 'Receive', 'Exchange', 'More']);
 });

@@ -12,6 +12,7 @@ import {
     createWallet,
     expect,
     gotoSection,
+    openIssueSection,
     openSettings,
     test,
 } from '../../fixtures/wallet.js';
@@ -273,10 +274,8 @@ test.describe('keyboard form contracts at 1280 by 800', () => {
 
         await test.step('Create token', async () => {
             await gotoSection(page, 'Home');
-            // Home has no action grid at 834px and wider (ruling U45), and the
-            // All actions has no wizard entry (its "Issue
-            // token" row opens the plain issue form). The guided Create token
-            // wizard is reached through the wallet menu at this width.
+            // Home has no action grid at 834px and wider (ruling U45), so the
+            // Create token form is reached through the wallet menu at this width.
             await page.keyboard.press('ControlOrMeta+k');
             const palette = page.getByRole('dialog', { name: 'Wallet menu' });
             await expect(palette).toBeVisible();
@@ -287,36 +286,33 @@ test.describe('keyboard form contracts at 1280 by 800', () => {
             await expect(createToken).toBeVisible();
             await createToken.click();
             await expect(palette).toBeHidden();
-            // Custom opens the full Issue form (ruling U79), so the wizard's
-            // network step is reached through the Utility template.
-            const template = page.getByRole('button', { name: /^Utility token\b/ });
-            await expect(template).toBeVisible();
-            await template.click();
-
-            const chainForm = page.getByRole('form', { name: 'Choose token network' });
-            await expect(chainForm).toBeVisible();
-            const network = chainForm.getByRole('button', { name: /^Network:/ });
+            // Issue Token is one form; its network sits in the From section,
+            // which starts closed.
+            const form = page.getByRole('form', { name: 'Issue Token' });
+            await expect(form).toBeVisible();
+            await openIssueSection(page.getByRole('main'), 'From');
+            const network = form.getByRole('button', { name: /^Network:/ });
             await expect(network).toBeVisible();
             // The Network field opens the full network-picker screen (ruling
-            // U59); Escape closes it and returns to the step it came from.
+            // U59); Escape closes it and returns to the form it came from.
             await network.click();
             const picker = page.getByRole('dialog', { name: 'Network' });
             await expect(picker).toBeVisible();
             await page.keyboard.press('Escape');
             await expect(picker).toHaveCount(0);
-            await expect(chainForm).toBeVisible();
-            const next = chainForm.getByRole('button', { name: 'Next' });
-            await expect(next).toBeEnabled();
-            await next.click();
-
-            const form = page.getByRole('form', { name: 'Token details' });
             await expect(form).toBeVisible();
+
             await expectVisualTabOrderAndFocusRings(page, form, 'Create token');
+            // The Issue Token button stays off until a ticker is typed, and a
+            // disabled default button blocks Enter submission, so the two
+            // fields are filled before the Enter boundaries are walked.
+            await form.getByRole('textbox', { name: 'Ticker', exact: true }).fill('TABORDER');
+            await form.getByRole('textbox', { name: /^Max supply/ }).fill('1000');
             await expectEnterSubmissionBoundaries(page, {
                 form,
-                firstField: form.getByRole('textbox', { name: 'Token name (ticker)' }),
-                lastField: form.getByRole('textbox').last(),
-                submitButton: form.getByRole('button', { name: 'Review token' }),
+                firstField: form.getByRole('textbox', { name: 'Ticker', exact: true }),
+                lastField: form.getByRole('textbox', { name: /^Max supply/ }),
+                submitButton: form.getByRole('button', { name: 'Issue Token', exact: true }),
                 label: 'Create token',
             });
         });

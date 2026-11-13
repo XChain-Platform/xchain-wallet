@@ -141,7 +141,7 @@ test('choice controls retain their values through order and Send review', async 
         await main.getByLabel('Amount', { exact: true }).fill('2');
 
         await expect(give.getByRole('radio', { name: 'A token' })).toBeChecked();
-        await main.getByRole('button', { name: 'Place order', exact: true }).click();
+        await main.getByRole('button', { name: 'Place Order', exact: true }).click();
         await expect(page.getByTestId('confirm-modal')).toBeVisible();
         await page.getByTestId('confirm-reject').click();
 

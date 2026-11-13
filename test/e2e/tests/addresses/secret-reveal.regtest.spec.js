@@ -51,7 +51,7 @@ import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/w
 import {
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
-    selectVenueChain,
+    readFromAddress,
     switchToRegtest,
 } from '../../fixtures/regtest.js';
 
@@ -130,8 +130,7 @@ test.describe('revealing an address private key', () => {
                 await openPaletteCommand(page, 'Issue token');
                 const form = page.getByRole('main');
                 await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-                await selectVenueChain(form);
-                address = await form.getByLabel('From').inputValue();
+                address = await readFromAddress(form);
                 expect(address, `no ${REGTEST_CHAIN_LABEL} address in this wallet`)
                     .toMatch(REGTEST_ADDRESS_RE);
 

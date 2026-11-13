@@ -23,7 +23,6 @@ const CONFIG_PATH = 'packages/core/src/branding/branding.js';
 const CONFIG_PREFIXES = [
     CONFIG_PATH,
     'packages/core/src/registry/',
-    'packages/core/src/shared/platform-links.json',
 ];
 const configuredUrls = [
     ANDROID_UPDATE_FEED_URL,

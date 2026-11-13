@@ -98,10 +98,11 @@ import {
     REGTEST_CHAIN_LABEL,
     expectConfirmModal,
     fundAddress,
+    issuePlainToken,
+    readIssueSource,
     mintXchain,
     readReceiveAddress,
     seedPrices,
-    selectVenueChain,
     selectVenueSendAsset,
     switchToRegtest,
     unlockAfterReload,
@@ -433,8 +434,7 @@ test.describe('the BIP39 passphrase is stored at setup (§15.6)', () => {
                 await openPaletteCommand(page, 'Issue token');
                 const main = page.getByRole('main');
                 await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-                await selectVenueChain(main);
-                source = await main.getByLabel('From').inputValue();
+                source = await readIssueSource(main);
                 expect(source, 'the Issue form has no venue-chain address to sign with')
                     .toMatch(REGTEST_ADDRESS_RE);
                 await fundAddress(source, ISSUE_FUNDING);
@@ -458,13 +458,10 @@ test.describe('the BIP39 passphrase is stored at setup (§15.6)', () => {
                 await openPaletteCommand(page, 'Issue token');
                 const form = page.getByRole('main');
                 await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-                await selectVenueChain(form);
-                expect(await form.getByLabel('From').inputValue(),
+                expect(await readIssueSource(form),
                     'the Issue form moved to a different address after the unlock')
                     .toBe(source);
-                await form.getByLabel('Ticker').fill(tick);
-                await form.getByLabel('Supply', { exact: true }).fill('1000');
-                await form.getByRole('button', { name: 'Issue token', exact: true }).click();
+                await issuePlainToken(form, { ticker: tick, supply: '1000' });
 
                 await expectConfirmModal(page, `the ISSUE of ${tick}`, 90_000);
                 await expect(capturePassphraseField(page),

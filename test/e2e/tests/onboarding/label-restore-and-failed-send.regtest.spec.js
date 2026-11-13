@@ -143,14 +143,14 @@ test.describe(`contacts restore on import and failed sends in History, on ${REGT
             await nudge.getByRole('button', { name: 'Open Backup' }).click();
 
             const main = page.getByRole('main');
-            await expect(main.getByRole('button', { name: 'Publish now…', exact: true }),
+            await expect(main.getByRole('button', { name: 'Publish Now…', exact: true }),
                 'Open Backup did not land on the Backup section')
                 .toBeVisible({ timeout: 30_000 });
         });
 
         await test.step('publish the labels from Backup and wait for the chain to accept the FILE', async () => {
             const main = page.getByRole('main');
-            await main.getByRole('button', { name: 'Publish now…', exact: true }).click();
+            await main.getByRole('button', { name: 'Publish Now…', exact: true }).click();
             const chain = page.getByLabel('Publish network');
             await expect(chain, 'the publish form has no chain picker').toBeVisible({ timeout: 30_000 });
             await chain.selectOption(REGTEST_CHAIN_ID);
@@ -225,7 +225,7 @@ test.describe(`contacts restore on import and failed sends in History, on ${REGT
             await expect(failedPanel.getByText(/bad-txns-inputs-missingorspent/),
                 'the technical details are not the node\'s rejection')
                 .toBeVisible();
-            await page.getByRole('button', { name: 'Remove from history', exact: true }).click();
+            await page.getByRole('button', { name: 'Remove From History', exact: true }).click();
 
             // Gone from the list, and only that row.
             await expect(page.locator('[data-pending-state="failed"]'),

@@ -54,20 +54,29 @@ assert.ok(
 );
 
 // Spec-named sections are present (labels were updated in the tabbed redesign).
-// "Your balance" became "Total balance" inside the balance hero span.
+// "Your balance" became the balance card: the held amount in the hero, over
+// the coin or token's own caption.
 assert.ok(
-    />Total balance</.test(td),
-    'TokenDetail renders the "Total balance" section (was "Your balance")',
+    /className=\{heroStyles\.amount\}[\s\S]{0,900}heroStyles\.amountValue/.test(td),
+    'TokenDetail renders the balance card amount (was "Your balance")',
 );
 // "Metadata" is now the "Details" tab.
 assert.ok(
-    /label:\s*'Details'/.test(td),
+    /id: 'details', label: tabLabel\(Icon\.InfoIcon, t\('tokenDetail\.tabs\.details'\)\)/.test(td),
     'TokenDetail renders the "Details" tab (was "Metadata")',
 );
-// "Actions" is now the quick-actions group (aria-label="Quick actions").
 assert.ok(
-    /aria-label="Quick actions"/.test(td),
-    'TokenDetail renders the "Quick actions" section (was "Actions")',
+    /'tokenDetail\.tabs\.details': 'Details'/.test(readFileSync(join(core, 'src', 'i18n', 'locales', 'en', 'tokenDetail.js'), 'utf8')),
+    'the Details tab reads "Details"',
+);
+// "Actions" is now the first tab and its action group.
+assert.ok(
+    /id: 'actions', label: tabLabel\(Icon\.ZapIcon, t\('tokenDetail\.tabs\.actions'\)\)/.test(td),
+    'TokenDetail renders the "Actions" tab first (was "Actions")',
+);
+assert.ok(
+    /role="group" aria-label=\{t\('tokenDetail\.actions\.label', \{ tick \}\)\}/.test(td),
+    'TokenDetail renders the action group for the token',
 );
 // "Holders" section is still present via HoldersPanel component and tab id.
 assert.ok(
@@ -157,7 +166,13 @@ assert.ok(/setTokenDetailRef\b/.test(deskApp),
     'desktop App.jsx tracks tokenDetailRef state');
 assert.ok(/onSelectToken=/.test(deskApp),
     'desktop App.jsx wires onSelectToken into Home');
-assert.ok(/setHistoryReturnTo\('token-detail'\)/.test(deskApp),
-    'desktop token-detail onViewActivity returns History back to token-detail');
+// One navigation history owns Back, so History opened from the token page
+// returns to it without a per-route return slot.
+assert.ok(/onViewActivity=\{\(\) => \{\s*const scope = historyScopeForAsset\(tokenDetailRef\);[\s\S]{0,300}?setUnlockedView\('history'\);/.test(deskApp),
+    'desktop token-detail onViewActivity opens History scoped to the token');
+assert.ok(/unlockedView === 'history' && activeWalletId[\s\S]{0,400}onBack=\{goBack\}/.test(deskApp),
+    'desktop History goes Back through the navigation history, to token-detail');
+assert.ok(!/setHistoryReturnTo\b/.test(deskApp),
+    'desktop has no per-route History return slot');
 
 console.log('token-detail smoke OK');

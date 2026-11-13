@@ -84,6 +84,7 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -168,7 +169,7 @@ test.describe(`A send the network never reports, on ${REGTEST_CHAIN_LABEL} regte
         await test.step(`send ${SEND_AMOUNT} ${TICK} into a network that cannot report it`, async () => {
             await gotoSection(page, 'Send');
             await pickAssetByChainAndTick(page, TICK, REGTEST_CHAIN_ID, TICK);
-            await expect(page.getByRole('main').getByLabel('From', { exact: true })).toHaveValue(own);
+            await expect(await openFromAddress(page.getByRole('main'))).toHaveValue(own);
             await page.getByLabel('To', { exact: true }).fill(REGTEST_DESTINATION);
             await page.getByRole('textbox', { name: `Amount (${TICK})` }).fill(SEND_AMOUNT);
             await mainButton(page, 'Send').click();

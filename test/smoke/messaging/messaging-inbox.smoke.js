@@ -112,7 +112,7 @@ assert.ok(
     /if \((?:shareTarget && )?(?:lane|shareLane)\.open\)[\s\S]*?<ActionConfirmScreen[\s\S]*?\{\.\.\.(?:lane|shareLane)\.confirmProps\}/.test(src),
     'MessagingInbox renders the shared dry-run confirmation screen for the reply',
 );
-assert.ok(/Share my key/.test(src),
+assert.ok(/Share My Key/.test(src),
     'MessagingInbox renders a "Share my key" reply action');
 assert.ok(/<ActionConfirmScreen[\s\S]*?signerReady=\{signerReady\}/.test(src),
     'MessagingInbox passes signer readiness to the confirmation screen');
@@ -233,16 +233,18 @@ for (const [shell, appPath] of [
         `${shell} App.jsx imports MessagingInbox`);
     assert.ok(app.includes("'messaging'"),
         `${shell} App.jsx tracks the messaging sub-route`);
-    assert.ok(/onMessaging={/.test(app) || /onMessaging=activeWalletId/.test(app),
-        `${shell} App.jsx threads onMessaging to Home`);
+    assert.ok(!/onMessaging=\{/.test(app),
+        `${shell} App.jsx passes no onMessaging to Home`);
 }
 
-// --- 6. Home wiring ----------------------------------------------------
+// --- 6. Entry: the wallet menu's Messaging row ---------------------------
+// Home has no bottom action row; Messaging is a wallet menu row.
 
 const homeSrc = withEnglishCopy(readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8'));
-assert.ok(/onMessaging/.test(homeSrc), 'Home.jsx accepts onMessaging prop');
-assert.ok(/>\s*Messaging\b/.test(homeSrc),
-    'Home.jsx renders a "Messaging" button');
+assert.ok(!/onMessaging/.test(homeSrc), 'Home.jsx carries no Messaging button of its own');
+assert.ok(/id: 'messaging', labelKey: 'walletMenu\.row\.messaging'/.test(
+    readFileSync(join(sharedRoutes, '..', 'walletMenu.js'), 'utf8'),
+), 'the wallet menu carries the Messaging row');
 
 // --- 7. wallet-removal sweep -----------------------------------
 

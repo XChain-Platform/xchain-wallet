@@ -36,7 +36,7 @@ assert.match(
 // Notification API is absent).
 assert.match(src, /Notification\.permission/, 'reads live Notification.permission');
 assert.match(src, /Notification\.requestPermission\(\)/, 'requests notification permission');
-assert.match(src, /(?:t\('settings\.notifications\.requestPermission'\)|Request permission)/, 'renders a Request permission control');
+assert.match(src, /(?:t\('settings\.notifications\.requestPermission'\)|Request Permission)/, 'renders a Request Permission control');
 assert.match(
     src,
     /<PermissionRow permission=\{permission\} setPermission=\{setPermission\} \/>/,
@@ -86,7 +86,7 @@ assert.match(src, /PriceAlertForm/, 'renders the shared PriceAlertForm');
 assert.match(src, /PriceAlertsManager/, 'renders the price-alert manager under the toggle');
 assert.match(src, /priceDataEnabled === false/, 'gates on the price-data privacy opt-out');
 assert.match(src, /(?:t\('settings\.notifications\.nativeCoinPriceData'\)|Native coin price data)/, 'surfaces the price-data dependency to the user');
-assert.match(src, /(?:t\('settings\.notifications\.reArm'\)|Re-arm)/, 'offers re-arm on a triggered alert');
+assert.match(src, /(?:t\('settings\.notifications\.reArm'\)|Re-Arm)/, 'offers re-arm on a triggered alert');
 
 // Quiet-hours (DND) scheduling block.
 assert.match(src, /import \{ QUIET_HOURS_DEFAULT \}/, 'imports the schema quiet-hours default');

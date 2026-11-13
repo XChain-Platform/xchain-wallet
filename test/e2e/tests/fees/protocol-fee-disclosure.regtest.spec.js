@@ -50,12 +50,15 @@
 // later (§3.2).
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, gotoSection, mainButton, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import {
+    createWallet, expect, gotoSection, mainButton, openIssueSection, openPaletteCommand, test,
+} from '../../fixtures/wallet.js';
 import {
     encoderRpc,
     expectConfirmModal,
     EXPLORER_URL,
     fundAddress,
+    readIssueSource,
     minerRpc,
     mintXchain,
     REGTEST_ADDRESS_RE,
@@ -65,6 +68,7 @@ import {
     tokenBalance,
     unlockAfterReload,
     waitForTokenBalance,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -198,6 +202,8 @@ function feeToggle(scope) {
 }
 
 async function setFeeLane(scope, nativeFee) {
+    // The switch sits in the Network fee section, closed until opened.
+    await openIssueSection(scope, 'Network fee');
     const toggle = feeToggle(scope);
     await expect(toggle, 'Bitcoin does not offer the fee choice this spec is about')
         .toBeVisible({ timeout: 30_000 });
@@ -220,14 +226,14 @@ async function composeIssue(page, tick, { nativeFee }) {
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await main.getByLabel('Ticker').fill(tick);
-    await main.getByLabel('Supply', { exact: true }).fill(SUPPLY);
+    await main.getByLabel('Max supply', { exact: true }).fill(SUPPLY);
     await setFeeLane(main, nativeFee);
 
     const password = main.getByLabel('Password', { exact: true });
     if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
     // Full mode is SINGLE-ENCODE: this button composes and opens the
     // confirm screen directly, with no review stage in between.
-    await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
 
     await expectConfirmModal(page, 'this action', 60_000);
     await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
@@ -275,7 +281,7 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            source = await main.getByLabel('From').inputValue();
+            source = await readIssueSource(main);
             expect(source, 'the form has no Bitcoin address to sign with').toMatch(REGTEST_ADDRESS_RE);
 
             await fundAddress(source, FUNDING);
@@ -448,7 +454,7 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            const source = await main.getByLabel('From').inputValue();
+            const source = await readIssueSource(main);
             expect(source).toMatch(REGTEST_ADDRESS_RE);
             await fundAddress(source, FUNDING);
             await page.reload();
@@ -498,7 +504,7 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
             await openPaletteCommand(page, 'Broadcast a message');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Message')).toBeVisible({ timeout: 30_000 });
-            source = await main.getByLabel('From').inputValue();
+            source = await (await openFromAddress(main)).inputValue();
             expect(source, 'the form has no Bitcoin address to sign with').toMatch(REGTEST_ADDRESS_RE);
 
             await fundAddress(source, FUNDING);

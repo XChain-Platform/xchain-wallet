@@ -22,7 +22,7 @@
 //
 // WHY IT IS WORTH A RUN OF ITS OWN. It is not a wallet defect and this spec
 // does not claim one; it is a protocol rule with a shape that invites the
-// mistake, and the wallet's create form offers "Set allow-list" with no hint
+// mistake, and the wallet's create form offers "Set Allow-List" with no hint
 // that the owner belongs on it. What a run settles that reading cannot: whether
 // the refusal is attributable (does the chain name GET_ADDRESS, or something
 // vaguer that a seller would blame on the buyer?), and what it COSTS - a
@@ -66,6 +66,7 @@ import {
     selectVenueSendAsset,
     selectDispenserOnSource,
     selectPickerAsset,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -231,7 +232,7 @@ async function addWalletAndReadAddress(page, name) {
     const form = page.getByRole('main');
     await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(form);
-    const address = await form.getByLabel('From').inputValue();
+    const address = await (await openFromAddress(form)).inputValue();
     expect(address, `${name} has no ${REGTEST_CHAIN_LABEL} address`).toMatch(REGTEST_ADDRESS_RE);
     return address;
 }
@@ -287,7 +288,7 @@ async function publishList(page, members) {
     await expect(main, 'the list form did not accept these addresses for this chain')
         .toContainText(`${members.length} valid address`);
 
-    await main.getByRole('button', { name: 'Publish list', exact: true }).click();
+    await main.getByRole('button', { name: 'Publish List', exact: true }).click();
     await expectConfirmModal(page);
     const published = await waitForIndexedAction(await approveAndGetTxid(page));
     expect(String(published.action)).toBe('LIST');
@@ -325,14 +326,14 @@ async function openDispenser(page, listIndex, { expectSelfWarning }) {
     await main.getByLabel('Escrow amount').fill(String(ESCROW));
     await main.getByLabel(/Trigger price/).fill(TRIGGER);
 
-    await main.getByRole('button', { name: 'Set allow-list' }).click();
+    await main.getByRole('button', { name: 'Set Allow-List' }).click();
     const row = page.getByRole('main').getByRole('button')
         .filter({ hasText: `Address list #${listIndex}` });
     await expect(row, `the dispenser's list picker cannot see list #${listIndex}, which this wallet `
         + 'just published from this chain')
         .toBeVisible({ timeout: 60_000 });
     await row.click();
-    await expect(main.getByRole('button', { name: `Allow-list #${listIndex}` }),
+    await expect(main.getByRole('button', { name: `Allow-List #${listIndex}` }),
         'the picker closed without binding the list')
         .toBeVisible({ timeout: 30_000 });
 

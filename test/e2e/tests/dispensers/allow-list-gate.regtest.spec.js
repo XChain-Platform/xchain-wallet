@@ -59,6 +59,7 @@ import {
     selectVenueSendAsset,
     selectDispenserOnSource,
     selectPickerAsset,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -204,7 +205,7 @@ async function addWalletAndReadAddress(page, name) {
     const form = page.getByRole('main');
     await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(form);
-    const address = await form.getByLabel('From').inputValue();
+    const address = await (await openFromAddress(form)).inputValue();
     expect(address, `${name} has no ${REGTEST_CHAIN_LABEL} address`).toMatch(REGTEST_ADDRESS_RE);
     return address;
 }
@@ -297,7 +298,7 @@ test.describe(`dispenser allow lists on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(main, 'the list form did not accept both addresses for this chain')
                 .toContainText('2 valid addresses');
 
-            await main.getByRole('button', { name: 'Publish list', exact: true }).click();
+            await main.getByRole('button', { name: 'Publish List', exact: true }).click();
             await expectConfirmModal(page);
             const published = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(published.action)).toBe('LIST');
@@ -329,14 +330,14 @@ test.describe(`dispenser allow lists on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByLabel('Escrow amount').fill(String(ESCROW));
             await main.getByLabel(/Trigger price/).fill(TRIGGER);
 
-            await main.getByRole('button', { name: 'Set allow-list' }).click();
+            await main.getByRole('button', { name: 'Set Allow-List' }).click();
             const picker = page.getByRole('main');
             const row = picker.getByRole('button').filter({ hasText: `Address list #${listIndex}` });
             await expect(row, `the dispenser's list picker cannot see list #${listIndex}, which this `
                 + 'wallet just published from this chain')
                 .toBeVisible({ timeout: 60_000 });
             await row.click();
-            await expect(main.getByRole('button', { name: `Allow-list #${listIndex}` }),
+            await expect(main.getByRole('button', { name: `Allow-List #${listIndex}` }),
                 'the picker closed without binding the list')
                 .toBeVisible({ timeout: 30_000 });
 

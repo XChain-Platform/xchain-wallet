@@ -49,8 +49,8 @@ describe('regression/remaining-control-rows', () => {
         render(<BackupReminderCard walletId="wallet-1" hasFunds onAction={vi.fn()} />);
 
         expectButtonsUseSize([
-            await screen.findByRole('button', { name: 'Back up now' }),
-            screen.getByRole('button', { name: 'Remind me tomorrow' }),
+            await screen.findByRole('button', { name: 'Back Up Now' }),
+            screen.getByRole('button', { name: 'Remind Me Tomorrow' }),
         ], 'sm');
     });
 
@@ -96,7 +96,7 @@ describe('regression/remaining-control-rows', () => {
             screen.getByRole('textbox', { name: 'Token ticker' }),
         ], 'md');
         expectButtonsUseSize([
-            screen.getByRole('button', { name: 'Watch token' }),
+            screen.getByRole('button', { name: 'Watch Token' }),
         ], 'md');
     });
 
@@ -113,7 +113,7 @@ describe('regression/remaining-control-rows', () => {
             screen.getByRole('textbox', { name: 'Target price' }),
         ], 'md');
         expectButtonsUseSize([
-            screen.getByRole('button', { name: 'Add alert' }),
+            screen.getByRole('button', { name: 'Add Alert' }),
             screen.getByRole('button', { name: 'Cancel' }),
         ], 'md');
     });

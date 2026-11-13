@@ -12,6 +12,7 @@ import {
     dismissIntroCarousel,
     expect,
     gotoSection,
+    openFromSection,
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
@@ -117,7 +118,7 @@ for (const viewport of VIEWPORTS) {
         await test.step('compose renders the selected fee and aligned address controls', async () => {
             await page.getByRole('button', { name: 'Back to previous screen' }).click();
             await expectHeading(page, 'Messaging');
-            await page.getByRole('button', { name: 'New conversation' }).click();
+            await page.getByRole('button', { name: 'New Conversation' }).click();
 
             const main = page.getByRole('main');
             await expectHeading(page, 'New message');
@@ -126,6 +127,7 @@ for (const viewport of VIEWPORTS) {
             await expect(main.getByText(/Recipient public key found/)).toBeVisible({ timeout: 15_000 });
             await expect(main.getByRole('button', { name: /^Encryption: Standard \(ECIES\)/ }))
                 .toBeVisible();
+            await openFromSection(main);
             await expect(main.getByRole('button', { name: /^Network: Dogecoin/ }))
                 .toBeVisible();
 

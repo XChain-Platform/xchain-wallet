@@ -130,7 +130,7 @@ for (const [shell, msgPath] of [
 const detail = readFileSync(join(sharedRoutes, 'StakeDetail.jsx'), 'utf8');
 assert.ok(/onOpenOperatorDashboard/.test(detail),
     'StakeDetail accepts onOpenOperatorDashboard prop');
-assert.ok(/Operator view/.test(detail),
+assert.ok(/Operator View/.test(detail),
     'StakeDetail renders the Operator view action');
 
 // --- App.jsx wiring ---

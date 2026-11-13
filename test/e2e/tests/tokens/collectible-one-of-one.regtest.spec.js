@@ -63,7 +63,7 @@
 //       --config=playwright.regtest.config.js tests/tokens/collectible-one-of-one.regtest.spec.js
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, openPaletteCommand, submitTokenWizard, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openIssueSection, openPaletteCommand, pickIssuePreset, submitTokenWizard, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
@@ -237,8 +237,13 @@ test.describe(`collectible 1-of-1 on ${REGTEST_CHAIN_LABEL}`, () => {
             await openPaletteCommand(page, 'Issue token');
             const probe = page.getByRole('main');
             await expect(probe.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            // The network and the signer sit in the From section, closed until opened.
+            await openIssueSection(probe, 'From');
             await selectVenueChain(probe);
-            owner = await probe.getByLabel('From').inputValue();
+            await expect.poll(async () => probe.getByLabel('From address').inputValue().catch(() => ''),
+                { timeout: 30_000, message: 'the Issue Token form names no signing address' })
+                .toMatch(REGTEST_ADDRESS_RE);
+            owner = await probe.getByLabel('From address').inputValue();
             expect(owner, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
 
@@ -255,23 +260,24 @@ test.describe(`collectible 1-of-1 on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Create a token');
             const main = page.getByRole('main');
-            await main.getByRole('button', { name: /^Collectible/ }).click();
+            await pickIssuePreset(main, /^Collectible/);
+            // The network and the signer sit in the From section, closed until opened.
+            await openIssueSection(main, 'From');
             await selectVenueChain(main);
-            await expect.poll(async () => main.getByLabel('Fee paid by').inputValue().catch(() => ''),
-                { timeout: 30_000, message: 'the wizard names no signing address' })
+            await expect.poll(async () => main.getByLabel('From address').inputValue().catch(() => ''),
+                { timeout: 30_000, message: 'the Issue Token form names no signing address' })
                 .toMatch(REGTEST_ADDRESS_RE);
-            await main.getByRole('button', { name: 'Next', exact: true }).click();
 
-            // The template exposes only these three: every number is the
-            // composer's, which is the whole point of the template and the
-            // reason the chain record is checked field by field below.
-            await expect(main.getByLabel('Token name (ticker)')).toBeVisible({ timeout: 30_000 });
-            await main.getByLabel('Token name (ticker)').fill(TICK);
+            // The template fills every number and the locks itself; the user
+            // adds a name and a picture. The form shows the filled supply and
+            // indivisibility, and the chain record is checked field by field below.
+            await expect(main.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
+            await main.getByLabel('Ticker', { exact: true }).fill(TICK);
+            await expect(main.getByLabel('Max supply', { exact: true }),
+                'the Collectible template did not fill a supply of exactly 1')
+                .toHaveValue('1');
+            await openIssueSection(main, 'Description');
             await main.getByLabel('Image URL').fill(IMAGE_URL);
-            expect(await main.getByLabel('Supply').count(),
-                'the Collectible template offered a Supply field, so its 1-of-1 is no longer fixed '
-                + 'by the composer')
-                .toBe(0);
             await submitTokenWizard(page);
 
             await expectConfirmScreen(page);

@@ -42,7 +42,7 @@ assert.equal(
 // Mode prop + branching.
 assert.ok(/mode\s*===\s*['"]unstake['"]/.test(formSrc),
     'StakingActionForm branches on mode === unstake');
-assert.ok(/Unstake|Claim rewards/.test(formSrc),
+assert.ok(/Unstake|Claim Rewards/.test(formSrc),
     'StakingActionForm renders both verbs');
 
 // 4-stage state machine.

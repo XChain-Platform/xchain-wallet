@@ -428,7 +428,7 @@ test.describe('watcher/signer pairing lane (§20.5, )', () => {
                     .toBe(false);
 
                 const res = await submitPartnerCode(watcher.page, {
-                    partnerCode: foreignCode.code, cta: 'Pair a signer',
+                    partnerCode: foreignCode.code, cta: 'Pair a Signer',
                 });
                 expect(res.ok,
                     'the watcher PAIRED with a signer restored from a different recovery phrase. '
@@ -445,7 +445,7 @@ test.describe('watcher/signer pairing lane (§20.5, )', () => {
                 // Same seed, same fingerprint, both halves watchers: a pair
                 // that would leave nobody able to sign. Only the mode says so.
                 const res = await submitPartnerCode(watcher.page, {
-                    partnerCode: watcherCode.code, cta: 'Pair a signer',
+                    partnerCode: watcherCode.code, cta: 'Pair a Signer',
                 });
                 expect(res.ok,
                     'a watcher paired with ANOTHER watcher, so both halves of the "air-gapped pair" '
@@ -462,7 +462,7 @@ test.describe('watcher/signer pairing lane (§20.5, )', () => {
                 // and a correctly-set-up user would be told their devices do
                 // not match.
                 const res = await submitPartnerCode(watcher.page, {
-                    partnerCode: signerCode.code, cta: 'Pair a signer',
+                    partnerCode: signerCode.code, cta: 'Pair a Signer',
                 });
                 expect(res.ok,
                     'the genuine signer half was refused after two failed attempts, so the form is '
@@ -481,7 +481,7 @@ test.describe('watcher/signer pairing lane (§20.5, )', () => {
                 // testing only one direction leaves the signer unaware of its
                 // watcher.
                 const res = await submitPartnerCode(signer.page, {
-                    partnerCode: watcherCode.code, cta: 'Pair a watcher',
+                    partnerCode: watcherCode.code, cta: 'Pair a Watcher',
                 });
                 expect(res.ok,
                     'the signer half refused the watcher it had just been paired WITH, so the lane '
@@ -564,7 +564,7 @@ test.describe('watcher/signer pairing lane (§20.5, )', () => {
             // And the point of all of it: a device that has only ever SEEN the
             // other one pairs with it.
             const res = await submitPartnerCode(page, {
-                partnerCode: (await box.inputValue()).trim(), cta: 'Pair a watcher',
+                partnerCode: (await box.inputValue()).trim(), cta: 'Pair a Watcher',
             });
             expect(res.ok,
                 'the code arrived intact over the camera and the pairing was still refused, so the '

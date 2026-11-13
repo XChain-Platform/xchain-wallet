@@ -129,7 +129,7 @@ describe('classical cosigner replies are verified before they count', () => {
         const list = await screen.findByRole('list', { name: 'Multisig sessions' });
         fireEvent.click(within(list).getByRole('button'));
         await screen.findByLabelText('Multisig signing progress');
-        fireEvent.click(screen.getByRole('button', { name: 'Import cosigner reply' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Import Cosigner Reply' }));
         const reply = buildReplyEnvelope({
             kind: 'multisig-classical-reply',
             fingerprint: fingerprintSessionRef({
@@ -145,10 +145,10 @@ describe('classical cosigner replies are verified before they count', () => {
         fireEvent.change(screen.getByLabelText('Cosigner reply chunks'), {
             target: { value: encodeXcwChunks(encodeMultisigEnvelope(reply)).join('\n') },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Submit chunks' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Submit Chunks' }));
         const alert = await screen.findByRole('alert');
         expect(alert.textContent).toMatch(/signature doesn't match this signing session/);
-        expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Try Again' })).toBeNull();
         expect((await vault.multisigSigningSessions.get(session.id)).signatures).toEqual([]);
     });
 });

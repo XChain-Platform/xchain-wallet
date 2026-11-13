@@ -192,7 +192,7 @@ for (const viewport of VIEWPORTS) {
             await expectScreenLayout(page, 'View address', 'address detail');
 
             const label = page.getByRole('textbox', { name: 'Address label' });
-            const save = page.getByRole('button', { name: 'Save label', exact: true });
+            const save = page.getByRole('button', { name: 'Save Label', exact: true });
             await label.fill(LABEL);
             await save.click();
             await expect(save).toBeDisabled();

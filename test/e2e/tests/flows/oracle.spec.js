@@ -99,22 +99,6 @@ async function gotoPalette(page, title) {
     await expect(dialog).toBeHidden({ timeout: 15_000 });
 }
 
-async function useWatcherMode(page) {
-    await gotoPalette(page, 'Settings');
-    const row = page.getByRole('main').getByRole('button', { name: /^Wallet mode/i });
-    await expect(row).toBeVisible({ timeout: 30_000 });
-    await row.click();
-
-    const watcher = page.getByRole('radio', { name: /^Watcher/ });
-    await expect(watcher).toBeVisible({ timeout: 30_000 });
-    await watcher.click();
-    const confirm = page.getByRole('dialog', { name: /Switch to Watcher/ });
-    await expect(confirm).toBeVisible();
-    await confirm.getByRole('button', { name: 'Confirm mode change' }).click();
-    await expect(confirm).toBeHidden({ timeout: 30_000 });
-    await expect(watcher).toBeChecked();
-}
-
 async function sharedControlRows(page) {
     return page.getByRole('main').evaluate((main) => {
         // Skip aria-hidden subtrees: decoration such as the fee slider tick labels, not controls.
@@ -200,9 +184,9 @@ for (const viewport of VIEWPORTS) {
     test(`oracle flow renders at ${viewport.width}x${viewport.height}`, async ({ page }) => {
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
         await installOracleReads(page);
-        // Demo wallets hide the create commands, so this walk uses a real dev wallet.
-        await createWallet(page);
-        await useWatcherMode(page);
+        // Demo wallets hide the create commands, so this walk uses a real dev
+        // wallet, created in watch-only mode (the mode is chosen at create).
+        await createWallet(page, { walletMode: 'watcher' });
 
         await test.step('oracle console', async () => {
             await gotoPalette(page, 'My markets');
@@ -211,7 +195,7 @@ for (const viewport of VIEWPORTS) {
         });
 
         await test.step('oracle record', async () => {
-            await page.getByRole('main').getByRole('button', { name: 'View market' }).click();
+            await page.getByRole('main').getByRole('button', { name: 'View Market' }).click();
             await expect(page.getByRole('heading', { name: MARKET_TITLE, exact: true })).toBeVisible();
             await page.getByRole('main').getByRole('button', { name: ORACLE, exact: true }).click();
 
@@ -239,7 +223,7 @@ for (const viewport of VIEWPORTS) {
             await form.getByLabel('Usage fee', { exact: true }).fill(USAGE_FEE);
             await form.getByLabel('Memo', { exact: true }).fill(MEMO);
 
-            const preview = form.getByRole('button', { name: 'Publish price', exact: true });
+            const preview = form.getByRole('button', { name: 'Publish Price', exact: true });
             await preview.scrollIntoViewIfNeeded();
             const before = await page.getByRole('main').evaluate((main) => main.scrollTop);
             expect(before, `${viewport.name}: the form did not scroll, so review top restoration was not exercised`)

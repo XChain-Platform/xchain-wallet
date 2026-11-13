@@ -102,7 +102,7 @@ assert.ok(
     'contract-execute route passes the executePrefill fields into ExecuteContractForm',
 );
 assert.ok(
-    /setExecutePrefill\(null\);\s*setUnlockedView\('contract-detail'\)/.test(webApp),
+    /setExecutePrefill\(null\);\s*goBack\(\)/.test(webApp),
     'contract-execute onBack clears the executePrefill',
 );
 
@@ -120,7 +120,7 @@ assert.ok(
     'Send route in App.jsx receives prefill={sendPrefill}',
 );
 assert.ok(
-    /onBack=\{\(\)\s*=>\s*\{\s*\n\s*setSendPrefill\(null\);\s*\n\s*setUnlockedView\(sendBackTo\);/.test(webApp),
+    /onBack=\{\(\)\s*=>\s*\{\s*\n\s*setSendPrefill\(null\);\s*\n\s*goBack\(\);/.test(webApp),
     'Send onBack clears the prefill so a fresh navigate to Send is clean',
 );
 

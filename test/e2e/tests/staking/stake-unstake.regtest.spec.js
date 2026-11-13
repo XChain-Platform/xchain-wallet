@@ -70,6 +70,7 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -255,7 +256,7 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
             pubkey = newSigningPubkey();
 
             await openPaletteCommand(page, 'Staking');
-            const newStakeBtn = page.getByRole('button', { name: 'New stake', exact: true });
+            const newStakeBtn = page.getByRole('button', { name: 'New Stake', exact: true });
             await expect(newStakeBtn).toBeVisible({ timeout: 30_000 });
             await newStakeBtn.click();
 
@@ -271,7 +272,7 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
 
             // The address that will sign must be the one that was funded and
             // minted to: the form resolves its own source from wallet state.
-            expect(await main.getByLabel('From', { exact: true }).inputValue(),
+            expect(await (await openFromAddress(main)).inputValue(),
                 'the stake form signs with the funded address').toBe(staker);
 
             await main.getByLabel('Signing public key', { exact: true }).fill(pubkey);
@@ -431,7 +432,7 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
 
         await test.step('Top-up mode: staking again under the SAME pubkey broadcasts as VERSION 2', async () => {
             await openPaletteCommand(page, 'Staking');
-            const newStakeBtn = page.getByRole('button', { name: 'New stake', exact: true });
+            const newStakeBtn = page.getByRole('button', { name: 'New Stake', exact: true });
             await expect(newStakeBtn).toBeVisible({ timeout: 30_000 });
             await newStakeBtn.click();
 

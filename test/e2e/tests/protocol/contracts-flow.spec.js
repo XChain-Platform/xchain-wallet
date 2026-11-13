@@ -196,20 +196,6 @@ function definitionValue(main, term) {
         .locator('xpath=following-sibling::dd[1]');
 }
 
-async function setWatcherMode(page) {
-    await gotoSection(page, 'Settings');
-    await page.getByRole('button', { name: /^Wallet mode/ }).click();
-    const watcher = page.getByRole('radio', { name: /^Watcher/ });
-    await expect(watcher).toBeVisible();
-    await watcher.click();
-    const confirm = page.getByRole('button', { name: 'Confirm mode change' });
-    if (await confirm.count() > 0) {
-        await confirm.click();
-        await expect(confirm).toBeHidden();
-    }
-    await expect(watcher).toBeChecked();
-}
-
 async function openContract(page) {
     await gotoSection(page, 'Contracts');
     const row = page.getByRole('button', { name: `Open ${CONTRACT_LABEL}`, exact: true }).first();
@@ -232,7 +218,7 @@ async function walkExecute(page, viewport) {
 
     await main.evaluate((element) => { element.scrollTop = element.scrollHeight; });
     // Each form's main action names what it does (U63).
-    await main.getByRole('button', { name: 'Call contract', exact: true }).click();
+    await main.getByRole('button', { name: 'Call Contract', exact: true }).click();
     await expectReviewAtTop(page, viewport, 'Review contract call');
     await expect(definitionValue(main, 'Contract')).toHaveText(`#${CONTRACT_INDEX}`);
     await expect(definitionValue(main, 'Deposit')).toHaveText(`${DEPOSIT_AMOUNT} ${DEPOSIT_TICK}`);
@@ -249,13 +235,13 @@ async function walkDeploy(page, viewport) {
     await page.getByRole('button', { name: 'Back to contracts list' }).click();
     const main = page.getByRole('main');
     await main.getByRole('button', { name: 'Publish contract', exact: true }).click();
-    await expectScreen(page, viewport, 'Publish contract');
+    await expectScreen(page, viewport, 'Publish Contract');
 
     await main.getByLabel('Code source', { exact: true }).fill(DEPLOY_SOURCE);
     await main.getByLabel('Gas limit', { exact: true }).fill(DEPLOY_GAS);
     await main.getByLabel('Constructor params', { exact: true }).fill(CALL_AMOUNT);
     await main.evaluate((element) => { element.scrollTop = element.scrollHeight; });
-    await main.getByRole('button', { name: 'Publish contract', exact: true }).click();
+    await main.getByRole('button', { name: 'Publish Contract', exact: true }).click();
 
     await expectReviewAtTop(page, viewport, 'Review publish');
     await expect(definitionValue(main, 'Name')).toHaveText('Review Contract');
@@ -263,7 +249,7 @@ async function walkDeploy(page, viewport) {
     await expect(definitionValue(main, 'Constructor')).toHaveText(CALL_AMOUNT);
 
     await page.getByRole('button', { name: 'Back to previous screen' }).click();
-    await expect(page.getByRole('heading', { name: 'Publish contract', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Publish Contract', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Back to previous screen' }).click();
     await expect(page.getByRole('heading', { name: 'Contracts', exact: true })).toBeVisible();
 }
@@ -271,8 +257,7 @@ async function walkDeploy(page, viewport) {
 test('contract browse, detail, execute, and deploy reviews fit phone and desktop', async ({ page }) => {
     test.slow();
     await installContractFixture(page);
-    await createWallet(page);
-    await setWatcherMode(page);
+    await createWallet(page, { walletMode: 'watcher' });
 
     for (const viewport of VIEWPORTS) {
         await test.step(viewport.name, async () => {

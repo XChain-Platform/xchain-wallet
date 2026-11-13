@@ -145,21 +145,28 @@ assert.ok(
 );
 assert.ok(
     /REVEAL_TIMEOUT_MS\s*=\s*30_000/.test(viewSrc)
-        && /setTimeout\(\(\) => setRevealed\(false\), REVEAL_TIMEOUT_MS\)/.test(viewSrc),
-    'ViewPrivateKey auto-hides after a fixed reveal timeout',
+        && /setTimeout\(\(\) => clearSensitiveState\(\), REVEAL_TIMEOUT_MS\)/.test(viewSrc),
+    'ViewPrivateKey wipes the key after a fixed reveal timeout',
 );
 assert.ok(
     /<CopyButton[\s\S]*?sensitive[\s\S]*?onCopied=/.test(viewSrc)
         && !/navigator\.clipboard/.test(viewSrc),
     'ViewPrivateKey uses the shared sensitive clipboard path',
 );
+// The warning and the password are the confirmation: the key shows once the
+// export with that password returns, with no second tap to reveal.
 assert.ok(
-    /Tap to reveal/.test(viewSrc),
-    'ViewPrivateKey uses tap-to-reveal, not auto-reveal',
+    !/Tap to reveal/.test(viewSrc)
+        && /setWif\(\{ addressId: address\.id, value: res\.wif \}\);[\s\S]*?setRevealed\(true\)/.test(viewSrc),
+    'ViewPrivateKey shows the key straight after the password export',
 );
 
+// Every wipe (Back, blur, timeout, session change) clears the password and
+// the key, so each view asks for the password again.
 assert.ok(
-    /type="password"/.test(viewSrc) && /every time you view a private key/.test(viewSrc),
+    /type="password"/.test(viewSrc)
+        && /const clearSensitiveState = useCallback\(\(\) => \{[\s\S]*?setPassword\(''\);[\s\S]*?setWif\(null\);/.test(viewSrc)
+        && /addEventListener\('xc:session-changed', clearSensitiveState\)/.test(viewSrc),
     'ViewPrivateKey requires password confirmation for every export',
 );
 assert.ok(
@@ -254,7 +261,7 @@ for (const [shell, appPath, offersTrezor] of [
         );
     }
     assert.ok(
-        surfacesEntry(app, 'pair-signer', 'Pair hardware signer'),
+        surfacesEntry(app, 'pair-signer', 'Pair hardware wallet'),
         `${shell} App.jsx registers the pair-signer entry in buildActionEntries`,
     );
     assert.ok(

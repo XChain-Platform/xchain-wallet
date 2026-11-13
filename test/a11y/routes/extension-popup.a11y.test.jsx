@@ -181,7 +181,8 @@ describe('extension popup main-screen accessibility', () => {
                 onLockWallet={() => {}}
             />,
         );
-        await screen.findByRole('region', { name: 'Active address balance' });
+        // The balance hero is named for the wallet whose balance it shows.
+        await screen.findByRole('region', { name: WALLET.name });
         await expectNoSeriousAxeViolations(container);
     });
 

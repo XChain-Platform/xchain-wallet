@@ -37,6 +37,8 @@ import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/w
 import {
     expectConfirmModal,
     fundAddress,
+    issuePlainToken,
+    readIssueSource,
     mintXchain,
     nudgeChain,
     readReceiveAddress,
@@ -125,14 +127,8 @@ test.describe('DESTROY on regtest', () => {
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(main);
-            await main.getByLabel('Ticker').fill(TICK);
-            await main.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
-            const password = main.getByLabel('Password', { exact: true });
-            if (await password.count() > 0 && await password.isVisible().catch(() => false)) {
-                await password.fill(PASSWORD);
-            }
-            await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+            await readIssueSource(main);
+            await issuePlainToken(main, { ticker: TICK, supply: SUPPLY, password: PASSWORD });
 
             await expectConfirmModal(page, 'the ISSUE');
             const issuePassword = page.getByLabel('Password', { exact: true });

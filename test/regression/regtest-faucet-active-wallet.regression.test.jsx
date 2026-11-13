@@ -95,7 +95,7 @@ describe('regression/regtest-faucet-active-wallet', () => {
             />,
         );
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Get test BTC' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Get Test BTC' }));
 
         await waitFor(() => expect(messaging.getNewestAddress).toHaveBeenCalledWith(
             ACTIVE_WALLET.id,

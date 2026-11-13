@@ -140,7 +140,7 @@ const ALL_FORMS = [
         trigger: async (page) => {
             const main = page.getByRole('main');
             await main.getByLabel('Sign-throttle burst (max requests per window)', { exact: true }).fill('5');
-            await main.getByRole('button', { name: 'Apply throttle', exact: true }).click();
+            await main.getByRole('button', { name: 'Apply Throttle', exact: true }).click();
         },
     },
     {
@@ -151,22 +151,22 @@ const ALL_FORMS = [
         },
         open: async (page) => {
             await settingsSubpage(page, 'Connected sites');
-            await expect(page.getByRole('main').getByRole('button', { name: 'Clear history', exact: true })).toBeEnabled();
+            await expect(page.getByRole('main').getByRole('button', { name: 'Clear History', exact: true })).toBeEnabled();
         },
         trigger: async (page) => {
-            await page.getByRole('main').getByRole('button', { name: 'Clear history', exact: true }).click();
-            await page.getByRole('dialog').getByRole('button', { name: 'Clear history', exact: true }).click();
+            await page.getByRole('main').getByRole('button', { name: 'Clear History', exact: true }).click();
+            await page.getByRole('dialog').getByRole('button', { name: 'Clear History', exact: true }).click();
         },
     },
     {
         label: 'Settings publish labels without a password',
         open: async (page) => {
             await settingsSubpage(page, 'Backup');
-            await page.getByRole('main').getByRole('button', { name: 'Publish now…', exact: true }).click();
+            await page.getByRole('main').getByRole('button', { name: 'Publish Now…', exact: true }).click();
             await expect(page.getByRole('main').getByLabel('Wallet password', { exact: true })).toBeVisible();
         },
         trigger: async (page) => {
-            await page.getByRole('main').getByRole('button', { name: 'Publish labels', exact: true }).click();
+            await page.getByRole('main').getByRole('button', { name: 'Publish Labels', exact: true }).click();
         },
         close: (page) => page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true }).first().click(),
     },
@@ -181,7 +181,7 @@ const ALL_FORMS = [
         trigger: async (page) => {
             const main = page.getByRole('main');
             await main.getByLabel('Wallet password', { exact: true }).fill('e2epassword1234');
-            await main.getByRole('button', { name: 'Check for contacts', exact: true }).click();
+            await main.getByRole('button', { name: 'Check for Contacts', exact: true }).click();
         },
         close: (page) => page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true }).first().click(),
     },
@@ -201,13 +201,13 @@ const ALL_FORMS = [
         label: 'Developer mode custom network unreadable',
         open: async (page) => {
             await openDeveloperMode(page);
-            await page.getByRole('main').getByRole('button', { name: 'Add custom network…', exact: true }).click();
+            await page.getByRole('main').getByRole('button', { name: 'Add Custom Network…', exact: true }).click();
         },
         trigger: async (page) => {
             const main = page.getByRole('main');
             // Exact, so the field's 'About ...' help tip (U57) is not matched too.
             await main.getByLabel('Custom network descriptor JSON', { exact: true }).fill('{ not json');
-            await main.getByRole('button', { name: 'Add network', exact: true }).click();
+            await main.getByRole('button', { name: 'Add Network', exact: true }).click();
         },
         close: (page) => page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true }).last().click(),
     },
@@ -264,7 +264,7 @@ const ALL_FORMS = [
         label: 'Union list',
         open: async (page) => {
             await gotoSection(page, 'Lists');
-            await page.getByRole('main').getByRole('button', { name: 'Create union list', exact: true }).click();
+            await page.getByRole('main').getByRole('button', { name: 'Create Union List', exact: true }).click();
         },
         trigger: async () => {},
     },

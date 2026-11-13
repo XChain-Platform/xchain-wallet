@@ -7,6 +7,7 @@ import {
     expect,
     test,
     createWallet,
+    openFromSection,
 } from '../../fixtures/wallet.js';
 import {
     describeOffenders,
@@ -158,7 +159,9 @@ async function fillBatch(page) {
     const step = (number) => main.getByRole('region', { name: `Step ${number}`, exact: true });
 
     await expect(main.getByRole('form', { name: 'Batch composer' })).toBeVisible({ timeout: 30_000 });
-    // The Batch composer's Network field opens the full-screen picker.
+    // The Batch composer's Network field sits in the closed From section and
+    // opens the full-screen picker.
+    await openFromSection(main);
     const network = main.getByRole('button', { name: /^Network:/ });
     await expect(network).toBeVisible({ timeout: 30_000 });
     if (!((await network.getAttribute('aria-label')) || '').includes('Bitcoin')) {

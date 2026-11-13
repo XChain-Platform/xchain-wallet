@@ -325,28 +325,28 @@ test.describe(`refusing a bad market, and the promise that it cannot be edited (
             // Non-vacuous first: the affordances that SHOULD be here are here,
             // which proves we are looking at the right screen before asserting
             // that something else is absent.
-            await expect(console_.getByRole('button', { name: 'Copy to a new market' }).first(),
-                'the console offers no "Copy to a new market", so this is not the surface this '
+            await expect(console_.getByRole('button', { name: 'Copy to a New Market' }).first(),
+                'the console offers no "Copy to a New Market", so this is not the surface this '
                 + 'assertion thinks it is')
                 .toBeVisible({ timeout: 30_000 });
 
             // And then the promise the form makes in words: the TERMS cannot be
             // edited. BET v4 carries exactly one edit on the wire, the market's
-            // allow-list and block-list references, so "Edit lists" is the only
+            // allow-list and block-list references, so "Edit Lists" is the only
             // edit-shaped control allowed here, and opening it must offer the two
             // list fields and nothing that touches the label, the outcomes or the
             // deadline.
             const editLike = console_.getByRole('button', { name: /\b(edit|modify|change the terms|update)\b/i });
             await expect(editLike,
-                'a created market offers an edit control other than "Edit lists", but BET can only '
+                'a created market offers an edit control other than "Edit Lists", but BET can only '
                 + 'edit list references on the wire: anything else could only ever silently do something else')
                 .toHaveCount(1);
-            await expect(editLike).toHaveAccessibleName('Edit lists');
+            await expect(editLike).toHaveAccessibleName('Edit Lists');
             await expect(console_.getByRole('link', { name: /\bedit\b/i })).toHaveCount(0);
 
             await editLike.click();
             await expect(console_.getByLabel('New allow-list index', { exact: true }),
-                '"Edit lists" did not open the list editor, so this is not the control it claims to be')
+                '"Edit Lists" did not open the list editor, so this is not the control it claims to be')
                 .toBeVisible({ timeout: 30_000 });
             await expect(console_.getByLabel('New block-list index', { exact: true })).toBeVisible();
             for (const term of ['What is being bet on', /^Outcome \d+$/, 'Betting closes']) {

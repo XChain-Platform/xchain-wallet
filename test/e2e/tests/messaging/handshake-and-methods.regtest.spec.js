@@ -89,7 +89,9 @@
 //       npx playwright test --config=playwright.regtest.config.js \
 //       tests/messaging/handshake-and-methods.regtest.spec.js
 
-import { createWallet, expect, gotoSection, mainButton, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import {
+    createWallet, expect, gotoSection, mainButton, openPaletteCommand, revealChainPicker, test,
+} from '../../fixtures/wallet.js';
 import {
     ENCODER_URL,
     approveConfirm,
@@ -108,6 +110,7 @@ import {
     switchToRegtest,
     unlockAfterReload,
     waitForValidAction,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -163,7 +166,7 @@ async function onboardFundedWallet(page, walletName) {
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
 
-    const address = await main.getByLabel('From').inputValue();
+    const address = await (await openFromAddress(main)).inputValue();
     expect(address, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
         .toMatch(REGTEST_ADDRESS_RE);
 
@@ -192,8 +195,7 @@ async function onboardFundedWallet(page, walletName) {
  */
 async function pickDeliveryNetwork(scope) {
     const trigger = scope.getByRole('button', { name: /^Network:/ }).first();
-    await expect(trigger, 'the compose form has no "Network" field')
-        .toBeVisible({ timeout: 30_000 });
+    await revealChainPicker(scope, trigger, 'Network');
 
     await selectVenueChain(scope, 'Network');
 
@@ -281,7 +283,7 @@ function keyRequestBlock(scope) {
     return missingPubkeyBanner(scope).locator('xpath=..');
 }
 
-const sendButton = (scope) => scope.getByRole('button', { name: 'Send message', exact: true });
+const sendButton = (scope) => scope.getByRole('button', { name: 'Send Message', exact: true });
 
 /**
  * The confirm page's accessible name for a MESSAGE: "Confirm " plus the
@@ -496,7 +498,7 @@ test.describe(`Messaging: first contact on ${REGTEST_CHAIN_LABEL}`, () => {
                 'the refusal banner does not tell the user what to do instead')
                 .toContainText('pick "Plain text" below');
             await expect(keyRequestBlock(main)
-                .getByRole('button', { name: 'Request encrypted session (publish your key)' }),
+                .getByRole('button', { name: 'Request Encrypted Session (Publish Your Key)' }),
             'the refusal banner offers no handshake, so the only way forward it leaves is plaintext')
                 .toBeVisible();
         });
@@ -648,7 +650,7 @@ test.describe(`Messaging: first contact on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBeVisible({ timeout: 60_000 });
 
             const request = keyRequestBlock(main)
-                .getByRole('button', { name: 'Request encrypted session (publish your key)' });
+                .getByRole('button', { name: 'Request Encrypted Session (Publish Your Key)' });
             await expect(request, 'no handshake offer for a recipient the chain has no key for')
                 .toBeVisible({ timeout: 30_000 });
 

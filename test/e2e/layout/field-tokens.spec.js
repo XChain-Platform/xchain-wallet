@@ -40,7 +40,7 @@ function readFields() {
     return out;
 }
 
-const SUBPAGES = ['This wallet', 'Display', 'Privacy', 'Safety', 'Wallet mode', 'Backup', 'Fees', 'Connected sites',
+const SUBPAGES = ['This wallet', 'Display', 'Privacy', 'Safety', 'Backup', 'Fees', 'Connected sites',
     'Automatic donation system', 'Developer mode', 'About', 'Network & endpoints', 'Notifications', 'Keyboard'];
 
 const escapeRegExp = (v) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

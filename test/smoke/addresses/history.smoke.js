@@ -108,8 +108,11 @@ for (const [shell, msgPath] of [
 const home = readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8');
 assert.ok(/onHistory/.test(home),
     'Home accepts onHistory prop');
-assert.ok(/onClick=\{onHistory\}/.test(home),
-    'Home renders the History button wired to onHistory');
+assert.ok(/onHistory=\{onHistory\}/.test(home),
+    'Home hands onHistory to the Activity tab, whose View all control opens History');
+const homeTabs = readFileSync(join(sharedRoutes, '..', 'components', 'HomeTabs.jsx'), 'utf8');
+assert.ok(/onClick=\{onHistory\}/.test(homeTabs),
+    'the Activity tab renders the View all button wired to onHistory');
 
 // --- App.jsx wiring (all three shells) ---
 

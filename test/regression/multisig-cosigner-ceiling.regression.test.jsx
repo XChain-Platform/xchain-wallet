@@ -105,7 +105,7 @@ describe('regression/multisig-cosigner-ceiling', () => {
                 </MessagingProvider>,
             );
         });
-        const add = await screen.findByRole('button', { name: /Add cosigner/i });
+        const add = await screen.findByRole('button', { name: /Add Cosigner/ });
         for (let i = 0; i < 20; i += 1) {
             await act(async () => { fireEvent.click(add); });
         }
@@ -122,6 +122,6 @@ describe('regression/multisig-cosigner-ceiling', () => {
             fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'p2wsh-multisig' } });
         });
         expect(screen.getByText(/supports at most 16 cosigners/i)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Create multisig' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Create Multisig' }).disabled).toBe(true);
     });
 });

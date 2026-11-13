@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterAll, afterEach, beforeAll, describe, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BetFeedDetail } from '../../../packages/core/src/shared/routes/BetFeedDetail.jsx';
 import { DispenserDetail } from '../../../packages/core/src/shared/routes/DispenserDetail.jsx';
@@ -96,7 +96,13 @@ describe('protocol detail route accessibility', () => {
             host,
         );
 
-        await screen.findByRole('heading', { name: 'Actions' });
+        // The section tabs are Buy, Details and Fills; scan the page as it opens
+        // and then each tab that holds content.
+        await screen.findByRole('tab', { name: 'Details' });
+        await expectNoSeriousAxeViolations(container);
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        await screen.findByRole('heading', { name: 'Dispenser Details' });
         await expectNoSeriousAxeViolations(container);
     });
 
@@ -208,7 +214,7 @@ describe('protocol detail route accessibility', () => {
             messaging(),
         );
 
-        await screen.findByRole('button', { name: 'Network: Bitcoin' });
+        await screen.findByRole('form', { name: 'Swap tokens' });
         await expectNoSeriousAxeViolations(container);
     });
 

@@ -41,6 +41,8 @@ import {
     expectConfirmModal,
     EXPLORER_URL,
     fundAddress,
+    issuePlainToken,
+    readIssueSource,
     minerRpc,
     mintXchain,
     REGTEST_ADDRESS_RE,
@@ -51,6 +53,7 @@ import {
     switchToRegtest,
     tokenBalance,
     unlockAfterReload,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -206,10 +209,8 @@ async function issueRunToken(page, owner, tick) {
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(main);
-    await main.getByLabel('Ticker').fill(tick);
-    await main.getByLabel('Supply', { exact: true }).fill(String(TOKEN_SUPPLY));
-    await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await readIssueSource(main);
+    await issuePlainToken(main, { ticker: tick, supply: TOKEN_SUPPLY });
     await expectConfirmModal(page, 'this action', 60_000);
     await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
     const issued = await waitForIndexedAction(await approveAndGetTxid(page));
@@ -221,9 +222,9 @@ async function issueRunToken(page, owner, tick) {
 async function openCreateOrder(page) {
     await openPaletteCommand(page, 'Create order');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('From address')).toBeVisible({ timeout: 30_000 });
+    await expect(await openFromAddress(main)).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
-    const source = await main.getByLabel('From address').inputValue();
+    const source = await (await openFromAddress(main)).inputValue();
     expect(source, `the Create order form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
         .toMatch(REGTEST_ADDRESS_RE);
     return { main, source };
@@ -374,8 +375,8 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(pending, 'the queue labels the debt in the wrong unit (D-137)')
                 .not.toContainText(/base units/);
 
-            await main.getByRole('button', { name: 'Pay now' }).first().click();
-            await main.getByRole('button', { name: 'Pay order', exact: true }).click();
+            await main.getByRole('button', { name: 'Pay Now' }).first().click();
+            await main.getByRole('button', { name: 'Pay Order', exact: true }).click();
             await page.getByRole('button', { name: /^Pay \d/ }).click();
             await expectConfirmModal(page, 'the matched order payment', 60_000);
             const password = page.getByLabel('Password', { exact: true });
@@ -489,10 +490,9 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByLabel('Ticker', { exact: true }).fill(tick);
             await main.getByLabel('Amount', { exact: true }).fill(String(GIVE_TOKENS));
 
-            // Left ON this time, and the web shell's acknowledgement taken: this
-            // is the arming the rest of the test depends on.
+            // Left ON this time: this is the arming the rest of the test
+            // depends on. The web shell's keep-open fact is a confirm notice.
             await expect(main.getByRole('switch', { name: /Enable auto-pay/ })).toBeChecked();
-            await main.getByRole('checkbox', { name: /only auto-pays while it is open/ }).check();
 
             await main.getByRole('button', { name: /^Place order/ }).click();
             await expectConfirmModal(page, 'this action', 60_000);

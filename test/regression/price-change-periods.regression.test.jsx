@@ -90,6 +90,7 @@ function nativeTokenDetail() {
             tick="BTC"
             kind="native"
             quantity="50000000"
+            divisibility={8}
             fiatRate={80_000}
             onBack={() => {}}
         />
@@ -142,8 +143,10 @@ describe('regression/price-change-periods', () => {
         home.unmount();
         renderWithMessaging(messaging, nativeTokenDetail());
 
-        const detailChange = await screen.findByText('+10.00%');
-        expect.soft(renderedLabel(detailChange.parentElement)).toMatch(/\b24h\b/i);
+        // TokenDetail opens on 1W and its change figure measures the selected
+        // range, so it names that range rather than 24h.
+        const detailChange = await screen.findByLabelText(/^1W change\. /);
+        expect(detailChange).toHaveTextContent(/\(\+[\d.]+%\)/);
     });
 
     it('[REGRESSION P1] draws recorded hourly and daily price history on Home and TokenDetail', async () => {

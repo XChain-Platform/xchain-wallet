@@ -455,7 +455,7 @@ test.describe('BET deadline race', () => {
             // well as on demand, so anything slotted in between can put the
             // wallet's own call back on the cold path.
             await warmBet(punter, feedIndex, true);
-            await main.getByRole('button', { name: 'Place bet', exact: true }).click();
+            await main.getByRole('button', { name: 'Place Bet', exact: true }).click();
 
             // The dry run must not be REFUSING here. A confirm that is already
             // failing would make the degradation below unobservable.

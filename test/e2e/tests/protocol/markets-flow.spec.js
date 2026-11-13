@@ -12,7 +12,6 @@ import {
     dismissIntroCarousel,
     expect,
     gotoSection,
-    openSettings,
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
@@ -80,20 +79,6 @@ async function expectMatchingLineHeights(controls, label) {
     }
 }
 
-async function useWatcherMode(page) {
-    await openSettings(page);
-    await page.getByRole('main').getByRole('button', { name: /^Wallet mode/ }).click();
-    const watcher = page.getByRole('radio', { name: /^Watcher \(watch-only\)/ });
-    await expect(watcher).toBeVisible();
-    await watcher.click();
-    const dialog = page.getByRole('dialog', {
-        name: 'Switch to Watcher (watch-only) mode?',
-    });
-    await dialog.getByRole('button', { name: 'Confirm mode change' }).click();
-    await expect(dialog).toBeHidden();
-    await expect(watcher).toBeChecked();
-}
-
 function reviewValue(review, label) {
     return review.getByText(label, { exact: true })
         .locator('xpath=following-sibling::dd[1]');
@@ -103,8 +88,9 @@ for (const viewport of VIEWPORTS) {
     test(`markets flow fits and preserves order amounts on ${viewport.name}`, async ({ page }) => {
         test.slow();
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
+        // The demo wallet keeps its own Normal mode (mode is fixed per wallet);
+        // the review step below accepts either submit label.
         await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
-        await useWatcherMode(page);
 
         await test.step('filter the populated markets list', async () => {
             await gotoSection(page, 'DEX');

@@ -21,6 +21,8 @@ import {
     explorerJson,
     expectConfirmModal,
     fundAddress,
+    issuePlainToken,
+    readIssueSource,
     healVenueClock,
     mintXchain,
     nudgeChain,
@@ -29,7 +31,6 @@ import {
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
     seedPrices,
-    selectVenueChain,
     selectVenueSendAsset,
     switchToRegtest,
     tokenBalance,
@@ -261,11 +262,8 @@ test.describe(`holder-payout callback on ${REGTEST_CHAIN_LABEL}`, () => {
             await openPaletteCommand(ownerPage, 'Issue token');
             let main = ownerPage.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(main);
-            expect(await main.getByLabel('From').inputValue()).toBe(owner);
-            await main.getByLabel('Ticker').fill(TICK);
-            await main.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
-            await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+            expect(await readIssueSource(main)).toBe(owner);
+            await issuePlainToken(main, { ticker: TICK, supply: SUPPLY });
 
             const issue = await waitForValidAction(
                 await approveAndReadTxid(ownerPage, `the ISSUE of ${TICK}`),
@@ -333,7 +331,7 @@ test.describe(`holder-payout callback on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(holdersToPay).toHaveText('1', { timeout: 60_000 });
             await expect(totalPayout).toHaveText(`${expectedHolderPayout} ${PAYOUT_TICK}`);
 
-            const execute = main.getByRole('button', { name: 'Execute callback', exact: true });
+            const execute = main.getByRole('button', { name: 'Execute Callback', exact: true });
             await expect(execute).toBeEnabled({ timeout: 60_000 });
             await execute.click();
             const txid = await approveAndReadTxid(ownerPage, 'the holder-payout callback', {

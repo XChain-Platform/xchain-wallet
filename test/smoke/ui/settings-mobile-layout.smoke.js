@@ -31,7 +31,7 @@ assert.equal(
     1,
     'the shared Settings template owns the responsive layout scope',
 );
-assert.match(route, /<SettingsPageTemplate\s+view="subpage"\s+sectionId=\{section\.id\}>/,
+assert.match(route, /<SettingsPageTemplate\s+view="subpage"\s+sectionId=\{section\.id\}(?:\s+flat=\{FLAT_GROUP_PAGES\.has\(section\.id\)\})?>/,
     'drilldown Settings pages use the shared template');
 assert.match(route, /<SettingsPageTemplate\s+view="list"/,
     'the Settings list uses the shared template');

@@ -76,7 +76,6 @@ for (const path of cssFiles(join(wsRoot, 'packages'))) {
  * outline: ... var(--xc-focus-ring) ...}`.
  */
 const targets = [
-    [join(components, 'AlertsOverlay.module.css'), 'close'],
     [join(components, 'BackupReminderCard.module.css'), 'dismissBtn'],
     [join(components, 'QueuedBroadcastBanner.module.css'), 'broadcastBtn'],
     [join(components, 'QueuedBroadcastBanner.module.css'), 'discardBtn'],

@@ -41,6 +41,6 @@ assert.match(src, /p\.BLOCK_LIST = blockListIdx/, 'emits BLOCK_LIST');
 assert.match(src, /ListPickerScreen/, 'uses the shared list picker');
 
 // Oracle/fiat pricing is coin-only: it hides in the token lane.
-assert.match(src, /showAdvanced && payWith === 'coin'/, 'oracle/fiat advanced section is coin-only');
+assert.match(src, /payWith === 'coin' \? \(\s*<>\s*<Select\s+id="dispenser-fiat-code"/, 'oracle/fiat advanced section is coin-only');
 
 console.log('dispenser-create-depth smoke: all assertions passed');

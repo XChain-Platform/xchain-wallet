@@ -50,9 +50,10 @@ import {
     actionStatuses,
     expectConfirmModal,
     fundAddress,
+    issuePlainToken,
+    readIssueSource,
     mintXchain,
     readReceiveAddress,
-    selectVenueChain,
     selectVenueSendAsset,
     switchToRegtest,
     txActions,
@@ -171,14 +172,8 @@ test.describe('the PC-29 unlock threshold stays inert on regtest', () => {
             await openPaletteCommand(issuer, 'Issue token');
             const main = issuer.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(main);
-            await main.getByLabel('Ticker').fill(TICK);
-            await main.getByLabel('Supply', { exact: true }).fill(SUPPLY);
-            const password = main.getByLabel('Password', { exact: true });
-            if (await password.count() > 0 && await password.isVisible().catch(() => false)) {
-                await password.fill(PASSWORD);
-            }
-            await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+            await readIssueSource(main);
+            await issuePlainToken(main, { ticker: TICK, supply: SUPPLY, password: PASSWORD });
 
             await expectConfirmModal(issuer, 'the ISSUE');
             await approveConfirm(issuer);
@@ -220,10 +215,7 @@ test.describe('the PC-29 unlock threshold stays inert on regtest', () => {
                 mimeType: 'text/plain',
                 buffer: Buffer.from('gated content with no unlock threshold, by construction on this venue'),
             });
-            await main.getByRole('checkbox', {
-                name: /I understand the encrypted file is published on-chain forever/,
-            }).check();
-            await main.getByRole('button', { name: 'Publish file', exact: true }).click();
+            await main.getByRole('button', { name: 'Publish File', exact: true }).click();
 
             // The review screen states threshold rows only when one is set;
             // confirming its absence here is the review-time half of the same
@@ -234,7 +226,7 @@ test.describe('the PC-29 unlock threshold stays inert on regtest', () => {
             if (await reviewPassword.count() > 0 && await reviewPassword.isVisible().catch(() => false)) {
                 await reviewPassword.fill(PASSWORD);
             }
-            await main.getByRole('button', { name: 'Sign and publish' }).click();
+            await main.getByRole('button', { name: 'Sign and Publish' }).click();
             await expectConfirmModal(issuer, 'the gated publish', 60_000);
             await expect(issuer.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
             await issuer.getByTestId('confirm-approve').click();

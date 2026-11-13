@@ -78,6 +78,8 @@ import {
     expectConfirmModal as sharedConfirmModal,
     explorerJson,
     fundAddress,
+    issuePlainToken,
+    readIssueSource,
     minerRpc,
     mintXchain,
     REGTEST_ADDRESS_RE,
@@ -90,6 +92,7 @@ import {
     unlockAfterReload,
     warmPreflight,
     selectVenueSendAsset,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -280,9 +283,7 @@ async function onboardAndIssue(page, tick, walletName) {
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(main);
-
-    const source = await main.getByLabel('From', { exact: true }).inputValue();
+    const source = await readIssueSource(main);
     expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
         .toMatch(REGTEST_ADDRESS_RE);
 
@@ -300,13 +301,10 @@ async function onboardAndIssue(page, tick, walletName) {
     await openPaletteCommand(page, 'Issue token');
     const form = page.getByRole('main');
     await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(form);
-    expect(await form.getByLabel('From', { exact: true }).inputValue(),
+    expect(await readIssueSource(form),
         'the Issue form changed its From address between the two visits')
         .toBe(source);
-    await form.getByLabel('Ticker').fill(tick);
-    await form.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
-    await form.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await issuePlainToken(form, { ticker: tick, supply: SUPPLY });
 
     await expectConfirmModal(page);
     const issued = await waitForIndexedAction(await approveAndGetTxid(page));
@@ -361,7 +359,7 @@ async function publishAddressList(page, source, chooseMembers) {
         + `${others.length}: ${others.join(', ')}`)
         .toBeGreaterThanOrEqual(2);
 
-    expect(await main.getByLabel('From', { exact: true }).inputValue(),
+    expect(await (await openFromAddress(main)).inputValue(),
         'the list would be published from an address that is not the token issuer, so it would be '
         + 'paid for by an address holding no coin')
         .toBe(source);
@@ -379,7 +377,7 @@ async function publishAddressList(page, source, chooseMembers) {
     await expect(main, `the list form did not accept all ${members.length} addresses as valid for this chain`)
         .toContainText(`${members.length} valid ${plural}`);
 
-    await main.getByRole('button', { name: 'Publish list', exact: true }).click();
+    await main.getByRole('button', { name: 'Publish List', exact: true }).click();
     await expectConfirmModal(page);
     const published = await waitForIndexedAction(await approveAndGetTxid(page));
     expect(String(published.action)).toBe('LIST');

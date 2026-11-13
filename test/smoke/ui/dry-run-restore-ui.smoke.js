@@ -42,7 +42,7 @@ assert.match(sectionSrc, /dryRunStage/, 'tracks dry-run stage');
 assert.match(sectionSrc, /'idle' \| 'form' \| 'running' \| 'result'/, 'four dry-run stages');
 assert.match(sectionSrc, /<DryRunForm/, 'inline form component');
 assert.match(sectionSrc, /<DryRunReport/, 'comparison report component');
-assert.match(sectionSrc, /Run test/, 'submit copy');
+assert.match(sectionSrc, /Run Test/, 'submit copy');
 assert.match(
     sectionSrc,
     /Backup matches this wallet/,

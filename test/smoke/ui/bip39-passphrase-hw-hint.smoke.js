@@ -27,7 +27,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 
-const createSrc = read('packages/core/src/shared/routes/CreateWallet.jsx');
+const createSrc = withEnglishCopy(read('packages/core/src/shared/routes/CreateWallet.jsx'));
 const importSrc = withEnglishCopy(read('packages/core/src/shared/routes/ImportWallet.jsx'));
 
 // 1. CreateWallet's existing BIP39 InfoTip extends its label to
@@ -47,7 +47,7 @@ assert.ok(/aria="(Extra )?[Pp]assphrase help"/.test(importSrc),
     'ImportWallet ships a BIP39 passphrase InfoTip');
 assert.ok(/hardware wallets|enter it on the device/i.test(importSrc),
     'ImportWallet InfoTip mentions HW devices handle passphrases on-device');
-assert.ok(/Add Account/.test(importSrc),
+assert.ok(/connect through Pair Hardware Wallet/.test(importSrc),
     'ImportWallet InfoTip points users to the correct HW pairing lane');
 
 // 3. The ImportWallet InfoTip lives beside the passphrase Switch so it

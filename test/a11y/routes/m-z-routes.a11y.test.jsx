@@ -30,7 +30,7 @@ const ROUTE_NAMES = [
     'MultisigCreate',
     'MultisigSendForm',
     'MultisigSigningSession',
-    'MyBets',
+    'MyDelegations',
     'MyLists',
     'MyOrdersView',
     'MySwapsView',
@@ -48,6 +48,7 @@ const ROUTE_NAMES = [
     'PsbtSignForm',
     'PublishFileForm',
     'ReceivePicker',
+    'RemoveWallet',
     'RenameAccountForm',
     'RenameWalletForm',
     'RouteNotFound',
@@ -68,6 +69,7 @@ const ROUTE_NAMES = [
     'TokenAdminForm',
     'TokenPicker',
     'TokenWizard',
+    'UnbindForm',
     'UnionListForm',
     'VaultUnavailable',
     'VerifySignatureForm',
@@ -80,6 +82,8 @@ const ROUTE_PROPS = Object.values(ROUTE_REGISTRY).reduce((props, route) => {
     if (!(route.component in props)) props[route.component] = route.minimalProps;
     return props;
 }, {
+    // The remove page only offers a wallet it can name for the typed confirmation.
+    RemoveWallet: { walletName: 'Primary Wallet', activeWalletId: null },
     // Send renders this form in place when its source is a multisig, so it has
     // no route entry; a 2-of-3 P2WSH multisig shows the whole send form.
     MultisigSendForm: {

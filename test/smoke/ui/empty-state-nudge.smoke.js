@@ -91,8 +91,8 @@ assert.ok(
     'HomeTabs accepts the onReceive prop',
 );
 assert.ok(
-    /onReceive=\{networkFilter === 'all' \? onReceive : undefined\}/.test(homeTabsSrc),
-    'HomeTabs only forwards onReceive when the filter is "all"; network-filtered empty states avoid the misleading CTA',
+    /onReceive=\{networkFilter === 'all' && !tokenQueryTrim \? onReceive : undefined\}/.test(homeTabsSrc),
+    'HomeTabs only forwards onReceive when the filter is "all" and no search is typed; network-filtered and searched empty states avoid the misleading CTA',
 );
 
 // --- 4. Home.jsx threads onReceive into HomeTabs --------------------------

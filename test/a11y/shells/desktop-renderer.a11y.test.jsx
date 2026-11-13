@@ -156,7 +156,8 @@ describe('desktop renderer accessibility', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
 
         await screen.findByRole('heading', { name: 'Settings' });
-        await screen.findAllByText('Desktop Wallet');
+        // Settings lists groups now, so the page is loaded once its search box is.
+        await screen.findByRole('searchbox', { name: 'Search settings' });
         await expectNoSeriousAxeViolations(container);
     });
 });

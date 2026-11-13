@@ -27,5 +27,5 @@ assert.match(formSrc, /import \{ useWalletMode \} from '\.\.\/hooks\/useWalletMo
 assert.match(formSrc, /import \{ ResultScreen \} from '\.\.\/components\/ResultScreen\.jsx';/);
 assert.match(formSrc, /const \{ isWatcherMode \} = useWalletMode\(\);/);
 assert.match(formSrc, /messaging\.buildActionPsbtRequest\(\{[\s\S]+?action: 'EXECUTE'/);
-assert.match(formSrc, /Create transaction for signing/);
+assert.match(formSrc, /Create Transaction for Signing/);
 console.log('execute-contract-watcher-mode smoke OK');

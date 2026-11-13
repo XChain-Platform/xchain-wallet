@@ -13,6 +13,8 @@ import { selectNamedToken } from '../../fixtures/crossChain.js';
 import {
     expectConfirmModal,
     fundAddress,
+    issuePlainToken,
+    readIssueSource,
     mintXchain,
     readReceiveAddress,
     REGTEST_CHAIN_ID,
@@ -56,10 +58,8 @@ async function issueGiveToken(page, source) {
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(main);
-    await main.getByLabel('Ticker').fill(GIVE_TICK);
-    await main.getByLabel('Supply', { exact: true }).fill(String(GIVE_SUPPLY));
-    await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await readIssueSource(main);
+    await issuePlainToken(main, { ticker: GIVE_TICK, supply: GIVE_SUPPLY });
 
     const txid = await approveAndReadTxid(page, `the ISSUE of ${GIVE_TICK}`);
     const action = await waitForValidAction(txid);
@@ -102,9 +102,7 @@ test.describe(`same-chain SWAP on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('fill the dedicated same-chain Swap form and approve it', async () => {
             await openPaletteCommand(page, 'Swap');
             const main = page.getByRole('main');
-            await expect(main.getByRole('button', { name: /^Give and get network:/ }))
-                .toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(main, 'Give and get network');
+            await selectVenueChain(main, 'Network');
             await selectNamedToken(page, 'Give token', {
                 chainId: REGTEST_CHAIN_ID,
                 chainLabel: REGTEST_CHAIN_LABEL,

@@ -19,7 +19,9 @@ import {
     dismissIntroCarousel,
     expect,
     gotoSection,
+    openIssueSection,
     openPaletteCommand,
+    pickIssuePreset,
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
@@ -222,35 +224,33 @@ test('the first block of the intro carousel and the issuance wizard fills the gu
         violations.push(...judgeFirstBlock(where, intro));
     }
 
-    // A demo wallet disables every submit button, so the wizard walk uses a
-    // real wallet to reach the details and review steps.
+    // A demo wallet disables every submit button, so the Issue Token walk uses
+    // a real wallet.
     await createWallet(page);
     for (const viewport of FIRST_BLOCK_VIEWPORTS) {
         await page.setViewportSize(viewport);
         await settle(page);
         await openPaletteCommand(page, 'Create a token');
-        await expect(page.getByText('Step 1 of 4: Template', { exact: true })).toBeVisible();
+        const main = page.getByRole('main');
+        const form = page.getByRole('form', { name: 'Issue Token' });
+        await expect(form).toBeVisible();
         await settle(page);
-        violations.push(...judgeFirstBlock(`${viewport.width}px / token wizard template`, await settledFirstBlock(page)));
+        violations.push(...judgeFirstBlock(`${viewport.width}px / issue token form`, await settledFirstBlock(page)));
 
-        await page.getByRole('button', { name: /Meme token/ }).click();
-        await expect(page.getByText('Step 2 of 4: Network', { exact: true })).toBeVisible();
+        await pickIssuePreset(main, /^Meme token/);
         await settle(page);
-        violations.push(...judgeFirstBlock(`${viewport.width}px / token wizard network`, await settledFirstBlock(page)));
+        violations.push(...judgeFirstBlock(`${viewport.width}px / issue token template picked`, await settledFirstBlock(page)));
 
-        const chainForm = page.getByRole('form', { name: 'Choose token network' });
-        await chainForm.getByRole('button', { name: 'Next' }).click();
-        await expect(page.getByText('Step 3 of 4: Details', { exact: true })).toBeVisible();
+        // The network sits in the From section, closed until opened.
+        await openIssueSection(main, 'From');
         await settle(page);
-        violations.push(...judgeFirstBlock(`${viewport.width}px / token wizard details`, await settledFirstBlock(page)));
+        violations.push(...judgeFirstBlock(`${viewport.width}px / issue token network`, await settledFirstBlock(page)));
 
-        const details = page.getByRole('form', { name: 'Token details' });
-        await details.getByRole('textbox', { name: 'Token name (ticker)' }).fill('WIDTHCHECK');
-        await details.getByRole('textbox', { name: 'Supply' }).fill('1000');
-        await details.getByRole('button', { name: 'Review token' }).click();
-        await expect(page.getByText('Step 4 of 4: Review', { exact: true })).toBeVisible({ timeout: 30_000 });
+        await form.getByRole('textbox', { name: 'Ticker', exact: true }).fill('WIDTHCHECK');
+        await form.getByRole('textbox', { name: /^Max supply/ }).fill('1000');
+        await openIssueSection(main, 'Public minting');
         await settle(page);
-        violations.push(...judgeFirstBlock(`${viewport.width}px / token wizard review`, await settledFirstBlock(page)));
+        violations.push(...judgeFirstBlock(`${viewport.width}px / issue token details`, await settledFirstBlock(page)));
         await gotoSection(page, 'Home');
     }
     expect(violations, violations.join('\n')).toEqual([]);

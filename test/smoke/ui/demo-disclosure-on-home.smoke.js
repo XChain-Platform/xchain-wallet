@@ -38,8 +38,8 @@ assert.match(
     /'home\.demoSendBlocked': "Demo wallets can't send\. Create a real wallet to send\."/,
     'the blocked-send note says why and what to do',
 );
-assert.match(homeSrc, /t\('walletDetails\.exitDemo'\)/, 'the blocked-send note carries the exit action');
-assert.match(enLocaleSrc, /'walletDetails\.exitDemo': 'Exit demo & wipe'/, 'the exit action is named for what it does');
+assert.match(homeSrc, /t\('walletDetails\.exitDemoAction'\)/, 'the blocked-send note carries the exit action');
+assert.match(enLocaleSrc, /'walletDetails\.exitDemoAction': 'Exit Demo & Wipe'/, 'the exit action is named for what it does');
 
 for (const [label, src] of [['web', webSrc], ['extension', popupSrc]]) {
     assert.match(src, /useDemoAutoWipe\(activeWalletId, refresh\)/, `${label} enforces demo expiry`);

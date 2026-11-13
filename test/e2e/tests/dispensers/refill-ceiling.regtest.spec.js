@@ -251,7 +251,7 @@ test.describe(`dispenser refill ceiling on ${REGTEST_CHAIN_LABEL}`, () => {
                     .toContainText(/of 5 refills used/, { timeout: 60_000 });
 
                 await main.getByLabel('Refill amount').fill(String(REFILL));
-                await main.getByRole('button', { name: 'Refill dispenser' }).click();
+                await main.getByRole('button', { name: 'Refill Dispenser' }).click();
 
                 const done = await waitForIndexedAction(await signedTxid(page));
                 expect(String(done.status),
@@ -282,7 +282,7 @@ test.describe(`dispenser refill ceiling on ${REGTEST_CHAIN_LABEL}`, () => {
                 + 'owner has no way to know they are on their sixth')
                 .toContainText(/used all 5 of its refills|5 of 5 refills used/, { timeout: 60_000 });
 
-            const signButton = main.getByRole('button', { name: 'Refill dispenser' });
+            const signButton = main.getByRole('button', { name: 'Refill Dispenser' });
             if (!(await signButton.isEnabled())) {
                 // The venue serves per-edit give_escrow, so the count is exact and
                 // the wallet refuses outright. Nothing is signed, nothing is spent.

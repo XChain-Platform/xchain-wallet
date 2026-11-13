@@ -124,7 +124,7 @@ assert.ok(/useExtensionWallet/.test(bannerSrc),
 // The accept label is localized: the banner names the key and the English
 // dictionary carries the visible text.
 assert.ok(/t\('extensionBanner\.useExtension'\)/.test(bannerSrc)
-    && /'extensionBanner\.useExtension': 'Use extension wallet'/.test(englishDictionarySource()),
+    && /'extensionBanner\.useExtension': 'Use Extension Wallet'/.test(englishDictionarySource()),
     'ExtensionBanner offers the accept action');
 const extHook = readFileSync(join(web, 'src', 'useExtensionWallet.js'), 'utf8');
 assert.ok(/xchain#initialized/.test(extHook),

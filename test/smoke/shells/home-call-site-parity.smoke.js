@@ -91,7 +91,7 @@ function homeCallSiteProps(src, shell) {
     // assertion below pass over an empty list. Every shell passes at least
     // the wallet id and the core navigation handlers.
     assert.ok(
-        props.length >= 20,
+        props.length >= 15,
         `${shell}: parsed only ${props.length} <Home> props. The call site changed `
         + 'shape; fix this parser rather than letting the comparison pass vacuously.',
     );

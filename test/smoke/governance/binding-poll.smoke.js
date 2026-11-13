@@ -43,7 +43,7 @@ const formSrc = read(formPath);
 
 // 1: the section exists and both param paths carry every callback field.
 assert.ok(
-    /Binding poll \(run a contract on the result\)/.test(formSrc),
+    /title="Run a Contract When It Ends"/.test(formSrc),
     'form offers a binding-poll disclosure',
 );
 for (const [camel, wire] of [

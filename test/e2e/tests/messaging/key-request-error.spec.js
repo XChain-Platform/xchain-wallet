@@ -157,7 +157,7 @@ function keyRequestBlock(scope) {
 }
 
 function requestButton(scope) {
-    return scope.getByRole('button', { name: /Request encrypted session/i });
+    return scope.getByRole('button', { name: 'Request Encrypted Session (Publish Your Key)' });
 }
 
 /** Every alert currently on screen, joined, so nothing can hide in a sibling. */
@@ -252,7 +252,7 @@ async function unlockDecliningCapture(page, password) {
         'the unlock let a wallet through that holds a passphrase it has never stored, so '
         + 'either the capture step is gone or this wallet is not in the legacy state at all')
         .toBeVisible({ timeout: kdfStepTimeout() });
-    const notNow = page.getByRole('button', { name: 'Not now', exact: true });
+    const notNow = page.getByRole('button', { name: 'Not Now', exact: true });
     await expect(notNow, 'the capture step offers no way to postpone, so a user who does not '
         + 'have their passphrase to hand cannot reach the wallet at all')
         .toBeVisible({ timeout: 30_000 });

@@ -179,7 +179,7 @@ async function publishLabels(page) {
     const main = page.getByRole('main');
     await main.getByRole('button', { name: /^Backup/ }).first().click();
 
-    const open = main.getByRole('button', { name: 'Publish now…', exact: true });
+    const open = main.getByRole('button', { name: 'Publish Now…', exact: true });
     await expect(open, 'the Backup section offers no "Publish now…" action').toBeVisible({ timeout: 30_000 });
     await open.click();
 

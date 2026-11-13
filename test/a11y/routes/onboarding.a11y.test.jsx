@@ -66,8 +66,8 @@ describe('Onboarding route accessibility', () => {
             await expectNoSeriousAxeViolations(container);
         }
 
-        fireEvent.click(screen.getByRole('button', { name: 'Get started' }));
-        await screen.findByRole('button', { name: 'Create new wallet' });
+        fireEvent.click(screen.getByRole('button', { name: 'Get Started' }));
+        await screen.findByRole('button', { name: 'Create New Wallet' });
         await expectNoSeriousAxeViolations(container);
     });
 });

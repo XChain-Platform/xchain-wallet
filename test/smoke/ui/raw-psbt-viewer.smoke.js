@@ -75,12 +75,12 @@ assert.match(compSrc, /copyText\(value\)/, 'copy uses the shared clipboard path'
 assert.match(compSrc, /Copy failed: clipboard unavailable/, 'copy failure is visible in plain words');
 assert.match(
     compSrc,
-    /copyLabel\('psbt', 'unsigned transaction code'\)/,
+    /copyLabel\('psbt', 'Unsigned Transaction Code'\)/,
     'PSBT copy button labels what it copies',
 );
 assert.match(
     compSrc,
-    /copyLabel\('fields', 'action fields'\)/,
+    /copyLabel\('fields', 'Action Fields'\)/,
     'action-fields copy button labels what it copies',
 );
 

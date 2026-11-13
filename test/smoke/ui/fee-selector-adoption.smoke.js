@@ -22,21 +22,23 @@ const here = dirname(fileURLToPath(import.meta.url));
 const routes = join(here, '..', '..', '..', 'packages', 'core', 'src', 'shared', 'routes');
 const read = (f) => readFileSync(join(routes, f), 'utf8');
 
-// Forms that render an editable FeeSelector for the network fee.
-const FEE_FORMS = [
+// Form Standard forms put the one editable FeeSelector in their Network fee
+// section; the Dispenser detail page renders the selector itself.
+const FEE_SECTION_FORMS = [
     'Send.jsx',
     'ComposeMessage.jsx',
-    'DispenserDetail.jsx',
     'SwapForm.jsx',
     'CrossChainSwapForm.jsx',
     'SellOwnershipForm.jsx',
     'CoinpayForm.jsx',
 ];
 
-for (const f of FEE_FORMS) {
+for (const f of FEE_SECTION_FORMS) {
     const src = read(f);
-    assert.match(src, /<FeeSelector/, `${f} renders the shared FeeSelector`);
+    assert.match(src, /<FeeSection\b/, `${f} renders the shared Network fee section`);
+    assert.doesNotMatch(src, /<FeeSelector\b/, `${f} leaves the selector to the fee section`);
 }
+assert.match(read('DispenserDetail.jsx'), /<FeeSelector/, 'DispenserDetail renders the shared FeeSelector');
 
 assert.doesNotMatch(
     read('Receive.jsx'),

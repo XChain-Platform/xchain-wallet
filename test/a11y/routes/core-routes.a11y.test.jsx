@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterAll, afterEach, beforeAll, describe, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
@@ -33,6 +33,8 @@ function pending() {
 
 function messaging(overrides = {}) {
     const base = {
+        // Wallet mode is per wallet and read from the wallet list.
+        listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'Primary Wallet', walletMode: 'full' }]),
         getSettings: vi.fn().mockResolvedValue(SETTINGS),
         updateSettings: vi.fn().mockResolvedValue(SETTINGS),
         getAddressesByChain: vi.fn().mockResolvedValue({
@@ -173,6 +175,12 @@ describe('high-use route accessibility', () => {
             />,
         );
         await screen.findByRole('heading', { name: 'Accessibility Token' });
+        // Actions is the tab that opens first.
+        await screen.findByRole('tab', { name: 'Actions', selected: true });
+        await expectNoSeriousAxeViolations(container);
+
+        // The description is a row of the Details tab.
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
         await screen.findByText('A token used by the accessibility fixture.');
         await expectNoSeriousAxeViolations(container);
     });

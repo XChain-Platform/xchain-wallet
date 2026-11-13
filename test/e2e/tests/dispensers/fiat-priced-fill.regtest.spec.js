@@ -65,6 +65,7 @@ import {
     selectVenueSendAsset,
     selectDispenserOnSource,
     selectPickerAsset,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -290,7 +291,7 @@ test.describe(`fiat-priced dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
             const form = page.getByRole('main');
             await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(form);
-            buyer = await form.getByLabel('From').inputValue();
+            buyer = await (await openFromAddress(form)).inputValue();
             expect(buyer, `the buyer wallet has no ${REGTEST_CHAIN_LABEL} address`)
                 .toMatch(REGTEST_ADDRESS_RE);
             expect(buyer, 'the buyer wallet derived the seller\'s address').not.toBe(seller);

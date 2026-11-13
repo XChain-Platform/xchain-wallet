@@ -27,5 +27,5 @@ assert.match(formSrc, /import \{ useWalletMode \} from '\.\.\/hooks\/useWalletMo
 assert.match(formSrc, /import \{ ResultScreen \} from '\.\.\/components\/ResultScreen\.jsx';/);
 assert.match(formSrc, /const \{ isWatcherMode \} = useWalletMode\(\);/);
 assert.match(formSrc, /messaging\.buildActionPsbtRequest\(\{[\s\S]+?action: 'ISSUE'/);
-assert.match(formSrc, /Create unsigned transaction/);
+assert.match(formSrc, /Create Unsigned Transaction/);
 console.log('token-admin-watcher-mode smoke OK');

@@ -76,9 +76,10 @@ for (const label of [
     'Gas limit:',
     'Status:',
     'Code hash:',
-    'State (expandable)',
-    'Balances (tokens held by the contract)',
-    'Execution history',
+    'title="State"',
+    'Expand',
+    'title="Holdings"',
+    'title="Execution history"',
 ]) {
     assert.ok(detailSrc.includes(label), `ContractDetail renders "${label}"`);
 }
@@ -247,8 +248,10 @@ for (const [shell, appPath] of [
         `${shell} tracks the contract-detail sub-route`);
     assert.ok(/setContractRef\(\{\s*chainId:\s*cid,\s*contractActionIndex:/.test(app),
         `${shell} ContractsList.onOpenContract threads chainId + contractActionIndex`);
-    assert.ok(/onBack=\{\(\)\s*=>\s*setUnlockedView\('contracts-list'\)\}/.test(app),
-        `${shell} ContractDetail back returns to the list`);
+    // Back is the shell's one navigation history, which returns to the list
+    // the detail was opened from.
+    assert.ok(/<ContractDetail[\s\S]*?onBack=\{goBack\}/.test(app),
+        `${shell} ContractDetail back pops the navigation history`);
 }
 
 console.log(

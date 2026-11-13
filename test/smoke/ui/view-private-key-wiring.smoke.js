@@ -20,6 +20,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withEnglishCopy } from '../_localized-source.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -31,7 +32,8 @@ const routes = join(core, 'src', 'shared', 'routes');
 
 // --- 1. AddressList exposes onShowPrivateKey + renders the button -------
 
-const al = readFileSync(join(routes, 'AddressList.jsx'), 'utf8');
+// The button copy lives in the English locale, read back in place of each t() call.
+const al = withEnglishCopy(readFileSync(join(routes, 'AddressList.jsx'), 'utf8'));
 assert.ok(/onShowPrivateKey/.test(al),
     'AddressList accepts an onShowPrivateKey prop');
 assert.ok(/Secret/.test(al),

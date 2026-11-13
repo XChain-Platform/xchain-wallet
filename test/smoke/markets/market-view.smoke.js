@@ -42,13 +42,11 @@ assert.ok(/messaging\.getMarket\(/.test(src),
 
 // Chart panel (§41.3.1): Step 3 landed MarketChart; asserted here by
 // import, not by stub text.
+// The chart now sits behind the pair's blue card, built from the shared
+// price-chart pieces.
 assert.ok(
-    /import \{ MarketChart \}/.test(src),
-    'MarketView imports MarketChart (Step 3)',
-);
-assert.ok(
-    /<MarketChart\b/.test(src),
-    'MarketView renders <MarketChart /> for the chart panel',
+    /import \{ Sparkline \}/.test(src) && /ChartRangeTabs/.test(src),
+    'MarketView draws the chart behind its card from the shared Sparkline and range tabs',
 );
 
 // Orderbook panel (§41.3.2): Step 4 landed OrderbookPanel.
@@ -61,8 +59,8 @@ assert.ok(
     'MarketView renders <OrderbookPanel /> for the orderbook panel',
 );
 assert.ok(
-    /onPickPrice=\{\(price\)/.test(src),
-    'MarketView threads price picks from the orderbook into local state',
+    /onPickPrice=\{\(price, side\)/.test(src) && /pick: pickRef\.current/.test(src),
+    'MarketView threads price picks from the orderbook into the trade page',
 );
 
 // Recent trades panel (§41.3.3): Step 5 landed RecentTradesPanel.
@@ -76,13 +74,16 @@ assert.ok(
 );
 
 // Place order form (§41.3.4): Step 6 landed PlaceOrderPanel.
+// Trading opens on its own page (MarketTrade), which hosts the PlaceOrderPanel.
 assert.ok(
-    /import \{ PlaceOrderPanel \}/.test(src),
-    'MarketView imports PlaceOrderPanel (Step 6)',
+    /import \{ MarketTrade \}/.test(src) && /<MarketTrade\b/.test(src) && /price=\{localTrade\.price \?\? null\}/.test(src),
+    'MarketView opens MarketTrade with the price picked from the orderbook',
 );
+const tradeSrc = readFileSync(join(core, 'src', 'shared', 'routes', 'MarketTrade.jsx'), 'utf8');
 assert.ok(
-    /<PlaceOrderPanel\b/.test(src) && /prefillPrice=\{prefillPrice\}/.test(src),
-    'MarketView renders <PlaceOrderPanel /> with prefillPrice from orderbook clicks',
+    /import \{ PlaceOrderPanel \}/.test(tradeSrc)
+        && /<PlaceOrderPanel\b/.test(tradeSrc) && /prefillPrice=\{pickedPrice\}/.test(tradeSrc),
+    'MarketTrade renders <PlaceOrderPanel /> with prefillPrice from orderbook clicks',
 );
 
 // Open orders panel (§41.3.5): Step 7 landed OpenOrdersPanel.

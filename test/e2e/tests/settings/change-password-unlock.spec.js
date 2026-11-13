@@ -90,7 +90,7 @@ test.describe('Settings: change wallet password', () => {
             await page.getByLabel('New wallet password', { exact: true }).fill(NEW_PASSWORD);
             await page.getByLabel('Confirm new wallet password', { exact: true }).fill(NEW_PASSWORD);
             await page.getByRole('main')
-                .getByRole('button', { name: 'Change password', exact: true })
+                .getByRole('button', { name: 'Change Password', exact: true })
                 .click();
 
             await expect(page.getByText('Wallet password changed.', { exact: true }))

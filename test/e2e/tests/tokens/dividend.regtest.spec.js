@@ -24,6 +24,8 @@ import { LICENSE_VERSION } from '../../../../packages/core/src/buildInfo.js';
 import {
     expectConfirmModal,
     fundAddress,
+    issuePlainToken,
+    readIssueSource,
     mintXchain,
     nudgeChain,
     readReceiveAddress,
@@ -94,10 +96,8 @@ async function issueHolderToken(page, source) {
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(main);
-    await main.getByLabel('Ticker').fill(HOLDER_TICK);
-    await main.getByLabel('Supply', { exact: true }).fill(String(HOLDER_SUPPLY));
-    await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await readIssueSource(main);
+    await issuePlainToken(main, { ticker: HOLDER_TICK, supply: HOLDER_SUPPLY });
 
     const txid = await approveAndReadTxid(page, `the ISSUE of ${HOLDER_TICK}`);
     const action = await waitForValidAction(txid);
@@ -197,7 +197,7 @@ test.describe('DIVIDEND on regtest', () => {
             await expect(main.getByText(/1 eligible holder/)).toBeVisible({ timeout: 60_000 });
             await expect(main.getByText(new RegExp(`total distribution ~${HOLDER_UNITS * RATE} XCHAIN`)))
                 .toBeVisible({ timeout: 30_000 });
-            await main.getByRole('button', { name: 'Pay dividend', exact: true }).click();
+            await main.getByRole('button', { name: 'Pay Dividend', exact: true }).click();
 
             await expectConfirmModal(issuer, 'the DIVIDEND');
             await expect(issuer.getByTestId('action-intent'))

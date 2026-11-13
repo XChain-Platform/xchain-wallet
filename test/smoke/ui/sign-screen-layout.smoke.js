@@ -20,7 +20,7 @@
 //   - CSS hooks for the new blocks are present.
 
 import { strict as assert } from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -98,8 +98,13 @@ assert.match(
     );
     assert.match(
         confirmSrc,
-        /\{resolvedApproveLabel\}/,
-        'confirm surface: the footer button renders the derived label',
+        /const approveLabel = resolvedApproveLabel;[\s\S]*?>\s*\{approveLabel\}\s*<\/Button>/,
+        'confirm surface: the footer button renders the one approve label',
+    );
+    assert.match(
+        confirmSrc,
+        /const actionHeaderLabel = variant === 'action' && formattedDecoded\s*\?\s*reviewActionLabel\(/,
+        'confirm surface: the reviewed action and amount are named in the header label',
     );
     // The footer consumes the label derived from the reviewed action.
     const footerIdx = confirmSrc.indexOf('data-testid="confirm-approve"');
@@ -222,6 +227,26 @@ assert.match(
         [],
         'en locale holds no "Sign on X" label',
     );
+    // Product JSX never writes a "Sign on <device>" button literal either: the
+    // hardware path shows the software path's label with the sign icon.
+    const offenders = [];
+    const walk = (dir) => {
+        for (const entry of readdirSync(dir, { withFileTypes: true })) {
+            const full = join(dir, entry.name);
+            if (entry.isDirectory()) walk(full);
+            else if (/\.jsx$/.test(entry.name)) {
+                readFileSync(full, 'utf8').split('\n').forEach((line, i) => {
+                    if (/^\s*(\/\/|\*|\/\*)/.test(line)) return;
+                    if (/(['"`]|>)Sign on\b/.test(line)) offenders.push(`${full.slice(wsRoot.length + 1)}:${i + 1}`);
+                });
+            }
+        }
+    };
+    for (const pkg of ['core', 'web', 'desktop', 'extension']) {
+        const src = join(wsRoot, 'packages', pkg, 'src');
+        if (existsSync(src)) walk(src);
+    }
+    assert.deepEqual(offenders, [], 'no product JSX literal reads "Sign on <device>"');
 }
 
 // --- 6. Send.jsx CSS hooks ---------------------------------------------
@@ -242,13 +267,19 @@ assert.match(sendCss, /\.detailsToggle\b/, 'Send.module.css defines .detailsTogg
         const end = src.indexOf('</div>', src.lastIndexOf('</Button>', src.indexOf('</div>', start + 200)) );
         return src.slice(start, end === -1 ? start + 1500 : end);
     };
-    const assertPair = (name, footer) => {
+    // The action page of the in-wallet confirm surface carries X and Check
+    // icons; every other variant and surface keeps the thumbs pair.
+    const THUMBS = {
+        reject: /icon=\{<Icon\.ThumbsDownIcon \/>\}/,
+        approve: /icon=\{<Icon\.ThumbsUpIcon \/>\}/,
+    };
+    const assertPair = (name, footer, icons = THUMBS) => {
         const buttons = footer.match(/<Button\b/g) || [];
         assert.equal(buttons.length, 2, `${name}: footer has exactly two buttons`);
         const [rejectBtn, approveBtn] = footer.split(/<Button\b/).slice(1);
-        assert.match(rejectBtn, /icon=\{<Icon\.ThumbsDownIcon \/>\}/, `${name}: Reject carries the thumbs-down icon`);
+        assert.match(rejectBtn, icons.reject, `${name}: Reject carries its icon`);
         assert.match(rejectBtn, /extension\.approval\.reject|\bReject\b/, `${name}: first button is Reject`);
-        assert.match(approveBtn, /icon=\{<Icon\.ThumbsUpIcon \/>\}/, `${name}: Approve carries the thumbs-up icon`);
+        assert.match(approveBtn, icons.approve, `${name}: Approve carries its icon`);
         assert.doesNotMatch(rejectBtn, /variant="(danger|primary)"/, `${name}: Reject is not danger or primary`);
         assert.doesNotMatch(approveBtn, /variant="danger"/, `${name}: Approve is not danger`);
     };
@@ -266,7 +297,11 @@ assert.match(sendCss, /\.detailsToggle\b/, 'Send.module.css defines .detailsTogg
     assert.equal(en['extension.connect.approve'], 'Approve', 'ConnectApproval approve label is Approve');
     assertPair(
         'ConfirmActionModal',
-        footerOf(read('packages', 'core', 'src', 'shared', 'components', 'ConfirmActionModal.jsx'), '<div className={styles.footer}>'),
+        footerOf(read('packages', 'core', 'src', 'shared', 'components', 'ConfirmActionModal.jsx'), '<div className={k6 ? '),
+        {
+            reject: /icon=\{k6 \? <Icon\.XIcon \/> : <Icon\.ThumbsDownIcon \/>\}/,
+            approve: /icon=\{k6 \? <Icon\.CheckIcon \/> : <Icon\.ThumbsUpIcon \/>\}/,
+        },
     );
     for (const name of ['ActionConfirmScreen', 'MessageConfirmScreen', 'PsbtConfirmScreen']) {
         const src = read('packages', 'core', 'src', 'shared', 'components', `${name}.jsx`);
@@ -278,7 +313,7 @@ assert.match(sendCss, /\.detailsToggle\b/, 'Send.module.css defines .detailsTogg
         // the composed publish to <ActionConfirmScreen>, and no review stage of
         // the form puts a second sign button in front of Reject and Approve.
         const gatedSrc = read('packages', 'core', 'src', 'shared', 'routes', 'GatedPublishForm.jsx');
-        assert.doesNotMatch(gatedSrc, /gatedPublish\.signAndPublish/, 'GatedPublishForm: no Sign and publish button');
+        assert.doesNotMatch(gatedSrc, /gatedPublish\.signAndPublish/, 'GatedPublishForm: no Sign and Publish button');
         assert.doesNotMatch(gatedSrc, /send\.review\.signOn/, 'GatedPublishForm: no Sign on device button');
         assert.match(
             gatedSrc,

@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Regression suite: Home quick actions are the same four square tiles at
+// Regression suite: Home quick actions are the same four round buttons at
 // every width and for demo wallets.
 //
-// The row contains Send, Receive, Exchange and All actions at every width,
-// including demo wallets. Each square tile stacks its icon above its label.
+// The row contains Send, Receive, Exchange and More at every width,
+// including demo wallets. Each button stacks its round icon above its label.
 //
-// jsdom has no layout, so the tile shape is pinned on the stylesheet and the
+// jsdom has no layout, so the button shape is pinned on the stylesheet and the
 // e2e layout sweep measures it in a browser.
 
 import React from 'react';
@@ -37,7 +37,7 @@ const BALANCES = {
         },
     }],
 };
-const FOUR = ['Send', 'Receive', 'Exchange', 'All actions'];
+const FOUR = ['Send', 'Receive', 'Exchange', 'More'];
 
 const readCss = (path) => readFileSync(join(process.cwd(), path), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '');
@@ -104,7 +104,7 @@ describe('Home quick action tiles', () => {
         ['web', 360], ['web', 1280], ['web', 1440],
         ['desktop', 360], ['desktop', 1280], ['desktop', 1440],
         ['popup', 360],
-    ])('holds exactly Send, Receive, Exchange and All actions in the %s shell at %ipx', async (shell, width) => {
+    ])('holds exactly Send, Receive, Exchange and More in the %s shell at %ipx', async (shell, width) => {
         setWidth(width);
         mountHome(handlers(), shell);
         expect(await quickActionNames()).toEqual(FOUR);
@@ -118,14 +118,14 @@ describe('Home quick action tiles', () => {
         expect(await quickActionNames()).toEqual(FOUR);
     });
 
-    it('opens the actions menu from All actions', async () => {
+    it('opens the actions menu from More', async () => {
         setWidth(360);
         const h = handlers();
         mountHome(h, 'desktop');
         const row = await screen.findByRole('group', { name: 'Quick actions' });
-        within(row).getByRole('button', { name: 'All actions' }).click();
+        within(row).getByRole('button', { name: 'More actions' }).click();
         expect(h.onActions).toHaveBeenCalledTimes(1);
-        expect(screen.getAllByRole('button', { name: 'All actions' })).toHaveLength(1);
+        expect(screen.getAllByRole('button', { name: 'More actions' })).toHaveLength(1);
     });
 
     it('puts every tile icon before its label', async () => {
@@ -139,15 +139,21 @@ describe('Home quick action tiles', () => {
         }
     });
 
-    it('draws each tile square with the icon centred above the label', () => {
+    it('draws each button as a round 52px icon centred above its label with no outline or fill', () => {
         const base = ruleBody('.tile', tileCss);
         const tile = `${base}\n${ruleBody('.tile.tile', tileCss)}`;
-        expect(base).toMatch(/aspect-ratio:\s*1\s*\/\s*1/);
+        const round = ruleBody('.tile.tile.tile', tileCss);
+        const icon = ruleBody('.tile.tile.tile .icon', tileCss);
         expect(base).toMatch(/flex-direction:\s*column/);
-        expect(tile).toMatch(/aspect-ratio:\s*1\s*\/\s*1/);
         expect(tile).toMatch(/flex-direction:\s*column/);
         expect(tile).toMatch(/align-items:\s*center/);
         expect(tile).toMatch(/justify-content:\s*center/);
+        expect(round).toMatch(/aspect-ratio:\s*auto/);
+        expect(round).toMatch(/background:\s*transparent/);
+        expect(round).toMatch(/border-color:\s*transparent/);
+        expect(ruleBody('.icon', tileCss)).toMatch(/border-radius:\s*50%/);
+        expect(icon).toMatch(/width:\s*52px/);
+        expect(icon).toMatch(/height:\s*52px/);
         expect(ruleBody('.quickActions')).not.toMatch(/grid-auto-columns:\s*minmax\(0,\s*1fr\)/);
     });
 });

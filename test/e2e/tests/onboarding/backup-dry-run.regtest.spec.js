@@ -99,7 +99,7 @@ async function openDryRunForm(page) {
 async function runDryRun(page, { mnemonic, passphrase = '' }) {
     await page.getByLabel('Recovery phrase to test').fill(mnemonic);
     if (passphrase) await page.getByLabel('Extra passphrase').fill(passphrase);
-    await page.getByRole('button', { name: 'Run test', exact: true }).click();
+    await page.getByRole('button', { name: 'Run Test', exact: true }).click();
 
     const matched = page.getByText(MATCH_TEXT);
     const mismatched = page.getByText(MISMATCH_TEXT);

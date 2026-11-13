@@ -17,7 +17,7 @@
 // owes a CoinPay payment on a deadline. Auto-pay is the wallet promising to make
 // that payment unattended. The PAYING half needs a match and is blocked behind
 // D-135 (the venue refuses to compose an order that fills on arrival), but
-// the ARMING half - the consent, the acknowledgement gate, the per-order
+// the ARMING half - the consent, the keep-open confirm notice, the per-order
 // revocation - needs no counterparty at all and had never been driven.
 //
 // THE ORDER GETS A FRESHLY ISSUED TOKEN ON ITS GET SIDE, deliberately: a mirror
@@ -34,6 +34,8 @@ import {
     expectConfirmModal,
     EXPLORER_URL,
     fundAddress,
+    issuePlainToken,
+    readIssueSource,
     minerRpc,
     mintXchain,
     REGTEST_ADDRESS_RE,
@@ -43,6 +45,7 @@ import {
     switchToRegtest,
     unlockAfterReload,
     waitForTokenBalance,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -120,8 +123,7 @@ test.describe(`PC-16 auto-pay arming on ${REGTEST_CHAIN_LABEL}`, () => {
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(main);
-            source = await main.getByLabel('From').inputValue();
+            source = await readIssueSource(main);
             expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
 
@@ -137,10 +139,8 @@ test.describe(`PC-16 auto-pay arming on ${REGTEST_CHAIN_LABEL}`, () => {
             await openPaletteCommand(page, 'Issue token');
             const form = page.getByRole('main');
             await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(form);
-            await form.getByLabel('Ticker').fill(TICK);
-            await form.getByLabel('Supply', { exact: true }).fill(SUPPLY);
-            await form.getByRole('button', { name: 'Issue token', exact: true }).click();
+            await readIssueSource(form);
+            await issuePlainToken(form, { ticker: TICK, supply: SUPPLY });
             await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
             const issued = await waitForIndexedAction(await approveAndGetTxid(page));
@@ -150,10 +150,10 @@ test.describe(`PC-16 auto-pay arming on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBe('valid');
         });
 
-        await test.step('the arming gate refuses to proceed unacknowledged', async () => {
+        await test.step('the arming offer carries no acknowledgement gate', async () => {
             await openPaletteCommand(page, 'Create order');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('From address')).toBeVisible({ timeout: 30_000 });
+            await expect(await openFromAddress(main)).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
             await fillNativeGiveOrder(main);
 
@@ -165,30 +165,22 @@ test.describe(`PC-16 auto-pay arming on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(autopay, 'auto-pay is not the default on the shape that can use it')
                 .toBeChecked();
 
-            // The web shell can only pay while it is open, so it must say so and
-            // must not let an armed order past without the user agreeing.
-            const ack = main.getByRole('checkbox', { name: /only auto-pays while it is open/ });
-            await expect(ack,
-                'the web wallet arms unattended payments without telling the user it can only make '
-                + 'them while it is open')
-                .toBeVisible();
-            await expect(ack).not.toBeChecked();
-
-            await main.getByRole('button', { name: /^Place order/ }).click();
-            await expect(page.getByRole('alert'),
-                'the form let an unacknowledged armed order through to the confirm screen')
-                .toContainText(/Acknowledge the auto-pay requirement/, { timeout: 30_000 });
-            await expect(page.getByTestId('confirm-modal'),
-                'a refused submit still composed a transaction')
+            // The web shell can only pay while it is open; the confirm screen
+            // says so, and the form asks for no acknowledgement checkbox.
+            await expect(main.getByRole('checkbox', { name: /I understand/ }),
+                'the form still gates an armed order on an acknowledgement checkbox')
                 .toHaveCount(0);
         });
 
-        await test.step('acknowledge, place it, and read what the wallet promises', async () => {
+        await test.step('place it, and read what the wallet promises', async () => {
             const main = page.getByRole('main');
-            await main.getByRole('checkbox', { name: /only auto-pays while it is open/ }).check();
             await main.getByRole('button', { name: /^Place order/ }).click();
 
             await expectConfirmModal(page, 'this action', 60_000);
+            await expect(page.getByTestId('confirm-summary-notice'),
+                'the web wallet arms unattended payments without telling the user it can only make '
+                + 'them while it is open')
+                .toContainText(/paid only while the wallet is open and unlocked/);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
             const txid = await approveAndGetTxid(page);
 

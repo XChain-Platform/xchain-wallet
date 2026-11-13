@@ -7,6 +7,7 @@ import {
     createWallet,
     dismissIntroCarousel,
     expect,
+    openFromAddress,
     test,
 } from '../../fixtures/wallet.js';
 import {
@@ -139,20 +140,6 @@ async function checkPrivateKeyScrubbing(page, label) {
     await page.waitForURL('about:blank');
 }
 
-async function setWatcherMode(page, label) {
-    await gotoPalette(page, 'Settings');
-    const main = page.getByRole('main');
-    await main.getByRole('button', { name: /^Wallet mode/i }).click();
-    await expectScreenLayout(page, 'Wallet mode', `${label} wallet mode`);
-
-    const watcher = main.getByRole('radio', { name: /^Watcher/ });
-    await watcher.click();
-    const confirmation = page.getByRole('dialog', { name: 'Switch to Watcher (watch-only) mode?' });
-    await confirmation.getByRole('button', { name: 'Confirm mode change' }).click();
-    await expect(confirmation).toBeHidden();
-    await expect(watcher).toBeChecked();
-}
-
 function detailValue(review, label) {
     return review.locator('dt').filter({ hasText: new RegExp(`^${label}$`) })
         .first().locator('xpath=following-sibling::dd[1]');
@@ -163,9 +150,9 @@ for (const viewport of VIEWPORTS) {
         test.slow();
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
         await checkPrivateKeyScrubbing(page, viewport.name);
-        // Demo wallets hide the create commands, so this walk uses a real dev wallet.
-        await createWallet(page);
-        await setWatcherMode(page, viewport.name);
+        // Demo wallets hide the create commands, so this walk uses a real dev
+        // wallet, created in watch-only mode (the mode is chosen at create).
+        await createWallet(page, { walletMode: 'watcher' });
 
         await gotoPalette(page, 'Sweep address');
         const main = page.getByRole('main');
@@ -173,7 +160,7 @@ for (const viewport of VIEWPORTS) {
             .toBeVisible({ timeout: 30_000 });
         await expectScreenLayout(page, 'Sweep address', `${viewport.name} sweep form`);
 
-        const source = await main.getByRole('textbox', { name: 'From', exact: true }).inputValue();
+        const source = await (await openFromAddress(main)).inputValue();
         expect(source.length, `${viewport.name}: sweep source is empty`).toBeGreaterThan(0);
         await main.getByRole('textbox', { name: 'Destination address' }).fill(DESTINATION);
 

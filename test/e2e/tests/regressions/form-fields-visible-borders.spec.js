@@ -8,6 +8,7 @@ import {
     expect,
     gotoSection,
     openSettings,
+    revealChainPicker,
     test,
 } from '../../fixtures/wallet.js';
 import { selectNamedToken } from '../../fixtures/crossChain.js';
@@ -49,7 +50,7 @@ async function gotoPaletteRoute(page, name) {
 async function selectHeldGiveToken(page) {
     const main = page.getByRole('main');
     const network = main.getByRole('button', { name: /^Network:/ });
-    await expect(network).toBeVisible();
+    await revealChainPicker(main, network, 'Network');
     if (await network.getAttribute('aria-label') !== 'Network: Bitcoin') {
         await network.click();
         await page.getByRole('dialog', { name: 'Network' })
@@ -237,7 +238,7 @@ for (const theme of THEMES) {
 
                 await test.step(`${context} / Swap`, async () => {
                     await gotoPaletteRoute(page, 'Swap');
-                    await expect(page.getByRole('heading', { name: 'Swap tokens', exact: true })).toBeVisible();
+                    await expect(page.getByRole('heading', { name: 'Swap Tokens', exact: true })).toBeVisible();
                     await selectHeldGiveToken(page);
                     await checkScreen(page, `${context} / Swap`, ['Max']);
                 });

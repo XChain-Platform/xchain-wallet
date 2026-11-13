@@ -58,16 +58,17 @@ describe('regression/page-header-controls', () => {
 
         const back = screen.getByRole('button', { name: 'Back to home' });
 
-        // 21b makes the back control the kit small secondary Button; the
-        // trailing slot, still used by screens outside this fix, sizes its
-        // action to the same small control height while its lane keeps the
-        // header side width.
+        // Back is the kit small Button; the trailing actions are the app bar's
+        // 44px outlined buttons, and every header row holds the same 44px
+        // height with or without Back or a trailing action, so a screen with
+        // an action is no taller than one without.
         expect(back).toHaveClass(buttonStyles.btn, buttonStyles.sm, buttonStyles.iconOnly);
-        for (const body of [ruleBody('.trailing button:not([role="menuitem"])')]) {
-            expect(body).toMatch(/width:\s*var\(--xc-control-h-sm\)/);
-            expect(body).toMatch(/height:\s*var\(--xc-control-h-sm\)/);
-            expect(body).toMatch(/justify-content:\s*center/);
-        }
+        const trailing = ruleBody('.trailing button:not([role="menuitem"], [role="dialog"] *)');
+        expect(trailing).toMatch(/width:\s*var\(--xc-control-h-md\)/);
+        expect(trailing).toMatch(/height:\s*var\(--xc-control-h-md\)/);
+        expect(trailing).toMatch(/justify-content:\s*center/);
+        expect(ruleBody('.header.header')).toMatch(/min-height:\s*var\(--xc-control-h-md\)/);
+        expect(pageHeaderCss).toMatch(/--xc-control-h-md:\s*44px/);
         expect(pageHeaderCss).toMatch(/--xc-page-header-side:\s*var\(--xc-control-h-md\)/);
     });
 

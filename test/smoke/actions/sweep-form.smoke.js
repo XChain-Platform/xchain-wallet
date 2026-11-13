@@ -47,8 +47,8 @@ assert.match(form, /sweepPreview\(\{ chainId, address \}\)/, 'API-derived previe
 // confirm covers whatever the selected categories hold at confirmation.
 assert.match(form, /typed confirm covers everything in the selected categories/,
     'typed-confirm copy covers everything in the selected categories (counts are a snapshot)');
-assert.match(form, /The counts are a snapshot; the sweep moves whatever the/,
-    'the top notice says the counts are a snapshot');
+assert.match(form, /The counts show what the address holds now; the sweep moves whatever it holds when the transaction confirms/,
+    'the What to sweep help tip says the counts are a snapshot');
 assert.match(form, /thirdPartyDestination/, 'third-party destination detection present');
 assert.match(form, /not one of this wallet's addresses/,
     'loud third-party warning copy present');
@@ -60,7 +60,8 @@ assert.match(form, /gatedContentScan/, 'migrate gate runs the PC-26 recovery sca
 assert.match(form, /listGatedKeys/, 'gate checks vault custody before prompting');
 assert.match(form, /cannot run the key recovery scan/,
     'HW / watch-only degrade to a per-tick warning (§5 signer note)');
-assert.match(form, /ackMissingKeys/, 'missing keys need an explicit acknowledgment');
+assert.match(form, /missingKeysNotice/, 'missing keys are said as a confirm-step notice');
+assert.doesNotMatch(form, /ackMissingKeys/, 'the form carries no acknowledgement gate');
 assert.match(form, /ResultScreen/, 'watcher (encode-only) result surface');
 assert.match(form, /SignCredentials/, 'standard signing surface used');
 assert.match(form, /prebuiltPsbt/, 'single-encode confirm path forwards the composed PSBT');
@@ -120,7 +121,7 @@ for (const shell of [
 // ---- Migrate wizard -----------------------------------------------------
 const migrate = read('packages', 'core', 'src', 'shared', 'routes', 'MigrateToBip39.jsx');
 assert.match(migrate, /onSweepChain/, 'wizard exposes the per-chain sweep step');
-assert.match(migrate, /Review sweep/, 'done screen opens sweep review per chain');
+assert.match(migrate, /Review Sweep/, 'done screen opens sweep review per chain');
 assert.ok(!/doesn't\s+exist yet/.test(migrate) && !/SweepForm surface that doesn'?t/.test(migrate),
     'stale "SweepForm does not exist" claim removed (§14 rule 3)');
 

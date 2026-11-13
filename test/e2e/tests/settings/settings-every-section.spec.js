@@ -21,7 +21,6 @@ const SUBPAGES = [
     'Display',
     'Privacy',
     'Safety',
-    'Wallet mode',
     'Backup',
     'Fees',
     'Connected sites',

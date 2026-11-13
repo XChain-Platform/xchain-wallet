@@ -92,7 +92,7 @@ assert.ok(/sendUnencrypted/.test(src) && /value: 'plaintext'/.test(src),
     'ComposeMessage offers the plain-text fallback in the Encryption dropdown');
 assert.ok(/encryptionChoice/.test(src) && /value: 'ecdh'/.test(src),
     'ComposeMessage offers an ECDH (shared-key) encryption choice');
-assert.ok(/<NetworkField/.test(src) && /networkOptions/.test(src),
+assert.ok(/<FromSection/.test(src) && /chainIds=\{networkOptions\.map/.test(src),
     'ComposeMessage lets the user pick the delivery network through the standard Network field');
 assert.ok(/IconSelect/.test(src) && /LockIcon/.test(src) && /UnlockIcon/.test(src),
     'Encryption options carry lock / unlock icons');
@@ -100,7 +100,10 @@ assert.ok(/FeeSelector/.test(src) && /feePick/.test(src),
     'ComposeMessage includes the network-fee tier selector');
 assert.ok(/isValidAddressAnyNetwork/.test(src) && /addressInvalid/.test(src),
     'ComposeMessage validates the recipient address (any network) before review');
-assert.ok(/Request encrypted session/.test(src),
+assert.ok(/t\('composeMessage\.requestSession'\)/.test(src)
+    && /'composeMessage\.requestSession': 'Request Encrypted Session \(Publish Your Key\)',/.test(
+        readFileSync(join(core, 'src', 'i18n', 'locales', 'en', 'composeMessage.js'), 'utf8'),
+    ),
     'ComposeMessage offers a key-exchange handshake when the recipient pubkey is unknown');
 assert.ok(
     /useOwnerActionLane\(\{[\s\S]*?software: 'sendHandshake',[\s\S]*?hardware: 'sendHandshakeHw',[\s\S]*?\}\)/.test(src),
@@ -165,8 +168,11 @@ assert.ok(!/messaging\.messageAction(Hw)?\s*\(/.test(reviewBody),
     'handleReview does not directly sign or broadcast a message');
 assert.ok(/estimateNativeSendFee\s*\(/.test(src),
     'ComposeMessage review estimates the network fee (recipient + cost shown)');
-assert.ok(/Review message/.test(src),
-    'ComposeMessage retitles the header to "Review message" on the review stage');
+assert.ok(/stage === 'review' \|\| stage === 'submitting' \? t\('composeMessage\.reviewTitle'\)/.test(src)
+    && /'composeMessage\.reviewTitle': 'Review Message'/.test(
+        readFileSync(join(core, 'src', 'i18n', 'locales', 'en', 'composeMessage.js'), 'utf8'),
+    ),
+    'ComposeMessage retitles the header to "Review Message" on the review stage');
 
 // --- 3. Background handlers -------------------------------------------
 
@@ -221,7 +227,7 @@ for (const [shell, appPath] of [
 
 const inboxSrc = readFileSync(join(sharedRoutes, 'MessagingInbox.jsx'), 'utf8');
 assert.ok(/onCompose/.test(inboxSrc), 'MessagingInbox accepts onCompose prop');
-assert.ok(/New conversation/.test(inboxSrc),
+assert.ok(/New Conversation/.test(inboxSrc),
     'MessagingInbox renders "New conversation" button when no counterparty selected');
 assert.ok(/Reply/.test(inboxSrc),
     'MessagingInbox renders "Reply" button when counterparty selected');
