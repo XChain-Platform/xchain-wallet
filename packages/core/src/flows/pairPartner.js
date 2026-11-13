@@ -65,7 +65,6 @@
 import { sha256 } from '@noble/hashes/sha2';
 import { t } from '../i18n/index.js';
 import '../i18n/locales/en/flows.js';
-import '../i18n/locales/en/settings.js';
 
 export const PARTNER_PAIRING_VERSION = 1;
 export const PARTNER_PAIRING_KIND = 'xcw-partner-pairing';
@@ -127,8 +126,8 @@ export function describePairingLane(walletMode) {
             help: t('flows.pairPartner.unavailableHelp'),
         };
     }
-    // The locale values remain 'Pair a signer' and 'Pair a watcher', the
-    // pairing lane's user-visible contract.
+    // The locale values 'Pair a Signer' and 'Pair a Watcher' are the pairing
+    // lane's user-visible contract: the page title and its main button.
     const cta = partnerMode === 'signer'
         ? t('flows.pairPartner.pairSigner')
         : t('flows.pairPartner.pairWatcher');

@@ -904,7 +904,10 @@ function pendingTxScopeKey(record) {
 }
 
 function prepareDecodedPayload(decoded) {
-    decoded.wallet = migrateWallet(decoded.wallet);
+    // A backup taken before wallet mode moved onto the wallet carries the
+    // mode in its own settings; that value, never the receiving vault's,
+    // is the one its wallet had.
+    decoded.wallet = migrateWallet(decoded.wallet, { legacyWalletMode: decoded.settings?.walletMode });
     decoded.accounts = migratePayloadRecords(decoded.accounts, 'accounts', migrateAccount);
     decoded.addresses = migratePayloadRecords(decoded.addresses, 'addresses', migrateAddress);
     decoded.contacts = migratePayloadRecords(decoded.contacts, 'contacts', migrateContact);

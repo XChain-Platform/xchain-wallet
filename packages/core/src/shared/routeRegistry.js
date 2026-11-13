@@ -23,12 +23,12 @@ const GROUPED_ROUTES = {
         ['mint', 'MintForm'],
         ['destroy', 'DestroyForm'],
         ['sweep', 'SweepForm'],
-        ['lock', 'TokenAdminForm', { action: 'lock' }],
-        ['mint-settings', 'TokenAdminForm', { action: 'mint-settings' }],
-        ['callback-settings', 'TokenAdminForm', { action: 'callback-settings' }],
-        ['bridge-settings', 'TokenAdminForm', { action: 'bridge-settings' }],
-        ['description', 'TokenAdminForm', { action: 'description' }],
-        ['transfer', 'TokenAdminForm', { action: 'transfer' }],
+        ['lock', 'TokenAdminForm', { mode: 'lock' }],
+        ['mint-settings', 'TokenAdminForm', { mode: 'mint-settings' }],
+        ['callback-settings', 'TokenAdminForm', { mode: 'callback-settings' }],
+        ['bridge-settings', 'TokenAdminForm', { mode: 'bridge-settings' }],
+        ['description', 'TokenAdminForm', { mode: 'description' }],
+        ['transfer', 'TokenAdminForm', { mode: 'transfer' }],
         ['bridge-move', 'BridgeMoveForm'],
         ['execute-callback', 'CallbackForm'],
         ['pause-token', 'SleepForm', { mode: 'pause' }],
@@ -36,6 +36,7 @@ const GROUPED_ROUTES = {
         ['broadcast', 'BroadcastForm'],
         ['oracle', 'OracleForm'],
         ['controller-bind', 'ControllerBindForm'],
+        ['controller-unbind', 'UnbindForm'],
         ['dividend', 'DividendForm'],
         ['airdrop', 'AirdropForm'],
         ['advanced', 'AdvancedActionsForm'],
@@ -56,6 +57,8 @@ const GROUPED_ROUTES = {
         ['governance-create-poll', 'CreatePollForm'],
         ['governance-poll-detail', 'PollDetail'],
         ['governance-delegate', 'DelegateVoteForm'],
+        ['governance-delegations', 'MyDelegations'],
+        ['governance-clear-delegation', 'DelegateVoteForm', { mode: 'clear' }],
         ['cosigner-accounts', 'CoSignerAccountList'],
         ['cosigner-provision', 'CoSignerProvision'],
         ['cosigner-detail', 'CoSignerAccountDetail'],
@@ -74,6 +77,7 @@ const GROUPED_ROUTES = {
         ['address-preferences', 'AddressPreferencesForm'],
         ['wallet-picker', 'WalletPicker'],
         ['account-picker', 'AccountPicker'],
+        ['account-details', 'AccountDetails'],
         ['wallet-details', 'WalletDetails'],
         ['wallet-rename', 'RenameWalletForm'],
         ['account-rename', 'RenameAccountForm'],
@@ -91,7 +95,6 @@ const GROUPED_ROUTES = {
     ],
     receive: [
         ['receive', 'Receive'],
-        ['receive-picker', 'ReceivePicker'],
     ],
     scan: [
         ['scan', 'ScanRoute'],
@@ -107,13 +110,12 @@ const GROUPED_ROUTES = {
         ['my-swaps', 'MySwapsView'],
         ['cross-chain-swap', 'CrossChainSwapForm'],
         ['cross-chain-order', 'CrossChainOrderForm'],
-        ['cross-chain-templates', 'CrossChainTemplates'],
         ['bet-markets', 'BetFeedsList'],
         ['bet-market-detail', 'BetFeedDetail'],
         ['bet-oracle-record', 'OracleRecord'],
         ['bet-create', 'CreateBetFeedForm'],
-        ['my-bets', 'MyBets'],
-        ['bet-oracle-console', 'OracleConsole'],
+        // The Trade page a market's Buy, Sell or book price opens.
+        ['market-trade', 'MarketTrade'],
     ],
     'market-activity': [
         ['market-activity', 'MarketActivity'],
@@ -167,7 +169,7 @@ const GROUPED_ROUTES = {
         }],
         ['list-union', 'UnionListForm'],
         ['shared-lists', 'SharedListDirectory'],
-        ['access-lists', 'TokenAdminForm', { action: 'access-lists' }],
+        ['access-lists', 'TokenAdminForm', { mode: 'access-lists' }],
     ],
     obligations: [
         ['obligations', 'ObligationsView'],
@@ -181,9 +183,12 @@ const GROUPED_ROUTES = {
 
 const TITLE_OVERRIDES = {
     advanced: 'Advanced action',
-    'bet-oracle-console': 'My betting markets',
+    // The Trade page's registry title.
+    'market-trade': 'Trade',
     'sign-psbt': 'Sign transaction',
     'verify-signature': 'Verify signature',
+    'governance-delegations': 'My delegations',
+    'governance-clear-delegation': 'Clear vote delegation',
 };
 
 function titleFor(id) {
@@ -206,6 +211,7 @@ const ROUTE_NAV_SECTION_OVERRIDES = {
     wizard: 'create-token',
     issue: 'create-token',
     'account-picker': 'accounts',
+    'account-details': 'accounts',
     'account-rename': 'accounts',
     'add-account': 'accounts',
     'wallet-picker': 'wallets',

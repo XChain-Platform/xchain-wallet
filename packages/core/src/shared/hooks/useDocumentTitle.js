@@ -6,7 +6,7 @@ import { useEffect, useSyncExternalStore } from 'react';
 const APP_TITLE = 'XChain Wallet';
 
 const KNOWN_ROUTES = new Set([
-    'home', 'send', 'send-picker', 'receive', 'receive-picker', 'scan',
+    'home', 'send', 'send-picker', 'receive', 'scan',
     'wizard', 'actions', 'my-tokens', 'manage-token', 'token-detail',
     'market-activity', 'issue', 'mint', 'destroy', 'sweep', 'lock',
     'mint-settings', 'callback-settings', 'execute-callback', 'access-lists',
@@ -20,79 +20,81 @@ const KNOWN_ROUTES = new Set([
     'list-fork', 'list-share', 'list-transfer', 'list-rename', 'list-union',
     'shared-lists', 'contracts-list', 'contract-detail', 'contract-stake',
     'contract-deploy', 'contract-execute', 'contract-deposit',
-    'contract-withdraw', 'controller-bind', 'staking-dashboard',
+    'contract-withdraw', 'controller-bind', 'controller-unbind', 'staking-dashboard',
     'stake-detail', 'stake-new', 'stake-form', 'staking-unstake',
     'staking-claim', 'staking-delegate', 'staking-revoke',
     'operator-dashboard', 'history', 'action-detail', 'link-form',
     'attach-content', 'gated-publish', 'publish-file', 'project-roster',
     'parallel-compose', 'batch-compose', 'cross-chain-swap',
-    'cross-chain-order', 'cross-chain-templates', 'multisig-create',
+    'cross-chain-order', 'multisig-create', // no cross-chain templates route
     'multisig-sign', 'cosigner-accounts', 'cosigner-provision',
     'cosigner-detail', 'addresses', 'address-preferences', 'view-private-key',
     'add-wallet', 'add-account', 'wallet-picker', 'account-picker',
-    'wallet-details', 'wallet-rename', 'account-rename', 'sign-message',
+    'account-details', 'wallet-details', 'wallet-rename', 'account-rename', 'sign-message',
     'verify-signature', 'sign-psbt', 'settings', 'connected-sites', 'alerts',
     'menu', 'bet-markets', 'bet-market-detail', 'bet-oracle-record',
-    'bet-create', 'my-bets', 'bet-oracle-console', 'governance-polls',
+    'bet-create', 'governance-polls',
     'governance-create-poll', 'governance-poll-detail',
-    'governance-delegate',
+    'governance-delegate', 'governance-delegations', 'governance-clear-delegation',
 ]);
 
 // Routes whose page heading differs from the words of the route id read as
 // that heading, so the window title names the page the user is looking at.
 // Every other route reads as its id in sentence case, the way headings do.
 const ROUTE_LABELS = {
+    alerts: 'Notifications',
     'send-picker': 'Send',
-    'receive-picker': 'Receive',
-    actions: 'All actions',
-    lock: 'Lock token',
-    description: 'Update description',
-    transfer: 'Transfer ownership',
-    'markets-picker': 'Select coin or token',
-    'list-union': 'Create union list',
-    'contract-deploy': 'Publish contract',
-    'stake-new': 'New stake',
-    'link-form': 'Link actions',
-    'parallel-compose': 'Action queue',
+    // Every label below is Title Case, matching its page heading.
+    actions: 'All Actions',
+    lock: 'Lock Token',
+    description: 'Update Description',
+    transfer: 'Transfer Ownership',
+    'markets-picker': 'Choose Asset', // matches the page title
+    'list-union': 'Create Union List',
+    'contract-deploy': 'Publish Contract',
+    'stake-new': 'New Stake',
+    'link-form': 'Link Actions',
+    'parallel-compose': 'Action Queue',
     'batch-compose': 'Batch',
-    'multisig-create': 'Create multisig',
-    'pair-signer': 'Pair hardware signer',
-    'compose-message': 'New message',
-    markets: 'Decentralized exchange',
+    'multisig-create': 'Create Multisig',
+    'pair-signer': 'Pair Hardware Wallet',
+    'compose-message': 'New Message',
+    markets: 'Decentralized Exchange',
     market: 'Marketplace',
     'market-activity': 'Marketplace',
-    'dispensers-list': 'My dispensers',
-    lists: 'My lists',
-    obligations: 'Payments due',
+    'dispensers-list': 'My Dispensers',
+    lists: 'My Lists',
+    obligations: 'Payments Due',
     'contracts-list': 'Contracts',
     'staking-dashboard': 'Staking',
-    'governance-polls': 'Governance',
+    'governance-polls': 'Governance Polls',
+    'governance-delegations': 'My Delegations',
+    'governance-clear-delegation': 'Clear Vote Delegation',
     'bet-markets': 'Betting',
-    'bet-oracle-console': 'My markets',
-    wizard: 'Issue a token',
-    issue: 'Issue token',
-    sweep: 'Sweep address',
-    oracle: 'My oracle',
-    dispenser: 'Create dispenser',
-    dividend: 'Pay dividend',
-    airdrop: 'Airdrop tokens',
-    'list-create': 'Create list',
-    'controller-bind': 'Bind controller',
-    'bridge-move': 'Move across networks',
-    advanced: 'Advanced action',
-    swap: 'Swap tokens',
-    coinpay: 'Pay for matched order',
-    'cross-chain-swap': 'Cross-chain swap',
-    'cross-chain-order': 'Cross-chain order',
-    'cross-chain-templates': 'Cross-chain templates',
-    'wallet-picker': 'Wallets',
-    'account-picker': 'Accounts',
-    'migrate-bip39': 'Upgrade to a standard recovery phrase',
-    'sign-psbt': 'Sign transaction',
-    'multisig-sign': 'Multisig signing sessions',
-    'cosigner-accounts': 'Agent accounts',
-    'cosigner-provision': 'New agent account',
-    'cosigner-detail': 'Co-signer account',
+    wizard: 'Issue a Token',
+    issue: 'Issue Token',
+    sweep: 'Sweep Address',
+    oracle: 'My Oracle',
+    dispenser: 'Create Dispenser',
+    dividend: 'Pay Dividend',
+    airdrop: 'Airdrop Tokens',
+    'list-create': 'Create List',
+    'controller-bind': 'Bind Controller',
+    'controller-unbind': 'Unbind Controller',
+    'bridge-move': 'Move Across Networks',
+    advanced: 'Advanced Action',
+    swap: 'Swap Tokens',
+    coinpay: 'Pay for Matched Order',
+    'cross-chain-swap': 'Cross-Chain Swap',
+    'cross-chain-order': 'Cross-Chain Order',
+    'wallet-picker': 'My Wallets',
+    'account-picker': 'My Accounts',
+    'migrate-bip39': 'Upgrade Wallet',
+    'sign-psbt': 'Sign Transaction',
+    'multisig-sign': 'Multisig Signing Sessions',
+    'cosigner-accounts': 'Agent Accounts',
+    'cosigner-provision': 'New Agent Account',
+    'cosigner-detail': 'Agent Account',
 };
 
 const ONBOARDING_LABELS = {
@@ -103,11 +105,16 @@ const ONBOARDING_LABELS = {
     'pair-partner': 'Pair an Offline Signer',
 };
 
+// Title case: short articles, conjunctions and prepositions stay lowercase
+// after the first word.
+const SMALL_WORDS = new Set(['a', 'an', 'the', 'and', 'or', 'to', 'of', 'for', 'in', 'on', 'at', 'by']);
+
 function labelForRoute(route) {
     if (!KNOWN_ROUTES.has(route)) return null;
     if (ROUTE_LABELS[route]) return ROUTE_LABELS[route];
-    const words = route.split('-').join(' ');
-    return words.charAt(0).toUpperCase() + words.slice(1);
+    return route.split('-')
+        .map((word, index) => (index > 0 && SMALL_WORDS.has(word) ? word : word.charAt(0).toUpperCase() + word.slice(1)))
+        .join(' ');
 }
 
 // A screen with sub-screens of its own (Settings) names the one it is showing

@@ -73,8 +73,9 @@ export const WALLET_MENU_GROUPS = Object.freeze([
         rows: [
             { id: 'markets', labelKey: 'walletMenu.row.dex', icon: 'MarketIcon', gate: 'dex' },
             { id: 'market-activity', labelKey: 'walletMenu.row.marketplace', icon: 'LineChartIcon', gate: 'dex' },
-            { id: 'cross-chain-templates', labelKey: 'walletMenu.row.crossChain', icon: 'LinkIcon' },
             { id: 'obligations', labelKey: 'walletMenu.row.paymentsDue', icon: 'ClockIcon' },
+            // Buying from other people's dispensers; Earn's Dispensers row is your own.
+            { id: 'dispenser-explorer', labelKey: 'walletMenu.row.browseDispensers', icon: 'SearchIcon' },
         ],
     },
     {
@@ -157,9 +158,20 @@ export function visibleWalletMenu(gates = {}) {
         .filter((group) => group.rows.length > 0);
 }
 
-/** @returns {(WalletMenuRow & { label: string })[]} */
-export function walletMenuFooter() {
-    return WALLET_MENU_FOOTER.map((row) => ({ ...row, label: t(row.labelKey) }));
+/**
+ * Open in new window, above Settings and Lock, on the shells that can open
+ * the wallet somewhere bigger (the web app and the extension popup).
+ * @type {Readonly<WalletMenuRow>}
+ */
+export const WALLET_MENU_POP_OUT_ROW = Object.freeze({ id: 'pop-out', labelKey: 'walletMenu.row.openNewWindow', icon: 'ExternalLinkIcon' });
+
+/**
+ * @param {{ canPopOut?: boolean }} [options]
+ * @returns {(WalletMenuRow & { label: string })[]}
+ */
+export function walletMenuFooter({ canPopOut = false } = {}) {
+    const rows = canPopOut ? [WALLET_MENU_POP_OUT_ROW, ...WALLET_MENU_FOOTER] : WALLET_MENU_FOOTER;
+    return rows.map((row) => ({ ...row, label: t(row.labelKey) }));
 }
 
 /** @param {string} id @returns {WalletMenuRow | undefined} */

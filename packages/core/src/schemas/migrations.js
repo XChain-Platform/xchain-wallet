@@ -14,7 +14,7 @@
 // each step in sequence. When the first schema change ships, add the
 // `1: (r) => { ...; r.schemaVersion = 2; return r; }` entry below.
 
-import { CURRENT_VERSION as WALLET_VERSION } from './wallet.js';
+import { CURRENT_VERSION as WALLET_VERSION, walletModeOf } from './wallet.js';
 import { CURRENT_VERSION as ACCOUNT_VERSION } from './account.js';
 import { CURRENT_VERSION as ADDRESS_VERSION } from './address.js';
 import { CURRENT_VERSION as CONTACT_VERSION } from './contact.js';
@@ -36,7 +36,10 @@ import { randomUUID } from '../util/uuid.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 
 /**
- * @typedef {(record: any) => any} MigrationStep
+ * A step sees the record and an optional context object that carries
+ * document-level values a single record cannot know (see walletMigrations 3).
+ *
+ * @typedef {(record: any, ctx?: any) => any} MigrationStep
  * @typedef {Record<number, MigrationStep>} MigrationMap
  */
 
@@ -76,6 +79,14 @@ export const walletMigrations = {
     // indistinguishable from "wallet predates the change and still owes us
     // its passphrase once". Those two states take opposite unlock paths.
     2: (r) => ({ ...r, schemaVersion: 3, encryptedPassphrase: null }),
+    // v3 -> v4: §20. Copy the legacy app-wide `settings.walletMode` the caller
+    // passes (vault or backup settings) onto the wallet; absent or unknown is
+    // Normal, as the sparse store omits an unchanged mode.
+    3: (r, ctx) => ({
+        ...r,
+        schemaVersion: 4,
+        walletMode: walletModeOf({ walletMode: ctx?.legacyWalletMode }),
+    }),
 };
 /** @type {MigrationMap} */
 export const accountMigrations = {
@@ -268,8 +279,9 @@ export const autopayLeaseMigrations = {};
  * @param {{ schemaVersion: number }} record
  * @param {MigrationMap} migrations
  * @param {number} target
+ * @param {any} [ctx]   passed to every step unchanged
  */
-export function migrate(record, migrations, target) {
+export function migrate(record, migrations, target, ctx = undefined) {
     if (!record || typeof record.schemaVersion !== 'number') {
         throw new Error('migrate: record has no schemaVersion');
     }
@@ -287,7 +299,7 @@ export function migrate(record, migrations, target) {
                 `migrate: no migration registered from v${r.schemaVersion} to v${r.schemaVersion + 1}`,
             );
         }
-        r = step(r);
+        r = step(r, ctx);
         if (!r || typeof r.schemaVersion !== 'number') {
             throw new Error(
                 'migrate: migration step returned a record without schemaVersion',
@@ -299,7 +311,11 @@ export function migrate(record, migrations, target) {
 
 // Per-schema convenience wrappers. Callers that don't care about the
 // generic harness just reach for these.
-export const migrateWallet = (r) => migrate(r, walletMigrations, WALLET_VERSION);
+/**
+ * @param {any} r
+ * @param {{ legacyWalletMode?: unknown }} [ctx]   the pre-v4 app-wide wallet mode to copy onto a v3 record
+ */
+export const migrateWallet = (r, ctx) => migrate(r, walletMigrations, WALLET_VERSION, ctx);
 export const migrateAccount = (r) => migrate(r, accountMigrations, ACCOUNT_VERSION);
 export const migrateAddress = (r) => migrate(r, addressMigrations, ADDRESS_VERSION);
 export const migrateContact = (r) => migrate(r, contactMigrations, CONTACT_VERSION);

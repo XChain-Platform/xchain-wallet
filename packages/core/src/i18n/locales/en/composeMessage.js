@@ -18,8 +18,8 @@ const messages = {
     // Copy moved out of JSX literals by the i18n sweep.
 
     // Titles, labels and placeholders.
-    'composeMessage.newTitle': 'New message',
-    'composeMessage.reviewTitle': 'Review message',
+    'composeMessage.newTitle': 'New Message',
+    'composeMessage.reviewTitle': 'Review Message',
     'composeMessage.loadingWallet': 'Loading wallet…',
     'composeMessage.recipientPlaceholder': 'Recipient address',
     'composeMessage.messagePlaceholder': 'Write your message…',
@@ -30,7 +30,7 @@ const messages = {
     'composeMessage.messageHelp': 'The text to send. It goes on the blockchain for good, encrypted unless you choose plain text.',
     'composeMessage.attachmentLabelLimit': 'Attachment (up to {max} bytes)',
     'composeMessage.attachmentHelp': 'A PNG, JPEG, GIF, WebP, PDF or plain-text file sent with the message and encrypted the same way.',
-    'composeMessage.sendMessage': 'Send message',
+    'composeMessage.sendMessage': 'Send Message',
     'composeMessage.preparingReview': 'Preparing review…',
 
     // Encryption choices.
@@ -47,7 +47,7 @@ const messages = {
     'composeMessage.sendAsPlain': 'Send as plain text',
     'composeMessage.keepEncrypted': 'Keep encrypted',
     'composeMessage.keyMissing': 'We don\'t know the recipient\'s public key yet, so we can\'t encrypt. They need to send a transaction first, or pick "Plain text" below.',
-    'composeMessage.requestSession': 'Request encrypted session (publish your key)',
+    'composeMessage.requestSession': 'Request Encrypted Session (Publish Your Key)',
     'composeMessage.keyRequestSent': 'Key request sent. Once they respond or send any transaction, you can message them encrypted.',
     'composeMessage.keyLookingUp': 'Looking up recipient\'s public key…',
     'composeMessage.keyFound': '✓ Recipient public key found.',
@@ -80,13 +80,15 @@ const messages = {
     'composeMessage.attachmentUnreadable': 'Couldn\'t read that attachment.',
     'composeMessage.whatKeyRequest': 'key request',
     'composeMessage.whatMessage': 'message',
-    'composeMessage.attached': 'Attached: {name} ({size} bytes)',
+    'composeMessage.attachedValue': '{name} ({size} bytes)',
+    'composeMessage.removeAttachment': 'Remove attachment',
 
     // Review and result screens.
     'composeMessage.reviewSummary': 'Send {kind, select, plain {an unencrypted} other {an encrypted}} message to this recipient.',
     'composeMessage.confirmSend': 'Confirm send',
     'composeMessage.attachmentOnly': '(attachment only)',
     'composeMessage.feeSummary': 'Network fee: {amount}',
+    'composeMessage.networkHelp': 'The network the message goes out on; the sender, the recipient and the fee are all on it.',
 };
 
 addEnglish(messages);

@@ -46,7 +46,6 @@ export const RESUMABLE_VIEWS = Object.freeze([
     'markets',
     'staking-dashboard',
     'contracts-list',
-    'cross-chain-templates',
     'lists',
     'shared-lists',
     'dispensers-list',

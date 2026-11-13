@@ -15,7 +15,6 @@
 import { addEnglish } from '../../store.js';
 
 const messages = {
-    'createOrder.side.assetType': 'Asset type',
 };
 
 addEnglish(messages);

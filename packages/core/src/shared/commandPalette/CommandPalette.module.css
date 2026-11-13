@@ -480,9 +480,11 @@
 
 /* The menu keeps equal margins on both sides, so it does not reserve the
    shared scroll class's scrollbar lane; a scrollbar shows only on overflow. */
-.menuPanel .walletSurface,
-.menuPanel .walletGrid {
-    scrollbar-gutter: auto;
+@supports (scrollbar-gutter: stable) {
+    .menuPanel .walletSurface,
+    .menuPanel .walletGrid {
+        scrollbar-gutter: auto;
+    }
 }
 
 /* Settings and Lock wallet share one row at every width, half each. */
@@ -501,6 +503,11 @@
 
 /* A wallet that cannot lock shows Settings alone, across the full row. */
 .walletFooter .walletFooterRow:only-child {
+    grid-column: 1 / -1;
+}
+
+/* Open in new window takes its own full row above Settings and Lock. */
+.walletFooter .walletFooterRow[data-wallet-menu-row='pop-out'] {
     grid-column: 1 / -1;
 }
 

@@ -18,7 +18,7 @@ const messages = {
     // Copy moved out of JSX literals by the i18n sweep.
     'ui.field.optional': 'Optional',
     'ui.field.about': 'About {label}',
-    'ui.qrScanner.scanWithCamera': 'Scan with camera',
+    'ui.qrScanner.scanWithCamera': 'Scan With Camera',
     'ui.qrScanner.scanningPointTheCameraAt': 'Scanning… point the camera at a QR code.',
     'ui.qrScanner.opensTheCameraToRead': 'Opens the camera to read a QR code.',
     'ui.qrScanner.qrScanner': 'QR scanner',
@@ -46,7 +46,7 @@ const messages = {
         "Camera access isn't available in this browser. Paste the code below instead.",
     'ui.qrScanner.xchainWalletUsesTheCamera':
         'XChain Wallet uses the camera only to scan QR codes while this scanner is open. You can paste the code instead.',
-    'ui.qrScanner.continueToCamera': 'Continue to camera',
+    'ui.qrScanner.continueToCamera': 'Continue to Camera',
     'ui.qrScanner.startingCamera': 'Starting camera…',
     'ui.feeSelector.feePriorityHelpLabel': 'Fee priority help',
     'ui.feeSelector.pickHowFastThisTransaction':

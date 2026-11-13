@@ -32,7 +32,14 @@
 import { useEffect, useRef } from 'react';
 import { readLastView, writeLastView } from '../utils/lastViewMemory.js';
 import { normalizeRouteParams, RESUMABLE_VIEWS } from '../utils/lastViewMemory.js';
-import { isBareSentinel, setRouteHistoryManaged, takeSentinelForRoute } from '../../ui/backStack.js';
+import {
+    afterHistorySettles,
+    isBareSentinel,
+    isInternalPop,
+    setRouteHistoryManaged,
+    stepHistoryBack,
+    takeSentinelForRoute,
+} from '../../ui/backStack.js';
 import { useToast } from '../components/ToastHost.jsx';
 
 const PARAM_VIEWS = new Set(['token-detail', 'list-detail', 'dispenser-detail', 'market']);
@@ -61,13 +68,67 @@ function sameNetwork(entryNetwork, network) {
     return typeof entryNetwork !== 'string' || !entryNetwork || !network || entryNetwork === network;
 }
 
+/** @typedef {{ keys: string[], at: number }} Trail */
+
+/** @param {Trail} trail @param {string} key */
+function trailStart(trail, key) {
+    trail.keys = [key];
+    trail.at = 0;
+}
+
+/** A pushed entry drops everything Forward of the current one. @param {Trail} trail @param {string} key */
+function trailPush(trail, key) {
+    trail.keys = [...trail.keys.slice(0, trail.at + 1), key];
+    trail.at = trail.keys.length - 1;
+}
+
+/** @param {Trail} trail @param {string} key */
+function trailReplace(trail, key) {
+    if (trail.at < 0) trailStart(trail, key);
+    else trail.keys[trail.at] = key;
+}
+
+/**
+ * Follow a browser Back or Forward to the entry holding `key`. A Back that
+ * only took an overlay's sentinel off lands on the entry already current;
+ * otherwise one step either way when the neighbour matches. Anything else
+ * starts the trail over from the entry shown, since the entries around it
+ * are unknown.
+ *
+ * @param {Trail} trail
+ * @param {string | null} key
+ */
+function trailFollow(trail, key) {
+    if (key === null) {
+        trail.keys = [];
+        trail.at = -1;
+    } else if (trail.at >= 0 && trail.keys[trail.at] === key) {
+        // Still on the same entry.
+    } else if (trail.at > 0 && trail.keys[trail.at - 1] === key) {
+        trail.at -= 1;
+    } else if (trail.at >= 0 && trail.keys[trail.at + 1] === key) {
+        trail.at += 1;
+    } else {
+        trailStart(trail, key);
+    }
+}
+
+/** How many entries below the current one the nearest entry for `key` sits, or 0. @param {Trail} trail @param {string} key */
+function stepsBackTo(trail, key) {
+    for (let i = trail.at - 1; i >= 0; i -= 1) {
+        if (trail.keys[i] === key) return trail.at - i;
+    }
+    return 0;
+}
+
 /**
  * @param {object} args
  * @param {string | null | undefined} args.walletId   Active wallet id.
  * @param {string} args.currentView                   The shell's current `unlockedView`.
  * @param {object | null} [args.currentParams]        Validated context for a supported deep view.
- * @param {(view: string) => void} args.onResume      Called once per walletId change with the persisted view (or 'home' on miss).
+ * @param {(view: string, meta?: { source: 'resume' | 'history' }) => void} args.onResume Called once per walletId change with the persisted view, and on a browser Back or Forward with source 'history'.
  * @param {(view: string, params: object | null) => void} [args.onResumeParams] Primes deep-view state before `onResume` selects it.
+ * @param {(view: string) => boolean} [args.onHistoryPop] Browser Back to a page that is not resumable: the shell pops to it and returns true when it is the page below.
  * @param {boolean} [args.sessionActive] Whether the unlocked route is active.
  * @param {boolean} [args.skip]   §24.6 / Cluster Y FU 4: when true, the resume effect is
  *                                suppressed; a freshly-detached desktop window opens on its
@@ -80,6 +141,12 @@ function sameNetwork(entryNetwork, network) {
  *                                reloads the page but keeps its history, and an entry from
  *                                the network the user left would open its token detail with
  *                                a zero balance and a receive address for that network.
+ * @param {number} [args.navBacks] How many Back steps the shell's navigation history has taken
+ *                                (a Back press, a finished form unwinding). A route change that
+ *                                raises it is a Back: the browser steps back to the entry this
+ *                                hook wrote for that route rather than gaining a new one, so a
+ *                                browser Back right after an in-app Back does not reopen the
+ *                                page just left.
  */
 export function useLastView({
     walletId,
@@ -87,19 +154,27 @@ export function useLastView({
     currentParams = null,
     onResume,
     onResumeParams,
+    onHistoryPop,
     sessionActive = true,
     skip = false,
     network = null,
+    navBacks,
 }) {
     const lastResumedFor = useRef(/** @type {string | null} */ (null));
     const lastPersistedFor = useRef(/** @type {string | null} */ (null));
     const onResumeRef = useRef(onResume);
     const onResumeParamsRef = useRef(onResumeParams);
+    const onHistoryPopRef = useRef(onHistoryPop);
+    onHistoryPopRef.current = onHistoryPop;
     const networkRef = useRef(network);
     networkRef.current = typeof network === 'string' && network ? network : null;
     const pendingPopKey = useRef(/** @type {string | null} */ (null));
     const historyKey = useRef(/** @type {string | null} */ (null));
     const historyWallet = useRef(/** @type {string | null} */ (null));
+    // The route keys of the browser entries this hook wrote, oldest first,
+    // and which of them the browser shows. An overlay sentinel is never in it.
+    const trail = useRef({ keys: /** @type {string[]} */ ([]), at: -1 });
+    const shownBacks = useRef(/** @type {number | null} */ (null));
     onResumeRef.current = onResume;
     onResumeParamsRef.current = onResumeParams;
     const { dismissStaleToasts } = useToast();
@@ -151,48 +226,71 @@ export function useLastView({
         if (typeof walletId !== 'string' || !walletId || typeof window === 'undefined') return undefined;
         setRouteHistoryManaged(true);
         const onPop = (event) => {
+            // Closing an overlay takes its Back sentinel out of the browser
+            // history; that is not the user going Back a page.
+            if (isInternalPop(event)) return;
             const snapshot = event.state?.xcRoute;
-            if (!snapshot || snapshot.walletId !== walletId || !RESUMABLE_SET.has(snapshot.view)) return;
+            const ours = Boolean(snapshot && snapshot.walletId === walletId && typeof snapshot.view === 'string');
+            trailFollow(trail.current, ours
+                ? JSON.stringify({ view: snapshot.view, params: normalizeRouteParams(snapshot.view, snapshot.params) })
+                : null);
+            if (!ours) return;
             if (!sameNetwork(snapshot.network, networkRef.current)) return;
+            if (!RESUMABLE_SET.has(snapshot.view)) {
+                // Any other page opens only as a Back to the page just below
+                // in the shell's own history, which still holds its item.
+                if (!onHistoryPopRef.current?.(snapshot.view)) return;
+                pendingPopKey.current = JSON.stringify({ view: snapshot.view, params: null });
+                historyKey.current = pendingPopKey.current;
+                return;
+            }
             const params = normalizeRouteParams(snapshot.view, snapshot.params);
             if (PARAM_VIEWS.has(snapshot.view) && !params) return;
             const next = { view: snapshot.view, params };
             pendingPopKey.current = JSON.stringify(next);
             historyKey.current = pendingPopKey.current;
             onResumeParamsRef.current?.(next.view, next.params);
-            onResumeRef.current(next.view);
+            onResumeRef.current(next.view, { source: 'history' });
         };
         window.addEventListener('popstate', onPop);
         return () => window.removeEventListener('popstate', onPop);
     }, [walletId, sessionActive]);
 
     useEffect(() => {
-        if (!sessionActive) return;
+        const backs = typeof navBacks === 'number' ? navBacks : null;
+        const wentBack = backs !== null && shownBacks.current !== null && backs > shownBacks.current;
+        shownBacks.current = backs;        if (!sessionActive) return;
         if (typeof walletId !== 'string' || !walletId || typeof window === 'undefined') return;
         if (historyWallet.current !== walletId) {
             historyWallet.current = walletId;
             historyKey.current = null;
             pendingPopKey.current = null;
+            trailFollow(trail.current, null);
         }
+        // Every write waits while the Back stack is taking a stale sentinel
+        // out: until that Back lands, the current entry is the one leaving.
         if (SECRET_HISTORY_VIEWS.has(currentView)) {
-            const currentSnapshot = window.history.state?.xcRoute;
-            const currentParams = currentSnapshot
-                ? normalizeRouteParams(currentSnapshot.view, currentSnapshot.params)
-                : null;
-            const currentIsSafe = currentSnapshot?.walletId === walletId
-                && sameNetwork(currentSnapshot.network, networkRef.current)
-                && RESUMABLE_SET.has(currentSnapshot.view)
-                && (!PARAM_VIEWS.has(currentSnapshot.view) || currentParams !== null);
-            const safeRoute = currentIsSafe
-                ? { view: currentSnapshot.view, params: currentParams }
-                : { view: 'home', params: null };
-            const state = {
-                ...(window.history.state || {}),
-                xcRoute: routeSnapshot(walletId, networkRef.current, safeRoute),
-            };
-            window.history.replaceState(state, '');
-            historyKey.current = JSON.stringify(safeRoute);
             pendingPopKey.current = null;
+            afterHistorySettles(() => {
+                const currentSnapshot = window.history.state?.xcRoute;
+                const currentParams = currentSnapshot
+                    ? normalizeRouteParams(currentSnapshot.view, currentSnapshot.params)
+                    : null;
+                const currentIsSafe = currentSnapshot?.walletId === walletId
+                    && sameNetwork(currentSnapshot.network, networkRef.current)
+                    && RESUMABLE_SET.has(currentSnapshot.view)
+                    && (!PARAM_VIEWS.has(currentSnapshot.view) || currentParams !== null);
+                const safeRoute = currentIsSafe
+                    ? { view: currentSnapshot.view, params: currentParams }
+                    : { view: 'home', params: null };
+                const state = {
+                    ...(window.history.state || {}),
+                    xcRoute: routeSnapshot(walletId, networkRef.current, safeRoute),
+                };
+                window.history.replaceState(state, '');
+                historyKey.current = JSON.stringify(safeRoute);
+                trailReplace(trail.current, historyKey.current);
+            });
             return;
         }
         if (pendingPopKey.current === routeKey) {
@@ -200,23 +298,49 @@ export function useLastView({
             return;
         }
         if (historyKey.current === routeKey) return;
+        const previousKey = historyKey.current;
+        historyKey.current = routeKey;
+        afterHistorySettles(() => writeRoute(previousKey, wentBack));
+    }, [walletId, currentView, routeKey, sessionActive, navBacks]);
+
+    /**
+     * Record the route on screen in the browser history.
+     *
+     * @param {string | null} previousKey  the route recorded before it, null for the first
+     * @param {boolean} wentBack  the shell reached it by a Back step
+     */
+    function writeRoute(previousKey, wentBack) {
         const state = {
             ...(window.history.state || {}),
             xcRoute: routeSnapshot(walletId, networkRef.current, route),
         };
-        if (historyKey.current === null) {
+        if (previousKey === null) {
             window.history.replaceState(state, '');
+            trailStart(trail.current, routeKey);
         } else if (isBareSentinel(window.history.state)) {
             // An overlay's Back sentinel (the command palette, a menu) is on
             // top: the route takes its slot, so the overlay closing cannot
             // pop the route it just opened.
             window.history.replaceState(state, '');
             takeSentinelForRoute();
+            trailPush(trail.current, routeKey);
+        } else if (wentBack) {
+            // An in-app Back: the browser steps back to the entry it already
+            // holds for this page, so its own Back next goes further back
+            // instead of reopening the page just left. With no such entry the
+            // page left gives up its slot rather than staying Back-reachable.
+            const steps = stepsBackTo(trail.current, routeKey);
+            if (steps > 0 && stepHistoryBack(steps)) {
+                trail.current.at -= steps;
+            } else {
+                window.history.replaceState(state, '');
+                trailReplace(trail.current, routeKey);
+            }
         } else {
             window.history.pushState(state, '');
+            trailPush(trail.current, routeKey);
         }
-        historyKey.current = routeKey;
-    }, [walletId, currentView, routeKey, sessionActive]);
+    }
 
     // Resume on wallet activation / change. Skips re-running for the
     // same walletId so user navigation after the resume is not

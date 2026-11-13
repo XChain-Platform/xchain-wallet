@@ -87,6 +87,7 @@ export async function importSingleWif({
     addressType,
     label,
     kdfParams,
+    walletMode,
 }) {
     if (!vault) throw new Error('importSingleWif: vault is required');
     if (typeof password !== 'string' || password.length === 0) {
@@ -167,6 +168,7 @@ export async function importSingleWif({
             passphraseEnabled: false,
             encryptedSeed: '',
             kdfParams: params,
+            walletMode,
         }),
     };
 

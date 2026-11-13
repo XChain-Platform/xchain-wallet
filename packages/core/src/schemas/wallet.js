@@ -30,7 +30,27 @@ import {
 import { validateMultisigConfig } from './multisigConfig.js';
 import { randomUUID } from '../util/uuid.js';
 
-export const CURRENT_VERSION = 3;
+export const CURRENT_VERSION = 4;
+
+// §20: each wallet's mode, chosen once at create, import or pair. `full`
+// (Normal) signs and broadcasts here, `watcher` (Watch-only) builds unsigned
+// PSBTs, `signer` (Air-gapped signer) signs a watcher's PSBTs, never broadcasts.
+export const WALLET_MODES = /** @type {const} */ (['full', 'watcher', 'signer']);
+export const WALLET_MODE_DEFAULT = 'full';
+
+/**
+ * The mode a wallet record carries, with anything unrecognised read as the
+ * default so the three modes stay exhaustive for every reader.
+ *
+ * @param {{ walletMode?: unknown } | null | undefined} wallet
+ * @returns {typeof WALLET_MODES[number]}
+ */
+export function walletModeOf(wallet) {
+    const mode = wallet?.walletMode;
+    return WALLET_MODES.includes(/** @type {any} */ (mode))
+        ? /** @type {typeof WALLET_MODES[number]} */ (mode)
+        : WALLET_MODE_DEFAULT;
+}
 
 export const WALLET_ORIGINS = /** @type {const} */ ([
     'created',
@@ -65,7 +85,7 @@ export const WALLET_FORMATS = /** @type {const} */ ([
 
 /**
  * @typedef {Object} Wallet
- * @property {3} schemaVersion
+ * @property {4} schemaVersion
  * @property {string} id
  * @property {string} name
  * @property {string} createdAt
@@ -78,6 +98,7 @@ export const WALLET_FORMATS = /** @type {const} */ ([
  * @property {KdfParams} kdfParams
  * @property {ImportedKey[]} importedKeys
  * @property {import('./multisigConfig.js').MultisigConfig[]} multisigs   §22: multiple per wallet (BTC-only at launch)
+ * @property {typeof WALLET_MODES[number]} walletMode   §20: chosen once at create, import or pair; read-only afterwards
  */
 
 /**
@@ -88,6 +109,7 @@ export const WALLET_FORMATS = /** @type {const} */ ([
  * @param {boolean} input.passphraseEnabled
  * @param {string} input.encryptedSeed
  * @param {KdfParams} input.kdfParams
+ * @param {typeof WALLET_MODES[number]} [input.walletMode]   defaults to `full`
  * @returns {Wallet}
  */
 export function createWallet(input) {
@@ -107,6 +129,7 @@ export function createWallet(input) {
         kdfParams: input.kdfParams,
         importedKeys: [],
         multisigs: [],
+        walletMode: walletModeOf(input),
     };
 }
 
@@ -151,6 +174,7 @@ export function validateWallet(record) {
     }
     check(errors, 'kdfParams', isKdfParams(r.kdfParams), 'malformed');
     checkEach(errors, 'importedKeys', r.importedKeys, isImportedKey, 'malformed');
+    check(errors, 'walletMode', isOneOf(r.walletMode, WALLET_MODES), `must be one of ${WALLET_MODES.join(', ')}`);
 
     // A wif-only wallet must have at least one imported key (otherwise
     // there's literally no key material and nothing to unlock).

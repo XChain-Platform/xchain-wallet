@@ -16,7 +16,7 @@ import { addEnglish } from '../../store.js';
 
 const messages = {
     // --- signer selection ---------------------------------------
-    'signerSelect.choose': 'Choose signer',
+    'signerSelect.choose': 'Choose Signer',
     'signerSelect.title': 'Signer',
     'signerSelect.intro':
         "Choose where this operation gets its keys. This choice doesn't share your recovery phrase or private keys.",
@@ -24,7 +24,7 @@ const messages = {
         "Watch-only mode stays active. Choosing a key source here doesn't let this wallet sign transactions.",
     'signerSelect.loadFailed': 'Failed to load signers.',
     'signerSelect.loadUnreachable':
-        "Couldn't reach the wallet service to list hardware signers. The software wallet stays selected; reopen this screen to try again.",
+        "Couldn't reach the wallet service to list hardware wallets. The software wallet stays selected; reopen this screen to try again.",
 };
 
 addEnglish(messages);

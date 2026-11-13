@@ -19,9 +19,9 @@ const messages = {
         'The coin network where the address will be generated using the address number below.',
     'addressList.balanceCheckWarning': "The balance couldn't be checked. This address may hold coins.",
     'addressList.hidden.show':
-        '{count, plural, one {Show # hidden address} other {Show # hidden addresses}}',
+        '{count, plural, one {Show # Hidden Address} other {Show # Hidden Addresses}}',
     'addressList.hidden.hide':
-        '{count, plural, one {Hide # hidden address} other {Hide # hidden addresses}}',
+        '{count, plural, one {Hide # Hidden Address} other {Hide # Hidden Addresses}}',
     'addressList.pagination':
         '{shown, number} of {total, plural, one {# address} other {# addresses}} shown',
     'addressList.wifNetworkHelp': 'The coin network this private key belongs to. The imported address joins this account on that network.',

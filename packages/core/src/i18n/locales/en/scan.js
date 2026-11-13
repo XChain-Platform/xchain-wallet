@@ -19,7 +19,7 @@ const messages = {
     'scan.routing': 'Scanned, routing…',
     'scan.pasteLabel': 'Or paste it here',
     'scan.pastePlaceholder': 'xchain:… / bitcoin:… / address / transaction code',
-    'scan.classifyPaste': 'Use pasted text',
+    'scan.classifyPaste': 'Use Pasted Text',
     'scan.error.pasteEmpty': 'Paste something first.',
     'scan.error.unknownXchainIntent':
         "This XChain link isn't supported. Check the link and try again.",

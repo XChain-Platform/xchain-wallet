@@ -46,6 +46,7 @@ import {
     PanicModeActiveError,
 } from './panicMode.js';
 import { withAccountLock } from '../cosigner/accountLock.js';
+import { nativeTickForChain } from '../cosigner/allowedTicks.js';
 
 export class CoSignerAccountNotFoundError extends Error {
     constructor(accountId) {
@@ -186,6 +187,8 @@ async function decideForAccount({
                     // is rebuilt per request, so concurrent requests would otherwise
                     // both decide against the same pre-charge snapshot.
                     lockKey: accountId,
+                    // The chain's own coin is never limited by the allowed tokens.
+                    nativeTick: nativeTickForChain(account.chainId, chainRegistry || undefined),
                 });
             } finally {
                 privateKey.fill(0);

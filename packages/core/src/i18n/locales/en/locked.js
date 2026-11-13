@@ -23,16 +23,16 @@ const messages = {
     'locked.unlockWallet2': 'Unlock Wallet',
     'locked.passwordHelp':
         "The password you set for this wallet on this device. It only unlocks the wallet here and isn't used to restore it.",
-    'locked.useBiometrics': 'Use biometrics',
+    'locked.useBiometrics': 'Use Biometrics',
     'locked.thisIsADemoWallet':
         'This is a demo wallet. Its password is randomly generated and not recoverable. Starting over deletes every wallet saved in this app on this device and returns you to onboarding.',
-    'locked.forgotPassword': 'Forgot password?',
+    'locked.forgotPassword': 'Forgot Password?',
     'locked.restoreWalletAccess': 'Restore wallet access',
     'locked.yourPasswordCannotBeRecovered': "Your password can't be recovered or reset.",
     'locked.youCanRestoreTheWallet':
         'You can restore the wallet and choose a new password using its recovery phrase or an encrypted backup file.',
-    'locked.useRecoveryPhrase': 'Use recovery phrase',
-    'locked.useBackupFile': 'Use backup file',
+    'locked.useRecoveryPhrase': 'Use Recovery Phrase',
+    'locked.useBackupFile': 'Use Backup File',
     'locked.thisPermanentlyDeletesEveryWallet':
         'This permanently deletes every wallet saved in this app on this device, including its recovery information, accounts, addresses, and queued transactions.',
     'locked.fundsOnTheBlockchainAre': 'Funds on the blockchain are unaffected. Continue only if you have the',
@@ -42,7 +42,7 @@ const messages = {
     'locked.backupFileRestore': 'backup-file restore',
     'locked.recoveryPhraseRestore': 'recovery-phrase restore',
     'locked.form': 'form.',
-    'locked.eraseVaultAndRestore': 'Erase vault and restore',
+    'locked.eraseVaultAndRestore': 'Erase Vault and Restore',
     'locked.walletUsername': 'Wallet username',
     'locked.usesAPassphrase': 'uses a passphrase.',
     'locked.enterItOnceToFinish':

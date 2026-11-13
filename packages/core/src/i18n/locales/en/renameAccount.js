@@ -16,6 +16,10 @@ import { addEnglish } from '../../store.js';
 
 const messages = {
     // --- rename forms -------------------------------------------
+    'renameAccount.title': 'Edit Account',
+    'renameAccount.saveChanges': 'Save Changes',
+    'renameAccount.unnamed': 'Unnamed',
+    'renameAccount.look': 'Look',
     'renameAccount.name': 'Account name',
     'renameAccount.nameHelp': 'The name this account and its addresses show in the account picker, kept on this device only.',
     'renameAccount.error': 'Failed to rename account.',

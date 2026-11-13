@@ -200,7 +200,15 @@ export class Vault {
         // absorbed only by the tail so later operations can still proceed.
         this._writeTail = Promise.resolve();
 
-        this.wallets = makeCollection(this, 'wallets', migrateWallet, validateWallet);
+        // A v3 wallet takes its mode from the raw stored settings. The legacy
+        // key has no default, so settings writes keep it until every wallet
+        // has been read forward.
+        this.wallets = makeCollection(
+            this,
+            'wallets',
+            (r) => migrateWallet(r, { legacyWalletMode: this._doc?.settings?.walletMode }),
+            validateWallet,
+        );
         this.accounts = makeCollection(this, 'accounts', migrateAccount, validateAccount);
         this.addresses = makeCollection(this, 'addresses', migrateAddress, validateAddress);
         this.contacts = makeCollection(this, 'contacts', migrateContact, validateContact);

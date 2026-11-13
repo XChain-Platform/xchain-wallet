@@ -25,6 +25,7 @@ import {
     isString,
     result,
 } from './validate.js';
+import { WALLET_MODES, WALLET_MODE_DEFAULT } from './wallet.js';
 
 export const CURRENT_VERSION = 3;
 
@@ -37,14 +38,10 @@ export const SMALL_BALANCE_THRESHOLD_DEFAULT = 'dust';
 export const NUMBER_FORMATS = /** @type {const} */ (['full', 'trim', 'plain']);
 export const NUMBER_FORMAT_DEFAULT = 'full';
 
-// §20 / G039: wallet mode. `full` is the everyday wallet (sign + broadcast on
-// this device). `watcher` builds unsigned PSBTs against pubkeys / xpubs and
-// hands them to a signer-mode wallet for signing. `signer` is the air-gapped
-// half: accepts pasted PSBTs, signs, returns the signed PSBT for broadcast
-// on the watcher side. Readers default missing field to `'full'` so v2
-// records without the field keep their existing behavior.
-export const WALLET_MODES = /** @type {const} */ (['full', 'watcher', 'signer']);
-export const WALLET_MODE_DEFAULT = 'full';
+// §20: wallet mode lives on each wallet record (schemas/wallet.js). Re-exported
+// for the validator below, which accepts the legacy app-wide key that only the
+// wallet v3 -> v4 migration reads.
+export { WALLET_MODES, WALLET_MODE_DEFAULT };
 
 // Active network filter: only chains on this network are visible AND
 // queried. A user with `activeChainIds` carrying both mainnet and
@@ -257,7 +254,7 @@ export function resolveUndoSendWindowSeconds(settings) {
  * @property {string[]} [blockedOrigins]                                                                     v2-tolerant: user-managed origin blocklist (§12 / G009). bridge.connect + the four sign methods reject with BLOCKED_BY_USER for matching origins. Stored as URL.origin strings or wildcard patterns (`*.example.com`, Cluster S FOLLOWUP 3).
  * @property {Array<{ at: number, action: 'add' | 'remove', entry: string, evictedSiteIds?: string[] }>} [blocklistAuditLog]   v2-tolerant: ring-buffer of recent blocklist mutations (Cluster S FOLLOWUP 4). Capped at 50 entries.
  * @property {{ burst?: number, windowMs?: number }} [signThrottle]                                          v2-tolerant: per-origin sign-request token-bucket limits (§12 / G012 / Cluster S FOLLOWUP 1). `burst` is positive integer max requests per window; `windowMs` is window length in ms (positive integer). Either field may be omitted to fall back to SIGN_THROTTLE_DEFAULT_BURST / SIGN_THROTTLE_DEFAULT_WINDOW_MS.
- * @property {typeof WALLET_MODES[number]} [walletMode]                                                      v2-tolerant: `full` (default) signs + broadcasts here; `watcher` builds unsigned PSBTs for an air-gapped signer; `signer` accepts pasted PSBTs from a watcher and returns signed PSBTs (§20 / G039). Send / Home branch on this field in subsequent steps.
+ * @property {typeof WALLET_MODES[number]} [walletMode]                                                      LEGACY, read only by the wallet v3 -> v4 migration (schemas/migrations.js), which copies it onto every wallet record. Wallet mode is a per-wallet field now; nothing writes this key and no reader may branch on it. It has no default, so the sparse store keeps a stored value until every wallet has migrated.
  * @property {{ walletMode: 'watcher' | 'signer', label: string, keySetId: string, keys: object[], sharedChainIds: string[], pairedAt: string } | null} [partnerPairing] v2-tolerant: §20.5. The verified other half of a watcher/signer pair, holding that partner's account-level PUBLIC key set (never any seed or private key). Written only by `flows.pairPartner` after `verifyPartnerPairing` proves both halves derive from one recovery phrase. null / absent = unpaired, which is the only valid state for a `full` wallet.
  * @property {typeof NETWORKS[number]} [activeNetwork]                                                     v2-tolerant: `mainnet` (default) / `testnet` / `regtest`. Filters every visible chain AND every data fetch to chains on this network; a wallet with mainnet + testnet chains active under the hood shows only the mainnet ones while `activeNetwork === 'mainnet'`. Switching is a Settings > Network operation. Cross-network features are disabled while the filter is on.
  * @property {Partial<Record<typeof NETWORKS[number], string>>} [lastUsedChain]                             v2-tolerant: the chainId the user last worked on, one slot per network so a testnet choice never becomes the mainnet default. Written when an address is made active and when an action form submits; read by the action forms as their opening chain when the caller names none (shared/chainSelection.js).
@@ -397,7 +394,6 @@ export function createDefaultSettings() {
         verifyProofs: true,
         keyboard: { bindings: {} },
         showVariantBadge: false,
-        walletMode: WALLET_MODE_DEFAULT,
         partnerPairing: null,
         activeNetwork: NETWORK_DEFAULT,
         lastUsedChain: {},

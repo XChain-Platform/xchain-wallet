@@ -23,7 +23,7 @@ const messages = {
         "Choose Try again. If the wallet still doesn't open, contact support before clearing any wallet data.",
 
     // --- route fallback -----------------------------------------
-    'routeNotFound.title': 'Page not found',
+    'routeNotFound.title': 'Page Not Found',
     'routeNotFound.emptyTitle': "That page isn't here",
     'routeNotFound.body': "This page doesn't exist or is no longer available.",
 
@@ -31,7 +31,7 @@ const messages = {
     'vaultUnavailable.recoverySafe': 'Your recovery phrase still holds everything.',
     'vaultUnavailable.blockchainSafe':
         'Your coins live on the blockchain, not in this app. Anything stored here is only a copy, and your recovery phrase restores it on this device or any other.',
-    'vaultUnavailable.restore': 'Restore from recovery phrase or backup',
+    'vaultUnavailable.restore': 'Restore From Recovery Phrase or Backup',
     'vaultUnavailable.wipeWarning':
         "Don't do this unless you have your recovery phrase or an encrypted backup file to hand.",
     'vaultUnavailable.wipeConfirm': 'Type WIPE to confirm',
@@ -42,7 +42,7 @@ const messages = {
         "Part of the wallet stored on this device is missing, so it can't be opened, and a new wallet can't be set up over what is left. A reset that stopped part way leaves it like this.",
     'vaultUnavailable.incomplete.nextStep':
         'Reset this wallet, then restore it from your recovery phrase or an encrypted backup.',
-    'vaultUnavailable.incomplete.reset': 'Reset this wallet',
+    'vaultUnavailable.incomplete.reset': 'Reset This Wallet',
     'vaultUnavailable.incomplete.region': 'Clear what is left of this wallet',
     'vaultUnavailable.incomplete.note':
         'This clears what is left of the wallet on this device so you can restore it from its recovery phrase or an encrypted backup. It changes nothing on the blockchain.',

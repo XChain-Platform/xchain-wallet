@@ -35,6 +35,7 @@ import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { t } from '../../i18n/index.js';
 import { visibleWalletMenu, walletMenuFooter } from '../walletMenu.js';
+import { automaticPopOut } from '../popOut.js';
 import { TIER_RAIL_MIN_PX } from '../styles/breakpoints.js';
 import '../../i18n/locales/en/commandPalette.js';
 import '../../i18n/locales/en/walletMenu.js';
@@ -96,6 +97,7 @@ function orderMenuSearchResults(results, commands) {
  *   onSelect: (viewId: string) => void,
  *   onOpenSettings: () => void,
  *   onLock?: () => void,
+ *   onPopOut?: () => void,
  * }} [props.menu]
  */
 export function CommandPalette({
@@ -114,8 +116,10 @@ export function CommandPalette({
 
     const walletGroups = menu ? visibleWalletMenu(menu.gates) : [];
     const walletRows = walletGroups.flatMap((group) => group.rows);
+    // Open in new window: the shell's handler, else the browser's own way.
+    const popOut = menu ? (menu.onPopOut || automaticPopOut()) : null;
     const walletFooterRows = menu
-        ? walletMenuFooter().filter((row) => row.id !== 'lock' || menu.onLock)
+        ? walletMenuFooter({ canPopOut: Boolean(popOut) }).filter((row) => row.id !== 'lock' || menu.onLock)
         : [];
     const walletSelectableRows = [...walletRows, ...walletFooterRows];
     const trimmedQuery = (query || '').trim();
@@ -239,6 +243,7 @@ export function CommandPalette({
         onClose();
         if (row.id === 'settings') menu.onOpenSettings();
         else if (row.id === 'lock') menu.onLock?.();
+        else if (row.id === 'pop-out') popOut?.();
         else menu.onSelect(row.id);
     };
 

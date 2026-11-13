@@ -13,7 +13,7 @@
 import { addEnglish } from '../../store.js';
 
 const messages = {
-    'onboarding.carousel.getStarted': 'Get started',
+    'onboarding.carousel.getStarted': 'Get Started',
     'onboarding.demo.walletExists': 'This device already has a wallet. Unlock it to continue.',
     'onboarding.demo.unlock': 'Unlock',
     'onboarding.carousel.skip': 'Skip',
@@ -24,28 +24,28 @@ const messages = {
     // Copy moved out of JSX literals by the i18n sweep.
     'onboarding.backToWallets': 'Back to wallets',
     'onboarding.leaveTheDemo': 'Leave the demo',
-    'onboarding.licenseAgreement': 'License agreement',
-    'onboarding.acceptAndContinue': 'Accept and continue',
+    'onboarding.licenseAgreement': 'License Agreement',
+    'onboarding.acceptAndContinue': 'Accept and Continue',
     'onboarding.licenseTerms': 'License terms',
     'onboarding.iHaveReadAndAgree': 'I have read and agree to these terms.',
     'onboarding.scrollToTheEndTo': 'Scroll to the end to review all terms.',
-    'onboarding.leaveTheDemoFirst': 'Leave the demo first',
-    'onboarding.clearDemoCreateNewWallet': 'Clear demo & create new wallet',
-    'onboarding.clearDemoImportWallet': 'Clear demo & import wallet',
-    'onboarding.clearDemoImportFromFreewallet': 'Clear demo & import from FreeWallet',
-    'onboarding.keepExploringTheDemo': 'Keep exploring the demo',
+    'onboarding.leaveTheDemoFirst': 'Leave the Demo First',
+    'onboarding.clearDemoCreateNewWallet': 'Clear Demo & Create New Wallet',
+    'onboarding.clearDemoImportWallet': 'Clear Demo & Import Wallet',
+    'onboarding.clearDemoImportFromFreewallet': 'Clear Demo & Import From FreeWallet',
+    'onboarding.keepExploringTheDemo': 'Keep Exploring the Demo',
     'onboarding.theDemoUsesATemporary': 'The demo uses a temporary password for this device.',
     'onboarding.clearTheDemoBeforeYou':
         'Clear the demo before you create or import a wallet. Your wallet can then use the password you choose.',
     'onboarding.demoBalancesAndActivityAre':
         "Demo balances and activity are examples, so clearing the demo doesn't affect real funds.",
     'onboarding.walletSetup': 'Wallet setup',
-    'onboarding.createNewWallet': 'Create new wallet',
+    'onboarding.createNewWallet': 'Create New Wallet',
     'onboarding.fromFreewallet': 'From FreeWallet',
-    'onboarding.connectHardwareWallet': 'Connect a hardware wallet',
-    'onboarding.pairAnOfflineSigner': 'Pair an offline signer',
-    'onboarding.settingUpDemo': 'Setting up demo…',
-    'onboarding.tryInDemoMode': 'Try in demo mode',
+    'onboarding.connectHardwareWallet': 'Connect a Hardware Wallet',
+    'onboarding.pairAnOfflineSigner': 'Pair an Offline Signer',
+    'onboarding.settingUpDemo': 'Setting Up Demo…',
+    'onboarding.tryInDemoMode': 'Try in Demo Mode',
 };
 
 addEnglish(messages);

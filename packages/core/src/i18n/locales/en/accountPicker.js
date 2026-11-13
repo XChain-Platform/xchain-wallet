@@ -17,16 +17,14 @@ import { addEnglish } from '../../store.js';
 const messages = {
     // --- account picker ------------------------------------------
     'accountPicker.title': 'Accounts',
-    'accountPicker.add': 'Add account',
-    'accountPicker.manage': 'Manage',
+    'accountPicker.add': 'Add Account',
     'accountPicker.defaultName': 'Account {number}',
-    'accountPicker.renameLabel': 'Rename {label}',
-    'accountPicker.renameTitle': 'Rename account',
     'accountPicker.empty.title': 'No accounts yet',
-    'accountPicker.empty.body': 'Accounts added to this wallet appear here.',
     'accountPicker.error.load': "Couldn't load accounts. Try again.",
     'accountPicker.loading': 'Loading accounts…',
     'accountPicker.loadingLabel': 'Loading accounts',
+    'accountPicker.pageTitle': 'My Accounts',
+    'accountPicker.empty.addBody': 'Add an account with the plus above.',
 };
 
 addEnglish(messages);

@@ -17,7 +17,7 @@ import { addEnglish } from '../../store.js';
 const messages = {
     // --- staking chooser ----------------------------------------
     'stakeNew.backToStaking': 'Back to staking',
-    'stakeNew.title': 'New stake',
+    'stakeNew.title': 'New Stake',
     'stakeNew.chooseNetwork': 'Choose the network to stake on.',
     'stakeNew.bitcoinOnly':
         'Staking is available on Bitcoin only at launch. Use Receive on a Bitcoin network to generate an address first.',

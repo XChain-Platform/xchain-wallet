@@ -15,20 +15,17 @@
 import { addEnglish } from '../../store.js';
 
 const messages = {
-    'alerts.title': 'Alerts',
-    'alerts.close': 'Close alerts',
-    'alerts.empty': 'No alerts. Wallet activity, security, and price changes appear here.',
+    'alerts.title': 'Notifications',
 
     // --- alerts --------------------------------------------------
-    'alerts.empty.title': 'No alerts',
+    'alerts.empty.title': 'No notifications',
     'alerts.empty.body': 'Wallet activity, security, and price changes appear here.',
-    'alerts.unreadCount': '{count} unread',
     'alerts.markAllRead': 'Mark all read',
     'alerts.unread': 'Unread',
-    'alerts.search': 'Search alerts',
-    'alerts.clearSearch': 'Clear search',
-    'alerts.filterType': 'Filter alert type',
-    'alerts.matches': '{count} alerts match',
+    'alerts.search': 'Search notifications',
+    'alerts.filter': 'Filter notifications',
+    'alerts.filterType': 'Notification type',
+    'alerts.matches': '{count} notifications match',
     'alerts.type.all': 'All types',
     'alerts.type.payments': 'Payments',
     'alerts.type.messages': 'Messages',

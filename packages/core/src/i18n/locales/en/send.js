@@ -16,12 +16,12 @@ import { addEnglish } from '../../store.js';
 
 const messages = {
     'send.demo.blocked': "Demo wallets can't move funds. Create a real wallet to send.",
-    'send.demo.createRealWallet': 'Create a real wallet',
+    'send.demo.createRealWallet': 'Create a Real Wallet',
     'send.empty.title': 'Nothing to send yet',
     'send.max.coinsHeld':
         "Every coin at this address is held by another send from this wallet that hasn't gone out yet, so Max can't create a payment.",
     'send.empty.body': 'Receive coins or tokens on this network before creating a payment.',
-    'send.review': 'Review and send',
+    'send.review': 'Review and Send',
     'send.backToEdit': 'Edit payment',
     'send.memoForbiddenChars': "A memo can't include a vertical bar (|) or semicolon (;).",
     'send.passwordHint': 'Enter your wallet password to sign this transaction.',
@@ -29,10 +29,10 @@ const messages = {
     'send.testGate.title': 'First payment to this address. Send a small test first?',
     'send.testGate.body':
         'You are sending {amount} {ticker} to a new recipient. A small test payment helps you confirm the address before sending the full amount.',
-    'send.testGate.sendSmall': 'Send a small test first',
-    'send.testGate.continue': 'Continue with the full amount',
+    'send.testGate.sendSmall': 'Send a Small Test First',
+    'send.testGate.continue': 'Continue With the Full Amount',
     'send.signerMode':
-        "This wallet is in signer mode. It can sign transactions from a watch-only wallet, but it can't send them to the network. To send from this device, change the mode under Settings, Wallet mode.",
+        "This wallet is an air-gapped signer. It can sign transactions from a watch-only wallet, but it can't send them to the network. Its wallet mode is shown on Wallet Details and was chosen when the wallet was set up.",
     'send.networkFeeValue': 'Network fee: {amount} {ticker}',
     'send.totalValue': 'Total: {amount} {ticker}',
     'send.totalTokenCostValue': 'Total token cost: {amount}',
@@ -45,14 +45,17 @@ const messages = {
     'send.success.failedBody': 'The transaction failed.',
     'send.contacts.refreshFailed': "Couldn't refresh contacts. Saved addresses may be out of date.",
     'send.success.viewOnExplorer': 'View in block explorer',
-    'send.success.sendAnother': 'Send another',
+    'send.success.sendAnother': 'Send Another',
     'send.fields.amount': 'Amount',
     'send.fields.to': 'To',
     'send.fields.chain': 'Network',
     'send.fields.from': 'From',
     'send.fields.token': 'Token',
+    'send.asset': 'Asset',
+    'send.selectAsset': 'Select an asset',
+    'send.section.payment': 'Payment',
     'send.reviewLabel': 'Review payment',
-    'send.review.createUnsigned': 'Create transaction for signing',
+    'send.review.createUnsigned': 'Create Transaction for Signing',
     'send.review.sign': 'Sign',
     'send.review.submitAction': '{label}',
     'send.advanced.label': 'Advanced send choices',
@@ -62,18 +65,20 @@ const messages = {
     'send.advanced.notAllowed': 'Not allowed',
     'send.advanced.coinControl': 'Coin control',
     'send.advanced.coinControlEnabled': 'Coin control enabled',
+    'send.advanced.coinControlHelp': 'On lets you pick which coins at this address pay for this send; off lets the wallet choose.',
     'send.advanced.coinControlReady': 'Choose exactly which coins fund this transaction.',
     'send.advanced.coinControlUnavailable': "Coin control is unavailable while spendable inputs can't be loaded.",
     'send.advanced.loadingInputs': 'Loading spendable inputs…',
     'send.advanced.inputs': 'Inputs',
+    'send.advanced.inputsHelp': 'Tick the coins that pay for this send. Only the ticked coins are spent.',
     'send.advanced.noInputsTitle': 'No spendable inputs',
     'send.advanced.noInputs': 'Inputs this wallet can spend appear here.',
     'send.advanced.changeAddress': 'Change address',
     'send.advanced.automaticChange': 'Automatic: {address}',
     'send.advanced.changeHint': 'Any leftover native coin returns here.',
     'send.advanced.availableCount': '{count} available',
-    'send.advanced.selectAll': 'Select all',
-    'send.advanced.rowsCapped': 'Showing {shown} of {count} inputs. Select all includes every input.',
+    'send.advanced.selectAll': 'Select All',
+    'send.advanced.rowsCapped': 'Showing {shown} of {count} inputs. Select All includes every input.',
     'send.advanced.dust': 'Dust',
     'send.advanced.dustTitle': 'Below the {sats} sat dust threshold',
     'send.advanced.summaryLabel': 'Coin control summary',
@@ -86,8 +91,8 @@ const messages = {
     'send.device.ledger': 'Ledger',
     'send.watcherHardware':
         "This address is paired with {device}, but a watch-only wallet can't sign. Pair the same {device} with your signer wallet to sign the transaction.",
-    'send.useMax': 'Use max',
-    'send.fromAddress': 'From address',
+    'send.useMax': 'Use Max',
+    'send.fromAddress': 'From Address',
     'send.draft.restore': 'Restore',
     'send.draft.unfinished': 'Your unfinished payment was saved as a draft. Restore it to continue. Nothing was sent.',
     'send.draft.discardLabel': 'Discard saved draft',
@@ -110,9 +115,9 @@ const messages = {
         'How much of the selected asset to send. Max fills the most this From address can send after the network fee.',
     'send.paste.checkLabel': 'Check pasted recipient',
     'send.paste.checkHint': 'Compare the first and last 6 characters.',
-    'send.saveRecipient.open': 'Save recipient',
+    'send.saveRecipient.open': 'Save Recipient',
     'send.saveRecipient.nameHelp': 'The name used for this recipient in your contacts.',
-    'send.saveRecipient.save': 'Save contact',
+    'send.saveRecipient.save': 'Save Contact',
     'send.saveRecipient.saving': 'Saving…',
     'send.saveRecipient.saved': 'Recipient saved to contacts.',
     'send.token.hint': "Choose the coin or token to send. The network's own coin is selected by default.",
@@ -123,7 +128,7 @@ const messages = {
         'This address holds {balance} {tick} now, less than the {amount} {tick} this destroy burns. Nothing was signed. Review the amount and try again.',
     'send.destroy.balanceUnread':
         "Couldn't read this address's {tick} balance, so nothing was signed. Check your connection and try again.",
-    'send.dividend.retryHolders': 'Retry holder list',
+    'send.dividend.retryHolders': 'Retry Holder List',
     'send.dividend.holdersIncomplete':
         'The holder list is incomplete. Retry before paying this dividend.',
     'send.dividend.holdersChanged':
@@ -135,13 +140,14 @@ const messages = {
     'send.recipient.tokenHelp':
         'The token this recipient receives. Pick any token you hold on the chosen network.',
     'send.recipient.amountLabel': 'Recipient {number} amount',
-    'send.recipient.selectToken': 'Select token for recipient {number}',
+    'send.recipient.selectToken': 'Select Token for Recipient {number}',
     'send.recipient.differentToken': 'Different token per recipient',
+    'send.recipient.differentTokenHelp': 'On lets each recipient get a different token; off sends the token above to everyone.',
     'send.recipient.differentTokenOff': 'Off: every recipient gets {token}.',
     'send.recipient.tokenAbove': 'the token above',
     'send.recipient.total':
         'Total: {total} across {count, plural, one {# recipient} other {# recipients}}, in one transaction and one network fee.',
-    'send.recipient.add': '+ Add recipient',
+    'send.recipient.add': '+ Add Recipient',
     'send.recipient.maximum':
         '{count, plural, one {You can include up to # recipient in one payment.} other {You can include up to # recipients in one payment.}} Create another payment for any additional recipients.',
     'send.gated.ready':
@@ -155,7 +161,7 @@ const messages = {
     'send.gated.passwordLabel': 'Wallet password',
     'send.gated.passwordHint':
         'Scans messages sent to your addresses for the unlock key and stores it in this wallet.',
-    'send.gated.recover': 'Recover keys',
+    'send.gated.recover': 'Recover Keys',
     'send.networkFee': 'Network fee',
     'send.advanced': 'Advanced',
     'send.memo': 'Memo',
@@ -175,9 +181,11 @@ const messages = {
     // own pending record), but the network has not necessarily reported it
     // yet, so the hint sets that expectation instead of letting a still-
     // "awaiting network" row read as broken.
-    'send.success.viewInHistory': 'View in history',
+    'send.success.viewInHistory': 'View in History',
     'send.success.viewInHistoryHint':
         'The transaction already appears in History. Its network status may take up to a minute to update.',
+    'send.sweep.missingKeysNotice':
+        "Unlock keys for {ticks} aren't in the vault, so their gated content may never open in the new wallet.",
 };
 
 addEnglish(messages);

@@ -16,7 +16,7 @@ import { addEnglish } from '../../store.js';
 
 const messages = {
     // --- signature verification ---------------------------------
-    'verifySignature.title': 'Verify signature',
+    'verifySignature.title': 'Verify Signature',
     'verifySignature.valid': 'Valid signature. Signature matches this message and address.',
     'verifySignature.invalid': "Invalid signature. Signature doesn't match this message and address.",
     'verifySignature.malformed': 'Malformed signature. Enter a base64-encoded signature.',

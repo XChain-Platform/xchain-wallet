@@ -57,11 +57,14 @@ import actionDetail from './actionDetail.js';
 import actionsMenu from './actionsMenu.js';
 import addressDiscovery from './addressDiscovery.js';
 import addressList from './addressList.js';
+import addressPreferences from './addressPreferences.js';
 import adsNotice from './adsNotice.js';
+import airdrop from './airdrop.js';
 import alerts from './alerts.js';
 import backupReminder from './backupReminder.js';
 import balanceList from './balanceList.js';
 import balances from './balances.js';
+import batch from './batch.js';
 import betCreate from './betCreate.js';
 import bridgeOrigin from './bridgeOrigin.js';
 import commandPalette from './commandPalette.js';
@@ -98,6 +101,8 @@ import palette from './palette.js';
 import panic from './panic.js';
 import parallelComposer from './parallelComposer.js';
 import pending from './pending.js';
+import projectRoster from './projectRoster.js';
+import publishFile from './publishFile.js';
 import receive from './receive.js';
 import renameAccount from './renameAccount.js';
 import renameWallet from './renameWallet.js';
@@ -108,9 +113,12 @@ import settings from './settings.js';
 import shell from './shell.js';
 import signerSelect from './signerSelect.js';
 import stakeNew from './stakeNew.js';
+import tokenDetail from './tokenDetail.js';
+import tokenMarket from './tokenMarket.js';
 import transactionStatus from './transactionStatus.js';
 import txTimeline from './txTimeline.js';
 import ui from './ui.js';
+import unbindForm from './unbindForm.js';
 import undoSend from './undoSend.js';
 import verifySignature from './verifySignature.js';
 import walletDetails from './walletDetails.js';
@@ -123,11 +131,14 @@ export const en = {
     ...actionsMenu,
     ...addressDiscovery,
     ...addressList,
+    ...addressPreferences,
     ...adsNotice,
+    ...airdrop,
     ...alerts,
     ...backupReminder,
     ...balanceList,
     ...balances,
+    ...batch,
     ...betCreate,
     ...bridgeOrigin,
     ...commandPalette,
@@ -164,6 +175,8 @@ export const en = {
     ...panic,
     ...parallelComposer,
     ...pending,
+    ...projectRoster,
+    ...publishFile,
     ...receive,
     ...renameAccount,
     ...renameWallet,
@@ -174,9 +187,12 @@ export const en = {
     ...shell,
     ...signerSelect,
     ...stakeNew,
+    ...tokenDetail,
+    ...tokenMarket,
     ...transactionStatus,
     ...txTimeline,
     ...ui,
+    ...unbindForm,
     ...undoSend,
     ...verifySignature,
     ...walletDetails,

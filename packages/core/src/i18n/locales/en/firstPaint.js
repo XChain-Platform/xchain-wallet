@@ -24,8 +24,10 @@ const messages = {
     'settings.network.switching': 'Switching networks. This can take a moment.',
     'alerts.notificationsTitle': 'Notifications',
     'walletDetails.exitDemo': 'Exit demo & wipe',
-    'walletPicker.add': 'Add wallet',
-    'importWallet.title': 'Import wallet',
+    // The same action on a button, where labels are Title Case.
+    'walletDetails.exitDemoAction': 'Exit Demo & Wipe',
+    'walletPicker.add': 'Add Wallet',
+    'importWallet.title': 'Import Wallet',
 
     // --- send -----------------------------------------------------
     'send.title': 'Send',
@@ -35,14 +37,14 @@ const messages = {
     'extensionBanner.activeTitle': 'Using your extension wallet.',
     'extensionBanner.activeBody':
         'Signing and account access route through the XChain Wallet extension on this site.',
-    'extensionBanner.switchBack': 'Switch back',
+    'extensionBanner.switchBack': 'Switch Back',
     'extensionBanner.detectedTitle': 'XChain Wallet extension detected.',
     'extensionBanner.detectedBody':
         'Use your extension wallet on this site instead of the web app.',
     'extensionBanner.connecting': 'Connecting…',
-    'extensionBanner.useExtension': 'Use extension wallet',
+    'extensionBanner.useExtension': 'Use Extension Wallet',
     'extensionBanner.dismissLabel': 'Dismiss extension notice',
-    'extensionBanner.notNow': 'Not now',
+    'extensionBanner.notNow': 'Not Now',
 
     // --- xchain: URI intent labels (Cluster L FOLLOWUP 5) ---------
     'uri.intent.send': 'Send',
@@ -57,7 +59,7 @@ const messages = {
     'uri.intent.receiveAssetAt': 'Receive {tick} at {address}',
     'uri.intent.receiveAmount': 'Receive {amount} {tick}',
     'uri.intent.receiveAmountAt': 'Receive {amount} {tick} at {address}',
-    'uri.intent.execute': 'Call contract #{contract}',
+    'uri.intent.execute': 'Call Contract #{contract}', // Feeds the Execute page title.
     'uri.intent.executeMethod': 'Call {method} on contract #{contract}',
     'uri.intent.unknown': 'Unrecognized link',
 
@@ -67,7 +69,7 @@ const messages = {
     // --- history --------------------------------------------------
     'history.title': 'History',
     'history.detail.more': 'More',
-    'history.detail.openNewWindow': 'Open in new window',
+    'history.detail.openNewWindow': 'Open in New Window',
     'pending.detail.technicalDetails': 'Technical details',
 
 
@@ -83,8 +85,7 @@ const messages = {
     'settings.developer.sending': 'Sending…',
     'settings.thisWallet.wallet': 'Wallet',
     'settings.thisWallet.removing': 'Removing…',
-    'receive.explorer': 'Explorer',
-    'routes.addressList.viewAddress': 'View address',
+    'routes.addressList.viewAddress': 'View Address',
     'routes.addressList.dispensers': 'Dispensers',
     'routes.addressList.search': 'Search',
     'components.leftNav.primaryNavigation': 'Primary navigation',

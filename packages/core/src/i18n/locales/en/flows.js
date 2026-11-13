@@ -30,8 +30,8 @@ const messages = {
 
     'flows.pairPartner.unavailableHelp':
         'Pairing applies to Watcher and Signer wallets. Pick one of those modes first, then pair this wallet with its other half.',
-    'flows.pairPartner.pairSigner': 'Pair a signer',
-    'flows.pairPartner.pairWatcher': 'Pair a watcher',
+    'flows.pairPartner.pairSigner': 'Pair a Signer',
+    'flows.pairPartner.pairWatcher': 'Pair a Watcher',
     'flows.pairPartner.watcherHelp':
         'This wallet watches your coins and builds unsigned transactions. Pair it with the offline wallet that holds the same recovery phrase and signs them.',
     'flows.pairPartner.signerHelp':

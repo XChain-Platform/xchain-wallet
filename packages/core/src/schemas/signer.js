@@ -95,7 +95,7 @@ export function createSignerRecord(input) {
 function defaultLabel(kind) {
     if (kind === 'trezor') return 'Trezor';
     if (kind === 'ledger') return 'Ledger';
-    return 'Hardware signer';
+    return 'Hardware wallet';
 }
 
 /**

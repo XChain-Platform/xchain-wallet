@@ -326,6 +326,7 @@ export {
     pollDetail,
     pollResults,
     votesForQuery,
+    voteDelegationsForAddress,
 } from './voteQueries.js';
 export {
     createMarketAction,
@@ -390,6 +391,8 @@ export { passiveCoSignForAccount, CoSignerAccountNotFoundError } from './passive
 export { provisionCoSignerAccount } from './provisionCoSignerAccount.js';
 export { previewCoSignRequest } from './previewCoSignRequest.js';
 export { listCoSignerAccounts, findCoSignerAccountByAddress, getCoSignerAccount } from './coSignerAccountQueries.js';
+export { coSignerAccountBalances } from './coSignerAccountBalances.js';
+export { resolveCoSignerTokenIds } from '../cosigner/tickIdResolver.js';
 export { updateCoSignerAccount, CoSignerAccountNotFoundError as CoSignerAccountUpdateNotFoundError } from './updateCoSignerAccount.js';
 export {
     contractValidate,

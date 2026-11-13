@@ -440,7 +440,7 @@ async function fetchAddressShape({ sdk, address, nativeTicker, opts }) {
  *
  * @param {{ balResp: unknown, addrResp: unknown, nativeTicker: string | null }} reads
  */
-function shapeFromReads({ balResp, addrResp, nativeTicker, address }) {
+export function shapeFromReads({ balResp, addrResp, nativeTicker, address }) {
     const balOk = !(balResp instanceof Error);
     const addrOk = !(addrResp instanceof Error);
     if (!balOk && !addrOk) {
@@ -920,7 +920,7 @@ async function perAddressEntry({ sdk, addr, nativeTicker, opts }) {
 // becomes an Error carrying the slot's own code and message: that is what makes
 // the shared shaper mark it `unavailable` in the same words the per-address
 // path would have used.
-function readsFromBatchEntry(entry, address) {
+export function readsFromBatchEntry(entry, address) {
     const err = entry && entry.error ? entry.error : null;
     const failed = () => {
         const e = new Error(String((err && err.error) || `no batch result for ${address}`));

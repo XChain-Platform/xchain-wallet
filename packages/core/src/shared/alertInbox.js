@@ -83,8 +83,17 @@ export function createAlertInbox(storage, { key = DEFAULT_KEY, limit = DEFAULT_L
                     .sort((a, b) => b.at - a.at);
             });
         },
-        markRead(id) {
-            return update((rows) => rows.map((row) => row.id === id ? { ...row, read: true } : row));
+        // A warning the wallet derives (older recovery phrase format, unread
+        // messages) is recorded on its first read, so later builds of the same
+        // id find it already read and do not offer it as new.
+        markRead(id, alert) {
+            return update((rows) => {
+                if (!rows.some((row) => row.id === id)) {
+                    const recorded = alert && alert.id === id ? normalizeAlert({ ...alert, read: true }) : null;
+                    return recorded ? [recorded, ...rows].sort((a, b) => b.at - a.at) : rows;
+                }
+                return rows.map((row) => row.id === id ? { ...row, read: true } : row);
+            });
         },
         markAllRead() {
             return update((rows) => rows.map((row) => row.read ? row : { ...row, read: true }));

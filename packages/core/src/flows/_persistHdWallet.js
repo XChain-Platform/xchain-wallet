@@ -79,6 +79,7 @@ async function existingWalletNameFor(vault, derived) {
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string[]} activeChainIds
+ * @property {'full' | 'watcher' | 'signer'} [walletMode]   §20: this wallet's mode, chosen at create, import or pair; default `full`
  * @property {'mainnet' | 'testnet' | 'regtest'} [activeNetwork]   optional. Passed to `ensureSettings` so a fresh wallet's settings record is created with this network selected. Existing settings (e.g. second wallet created in an already-configured vault) preserve their stored value. Defaults: caller should pass an inferred value (typically the networkKind of activeChainIds[0]) so the wallet lands on the network its chains are on.
  */
 
@@ -102,6 +103,7 @@ export async function persistHdWallet({
     sdkRegistry,
     activeChainIds,
     activeNetwork,
+    walletMode,
 }) {
     // A supplied key belongs to the params it was derived with; calibrating
     // fresh ones beside it would seal a seed no password opens.
@@ -191,6 +193,7 @@ export async function persistHdWallet({
             passphraseEnabled,
             encryptedSeed,
             kdfParams: storedKdfParams,
+            walletMode,
         });
 
         // A create or import adds a wallet; it never replaces one. A stored
