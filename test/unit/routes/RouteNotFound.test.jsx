@@ -24,7 +24,7 @@ describe('RouteNotFound', () => {
             </MessagingProvider>,
         );
 
-        expect(screen.getByRole('heading', { level: 1, name: 'Page not found' })).toBeTruthy();
+        expect(screen.getByRole('heading', { level: 1, name: 'Page Not Found' })).toBeTruthy();
         expect(screen.getByRole('heading', { level: 2, name: "That page isn't here" })).toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Back to Home' })).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));

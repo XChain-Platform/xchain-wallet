@@ -16,6 +16,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { AdvancedActionsForm } from '../../../packages/core/src/shared/routes/AdvancedActionsForm.jsx';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 
@@ -28,13 +29,16 @@ const FROM = {
     source: 'hd',
 };
 
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); resetWalletModes(); });
 
 function watcherMessaging() {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode: 'watcher' }], activeWalletId: 'w' });
     const target = {
+        listWallets: vi.fn().mockResolvedValue([{ id: 'w', name: 'W', walletMode: 'watcher' }]),
         getAddressesByChain: vi.fn().mockResolvedValue({ [BTC]: [FROM] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [BTC]: FROM }),
-        getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher', activeNetwork: 'mainnet' }),
+        getSettings: vi.fn().mockResolvedValue({ activeNetwork: 'mainnet' }),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         listActions: vi.fn().mockResolvedValue(['EXECUTE', 'XBRIDGE']),
         getActionFormats: vi.fn().mockResolvedValue({ 0: 'VERSION' }),
@@ -55,7 +59,7 @@ async function openReview(actionCode) {
     await waitFor(() => expect(document.querySelector(`option[value="${actionCode}"]`)).toBeTruthy());
     const picker = document.querySelector(`option[value="${actionCode}"]`).closest('select');
     fireEvent.change(picker, { target: { value: actionCode } });
-    const submit = await screen.findByRole('button', { name: 'Sign action' });
+    const submit = await screen.findByRole('button', { name: 'Sign Action' });
     fireEvent.click(submit);
 }
 
@@ -63,8 +67,8 @@ describe('AdvancedActionsForm review stage wording', () => {
     it('titles a watcher-mode EXECUTE review as a contract call', async () => {
         await openReview('EXECUTE');
 
-        expect(await screen.findByRole('heading', { name: 'Review contract call' })).toBeInTheDocument();
-        const submit = screen.getByRole('button', { name: 'Create unsigned transaction: contract call' });
+        expect(await screen.findByRole('heading', { name: 'Review Contract Call' })).toBeInTheDocument();
+        const submit = screen.getByRole('button', { name: 'Create Unsigned Transaction: Contract Call' });
         expect(submit).toHaveClass(buttonStyles.success);
         expect(submit.querySelector('svg')).toBeTruthy();
         expect(screen.getByText('Watcher mode: this prepares the transaction for your offline signer. Sign it there, then bring the signed transaction to a wallet that can broadcast it.')).toBeInTheDocument();
@@ -74,7 +78,7 @@ describe('AdvancedActionsForm review stage wording', () => {
     it('titles a watcher-mode XBRIDGE review as a bridge transfer', async () => {
         await openReview('XBRIDGE');
 
-        expect(await screen.findByRole('heading', { name: 'Review bridge transfer' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Create unsigned transaction: bridge transfer' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Review Bridge Transfer' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Create Unsigned Transaction: Bridge Transfer' })).toBeInTheDocument();
     });
 });

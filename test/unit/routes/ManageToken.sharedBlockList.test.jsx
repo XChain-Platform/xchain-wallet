@@ -52,7 +52,15 @@ async function renderManage({ isOwner = true, tokenInfo = {}, ...handlers } = {}
     return messaging;
 }
 
+// The action tiles sit in collapsible group sections (only Supply starts open),
+// so a tile's group is opened before the tile is read.
+async function openGroup(title) {
+    const header = await screen.findByRole('button', { name: new RegExp(`^${title}`) });
+    if (header.getAttribute('aria-expanded') !== 'true') fireEvent.click(header);
+}
+
 async function sharedBlockListRow() {
+    await openGroup('Rules and automation');
     const row = await screen.findByRole('button', { name: 'Shared block list' });
     expect(row).toHaveAttribute('aria-busy', 'false');
     return row;
@@ -65,6 +73,7 @@ describe('ManageToken shared block list action', () => {
             tokenInfo: { locks: { description: true } },
             onUpdateDescription,
         });
+        await openGroup('Token page');
         const description = await screen.findByRole('button', { name: 'Description' });
         expect(description).toBeDisabled();
         expect(description).toHaveAttribute(
@@ -95,11 +104,13 @@ describe('ManageToken shared block list action', () => {
 
     it('is disabled when neither handler is passed', async () => {
         await renderManage();
+        await openGroup('Rules and automation');
         expect(await screen.findByRole('button', { name: 'Shared block list' })).toBeDisabled();
     });
 
     it('is disabled for a non-owner without showing an owner warning', async () => {
         await renderManage({ isOwner: false, onUseSharedBlockList: vi.fn() });
+        await openGroup('Rules and automation');
         await waitFor(() => {
             expect(screen.getByRole('button', { name: 'Shared block list' })).toBeDisabled();
         });

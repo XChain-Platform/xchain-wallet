@@ -31,6 +31,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, act as domAct, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../packages/core/src/shared/hooks/useWalletMode.js';
 
 import { BroadcastForm } from '../../packages/core/src/shared/routes/BroadcastForm.jsx';
 import { CreatePollForm } from '../../packages/core/src/shared/routes/CreatePollForm.jsx';
@@ -45,6 +46,7 @@ import { ContractStakeForm } from '../../packages/core/src/shared/routes/Contrac
 import { CreateBetFeedForm } from '../../packages/core/src/shared/routes/CreateBetFeedForm.jsx';
 import { CreateOrderForm } from '../../packages/core/src/shared/routes/CreateOrderForm.jsx';
 import { ControllerBindForm } from '../../packages/core/src/shared/routes/ControllerBindForm.jsx';
+import { UnbindForm } from '../../packages/core/src/shared/routes/UnbindForm.jsx';
 import { DeployContractForm } from '../../packages/core/src/shared/routes/DeployContractForm.jsx';
 import { ExecuteContractForm } from '../../packages/core/src/shared/routes/ExecuteContractForm.jsx';
 import { TokenAdminForm } from '../../packages/core/src/shared/routes/TokenAdminForm.jsx';
@@ -86,6 +88,7 @@ const COMPOSED = Object.freeze({
 });
 
 beforeEach(() => {
+    resetWalletModes();
     // A token record cached by one case must not answer the issuer check of the next.
     __clearTokenInfoCache();
     vi.useFakeTimers({
@@ -114,14 +117,18 @@ const JDOG_HOLDERS = Object.freeze({
 // Recording messaging mock. Real shapes for the calls the confirm pipeline
 // makes; every other host call resolves to a permissive generic so the
 // route's loaded branch still settles.
-function recordingMessaging(overrides = {}) {
+// `walletMode` among the overrides is the mode of wallet `w`, published the way
+// the shell does from the wallet list; every other override is a messaging method.
+function recordingMessaging({ walletMode = 'full', ...overrides } = {}) {
     const calls = [];
     const generic = Object.freeze([]);
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const target = {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [HD_ADDRESS] }),
         getActiveAddresses: () => Promise.resolve({}),
         signerReady: () => Promise.resolve({ ready: true }),
-        getSettings: () => Promise.resolve({ walletMode: 'full' }),
+        getSettings: () => Promise.resolve({}),
+        listWallets: () => Promise.resolve([{ id: 'w', name: 'W', walletMode }]),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
         getOwnedTokens: () => Promise.resolve([{ tick: 'JDOG' }]),
         // One spendable token so the TokenPicker has a row to select.
@@ -369,6 +376,13 @@ async function approveAction(utils) {
 const openTokenField = (label) => (utils) => {
     fireEvent.click(utils.getByRole('button', { name: new RegExp(`^${label}`, 'i') }));
 };
+// A closed form section's fields are not reachable by role until it is opened.
+const openFormSection = (title) => (utils) => {
+    const toggle = utils.getAllByRole('button')
+        .find((b) => b.hasAttribute('aria-expanded') && (b.textContent || '').startsWith(title));
+    if (!toggle) throw new Error(`no ${title} section`);
+    if (toggle.getAttribute('aria-expanded') === 'false') fireEvent.click(toggle);
+};
 const pickToken = (tick) => (utils) => {
     const row = Array.from(utils.container.querySelectorAll('button'))
         .find((b) => (b.textContent || '').includes(tick));
@@ -381,11 +395,14 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: CreatePollForm,
             props: { presetTick: 'JDOG' },
-            actionLabel: 'Create poll',
+            actionLabel: 'Create Poll',
             fill: (utils) => {
+                // The wallet requires a question before it composes a poll.
+                setValue(utils, 'Question', 'Which option wins?');
                 setValue(utils, 'Closes at block', '900000');
-                setValue(utils, 'Option 0', 'Yes');
-                setValue(utils, 'Option 1', 'No');
+                // Option fields are numbered from 1; the wire list stays in order.
+                setValue(utils, 'Option 1', 'Yes');
+                setValue(utils, 'Option 2', 'No');
             },
         });
         // VOTE's wire encoding belongs to sdk.voting.createPollParams,
@@ -398,7 +415,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         expect(compose, 'composed through the VOTE builder route').toBeTruthy();
         expect(compose.args.builder).toBe('createPollParams');
         expect(compose.args.params).toMatchObject({
-            tick: 'JDOG', endBlock: '900000', options: ['Yes', 'No'],
+            tick: 'JDOG', endBlock: '900000', options: ['Yes', 'No'], question: 'Which option wins?',
         });
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
         expect(calls.some((c) => c.method === 'preflight'), 'preflight streamed').toBe(true);
@@ -411,7 +428,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: DividendForm,
             props: { initialChainId: CHAIN, initialTick: 'JDOG', messagingOverrides: JDOG_HOLDERS },
-            actionLabel: 'Pay dividend',
+            actionLabel: 'Pay Dividend',
             steps: [openTokenField('Dividend token'), pickToken('XCHAIN'), () => vi.advanceTimersByTime(450)],
             fill: (utils) => setValue(utils, /^Per-unit amount/, '0.5'),
         });
@@ -426,7 +443,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: IssueTokenForm,
             props: {},
-            actionLabel: 'Issue token',
+            actionLabel: 'Issue Token',
             fill: (utils) => {
                 setValue(utils, 'Ticker', 'JDOG');
                 fireEvent.change(utils.getByRole('textbox', { name: 'Max supply' }), { target: { value: '1000' } });
@@ -487,7 +504,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             Form: ContractFundsForm,
             props: { mode: 'deposit', contractActionIndex: '42' },
             actionLabel: 'Deposit',
-            steps: [openTokenField('Token'), pickToken('XCHAIN')],
+            steps: [openTokenField('Token:'), pickToken('XCHAIN')],
             fill: (utils) => setValue(utils, /^Quantity/, '10'),
         });
         expectSingleEncode(calls, {
@@ -501,7 +518,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: DelegationActionForm,
             props: { mode: 'delegate' },
-            actionLabel: 'Delegate signing key',
+            actionLabel: 'Delegate Signing Key',
             fill: (utils) => setValue(utils, 'New signing pubkey', 'c'.repeat(64)),
         });
         expectSingleEncode(calls, {
@@ -516,7 +533,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: DelegationActionForm,
             props: { mode: 'revoke' },
-            actionLabel: 'Revoke delegation',
+            actionLabel: 'Revoke Delegation',
             fill: (utils) => setValue(utils, 'Signing pubkey to revoke', 'd'.repeat(64)),
         });
         const submit = expectSingleEncode(calls, {
@@ -531,7 +548,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls, utils } = await driveThroughConfirm({
             Form: DelegateVoteForm,
             props: { presetTick: 'JDOG' },
-            actionLabel: 'Delegate votes',
+            actionLabel: 'Delegate Votes',
             fill: (utils) => setValue(utils, 'Delegate to address', VOTE_DELEGATE),
         });
         const compose = calls.find((c) => c.method === 'composeVoteForConfirm');
@@ -552,7 +569,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: ControllerBindForm,
             props: { tick: 'JDOG', messagingOverrides: OWNED_JDOG },
-            actionLabel: 'Bind token',
+            actionLabel: 'Bind Token',
             fill: (utils) => setValue(utils, 'Guard contract', '7'),
         });
         expectSingleEncode(calls, {
@@ -561,24 +578,15 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         });
     });
 
-    // Session 34. The other half of the same form, and the half that had never
-    // been driven: UNBIND is the ONLY way a token is released from a guard, and
-    // it composed nothing at all. The form required "Guard contract" and gated
-    // its submit button on the same value - but an unbind sends an EMPTY
-    // CONTROLLER, because the chain resolves the live binding for the chosen
-    // class itself. So the button sat disabled, with no message, on the one
-    // action a controlled token's owner cannot do without.
-    //
-    // `fill` deliberately sets no Guard contract: typing one would make this
-    // test pass against the defect.
-    it('ControllerBindForm composes an UNBIND with no guard contract at all', async () => {
+    // UNBIND is the only way a token is released from a guard, and it is its
+    // own form. An unbind sends an EMPTY CONTROLLER, because the chain resolves
+    // the live binding for the chosen class itself, so the form has no Guard
+    // contract field at all and must still compose.
+    it('UnbindForm composes an UNBIND with no guard contract at all', async () => {
         const { calls } = await driveThroughConfirm({
-            Form: ControllerBindForm,
+            Form: UnbindForm,
             props: { tick: 'JDOG', messagingOverrides: OWNED_JDOG },
-            actionLabel: 'Unbind token',
-            fill: (utils) => {
-                fireEvent.click(utils.getByLabelText(/^Unbind/));
-            },
+            actionLabel: 'Unbind',
         });
         const built = calls.find((c) => c.method === 'buildControllerBindParams');
         expect(built, 'the unbind reached the host builder').toBeTruthy();
@@ -598,7 +606,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: ExecuteContractForm,
             props: { contractActionIndex: '9' },
-            actionLabel: 'Call contract',
+            actionLabel: 'Call Contract',
             fill: (utils) => setValue(utils, 'Method', 'transfer'),
         });
         expectSingleEncode(calls, {
@@ -632,10 +640,11 @@ describe('Action forms confirm via the single-encode pipeline', () => {
                     },
                 },
             },
-            actionLabel: 'Call contract',
+            actionLabel: 'Call Contract',
             steps: [
                 (utils) => setValue(utils, 'Method', 'fundLoan'),
-                openTokenField('Deposit'),
+                openFormSection('Deposit'),
+                openTokenField('Deposit:'),
                 pickToken('XCHAIN'),
             ],
             fill: (utils) => setValue(utils, /^Deposit amount/, '10'),
@@ -667,9 +676,10 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         });
         for (const step of [
             (u) => setValue(u, 'Method', 'fundLoan'),
-            openTokenField('Deposit'),
+            openFormSection('Deposit'),
+            openTokenField('Deposit:'),
             pickToken('XCHAIN'),
-            (u) => fireEvent.click(u.getByRole('button', { name: 'Call contract' })),
+            (u) => fireEvent.click(u.getByRole('button', { name: 'Call Contract' })),
         ]) {
             // eslint-disable-next-line no-await-in-loop
             await domAct(async () => { step(utils); await drainMicrotasks(); });
@@ -711,7 +721,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: DeployContractForm,
             props: {},
-            actionLabel: 'Publish contract',
+            actionLabel: 'Publish Contract',
             fill: (utils) => {
                 const code = utils.container.querySelector('textarea');
                 if (!code) throw new Error('no contract-code textarea');
@@ -733,7 +743,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: TokenAdminForm,
             props: { mode: 'description', initialChainId: CHAIN, initialTick: 'JDOG', messagingOverrides: OWNED_JDOG },
-            actionLabel: 'Update description',
+            actionLabel: 'Update Description',
             fill: (utils) => setValue(utils, 'Description', 'a better token'),
         });
         expectSingleEncode(calls, {
@@ -747,7 +757,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: AdvancedActionsForm,
             props: {},
-            actionLabel: 'Sign action',
+            actionLabel: 'Sign Action',
             fill: (utils) => {
                 fireEvent.change(utils.getByLabelText('Action'), { target: { value: 'BROADCAST' } });
             },
@@ -781,7 +791,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             await domAct(async () => { await drainMicrotasks(); });
             setValue(utils, 'TICK', 'JDOG');
             setValue(utils, 'AMOUNT', '5');
-            await clickAction(utils, 'Sign action');
+            await clickAction(utils, 'Sign Action');
 
             expect(approveButton(utils).disabled).toBe(true);
             await domAct(async () => {
@@ -809,26 +819,23 @@ describe('Action forms confirm via the single-encode pipeline', () => {
                     fireEvent.change(u.getByLabelText('Action'), { target: { value: 'BROADCAST' } });
                 },
             });
-            await clickAction(utils, 'Sign action');
+            await clickAction(utils, 'Sign Action');
 
             expect(utils.queryByLabelText(/to confirm/)).toBeNull();
             expect(approveButton(utils).disabled).toBe(false);
         });
     });
 
+    // The wizard is the one Issue Token form: no template, details or review
+    // steps of its own, so one press composes and opens the confirm page.
     it('TokenWizard skips its own preview/sign stages and confirms the composed ISSUE', async () => {
         const { calls } = await driveThroughConfirm({
             Form: TokenWizard,
             props: {},
-            actionLabel: 'Review token',
-            afterClick: (utils) => fireEvent.click(utils.getByRole('button', { name: 'Issue token' })),
-            steps: [
-                (utils) => fireEvent.click(utils.getByRole('button', { name: /Custom/ })),
-                (utils) => fireEvent.click(utils.getByRole('button', { name: 'Next' })),
-            ],
+            actionLabel: 'Issue Token',
             fill: (utils) => {
-                setValue(utils, 'Token name (ticker)', 'JDOG');
-                setValue(utils, 'Supply', '1000');
+                setValue(utils, 'Ticker', 'JDOG');
+                fireEvent.change(utils.getByRole('textbox', { name: 'Max supply' }), { target: { value: '1000' } });
             },
         });
         expectSingleEncode(calls, {
@@ -846,7 +853,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             fromAddress: args.from.address,
         }));
         const { messaging, calls } = recordingMessaging({
-            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+            walletMode: 'watcher',
             buildActionPsbtRequest: build,
         });
         let utils;
@@ -859,26 +866,19 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             await drainMicrotasks();
         });
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: /Custom/ }));
-            await drainMicrotasks();
-        });
-        await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Next' }));
-            await drainMicrotasks();
-        });
-        await domAct(async () => {
-            setValue(utils, 'Token name (ticker)', 'JDOG');
-            setValue(utils, 'Supply', '1000');
+            setValue(utils, 'Ticker', 'JDOG');
+            fireEvent.change(utils.getByRole('textbox', { name: 'Max supply' }), { target: { value: '1000' } });
             await drainMicrotasks();
         });
 
         expect(utils.queryByLabelText('Password')).toBeNull();
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Review token' }));
+            fireEvent.click(utils.getByRole('button', { name: 'Issue Token' }));
             await drainMicrotasks();
         });
+        // Watcher mode reviews the decoded ISSUE, then builds the unsigned transaction.
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Issue token' }));
+            fireEvent.click(utils.getByRole('button', { name: 'Create Transaction for Signing' }));
             await drainMicrotasks();
         });
 
@@ -916,7 +916,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
                 },
                 // The recipient-list review stage is kept: it is a data
                 // review, and its button is what opens the confirm page.
-                (utils) => fireEvent.click(utils.getByRole('button', { name: 'Review recipients' })),
+                (utils) => fireEvent.click(utils.getByRole('button', { name: 'Review Recipients' })),
             ],
         });
         expectSingleEncode(calls, { action: 'LIST', submitMethod: 'createList' });
@@ -993,7 +993,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: DispenserForm,
             props: { initialChainId: CHAIN, initialTick: 'JDOG' },
-            actionLabel: 'Create dispenser',
+            actionLabel: 'Create Dispenser',
             fill: (utils) => {
                 setValue(utils, /^Give amount/, '10');
                 setValue(utils, /^Escrow amount/, '100');
@@ -1011,7 +1011,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: SwapForm,
             props: { initialChainId: CHAIN },
-            actionLabel: 'Create swap',
+            actionLabel: 'Create Swap',
             steps: [
                 // Give and get must differ: SwapForm rejects a same-ticker pair.
                 openTokenField('Give token:'), pickToken('XCHAIN'),
@@ -1040,7 +1040,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: SellOwnershipForm,
             props: { tick: 'JDOG', messagingOverrides: OWNED_JDOG },
-            actionLabel: 'List name for sale',
+            actionLabel: 'List Name for Sale',
             fill: (utils) => setValue(utils, /^Price/, '5'),
         });
         expectSingleEncode(calls, {
@@ -1065,9 +1065,9 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             },
             steps: [
                 (utils) => fireEvent.change(utils.getByLabelText('Action'), { target: { value: 'SEND' } }),
-                (utils) => fireEvent.click(utils.getByRole('button', { name: 'Batch' })),
+                (utils) => fireEvent.click(utils.getByRole('button', { name: 'Review 1 Transaction' })),
             ],
-            actionLabel: 'Sign batch',
+            actionLabel: 'Sign Batch',
         });
         expectSingleEncode(calls, {
             action: 'BATCH',
@@ -1090,7 +1090,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         });
         for (const step of [
             (u) => fireEvent.change(u.getByLabelText('Action'), { target: { value: 'SEND' } }),
-            (u) => fireEvent.click(u.getByRole('button', { name: 'Batch' })),
+            (u) => fireEvent.click(u.getByRole('button', { name: 'Review 1 Transaction' })),
         ]) {
             // eslint-disable-next-line no-await-in-loop
             await domAct(async () => { step(utils); await drainMicrotasks(); });
@@ -1110,7 +1110,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
                     getActionByIndex: () => Promise.resolve({ action: 'SEND', tick: 'JDOG', amount: '1' }),
                 },
             },
-            actionLabel: 'Link actions',
+            actionLabel: 'Link Actions',
             steps: [
                 (utils) => {
                     // Both action cards carry the same field label, so they are
@@ -1221,7 +1221,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             Form: PlaceOrderPanel,
             props: { tick1: 'JDOG', tick2: 'XCHAIN' },
             // The software path carries the action verb, never "Review".
-            actionLabel: 'Place buy order',
+            actionLabel: 'Place Buy Order',
             fill: (utils) => {
                 // /^Price/ alone also names the "Price and amount" field group.
                 setValue(utils, /^Price \(/, '2');
@@ -1297,7 +1297,7 @@ describe('Hardware signers confirm on the single-encode surface', () => {
             name: 'DividendForm',
             Form: DividendForm,
             props: { initialChainId: CHAIN, initialTick: 'JDOG', messagingOverrides: JDOG_HOLDERS },
-            actionLabel: 'Pay dividend',
+            actionLabel: 'Pay Dividend',
             steps: [openTokenField('Dividend token'), pickToken('XCHAIN'), () => vi.advanceTimersByTime(450)],
             fill: (utils) => setValue(utils, /^Per-unit amount/, '0.5'),
             software: 'dividendAction',
@@ -1307,7 +1307,7 @@ describe('Hardware signers confirm on the single-encode surface', () => {
             name: 'TokenAdminForm',
             Form: TokenAdminForm,
             props: { mode: 'description', initialChainId: CHAIN, initialTick: 'JDOG', messagingOverrides: OWNED_JDOG },
-            actionLabel: 'Update description',
+            actionLabel: 'Update Description',
             fill: (utils) => setValue(utils, 'Description', 'a better token'),
             software: 'issueToken',
             hardware: 'issueTokenHw',
@@ -1316,7 +1316,7 @@ describe('Hardware signers confirm on the single-encode surface', () => {
             name: 'DispenserForm',
             Form: DispenserForm,
             props: { initialChainId: CHAIN, initialTick: 'JDOG' },
-            actionLabel: 'Create dispenser',
+            actionLabel: 'Create Dispenser',
             fill: (utils) => {
                 setValue(utils, /^Give amount/, '10');
                 setValue(utils, /^Escrow amount/, '100');
@@ -1414,7 +1414,7 @@ describe('§5.6 slice 3: ComposeMessage confirms the encrypted MESSAGE', () => {
         });
 
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Send message' }));
+            fireEvent.click(utils.getByRole('button', { name: 'Send Message' }));
             await drainMicrotasks();
         });
         await domAct(async () => {
@@ -1492,11 +1492,12 @@ describe('A migrated form maps its Approve failure through the one helper', () =
                     createPollAction: () => Promise.reject(encoderRefusalAcrossBoundary()),
                 },
             },
-            actionLabel: 'Create poll',
+            actionLabel: 'Create Poll',
             fill: (u) => {
+                setValue(u, 'Question', 'Which option wins?');
                 setValue(u, 'Closes at block', '900000');
-                setValue(u, 'Option 0', 'Yes');
-                setValue(u, 'Option 1', 'No');
+                setValue(u, 'Option 1', 'Yes');
+                setValue(u, 'Option 2', 'No');
             },
         });
         const text = utils.container.textContent || '';
@@ -1511,7 +1512,7 @@ const PROTOCOL_FAILURE_FORMS = [
         name: 'issue',
         Form: IssueTokenForm,
         props: {},
-        actionLabel: 'Issue token',
+        actionLabel: 'Issue Token',
         composeMethod: 'composeForConfirm',
         submitMethod: 'issueToken',
         fill: (u) => {
@@ -1529,7 +1530,7 @@ const PROTOCOL_FAILURE_FORMS = [
         name: 'dispenser',
         Form: DispenserForm,
         props: { initialChainId: CHAIN, initialTick: 'JDOG' },
-        actionLabel: 'Create dispenser',
+        actionLabel: 'Create Dispenser',
         composeMethod: 'composeForConfirm',
         submitMethod: 'dispenserAction',
         fill: (u) => {
@@ -1547,47 +1548,49 @@ const PROTOCOL_FAILURE_FORMS = [
         name: 'order',
         Form: CreateOrderForm,
         props: { initialChainId: CHAIN },
-        actionLabel: 'Place order',
+        actionLabel: 'Place Order',
         composeMethod: 'composeForConfirm',
         submitMethod: 'orderAction',
+        // The give token is picked from the Give asset picker page.
+        steps: [openTokenField('Give asset'), pickToken('JDOG')],
         fill: (u) => {
-            setValue(u, 'Ticker', 'JDOG');
-            setValue(u, 'Amount', '5');
-            setValue(u, 'Amount (BTC)', '0.01');
+            setValue(u, /^Give amount/, '5');
+            setValue(u, /^Get amount/, '0.01');
         },
         expectValues: (u) => {
-            expect(u.getByLabelText('Ticker').value).toBe('JDOG');
-            expect(u.getByLabelText('Amount').value).toBe('5');
+            expect(u.getByRole('button', { name: /^Give asset: JDOG/ })).toBeTruthy();
+            expect(u.getByLabelText(/^Give amount/).value).toBe('5');
             // Shown as typed while editing, padded to 8 decimals once not (U61).
-            expect(u.getByLabelText('Amount (BTC)').value).toMatch(/^0\.01(000000)?$/);
+            expect(u.getByLabelText(/^Get amount/).value).toMatch(/^0\.01(000000)?$/);
         },
     },
     {
         name: 'bet',
         Form: CreateBetFeedForm,
         props: { presetTick: 'JDOG' },
-        actionLabel: 'Open market',
+        actionLabel: 'Open Market',
         composeMethod: 'composeBetForConfirm',
         submitMethod: 'createMarketAction',
+        // The Quick view names the deadline "Closes"; outcomes are numbered from 1.
         fill: (u) => {
             const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16);
-            setValue(u, 'What is being bet on', 'Will retry work?');
-            setValue(u, 'Outcome 0', 'Yes');
-            setValue(u, 'Outcome 1', 'No');
-            setValue(u, 'Betting closes', tomorrow);
+            setValue(u, 'Question', 'Will retry work?');
+            setValue(u, 'Outcome 1', 'Yes');
+            setValue(u, 'Outcome 2', 'No');
+            setValue(u, 'Closes', tomorrow);
         },
         expectValues: (u) => {
-            expect(u.getByLabelText('What is being bet on').value).toBe('Will retry work?');
-            expect(u.getByLabelText('Outcome 0').value).toBe('Yes');
-            expect(u.getByLabelText('Outcome 1').value).toBe('No');
-            expect(u.getByLabelText('Betting closes').value).not.toBe('');
+            expect(u.getByLabelText('Question').value).toBe('Will retry work?');
+            expect(u.getByLabelText('Outcome 1').value).toBe('Yes');
+            expect(u.getByLabelText('Outcome 2').value).toBe('No');
+            expect(u.getByLabelText('Closes').value).not.toBe('');
         },
     },
     {
         name: 'vote',
         Form: DelegateVoteForm,
         props: { presetTick: 'JDOG' },
-        actionLabel: 'Delegate votes',
+        actionLabel: 'Delegate Votes',
         composeMethod: 'composeVoteForConfirm',
         submitMethod: 'delegateVoteAction',
         fill: (u) => {
@@ -1641,9 +1644,9 @@ const SUBMIT_FAILURES = [
 function expectFailureBesideAction(utils, spec, shown, hidden) {
     const message = utils.getByText(shown);
     const action = utils.getByRole('button', { name: spec.actionLabel });
-    // The failure leads the action's form page: the notice slot just above the
-    // form (its card, when wide), never a box inside it or another form's.
-    expect(action.closest('form').previousElementSibling).toContainElement(message);
+    // The failure shows in the form's one status slot, just above the action,
+    // never a box inside a section or another form's.
+    expect(action.closest('form').querySelector('[data-form-status]')).toContainElement(message);
     expect(utils.container.textContent || '').not.toContain(hidden);
     spec.expectValues(utils);
 }
@@ -1663,6 +1666,7 @@ describe.each(PROTOCOL_FAILURE_FORMS)('$name form submit failures', (spec) => {
                 ...spec.props,
                 messagingOverrides: { [spec.composeMethod]: compose },
             },
+            steps: spec.steps,
             fill: spec.fill,
         });
 
@@ -1686,6 +1690,7 @@ describe.each(PROTOCOL_FAILURE_FORMS)('$name form submit failures', (spec) => {
                 messagingOverrides: { [spec.submitMethod]: submit },
             },
             actionLabel: spec.actionLabel,
+            steps: spec.steps,
             fill: spec.fill,
         });
 

@@ -123,10 +123,11 @@ describe('BatchComposerForm fallback action list', () => {
         await actionOptions();
         const pick = (name) => screen.getByRole('combobox', { name });
         fireEvent.change(pick('Action'), { target: { value: 'COLLECT' } });
-        // Open the Network field and choose Litecoin.
+        // Open the closed From section, then the Network field, and choose Litecoin.
+        fireEvent.click(screen.getByRole('button', { name: /^From/, expanded: false }));
         fireEvent.click(screen.getByRole('button', { name: /^Network: / }));
         fireEvent.click(screen.getByRole('button', { name: /Select Litecoin/ }));
         expect(await screen.findByText(/is not available on/)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Batch' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Review 1 Transaction' }).disabled).toBe(true);
     });
 });

@@ -90,8 +90,9 @@ afterEach(() => cleanup());
 
 async function fillFirst(tick, amount) {
     fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: ALICE } });
-    fireEvent.change(screen.getByLabelText(/^Token$/), { target: { value: tick } });
-    fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: amount } });
+    fireEvent.click(await screen.findByRole('button', { name: /^Asset/ }));
+    fireEvent.click(await screen.findByRole('button', { name: `Pick ${tick}` }));
+    fireEvent.change(await screen.findByLabelText(/^Amount \(/), { target: { value: amount } });
     // The row checks read the source balances, which load after the form settles.
     await screen.findByText(new RegExp(tick + ' available'));
 }
@@ -109,7 +110,7 @@ describe('Send: an added recipient amount follows its token decimal places', () 
     it('clears the row amount when another token is picked for the row', async () => {
         const messaging = mount();
         await fillFirst('PEPE', '7');
-        fireEvent.click(await screen.findByRole('button', { name: /Add recipient/ }));
+        fireEvent.click(await screen.findByRole('button', { name: /Add Recipient/ }));
         fireEvent.change(screen.getByLabelText('Recipient 2 address'), { target: { value: BOB } });
         fireEvent.click(screen.getByRole('switch', { name: /different token/i }));
         pickRowToken('XCP');
@@ -123,7 +124,7 @@ describe('Send: an added recipient amount follows its token decimal places', () 
     it('keeps the row amount when the same token is picked again', async () => {
         mount();
         await fillFirst('PEPE', '7');
-        fireEvent.click(await screen.findByRole('button', { name: /Add recipient/ }));
+        fireEvent.click(await screen.findByRole('button', { name: /Add Recipient/ }));
         fireEvent.click(screen.getByRole('switch', { name: /different token/i }));
         pickRowToken('XCP');
         fireEvent.change(rowAmount(), { target: { value: '0.5' } });
@@ -134,7 +135,7 @@ describe('Send: an added recipient amount follows its token decimal places', () 
     it('refuses a row amount past its token places once the row takes the first token', async () => {
         const messaging = mount();
         await fillFirst('PEPE', '7');
-        fireEvent.click(await screen.findByRole('button', { name: /Add recipient/ }));
+        fireEvent.click(await screen.findByRole('button', { name: /Add Recipient/ }));
         fireEvent.change(screen.getByLabelText('Recipient 2 address'), { target: { value: BOB } });
         fireEvent.click(screen.getByRole('switch', { name: /different token/i }));
         pickRowToken('XCP');
@@ -149,18 +150,19 @@ describe('Send: an added recipient amount follows its token decimal places', () 
     it('clears a row that inherits the first token when that token changes', async () => {
         mount();
         await fillFirst('XCP', '1');
-        fireEvent.click(await screen.findByRole('button', { name: /Add recipient/ }));
+        fireEvent.click(await screen.findByRole('button', { name: /Add Recipient/ }));
         fireEvent.click(screen.getByRole('switch', { name: /different token/i }));
         // The row has no token of its own, so it sends the first row's XCP.
         fireEvent.change(rowAmount(), { target: { value: '0.5' } });
-        fireEvent.change(screen.getByLabelText(/^Token$/), { target: { value: 'PEPE' } });
-        expect(rowAmount().value).toBe('');
+        fireEvent.click(screen.getByRole('button', { name: /^Asset: XCP/ }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Pick PEPE' }));
+        expect((await screen.findByLabelText(/^Recipient 2 amount/)).value).toBe('');
     });
 
     it('still composes a row amount within its token places', async () => {
         const messaging = mount();
         await fillFirst('PEPE', '7');
-        fireEvent.click(await screen.findByRole('button', { name: /Add recipient/ }));
+        fireEvent.click(await screen.findByRole('button', { name: /Add Recipient/ }));
         fireEvent.change(screen.getByLabelText('Recipient 2 address'), { target: { value: BOB } });
         fireEvent.click(screen.getByRole('switch', { name: /different token/i }));
         pickRowToken('XCP');

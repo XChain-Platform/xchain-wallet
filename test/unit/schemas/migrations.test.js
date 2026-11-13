@@ -163,11 +163,37 @@ describe('walletMigrations: v2 to v3', () => {
 });
 
 describe('migrateWallet', () => {
-    it('walks a v1 wallet all the way to v3 with encryptedPassphrase seeded', () => {
+    it('walks a v1 wallet all the way to v4 with encryptedPassphrase seeded', () => {
         const migrated = migrateWallet(makeV1Wallet());
-        expect(migrated.schemaVersion).toBe(3);
+        expect(migrated.schemaVersion).toBe(4);
         expect(migrated.encryptedPassphrase).toBeNull();
         expect(migrated.multisigs).toEqual([]);
+        expect(migrated.walletMode).toBe('full');
+    });
+
+    // §20: wallet mode moved from one app-wide setting onto each wallet.
+    it('v3 -> v4 copies the legacy app-wide mode onto the wallet', () => {
+        const v3 = migrate(makeV1Wallet(), walletMigrations, 3);
+        for (const mode of ['full', 'watcher', 'signer']) {
+            const migrated = migrateWallet(v3, { legacyWalletMode: mode });
+            expect(migrated.schemaVersion).toBe(4);
+            expect(migrated.walletMode).toBe(mode);
+            expect(validateWallet(migrated).ok).toBe(true);
+        }
+    });
+
+    it('v3 -> v4 reads an absent or unknown legacy mode as Normal', () => {
+        const v3 = migrate(makeV1Wallet(), walletMigrations, 3);
+        expect(migrateWallet(v3).walletMode).toBe('full');
+        expect(migrateWallet(v3, { legacyWalletMode: undefined }).walletMode).toBe('full');
+        expect(migrateWallet(v3, { legacyWalletMode: 'observer' }).walletMode).toBe('full');
+    });
+
+    it('a rerun on a v4 wallet is a no-op, whatever the legacy value says', () => {
+        const once = migrateWallet(migrate(makeV1Wallet(), walletMigrations, 3), { legacyWalletMode: 'watcher' });
+        const again = migrateWallet(once, { legacyWalletMode: 'signer' });
+        expect(again).toBe(once);
+        expect(again.walletMode).toBe('watcher');
     });
 
     it('migrates a v1 wallet to current version', () => {

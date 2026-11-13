@@ -196,6 +196,8 @@ describe('Send Max quote agreement', () => {
         await useMax();
         await waitFor(() => expect(quote).toHaveBeenCalledTimes(1));
 
+        // The Network fee section starts closed: open it to reach the slider.
+        fireEvent.click(screen.getByRole('button', { name: /^Network fee/, expanded: false }));
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
             target: { value: '2' },
         });

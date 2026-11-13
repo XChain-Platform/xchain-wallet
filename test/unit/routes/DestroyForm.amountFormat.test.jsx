@@ -76,7 +76,9 @@ afterEach(() => {
 describe('DestroyForm amount format and help tips', () => {
     it('gives the From label its help tip and shows no irreversible notice on the form', async () => {
         mountDestroy();
-        expect(await screen.findByRole('button', { name: 'About From' })).toBeInTheDocument();
+        // From is a closed standard section; its field is From address.
+        fireEvent.click(await screen.findByRole('button', { name: /^From / }));
+        expect(await screen.findByRole('button', { name: 'About From address' })).toBeInTheDocument();
         expect(document.body.textContent).not.toContain('Destroy is irreversible');
     });
 

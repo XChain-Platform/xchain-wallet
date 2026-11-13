@@ -24,9 +24,12 @@ const TERM_PATTERN = new RegExp(
 // Keys shown only in Developer mode.
 const DEVELOPER_KEY = /^settings\.developer\./;
 
+// The wallet list names a recovery-phrase wallet's type BIP39 beside its account count, matching the Wallet details card.
+const ALLOWED = new Set(['walletPicker.js walletPicker.bip39']);
+
 export function jargonLabels(messages, file = 'fixture') {
     return Object.entries(messages)
-        .filter(([key, text]) => typeof text === 'string' && !DEVELOPER_KEY.test(key) && TERM_PATTERN.test(text))
+        .filter(([key, text]) => typeof text === 'string' && !DEVELOPER_KEY.test(key) && !ALLOWED.has(`${file} ${key}`) && TERM_PATTERN.test(text))
         .map(([key, text]) => `${file} ${key}: ${text.match(TERM_PATTERN)[0]}`);
 }
 
@@ -49,14 +52,15 @@ describe('plain-language labels (jargon scan of visible strings)', () => {
 });
 
 describe('wallet picker format badge', () => {
-    it('names a recovery-phrase wallet Standard and never shows BIP39', async () => {
+    it('names a recovery-phrase wallet BIP39 in its one badge and nowhere else in the picker copy', async () => {
         const mod = await import(pathToFileURL(resolve(EN_DIR, 'walletPicker.js')).href);
         const messages = mod.default ?? mod;
-        expect(messages['walletPicker.bip39']).toBe('Standard');
+        expect(messages['walletPicker.bip39']).toBe('BIP39');
         expect(messages['walletPicker.bip39']).not.toBe(messages['walletPicker.importedKey']);
         expect(messages['walletPicker.bip39']).not.toBe(messages['walletPicker.legacy']);
-        const strings = Object.values(messages).filter((text) => typeof text === 'string');
-        expect(strings.filter((text) => /\bBIP39\b/i.test(text))).toEqual([]);
+        const strings = Object.entries(messages)
+            .filter(([key, text]) => key !== 'walletPicker.bip39' && typeof text === 'string');
+        expect(strings.filter(([, text]) => /\bBIP39\b/i.test(text))).toEqual([]);
     });
 });
 

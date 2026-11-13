@@ -88,10 +88,24 @@ function mount(messaging = client()) {
 
 afterEach(cleanup);
 
+// The form sits on the Wallet Form Standard frame; Network and From
+// live in the closed From section and Memo and Pack in closed sections, so a
+// test opens a section before it reaches for a field inside.
+async function openSection(title) {
+    fireEvent.click(await screen.findByRole('button', { name: new RegExp(`^${title}\\b`), expanded: false }));
+}
+
 describe('GatedPublishForm fields and pickers', () => {
     it('orders the context fields first and keeps static explanations in help tips', async () => {
-        mount();
+        // The Pack question shows only when a reusable pack exists,
+        // so this vault holds one for its help tip to be checked.
+        const messaging = client();
+        messaging.listGatedKeys.mockResolvedValue([{ keyHash: 'a'.repeat(64) }]);
+        mount(messaging);
 
+        await openSection('From');
+        await openSection('Memo');
+        await openSection('Access');
         const network = await screen.findByRole('button', { name: /^Network: Bitcoin/ });
         const from = screen.getByLabelText('From');
         const token = await screen.findByRole('button', { name: /^Token: GATE/ });
@@ -118,7 +132,7 @@ describe('GatedPublishForm fields and pickers', () => {
         expect(document.querySelector('p[role="note"]')).toBeNull();
         expect(screen.queryByText('No reusable packs yet')).toBeNull();
 
-        const publish = screen.getByRole('button', { name: 'Publish file' });
+        const publish = screen.getByRole('button', { name: /^Publish file$/i });
         expect(publish.className).toContain('success');
         expect(publish.querySelector('svg')).not.toBeNull();
     });
@@ -135,16 +149,20 @@ describe('GatedPublishForm fields and pickers', () => {
         expect(litecoinToken).not.toBeNull();
         fireEvent.click(litecoinToken);
 
+        await openSection('From');
         expect(await screen.findByRole('button', { name: /^Network: Litecoin/ })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /^Token: LIT/ })).toBeInTheDocument();
         expect(screen.getByLabelText('From')).toHaveValue(LITECOIN_OWNER.address);
-        expect(screen.getByRole('heading', { name: 'Gated content · LIT' })).toBeInTheDocument();
+        // The title is Title Case.
+        expect(screen.getByRole('heading', { name: 'Gated Content · LIT' })).toBeInTheDocument();
     });
 
     it('opens the From picker filtered to the network and follows a cross-network pick', async () => {
         mount();
         await screen.findByDisplayValue(BITCOIN_OWNER.address);
-        fireEvent.click(screen.getByRole('button', { name: 'From address' }));
+        await openSection('From');
+        // The address-book icon is labelled in Title Case.
+        fireEvent.click(screen.getByRole('button', { name: 'From Address' }));
 
         expect(await screen.findByText(`Filtered to ${BITCOIN}`)).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Switch to Litecoin' }));

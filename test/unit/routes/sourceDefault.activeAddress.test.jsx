@@ -75,16 +75,15 @@ const FORMS = [
         name: 'DispenserForm',
         Form: DispenserForm,
         props: {},
-        read: async () => (await screen.findByLabelText('From')).value,
+        read: async () => (await screen.findByLabelText('From address')).value,
     },
     {
+        // The wizard route is the one Issue Token form: its From section
+        // holds the fee-paying source.
         name: 'TokenWizard',
         Form: TokenWizard,
         props: {},
-        read: async () => {
-            fireEvent.click(await screen.findByText('Meme token'));
-            return (await screen.findByLabelText('Fee paid by')).value;
-        },
+        read: async () => (await screen.findByLabelText('From address')).value,
     },
     {
         name: 'BatchComposerForm',

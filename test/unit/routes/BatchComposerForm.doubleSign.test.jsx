@@ -36,8 +36,9 @@ describe('BatchComposerForm double sign', () => {
         };
         render(<MessagingProvider shell="web" messaging={messaging}><BatchComposerForm walletId="w" onBack={() => {}} /></MessagingProvider>);
         fireEvent.change(await screen.findByRole('combobox', { name: 'Action' }), { target: { value: 'BROADCAST' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Batch' }));
-        const sign = await screen.findByRole('button', { name: 'Sign batch' });
+        // The action names how many transactions the review holds.
+        fireEvent.click(screen.getByRole('button', { name: 'Review 1 Transaction' }));
+        const sign = await screen.findByRole('button', { name: 'Sign Batch' });
         await waitFor(() => expect(sign).not.toBeDisabled());
         const form = sign.closest('form');
         fireEvent.submit(form);

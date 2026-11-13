@@ -14,6 +14,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ExecuteContractForm } from '../../../packages/core/src/shared/routes/ExecuteContractForm.jsx';
+import * as walletModes from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import contractStyles from '../../../packages/core/src/shared/routes/ContractScreens.module.css';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -39,6 +40,8 @@ function rule(selector) {
 }
 
 function mount(walletMode = 'full', abiParamName = 'config', overrides = {}, props = {}) {
+    // A wallet's mode is published by the shell from the wallet list, not read from settings.
+    walletModes.publishWalletModes?.({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const target = {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [ADDRESS] }),
         getActiveAddresses: () => Promise.resolve({}),
@@ -79,7 +82,10 @@ function mount(walletMode = 'full', abiParamName = 'config', overrides = {}, pro
     );
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    walletModes.resetWalletModes?.();
+});
 
 describe('ExecuteContractForm argument validation', () => {
     it.each([320, 360])('contains a long ABI label and hex value at %ipx', async (viewportWidth) => {
@@ -116,7 +122,7 @@ describe('ExecuteContractForm argument validation', () => {
         expect(await screen.findByText('config contains invalid JSON. Check the syntax and try again.'))
             .toBeInTheDocument();
         expect(screen.queryByText(/position|unexpected token|JSON\.parse/i)).toBeNull();
-        const submit = screen.getByRole('button', { name: 'Call contract' });
+        const submit = screen.getByRole('button', { name: 'Call Contract' });
         expect(submit).toBeEnabled();
         fireEvent.click(submit);
         expect(await screen.findAllByText('config contains invalid JSON. Check the syntax and try again.')).not.toHaveLength(0);
@@ -124,18 +130,18 @@ describe('ExecuteContractForm argument validation', () => {
 
     it('shows the required method message before compose', async () => {
         mount();
-        fireEvent.click(await screen.findByRole('button', { name: 'Enter method manually' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Enter Method Manually' }));
         fireEvent.change(screen.getByLabelText('Method'), { target: { value: '' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Call Contract' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent('Method name is required.');
     });
 
     it('refuses hostile method text before review', async () => {
         mount();
-        fireEvent.click(await screen.findByRole('button', { name: 'Enter method manually' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Enter Method Manually' }));
         fireEvent.change(screen.getByLabelText('Method'), { target: { value: 'pay\u202eout' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Call Contract' }));
 
         expect(await screen.findByRole('alert'))
             .toHaveTextContent('Method cannot contain text-direction control characters.');
@@ -158,7 +164,7 @@ describe('ExecuteContractForm argument validation', () => {
         fireEvent.change(await screen.findByLabelText('recipient (address)'), {
             target: { value: 'not-an-address' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Call Contract' }));
 
         expect(await screen.findAllByText('recipient must be a valid address for Bitcoin.'))
             .not.toHaveLength(0);
@@ -172,7 +178,7 @@ describe('ExecuteContractForm argument validation', () => {
         fireEvent.change(screen.getByLabelText('limit (amount)'), {
             target: { value: '1.123456789' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Call Contract' }));
 
         expect(await screen.findAllByText(/limit can have at most 8 decimal places/))
             .not.toHaveLength(0);
@@ -200,11 +206,11 @@ describe('ExecuteContractForm argument validation', () => {
             target: { value: 'TRUE' },
         });
         fireEvent.change(screen.getByLabelText('limit (amount)'), { target: { value: '-1' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Call Contract' }));
         expect(await screen.findAllByText('enabled must be true or false.')).not.toHaveLength(0);
 
         fireEvent.change(screen.getByLabelText('enabled (bool)'), { target: { value: 'false' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Call Contract' }));
         expect(await screen.findAllByText('limit must be a positive decimal amount.')).not.toHaveLength(0);
     });
 
@@ -214,7 +220,7 @@ describe('ExecuteContractForm argument validation', () => {
             target: { value: '{}' },
         });
         fireEvent.change(screen.getByLabelText('limit (amount)'), { target: { value: '1' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Call Contract' }));
 
         expect(await screen.findByRole('alert'))
             .toHaveTextContent('Contract ID must be a positive whole number.');
@@ -231,7 +237,7 @@ describe('ExecuteContractForm argument validation', () => {
             target: { value: '{}' },
         });
         fireEvent.change(screen.getByLabelText('limit (amount)'), { target: { value: '1' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Call Contract' }));
 
         expect(await screen.findByText(/This address needs BTC for the protocol fee/))
             .toBeInTheDocument();
@@ -240,9 +246,9 @@ describe('ExecuteContractForm argument validation', () => {
 
     it('shows blank positional arguments in manual mode', async () => {
         mount();
-        fireEvent.click(await screen.findByRole('button', { name: 'Enter method manually' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Enter Method Manually' }));
         fireEvent.change(screen.getByLabelText('Arguments'), { target: { value: 'first||third' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Call Contract' }));
 
         await waitFor(() => {
             expect(screen.getByRole('alert')).toHaveTextContent(
@@ -257,13 +263,13 @@ describe('ExecuteContractForm argument validation', () => {
             target: { value: '{"enabled":true}' },
         });
         fireEvent.change(screen.getByLabelText('limit (amount)'), { target: { value: '2.5' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Call Contract' }));
 
-        expect(await screen.findByRole('heading', { name: 'Review contract call' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Review Contract Call' })).toBeInTheDocument();
         expect(screen.getByText('Watcher mode: this prepares the transaction for your offline signer. Sign it there, then bring the signed transaction to a wallet that can broadcast it.')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
 
-        expect(await screen.findByRole('form', { name: 'Call contract' })).toBeInTheDocument();
+        expect(await screen.findByRole('form', { name: 'Call Contract' })).toBeInTheDocument();
         expect(screen.getByLabelText('config (json)')).toHaveValue('{"enabled":true}');
         expect(screen.getByLabelText('limit (amount)')).toHaveValue('2.5');
     });
@@ -279,7 +285,7 @@ describe('ExecuteContractForm argument validation', () => {
             .toHaveValue('{"safe":true}|9007199254740993|hidden');
         expect(screen.queryByLabelText('config (json)')).toBeNull();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Call Contract' }));
         await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
         expect(composeForConfirm.mock.calls[0][0].actionData.params.PARAMS).toEqual([
             '{"safe":true}',
@@ -304,18 +310,18 @@ describe('ExecuteContractForm tick arguments', () => {
     it.each(['XCH AIN', 'A,B', 'A;B', '.A', 'A..B'])('rejects the ticker %j before compose', async (value) => {
         mount('full', 'config', tickAbi());
         fireEvent.change(await screen.findByLabelText('asset (tick)'), { target: { value } });
-        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Call Contract' }));
 
         expect((await screen.findAllByText(/^asset /)).length).toBeGreaterThan(0);
-        expect(screen.queryByRole('heading', { name: 'Review contract call' })).toBeNull();
+        expect(screen.queryByRole('heading', { name: 'Review Contract Call' })).toBeNull();
     });
 
     it.each(['XCHAIN', 'Mixed-Case.sub', '^123'])('accepts the ticker %j', async (value) => {
         mount('watcher', 'config', tickAbi());
         fireEvent.change(await screen.findByLabelText('asset (tick)'), { target: { value } });
-        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Call Contract' }));
 
-        expect(await screen.findByRole('heading', { name: 'Review contract call' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Review Contract Call' })).toBeInTheDocument();
     });
 });
 
@@ -351,7 +357,7 @@ describe('ExecuteContractForm link prefill against a declared method', () => {
     it('keeps the declared inputs for a no-argument method and a link with no arguments', async () => {
         mount('full', 'config', twoParamAbi(), { initialMethod: 'ping', initialParamsText: '' });
 
-        expect(await screen.findByRole('button', { name: 'Enter method manually' })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: 'Enter Method Manually' })).toBeInTheDocument();
         expect(screen.queryByLabelText('Arguments')).toBeNull();
     });
 });

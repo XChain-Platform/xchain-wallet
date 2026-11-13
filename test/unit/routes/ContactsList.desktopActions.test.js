@@ -25,8 +25,9 @@ describe('Contacts desktop actions and narrow layout', () => {
 
         expect(contactsRoute).toMatch(/onSend=\{\(prefill\) => \{/);
         expect(contactsRoute).toMatch(/setSendPrefill\(prefill\)/);
-        expect(contactsRoute).toMatch(/setSendBackTo\('contacts'\)/);
+        // Send opens on top of Contacts in the history, so its Back returns here.
         expect(contactsRoute).toMatch(/setUnlockedView\('send'\)/);
+        expect(contactsRoute).toMatch(/onBack=\{goBack\}/);
     });
 
     it('uses the wrapping list-page toolbar with a full-width phone sort control', () => {

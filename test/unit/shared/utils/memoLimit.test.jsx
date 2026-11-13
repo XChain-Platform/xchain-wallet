@@ -6,6 +6,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
+import { openSection } from '../../../helpers/openFormSections.js';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -106,6 +107,22 @@ describe('memo length units', () => {
     });
 });
 
+/**
+ * The opening tag of the standard section a field at `index` sits in, or ''
+ * when no section precedes it. A tag ends at the first line that closes it.
+ */
+function openingTagOfEnclosingSection(source, index) {
+    const before = source.slice(0, index);
+    // The Give/Get forms build their terms fields once, in `termsFields`, and
+    // render them inside the optional "options" (Swap Terms) section.
+    if (/const termsFields = \(\s*<>[\s\S]*$/.test(before)) {
+        return source.match(/<FormSection\b[^>]*?id="options"[\s\S]*?(?:\n\s*>|>\s*\n)/)?.[0] ?? '';
+    }
+    const start = before.lastIndexOf('<FormSection');
+    if (start < 0) return '';
+    return before.slice(start).match(/^<FormSection\b[\s\S]*?(?:\n\s*>|>\s*\n)/)?.[0] ?? '';
+}
+
 describe('shared Memo fields', () => {
     it('uses the shared optional state and network limit on every input', () => {
         const routesDir = join(process.cwd(), 'packages/core/src/shared/routes');
@@ -114,13 +131,15 @@ describe('shared Memo fields', () => {
             .flatMap((name) => {
                 const source = readFileSync(join(routesDir, name), 'utf8');
                 return [...source.matchAll(/<(?:Input|Textarea)\b[\s\S]*?\/>/g)]
-                    .map(([field]) => ({ name, field }))
+                    .map((match) => ({ name, field: match[0], section: openingTagOfEnclosingSection(source, match.index) }))
                     .filter(({ field }) => /label=(?:"Memo(?: \(optional\))?"|\{t\('send\.memo'\)\})/.test(field));
             });
 
         expect(memoFields.length).toBeGreaterThan(20);
-        for (const { name, field } of memoFields) {
-            expect(field, name).toMatch(/\boptional(?:\s|=)/);
+        for (const { name, field, section } of memoFields) {
+            // A Memo is optional by its own prop, or by sitting in a standard
+            // section that carries the Optional tag (the field then shows none).
+            expect(/\boptional(?:\s|=)/.test(field) || /\boptional\b/.test(section), name).toBe(true);
             expect(field, name).toMatch(/maxLength=\{MAX_MEMO_LENGTH\}/);
         }
     });
@@ -136,10 +155,13 @@ describe.each([
 ])('%s Memo field', (_name, Component, props) => {
     it('shows one Optional pill and a UTF-16 counter at the network limit', async () => {
         mount(Component, props);
+        // The Memo section carries the one Optional pill; its field shows none.
+        const section = await openSection('Memo');
         const memo = await screen.findByRole('textbox', { name: 'Memo' });
 
+        expect(section).toHaveTextContent('Optional');
         expect(memo).toHaveAttribute('maxlength', String(MAX_MEMO_LENGTH));
-        expect(memo).toHaveAccessibleDescription(expect.stringMatching(/Optional/));
+        expect(memo).not.toHaveAccessibleDescription(expect.stringMatching(/Optional/));
         expect(screen.getByText('0 / 250')).toBeInTheDocument();
 
         fireEvent.change(memo, { target: { value: 'hello' } });
@@ -158,6 +180,7 @@ describe.each([
 ])('%s Memo counter', (_name, Component, props) => {
     it('uses the same units as memo validation', async () => {
         mount(Component, props);
+        await openSection('Memo');
         const memo = await screen.findByRole('textbox', { name: 'Memo' });
         const value = '😀'.repeat(125);
 

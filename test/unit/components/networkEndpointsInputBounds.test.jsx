@@ -29,7 +29,7 @@ function saveExplorer(value) {
     render(<NetworkEndpointsSection />);
     const block = screen.getByRole('region', { name: 'Bitcoin' });
     fireEvent.change(within(block).getByRole('textbox', { name: 'Explorer URL' }), { target: { value } });
-    fireEvent.click(within(block).getByRole('button', { name: 'Save endpoints' }));
+    fireEvent.click(within(block).getByRole('button', { name: 'Save Endpoints' }));
     return block;
 }
 

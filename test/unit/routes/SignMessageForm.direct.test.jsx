@@ -79,22 +79,25 @@ describe('SignMessageForm direct signing', () => {
         const signMessageRequest = vi.fn().mockResolvedValue({ signature: 'signed-value' });
         mount(messagingFor({ signMessageRequest }));
 
-        const address = await screen.findByLabelText('Address');
+        const address = await screen.findByLabelText('Signing address');
         await waitFor(() => expect(address).toHaveValue(FIRST.address));
         await waitFor(() => expect(screen.queryByLabelText('Password')).toBeNull());
         expect(address).toHaveAttribute('readonly');
-        expect(document.querySelector('select[aria-label="Address"]')).toBeNull();
+        expect(document.querySelector('select[aria-label="Signing address"]')).toBeNull();
         expect(screen.getByRole('textbox', { name: 'Signature' }))
             .toHaveTextContent('The signature appears here after you sign.');
-        expect(screen.queryByRole('button', { name: 'Copy signature' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Copy Signature' })).toBeNull();
 
+        // The signing address sits in the closed "Signing with"
+        // section (Wallet Form Standard); open it to reach the picker icon.
+        fireEvent.click(screen.getByRole('button', { name: /^Signing with/, expanded: false }));
         fireEvent.click(screen.getByRole('button', { name: 'Choose address' }));
         expect(screen.getByTestId('own-address-picker')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Pick second address' }));
-        await waitFor(() => expect(screen.getByLabelText('Address')).toHaveValue(SECOND.address));
+        await waitFor(() => expect(screen.getByLabelText('Signing address')).toHaveValue(SECOND.address));
 
         fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Proof of control' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Sign message' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Sign message$/i }));
 
         await waitFor(() => expect(signMessageRequest).toHaveBeenCalledTimes(1));
         expect(signMessageRequest).toHaveBeenCalledWith({
@@ -106,8 +109,8 @@ describe('SignMessageForm direct signing', () => {
         expect(screen.queryByTestId('confirm-modal')).toBeNull();
         const signatureBox = screen.getByRole('textbox', { name: 'Signature' });
         expect(signatureBox).toHaveTextContent('signed-value');
-        expect(within(signatureBox).getByRole('button', { name: 'Copy signature' })).toBeInTheDocument();
-        expect(screen.queryByText('Copy signature')).toBeNull();
+        expect(within(signatureBox).getByRole('button', { name: 'Copy Signature' })).toBeInTheDocument();
+        expect(screen.queryByText('Copy Signature')).toBeNull();
         expect(screen.getByLabelText('Message')).toHaveValue('Proof of control');
 
         fireEvent.click(screen.getByRole('button', { name: 'Choose address' }));
@@ -115,23 +118,23 @@ describe('SignMessageForm direct signing', () => {
         expect(screen.getByRole('textbox', { name: 'Signature' }))
             .toHaveTextContent('The signature appears here after you sign.');
 
-        fireEvent.click(screen.getByRole('button', { name: 'Sign message' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Sign message$/i }));
         await waitFor(() => expect(signMessageRequest).toHaveBeenCalledTimes(2));
         expect(screen.getByRole('textbox', { name: 'Signature' })).toHaveTextContent('signed-value');
         fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Edited proof' } });
         expect(screen.getByRole('textbox', { name: 'Signature' }))
             .toHaveTextContent('The signature appears here after you sign.');
-        expect(screen.queryByRole('button', { name: 'Copy signature' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Copy Signature' })).toBeNull();
     });
 
     it('shows and passes the inline password when the signer needs it', async () => {
         const signMessageRequest = vi.fn().mockResolvedValue({ signature: 'locked-signature' });
         mount(messagingFor({ ready: false, signMessageRequest }));
 
-        await waitFor(() => expect(screen.getByLabelText('Address')).toHaveValue(FIRST.address));
+        await waitFor(() => expect(screen.getByLabelText('Signing address')).toHaveValue(FIRST.address));
         fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Locked proof' } });
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Sign message' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Sign message$/i }));
 
         await waitFor(() => expect(signMessageRequest).toHaveBeenCalledWith({
             walletId: 'wallet-1',
@@ -149,10 +152,10 @@ describe('SignMessageForm direct signing', () => {
             signMessageRequest: vi.fn().mockRejectedValue(failure),
         }));
 
-        await waitFor(() => expect(screen.getByLabelText('Address')).toHaveValue(FIRST.address));
+        await waitFor(() => expect(screen.getByLabelText('Signing address')).toHaveValue(FIRST.address));
         fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Keep this message' } });
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'wrong' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Sign message' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Sign message$/i }));
 
         await waitFor(() => expect(screen.getByText('Incorrect password.')).toBeInTheDocument());
         expect(screen.getByLabelText('Password')).toHaveValue('');

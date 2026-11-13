@@ -101,7 +101,7 @@ describe('create onboarding keyboard flow', () => {
         const importMnemonic = vi.fn(() => new Promise((resolve) => { finishImport = resolve; }));
         renderCreate({ importMnemonic });
 
-        const passwordHeading = screen.getByRole('heading', { name: 'Create a new wallet' });
+        const passwordHeading = screen.getByRole('heading', { name: 'Create a New Wallet' });
         // The password stage puts focus on the password field.
         await waitFor(() => expect(screen.getByLabelText('Password')).toHaveFocus());
 
@@ -110,6 +110,8 @@ describe('create onboarding keyboard flow', () => {
             screen.getByLabelText('Confirm password'),
             screen.getByRole('button', { name: 'About Recovery phrase length' }),
             screen.getByRole('radio', { name: /^12 words/ }),
+            screen.getByRole('button', { name: 'About Wallet mode' }),
+            screen.getByRole('radio', { name: /^Normal/ }),
             screen.getByRole('switch', { name: /Use an extra passphrase/ }),
             screen.getByRole('button', { name: 'Extra passphrase help' }),
         ];
@@ -138,16 +140,16 @@ describe('create onboarding keyboard flow', () => {
         pressTab();
         expect(screen.getByRole('button', { name: 'Next' })).toHaveFocus();
         pressEnter(screen.getByLabelText('Confirm password'));
-        const phraseHeading = await screen.findByRole('heading', { name: 'Write down your recovery phrase' });
+        const phraseHeading = await screen.findByRole('heading', { name: 'Write Down Your Recovery Phrase' });
         expect(phraseHeading).toHaveFocus();
         expect(generateBip39Mnemonic).toHaveBeenCalledOnce();
 
         fireEvent.click(screen.getByRole('checkbox', { name: /saved my recovery phrase/i }));
-        const verifyButton = screen.getByRole('button', { name: 'Verify recovery phrase' });
+        const verifyButton = screen.getByRole('button', { name: 'Verify Recovery Phrase' });
         verifyButton.focus();
         fireEvent.keyDown(verifyButton, { key: 'Enter' });
         fireEvent.click(verifyButton);
-        await screen.findByRole('heading', { name: 'Verify your recovery phrase' });
+        await screen.findByRole('heading', { name: 'Verify Your Recovery Phrase' });
         // The verify stage puts focus on the first quiz word.
         await waitFor(() => expect(screen.getAllByLabelText(/^Word \d+$/)[0]).toHaveFocus());
 
@@ -159,7 +161,7 @@ describe('create onboarding keyboard flow', () => {
             fireEvent.change(input, { target: { value: 'abandon' } });
         }
         pressEnter(screen.getAllByLabelText(/^Word \d+$/)[2]);
-        const progressHeading = await screen.findByRole('heading', { name: 'Creating your wallet' });
+        const progressHeading = await screen.findByRole('heading', { name: 'Creating Your Wallet' });
         expect(progressHeading).toHaveFocus();
         expect(importMnemonic).toHaveBeenCalledOnce();
 
@@ -181,16 +183,16 @@ describe('create onboarding keyboard flow', () => {
         pressEnter(screen.getByLabelText('Confirm password'));
 
         fireEvent.click(await screen.findByRole('checkbox', { name: /saved my recovery phrase/i }));
-        fireEvent.click(screen.getByRole('button', { name: 'Verify recovery phrase' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Verify Recovery Phrase' }));
         fireEvent.change(await screen.findByLabelText('Word 1'), { target: { value: 'typed secret' } });
 
         fireEvent.keyDown(window, { key: 'Escape' });
-        const phraseHeading = await screen.findByRole('heading', { name: 'Write down your recovery phrase' });
+        const phraseHeading = await screen.findByRole('heading', { name: 'Write Down Your Recovery Phrase' });
         expect(phraseHeading).toHaveFocus();
         expect(onBack).not.toHaveBeenCalled();
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous step' }));
-        await screen.findByRole('heading', { name: 'Create a new wallet' });
+        await screen.findByRole('heading', { name: 'Create a New Wallet' });
         await waitFor(() => expect(screen.getByLabelText('Password')).toHaveFocus());
         expect(screen.getByLabelText('Wallet name')).toHaveValue('Travel wallet');
         expect(screen.getByRole('radio', { name: /^24 words/ })).toBeChecked();
@@ -209,11 +211,11 @@ describe('create onboarding keyboard flow', () => {
         const { onBack } = renderCreate();
         fillCreatePasswords();
         pressEnter(screen.getByLabelText('Confirm password'));
-        await screen.findByRole('heading', { name: 'Write down your recovery phrase' });
+        await screen.findByRole('heading', { name: 'Write Down Your Recovery Phrase' });
 
         swipeBackFromIOS();
 
-        await screen.findByRole('heading', { name: 'Create a new wallet' });
+        await screen.findByRole('heading', { name: 'Create a New Wallet' });
         expect(screen.getByLabelText('Password')).toHaveValue('');
         expect(screen.getByLabelText('Confirm password')).toHaveValue('');
         expect(screen.getByLabelText('Password')).not.toHaveFocus();
@@ -225,7 +227,7 @@ describe('create onboarding keyboard flow', () => {
         fillCreatePasswords();
         pressEnter(screen.getByLabelText('Confirm password'));
         fireEvent.click(await screen.findByRole('checkbox', { name: /saved my recovery phrase/i }));
-        fireEvent.click(screen.getByRole('button', { name: 'Verify recovery phrase' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Verify Recovery Phrase' }));
         for (const input of await screen.findAllByLabelText(/^Word \d+$/)) {
             fireEvent.change(input, { target: { value: 'abandon' } });
         }
@@ -248,7 +250,7 @@ describe('import onboarding keyboard flow', () => {
         const importMnemonic = vi.fn(() => new Promise((resolve) => { finishImport = resolve; }));
         renderImport({ importMnemonic });
 
-        const heading = screen.getByRole('heading', { name: 'Import an existing wallet' });
+        const heading = screen.getByRole('heading', { name: 'Import an Existing Wallet' });
         await waitFor(() => expect(heading).toHaveFocus());
 
         const expectedTabOrder = [
@@ -264,6 +266,8 @@ describe('import onboarding keyboard flow', () => {
             screen.getByLabelText('Password'),
             screen.getByRole('button', { name: 'About Confirm password' }),
             screen.getByLabelText('Confirm password'),
+            screen.getByRole('button', { name: 'About Wallet mode' }),
+            screen.getByRole('radio', { name: /^Normal/ }),
             screen.getByRole('switch', { name: /wallet uses an extra passphrase/ }),
             screen.getByRole('button', { name: 'Extra passphrase help' }),
         ];
@@ -299,13 +303,13 @@ describe('import onboarding keyboard flow', () => {
     it('returns with Escape or Back while retaining the name and clearing secret fields', async () => {
         const onBack = vi.fn();
         renderImport({ onBack });
-        await waitFor(() => expect(screen.getByRole('heading', { name: 'Import an existing wallet' })).toHaveFocus());
+        await waitFor(() => expect(screen.getByRole('heading', { name: 'Import an Existing Wallet' })).toHaveFocus());
 
         fireEvent.click(screen.getByRole('tab', { name: 'Encrypted backup' }));
-        const backupHeading = screen.getByRole('heading', { name: 'Restore from encrypted backup' });
+        const backupHeading = screen.getByRole('heading', { name: 'Restore From Encrypted Backup' });
         await waitFor(() => expect(backupHeading).toHaveFocus());
         fireEvent.click(screen.getByRole('tab', { name: 'Recovery phrase' }));
-        await waitFor(() => expect(screen.getByRole('heading', { name: 'Import an existing wallet' })).toHaveFocus());
+        await waitFor(() => expect(screen.getByRole('heading', { name: 'Import an Existing Wallet' })).toHaveFocus());
 
         fireEvent.change(screen.getByLabelText('Wallet name'), { target: { value: 'Recovered wallet' } });
         fireEvent.change(screen.getByLabelText('Recovery phrase'), { target: { value: PHRASE } });

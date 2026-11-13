@@ -38,6 +38,24 @@ describe('Receive action layout', () => {
         );
     });
 
+    it('keeps only the QR, address, asset, amount and four actions in the receive stack', () => {
+        const stack = receive.match(/className=\{`\$\{qrStyles\.stack\} \$\{styles\.receiveQrDisplay\}`\}>[\s\S]*?\{qrActionsContent\}/)?.[0] || '';
+        expect(stack).not.toBe('');
+        // QR first, then the three fields the user changes, then the actions.
+        const order = ['styles.qrSurface', '<AddressField', '<TokenField', '<AmountField', '{qrActionsContent}']
+            .map((marker) => stack.indexOf(marker));
+        expect(order.every((index) => index >= 0)).toBe(true);
+        expect([...order].sort((a, b) => a - b)).toEqual(order);
+        const addressField = stack.match(/<AddressField[\s\S]*?\/>/)?.[0] || '';
+        // The plain Address label: no address name, no tap-to-copy tooltip or help tip.
+        expect(addressField).toMatch(/label=\{t\('verifySignature\.address'\)\}|label="Address"/);
+        expect(addressField).not.toContain('address.label');
+        expect(addressField).not.toMatch(/\btitle=/);
+        expect(addressField).not.toMatch(/\bhelp=/);
+        expect(receive).not.toContain('tapToCopyAddress');
+        expect(receive).not.toContain('tapTheAddressToCopy');
+    });
+
     it.each([360, 1280])('wraps whole one-line kit secondary actions at %ipx', (viewportWidth) => {
         const actionSource = receive.match(
             /const generateAddressButton[\s\S]*?const body/,
@@ -47,16 +65,20 @@ describe('Receive action layout', () => {
         // Receive keeps the shared wrapping row: two equal buttons of one height per
         // row, and a pair that large text makes wider than the form wraps whole
         // instead of clipping its label past the form's edge.
-        expect(css).toMatch(/\.qrActions\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*wrap;/);
+        // The redesign puts Copy, Share, Explore and New four across in one grid row at every
+        // width, with short labels and no side padding so each fits a quarter of a 360px form.
+        expect(css).toMatch(/\.qrActions\.qrActions\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\);/);
         expect(css).toMatch(
-            /\.qrActions > \*\s*\{[^}]*flex:\s*1 1 calc\(50% - var\(--xc-space-2\) \/ 2\);[^}]*min-width:\s*max-content;[^}]*height:\s*var\(--xc-control-h-md\);[^}]*white-space:\s*nowrap;/,
+            /\.qrActions\.qrActions > \*\s*\{[^}]*min-width:\s*0;[^}]*height:\s*var\(--xc-control-h-md\);[^}]*white-space:\s*nowrap;/,
         );
         expect(css).toMatch(/\.qrActions > \* > span\s*\{[^}]*white-space:\s*nowrap;/);
-        expect(css).not.toMatch(/\.qrActions\s*\{[^}]*flex-direction:\s*column;/);
-        expect(receive).toMatch(/>\s*Copy QR\s*</);
-        expect(receive).toMatch(/>\s*Share QR\s*</);
-        expect(receive).toMatch(/>\s*Explorer\s*<span[^>]*>↗<\/span>/);
-        expect(receive).toMatch(/aria-label="Generate new address"[\s\S]*?>\s*New address\s*</);
+        expect(css).not.toMatch(/\.qrActions(?:\.qrActions)?\s*\{[^}]*flex-direction:\s*column;/);
+        // Copy and Share read their short labels from shared keys.
+        expect(receive).toMatch(/\{t\('common\.copy'\)\}\s*<\/Button>/);
+        expect(receive).toMatch(/\{t\('multisig\.signingLink\.share'\)\}\s*<\/Button>/);
+        expect(receive).toMatch(/<span className=\{buttonStyles\.label\}>Explore<\/span>/);
+        // The source reads with swept t() calls as English (withEnglishCopy).
+        expect(receive).toMatch(/aria-label="Generate new address"[\s\S]*?>\s*New\s*</);
         expect(actionSource.match(/variant="secondary"/g)).toHaveLength(3);
         // The explorer link takes the secondary medium button look from markup;
         // a composes would put a second Button.module.css into Receive's chunk.
@@ -67,10 +89,8 @@ describe('Receive action layout', () => {
     });
 
     it('keeps field actions attached at the medium kit size', () => {
-        expect(css).toMatch(
-            /\.labelEditor\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*wrap;[^}]*align-items:\s*end;/,
-        );
-        expect(css).not.toMatch(/@media[^}]+\{[\s\S]*?\.labelEditor\s*\{[^}]*grid-template-columns:\s*1fr;/);
+        // The redesign retired the label editor row; the amount editor's buttons keep the medium size.
+        expect(css).not.toContain('.labelEditor');
         expect(css).toMatch(
             /\.amountEditor button\s*\{[^}]*--xc-button-height:\s*var\(--xc-control-h-md\);[^}]*min-height:\s*var\(--xc-control-h-md\);/,
         );

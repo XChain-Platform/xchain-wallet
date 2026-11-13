@@ -70,7 +70,7 @@ describe('DeveloperModeSection U57 and U63 controls', () => {
         settings = { ...settings, developerMode: true };
         render(<DeveloperModeSection onNavigateToMint={() => {}} />);
 
-        const faucetAction = screen.getByRole('button', { name: 'Get test BTC' });
+        const faucetAction = screen.getByRole('button', { name: 'Get Test BTC' });
         expect(faucetAction).toHaveClass(buttonStyles.success);
         expect(faucetAction.querySelector('svg')).not.toBeNull();
         expectEveryActionButtonToHaveAnIcon();
@@ -82,8 +82,8 @@ describe('DeveloperModeSection U57 and U63 controls', () => {
         expectEveryActionButtonToHaveAnIcon();
 
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Add custom network…' }));
-        const addAction = screen.getByRole('button', { name: 'Add network' });
+        fireEvent.click(await screen.findByRole('button', { name: 'Add Custom Network…' }));
+        const addAction = screen.getByRole('button', { name: 'Add Network' });
         expect(addAction).toHaveClass(buttonStyles.success);
         expectEveryActionButtonToHaveAnIcon();
     });
@@ -99,7 +99,7 @@ describe('DeveloperModeSection U57 and U63 controls', () => {
         expect(screen.getByRole('button', { name: /About .* activation password/ })).toBeTruthy();
 
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Add custom network…' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Add Custom Network…' }));
         expect(screen.getByRole('button', {
             name: 'About Custom network descriptor JSON',
         })).toBeTruthy();

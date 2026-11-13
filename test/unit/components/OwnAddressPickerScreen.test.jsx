@@ -94,6 +94,15 @@ describe('OwnAddressPickerScreen', () => {
         expect(screen.getByTestId('address-list')).toHaveAttribute('data-unavailable', 'Watch-only');
     });
 
+    it('keeps a form that cannot follow a chain switch on its own chain', () => {
+        render(
+            <OwnAddressPickerScreen walletId="wallet-1" chainId="bitcoin-mainnet" onPick={vi.fn()} onBack={vi.fn()} pickerActions={[]} />,
+        );
+
+        expect(screen.getByTestId('address-list')).toHaveAttribute('data-network-locked', 'true');
+        expect(screen.getByTestId('address-list')).toHaveAttribute('data-network-filter', 'bitcoin');
+    });
+
     it('never locks a picker that has no chain to lock to', () => {
         render(
             <OwnAddressPickerScreen walletId="wallet-1" chainId={null} lockNetwork onPick={vi.fn()} onBack={vi.fn()} pickerActions={[]} />,

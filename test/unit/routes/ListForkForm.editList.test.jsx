@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { ListForkForm } from '../../../packages/core/src/shared/routes/ListForkForm.jsx';
 
 const CHAIN = 'dogecoin-mainnet';
@@ -46,10 +47,13 @@ function mountFork(resolution, { owner = ACTIVE.address } = {}) {
             owner,
         },
     };
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode: 'watcher' }], activeWalletId: 'wallet-1' });
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ACTIVE, OWNER] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: ACTIVE.id } }),
-        getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher', activeNetwork: 'mainnet' }),
+        getSettings: vi.fn().mockResolvedValue({ activeNetwork: 'mainnet' }),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'W', walletMode: 'watcher' }]),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'locked' }),
         getListByActionIndex: vi.fn().mockResolvedValue(row),
@@ -85,21 +89,21 @@ function mountFork(resolution, { owner = ACTIVE.address } = {}) {
 
 async function publishEdit() {
     fireEvent.change(await screen.findByLabelText('Add tokens'), { target: { value: 'ADD' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Create unsigned transaction' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Publish edit$/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Create Unsigned Transaction' }));
     await screen.findByText('Fork submitted');
 }
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     vi.clearAllMocks();
 });
 
 describe('ListForkForm edit presentation', () => {
     it('titles the compose screen Edit list', async () => {
         mountFork(true);
-        expect(await screen.findByText('Edit list')).toBeTruthy();
-
+        expect(await screen.findByText('Edit List')).toBeTruthy();
         const member = screen.getByRole('checkbox', { name: 'KEEP' });
         expect(member).toBeChecked();
         fireEvent.click(member);
@@ -110,16 +114,14 @@ describe('ListForkForm edit presentation', () => {
     it.each([false, null])('shows the repoint rail when resolution is %s', async (resolution) => {
         mountFork(resolution);
         await publishEdit();
-        expect(screen.getByText('Edit published')).toBeTruthy();
-        expect(screen.getByText('Now referenced by')).toBeTruthy();
+        expect(screen.getByText('Edit Published')).toBeTruthy();        expect(screen.getByText('Now referenced by')).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Token allow/block lists' })).toBeTruthy();
     });
 
     it('hides the repoint rail when resolution is true', async () => {
         mountFork(true);
         await publishEdit();
-        expect(screen.getByText('Edit published')).toBeTruthy();
-        expect(screen.queryByText('Now referenced by')).toBeNull();
+        expect(screen.getByText('Edit Published')).toBeTruthy();        expect(screen.queryByText('Now referenced by')).toBeNull();
         expect(screen.queryByText('Repoint (optional)')).toBeNull();
         expect(screen.queryByRole('button', { name: 'Token allow/block lists' })).toBeNull();
         expect(screen.getByText(/this edit is list #2700.s current membership/)).toBeTruthy();

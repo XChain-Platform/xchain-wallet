@@ -12,6 +12,7 @@ import {
 } from 'vitest';
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
 import { useActionForm } from '../../../packages/core/src/shared/hooks/useActionForm.js';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { useAutoLock } from '../../../packages/core/src/shared/hooks/useAutoLock.js';
 import { useAutoLockPolicy } from '../../../packages/core/src/shared/hooks/useAutoLockPolicy.js';
 import { useDispenserDestination } from '../../../packages/core/src/shared/hooks/useDispenserDestination.js';
@@ -52,6 +53,7 @@ async function flushMicrotasks() {
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     vi.useRealTimers();
     vi.restoreAllMocks();
     localStorage.clear();
@@ -181,10 +183,11 @@ describe('useActionForm', () => {
         ['full', 'hd', 'mintSoftware'],
     ])('dispatches %s mode with a %s source through %s', async (walletMode, source, method) => {
         const selected = { ...ADDRESS, source };
+        publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode }], activeWalletId: 'wallet-1' });
         const messaging = baseMessaging({
             getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [selected] }),
             getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: selected.id } }),
-            getSettings: vi.fn().mockResolvedValue({ walletMode }),
+            getSettings: vi.fn().mockResolvedValue({}),
             buildActionPsbtRequest: vi.fn().mockResolvedValue({ psbt: 'aa' }),
             mintHw: vi.fn().mockResolvedValue({ txid: 'hw' }),
             mintSoftware: vi.fn().mockResolvedValue({ txid: 'software' }),
@@ -248,7 +251,7 @@ describe('useLastView', () => {
             }));
         });
         expect(options.onResumeParams).toHaveBeenCalledWith('history', null);
-        expect(options.onResume).toHaveBeenCalledWith('history');
+        expect(options.onResume).toHaveBeenCalledWith('history', { source: 'history' });
     });
 
     it('lands unsafe transaction routes on Home with a one-shot interruption marker', () => {

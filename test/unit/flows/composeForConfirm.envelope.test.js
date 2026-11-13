@@ -168,15 +168,17 @@ async function pickFile(utils, size = FILE_BYTES) {
 }
 
 async function publishAndApprove(utils) {
-    await waitFor(() => expect(utils.getByRole('button', { name: 'Publish file' }).disabled).toBe(false));
-    const ack = utils.getByRole('checkbox', { name: /on-chain forever/ });
-    await domAct(async () => { fireEvent.click(ack); await drain(); });
-    await domAct(async () => { fireEvent.click(utils.getByRole('button', { name: 'Publish file' })); await drain(); });
+    await waitFor(() => expect(utils.getByRole('button', { name: 'Publish File' }).disabled).toBe(false));
+    // No acknowledgement checkbox; the confirm screen states the permanence.
+    expect(utils.queryByRole('checkbox')).toBeNull();
+    await domAct(async () => { fireEvent.click(utils.getByRole('button', { name: 'Publish File' })); await drain(); });
     const approve = await waitFor(() => {
         const el = utils.container.querySelector('[data-testid="confirm-approve"]');
         expect(el && !el.disabled).toBe(true);
         return el;
     });
+    expect(utils.getByTestId('confirm-summary-notice').textContent)
+        .toBe("The file stays on the blockchain for good and can't be deleted.");
     await domAct(async () => { fireEvent.click(approve); await drain(); });
 }
 

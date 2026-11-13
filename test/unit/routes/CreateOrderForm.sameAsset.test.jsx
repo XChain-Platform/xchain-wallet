@@ -88,14 +88,11 @@ vi.mock('../../../packages/core/src/shared/hooks/useNativeFee.js', () => ({
 }));
 
 import { CreateOrderForm } from '../../../packages/core/src/shared/routes/CreateOrderForm.jsx';
+import { openOrderSection, pickOrderAsset } from '../../helpers/orderAssetPicker.js';
 
 async function renderForm() {
     render(<CreateOrderForm walletId="wallet-1" onBack={vi.fn()} />);
     await screen.findByDisplayValue('mSourceAddress');
-}
-
-function chooseTokenOnGetSide() {
-    fireEvent.click(screen.getAllByRole('radio', { name: 'A token' })[1]);
 }
 
 beforeEach(() => {
@@ -130,12 +127,11 @@ describe('CreateOrderForm same token on both sides', () => {
         ['xcp', ' XCP '],
     ])('refuses give %j for get %j', async (give, get) => {
         await renderForm();
-        fireEvent.change(screen.getByLabelText('Ticker'), { target: { value: give } });
-        fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '10' } });
-        chooseTokenOnGetSide();
-        fireEvent.change(screen.getAllByLabelText('Ticker')[1], { target: { value: get } });
-        fireEvent.change(screen.getAllByLabelText('Amount')[1], { target: { value: '5' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
+        await pickOrderAsset('give', give);
+        fireEvent.change(await screen.findByLabelText(/^Give amount/), { target: { value: '10' } });
+        await pickOrderAsset('get', get);
+        fireEvent.change(await screen.findByLabelText(/^Get amount/), { target: { value: '5' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Place Order' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'You give and get the same token. Choose a different token for one side.',
@@ -145,12 +141,14 @@ describe('CreateOrderForm same token on both sides', () => {
 
     it('refuses ownership of a ticker traded for ownership of the same ticker', async () => {
         await renderForm();
-        fireEvent.change(screen.getByLabelText('Ticker'), { target: { value: 'XCP' } });
-        fireEvent.click(screen.getAllByRole('checkbox', { name: 'Trade ownership of this ticker (not a balance)' })[0]);
-        chooseTokenOnGetSide();
-        fireEvent.change(screen.getAllByLabelText('Ticker')[1], { target: { value: 'XCP' } });
-        fireEvent.click(screen.getAllByRole('checkbox', { name: 'Trade ownership of this ticker (not a balance)' })[1]);
-        fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
+        await pickOrderAsset('give', 'XCP');
+        await pickOrderAsset('get', 'XCP');
+        openOrderSection('Ownership');
+        const ownershipSwitches = screen.getAllByRole('switch', { name: 'Trade ownership of XCP (not a balance)' });
+        expect(ownershipSwitches).toHaveLength(2);
+        fireEvent.click(ownershipSwitches[0]);
+        fireEvent.click(ownershipSwitches[1]);
+        fireEvent.click(screen.getByRole('button', { name: 'Place Order' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent('You give and get the same token.');
         expect(state.confirm).not.toHaveBeenCalled();
@@ -159,12 +157,11 @@ describe('CreateOrderForm same token on both sides', () => {
     it('still opens the confirm for two different tokens', async () => {
         state.confirm.mockResolvedValue({ txid: 'tx-1' });
         await renderForm();
-        fireEvent.change(screen.getByLabelText('Ticker'), { target: { value: 'XCP' } });
-        fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '10' } });
-        chooseTokenOnGetSide();
-        fireEvent.change(screen.getAllByLabelText('Ticker')[1], { target: { value: 'PEPE' } });
-        fireEvent.change(screen.getAllByLabelText('Amount')[1], { target: { value: '5' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
+        await pickOrderAsset('give', 'XCP');
+        fireEvent.change(await screen.findByLabelText(/^Give amount/), { target: { value: '10' } });
+        await pickOrderAsset('get', 'PEPE');
+        fireEvent.change(await screen.findByLabelText(/^Get amount/), { target: { value: '5' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Place Order' }));
 
         await waitFor(() => expect(state.confirm).toHaveBeenCalledTimes(1));
     });

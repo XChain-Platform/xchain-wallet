@@ -129,7 +129,7 @@ describe('QrScanner browser camera failures', () => {
         useBrowserCamera(getUserMedia);
         const first = render(<QrScanner onFrame={() => {}} />);
         expect(screen.getByTestId('qr-scanner-camera-rationale')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Continue to camera' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Continue to Camera' }));
         expect(await screen.findByRole('alert')).toHaveTextContent(/paste the code instead/i);
         first.unmount();
 

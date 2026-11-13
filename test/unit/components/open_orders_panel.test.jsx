@@ -266,7 +266,7 @@ describe('OpenOrdersPanel cancellation confirmation', () => {
             </MessagingProvider>,
         );
         fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel Order' }));
 
         view.rerender(
             <MessagingProvider shell="web" messaging={messaging}>
@@ -286,7 +286,7 @@ describe('OpenOrdersPanel cancellation confirmation', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
         expect(screen.getByText(/Cancel order #17\?/)).toBeTruthy();
         expect(screen.getByText('This submits a cancellation transaction for the remaining order. Once confirmed, it can\'t be undone.')).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel Order' }));
 
         expect(await screen.findByLabelText('Confirm Cancel order (#17)')).toBeTruthy();
         expect(screen.getByTestId('confirm-fee')).toHaveTextContent('Network fee: 0.00001234 BTC');
@@ -318,7 +318,7 @@ describe('OpenOrdersPanel cancellation confirmation', () => {
     it('ends a signed-but-queued cancel on the queued panel and keeps the order listed', async () => {
         const messaging = mountPanel();
         fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel Order' }));
         await screen.findByLabelText('Confirm Cancel order (#17)');
 
         lane.open = false;
@@ -326,7 +326,7 @@ describe('OpenOrdersPanel cancellation confirmation', () => {
 
         expect(await screen.findByText('Signed. Not broadcast yet.')).toBeTruthy();
         expect(screen.queryByText('No open orders on this market.')).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Cancel order' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Cancel Order' })).toBeNull();
         expect(lane.run).toHaveBeenCalledTimes(1);
         expect(messaging.cancelOrder).not.toHaveBeenCalled();
 
@@ -339,7 +339,7 @@ describe('OpenOrdersPanel cancellation confirmation', () => {
         mountPanel();
 
         fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
-        const submit = screen.getByRole('button', { name: 'Cancel order' });
+        const submit = screen.getByRole('button', { name: 'Cancel Order' });
         fireEvent.click(submit);
 
         expect(submit).toBeDisabled();
@@ -365,7 +365,7 @@ describe('OpenOrdersPanel cancellation confirmation', () => {
         mountPanel();
 
         fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel Order' }));
 
         expect(await screen.findByText('Unsigned transaction, ready for signing')).toBeTruthy();
         expect(screen.getByLabelText('Unsigned transaction code').value).toBe('aa00');

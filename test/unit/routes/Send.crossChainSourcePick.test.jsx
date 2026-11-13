@@ -80,14 +80,16 @@ afterEach(cleanup);
 describe('Send cross-chain source picker', () => {
     it('switches the chain and keeps the picked source address over the chain default', async () => {
         mountSend();
-        await waitFor(() => expect(screen.getByLabelText(/^From$/)).toHaveValue(SOURCE_A));
+        await waitFor(() => expect(screen.getByLabelText('From address')).toHaveValue(SOURCE_A));
 
+        // The picker icon sits in the closed From section: open it first.
+        fireEvent.click(screen.getByRole('button', { name: /^From/, expanded: false }));
         fireEvent.click(screen.getByRole('button', { name: 'Choose source address' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Pick Litecoin source' }));
 
-        await waitFor(() => expect(screen.getByLabelText(/^From$/)).toHaveValue(SOURCE_B_PICKED));
+        await waitFor(() => expect(screen.getByLabelText('From address')).toHaveValue(SOURCE_B_PICKED));
         // The default effect has run on the new chain and left the pick alone.
         await new Promise((resolve) => { setTimeout(resolve, 50); });
-        expect(screen.getByLabelText(/^From$/)).toHaveValue(SOURCE_B_PICKED);
+        expect(screen.getByLabelText('From address')).toHaveValue(SOURCE_B_PICKED);
     });
 });

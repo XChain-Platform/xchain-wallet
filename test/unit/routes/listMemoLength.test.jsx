@@ -75,7 +75,7 @@ async function createWithMemo(memo) {
     const messaging = mount(ListCreateForm, { walletId: 'w', chainId: DOGE, initialType: '1', onBack() {} });
     fireEvent.change(await screen.findByLabelText('Tokens'), { target: { value: 'SWAPTEST' } });
     fireEvent.change(screen.getByLabelText(/Memo/, { selector: 'input' }), { target: { value: memo } });
-    const publish = await screen.findByRole('button', { name: 'Publish list' });
+    const publish = await screen.findByRole('button', { name: 'Publish List' });
     await waitFor(() => expect(publish.disabled).toBe(false));
     fireEvent.click(publish);
     return messaging;
@@ -91,7 +91,7 @@ async function forkWithMemo(memo) {
     await screen.findByText(/Forking token list #2700/);
     fireEvent.change(screen.getByLabelText('Add tokens'), { target: { value: 'NEWTICK' } });
     fireEvent.change(screen.getByLabelText(/Memo/, { selector: 'input' }), { target: { value: memo } });
-    fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Publish Edit' }));
     return messaging;
 }
 
@@ -126,13 +126,13 @@ describe('ListForkForm memo length', () => {
         const messaging = await forkWithMemo(OVER_LIMIT);
         expect(await screen.findByText(lengthErrorText)).toBeTruthy();
         // Still on the compose stage: no review, so nothing to sign.
-        expect(screen.queryByRole('button', { name: 'Publish add' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Publish Add' })).toBeNull();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('composes a memo exactly at the limit', async () => {
         const messaging = await forkWithMemo(AT_LIMIT);
-        const publish = await screen.findByRole('button', { name: 'Publish add' });
+        const publish = await screen.findByRole('button', { name: 'Publish Add' });
         await waitFor(() => expect(publish.disabled).toBe(false));
         fireEvent.click(publish);
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
@@ -170,10 +170,10 @@ describe('ListForkForm memo-only edit', () => {
         const messaging = openFork();
         await screen.findByText(/Forking token list #2700/);
         fireEvent.change(screen.getByLabelText(/Memo/, { selector: 'input' }), { target: { value: 'season two' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish Edit' }));
         expect(await screen.findByText(/Only the memo changes\. The list keeps its 1 member/)).toBeTruthy();
         expect(screen.getByText(/^Update the memo on list #2700/)).toBeTruthy();
-        const publish = screen.getByRole('button', { name: 'Publish memo' });
+        const publish = screen.getByRole('button', { name: 'Publish Memo' });
         await waitFor(() => expect(publish.disabled).toBe(false));
         fireEvent.click(publish);
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
@@ -184,7 +184,7 @@ describe('ListForkForm memo-only edit', () => {
     it('still refuses an edit with no member change and no memo', async () => {
         const messaging = openFork();
         await screen.findByText(/Forking token list #2700/);
-        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish Edit' }));
         expect(await screen.findByText('Nothing changed: add or remove an item, or write a memo.')).toBeTruthy();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });

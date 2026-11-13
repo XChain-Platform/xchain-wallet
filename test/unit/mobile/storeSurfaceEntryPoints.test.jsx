@@ -76,7 +76,8 @@ describe('the command palette', () => {
         // a trade, and one seed spans shells: it stays on every build.
         expect(list).toContain('trade-coinpay');
         expect(list).toContain('nav-obligations');
-        expect(list).toContain('nav-cross-chain-templates');
+        // The Cross chain templates page is retired, so no build carries its row.
+        expect(list).not.toContain('nav-cross-chain-templates');
     });
 
     it('keeps the DEX when a shell says nothing, rather than losing it silently', () => {

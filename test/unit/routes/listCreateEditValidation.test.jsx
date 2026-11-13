@@ -10,6 +10,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ListCreateForm } from '../../../packages/core/src/shared/routes/ListCreateForm.jsx';
 import { ListForkForm } from '../../../packages/core/src/shared/routes/ListForkForm.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 
 const BTC = 'bitcoin-mainnet';
 const DOGE = 'dogecoin-mainnet';
@@ -26,7 +27,7 @@ function messagingWith(chainId, overrides = {}) {
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [chainId]: [ADDRESS] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [chainId]: { id: ADDRESS.id } }),
-        getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher', activeNetwork: 'mainnet' }),
+        getSettings: vi.fn().mockResolvedValue({ activeNetwork: 'mainnet' }),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'locked' }),
         getTokenInfo: vi.fn().mockResolvedValue(null),
@@ -42,6 +43,8 @@ function messagingWith(chainId, overrides = {}) {
 }
 
 function mount(Component, props, messaging) {
+    // Wallet mode is a property of the wallet record: this is a watch-only wallet.
+    publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode: 'watcher' }], activeWalletId: 'wallet-1' });
     render(
         <MessagingProvider shell="web" messaging={messaging}>
             <Component {...props} />
@@ -50,6 +53,7 @@ function mount(Component, props, messaging) {
 }
 
 afterEach(() => {
+    resetWalletModes();
     cleanup();
     vi.clearAllMocks();
 });
@@ -64,11 +68,10 @@ describe('list create validation', () => {
         fireEvent.change(await screen.findByLabelText('Addresses'), {
             target: { value: `${ADDRESS.address}\nnot-an-address` },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Unsigned Transaction' }));
 
         expect(await screen.findByText('Remove 1 invalid address before reviewing.')).toBeTruthy();
-        expect(screen.queryByText('Review list')).toBeNull();
-        expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
+        expect(screen.queryByText('Review List')).toBeNull();        expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
     it('refuses an action over the compiled carrier limit', async () => {
@@ -80,11 +83,10 @@ describe('list create validation', () => {
         fireEvent.change(await screen.findByLabelText('Tokens'), {
             target: { value: ticks.join('\n') },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Unsigned Transaction' }));
 
         expect(await screen.findByText(/This list has 34 tokens \(8,\d{3} bytes\), but one action holds 8,192 bytes, which fits 32 of them\. Remove 2 tokens\./)).toBeTruthy();
-        expect(screen.queryByText('Review list')).toBeNull();
-    });
+        expect(screen.queryByText('Review List')).toBeNull();    });
 
     it('refuses a custom fee rate with more than eight decimal places before review', async () => {
         const messaging = messagingWith(BTC);
@@ -95,17 +97,18 @@ describe('list create validation', () => {
         fireEvent.change(await screen.findByLabelText('Tokens'), {
             target: { value: 'XCHAIN' },
         });
+        // The speed picker sits in the closed Network fee section; open it first.
+        fireEvent.click(screen.getByRole('button', { name: /^Network fee\b/, expanded: false }));
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
             target: { value: '3' },
         });
         fireEvent.change(screen.getByLabelText('Custom fee rate (sat/vB)'), {
             target: { value: '1.123456789' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Unsigned Transaction' }));
 
         expect(await screen.findAllByText('Custom fee rate can have at most 8 decimal places.')).toHaveLength(1);
-        expect(screen.queryByText('Review list')).toBeNull();
-        expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
+        expect(screen.queryByText('Review List')).toBeNull();        expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
     it('keeps form values and cancels the click when Back leaves review', async () => {
@@ -119,13 +122,12 @@ describe('list create validation', () => {
         fireEvent.change(screen.getByLabelText('Memo'), {
             target: { value: 'season two' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Unsigned Transaction' }));
 
         expect(fireEvent.click(await screen.findByRole('button', { name: 'Back' }))).toBe(false);
         expect(await screen.findByLabelText('Tokens')).toHaveValue('XCHAIN');
         expect(screen.getByLabelText('Memo')).toHaveValue('season two');
-        expect(screen.queryByText('Review list')).toBeNull();
-    });
+        expect(screen.queryByText('Review List')).toBeNull();    });
 });
 
 describe('list edit validation and review', () => {
@@ -160,11 +162,10 @@ describe('list edit validation and review', () => {
     it('refuses a malformed list reference before review', async () => {
         const messaging = mountTokenEdit('-1');
         fireEvent.change(await screen.findByLabelText('Add tokens'), { target: { value: 'ADD' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish Edit' }));
 
         expect(await screen.findByText('List reference must be a positive whole number.')).toBeTruthy();
-        expect(screen.queryByText('Review list edit')).toBeNull();
-        expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
+        expect(screen.queryByText('Review List Edit')).toBeNull();        expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
     it('shows plain copy and stays on the form when the list freshness read fails', async () => {
@@ -174,41 +175,41 @@ describe('list edit validation and review', () => {
             new Error('Explorer returned HTTP 502 for /BTC/api/lists/2700'),
             { name: 'SDKExplorerError' },
         ));
-        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish Edit' }));
 
         expect(await screen.findByText(/service that reads the chain is temporarily unavailable/)).toBeTruthy();
         expect(screen.queryByText(/\/BTC\/api\/lists/)).toBeNull();
-        expect(screen.queryByText('Review list edit')).toBeNull();
-    });
+        expect(screen.queryByText('Review List Edit')).toBeNull();    });
 
     it('keeps form values and cancels the click when Back leaves review', async () => {
         mountTokenEdit();
         fireEvent.change(await screen.findByLabelText('Add tokens'), { target: { value: 'ADD' } });
         fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'season two' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish Edit' }));
 
         expect(fireEvent.click(await screen.findByRole('button', { name: 'Back' }))).toBe(false);
         expect(await screen.findByLabelText('Add tokens')).toHaveValue('ADD');
         expect(screen.getByLabelText('Memo')).toHaveValue('season two');
-        expect(screen.getByRole('button', { name: 'Publish edit' })).toBeTruthy();
-        expect(screen.queryByRole('button', { name: 'Publish add' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'Publish Edit' })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'Publish Add' })).toBeNull();
     });
 
     it('refuses an empty custom fee rate before review', async () => {
         const messaging = mountTokenEdit();
 
         fireEvent.change(await screen.findByLabelText('Add tokens'), { target: { value: 'NEW' } });
+        // The speed picker sits in the closed Network fee section; open it first.
+        fireEvent.click(screen.getByRole('button', { name: /^Network fee\b/, expanded: false }));
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
             target: { value: '3' },
         });
         fireEvent.change(screen.getByLabelText('Custom fee rate (sat/vB)'), {
             target: { value: '' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish Edit' }));
 
         expect(await screen.findAllByText('Enter a custom fee rate.')).toHaveLength(1);
-        expect(screen.queryByText('Review list edit')).toBeNull();
-        expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
+        expect(screen.queryByText('Review List Edit')).toBeNull();        expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
     it('validates additions, reports duplicates, previews the delta, and preserves current members', async () => {
@@ -240,15 +241,16 @@ describe('list edit validation and review', () => {
         const additions = await screen.findByLabelText('Add tokens');
         fireEvent.change(additions, { target: { value: 'NEW\nnew\nKEEP\nBAD TICK' } });
         expect(screen.getByText(/1 duplicate removed/).textContent).toMatch(/1 already on the list/);
-        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish Edit' }));
         expect(await screen.findByText('Remove 1 invalid token name before reviewing.')).toBeTruthy();
 
         fireEvent.change(additions, { target: { value: 'NEW\nnew\nKEEP' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish Edit' }));
         expect(await screen.findByText('Members after edit')).toBeTruthy();
         expect(screen.getByText('Review added items')).toBeTruthy();
         expect(screen.getByText('NEW')).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
+        // The review screen keeps its own lowercase confirm label.
+        fireEvent.click(screen.getByRole('button', { name: 'Create Unsigned Transaction' }));
 
         await waitFor(() => expect(messaging.buildActionPsbtRequest).toHaveBeenCalledOnce());
         expect(messaging.buildActionPsbtRequest.mock.calls[0][0].actionData.params).toMatchObject({

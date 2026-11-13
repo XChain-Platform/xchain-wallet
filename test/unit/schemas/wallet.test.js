@@ -16,7 +16,9 @@ import {
     validateWallet,
     WALLET_ORIGINS,
     WALLET_FORMATS,
+    WALLET_MODES,
     CURRENT_VERSION,
+    walletModeOf,
 } from '../../../packages/core/src/schemas/wallet.js';
 
 const BASE_KDF = {
@@ -51,6 +53,29 @@ describe('WALLET_FORMATS', () => {
         expect(WALLET_FORMATS).toContain('bip39');
         expect(WALLET_FORMATS).toContain('counterwallet-legacy');
         expect(WALLET_FORMATS).toContain('wif-only');
+    });
+});
+
+describe('walletMode (§20, per wallet)', () => {
+    it('defaults a new wallet to Normal and keeps a chosen mode', () => {
+        expect(createWallet(BASE_INPUT).walletMode).toBe('full');
+        for (const walletMode of WALLET_MODES) {
+            const w = createWallet({ ...BASE_INPUT, walletMode });
+            expect(w.walletMode).toBe(walletMode);
+            expect(validateWallet(w).ok).toBe(true);
+        }
+    });
+
+    it('refuses a record with no mode or an unknown one', () => {
+        const { walletMode: _omit, ...without } = createWallet(BASE_INPUT);
+        expect(validateWallet(without).ok).toBe(false);
+        expect(validateWallet({ ...createWallet(BASE_INPUT), walletMode: 'observer' }).ok).toBe(false);
+    });
+
+    it('walletModeOf reads anything unknown as Normal', () => {
+        expect(walletModeOf({ walletMode: 'signer' })).toBe('signer');
+        expect(walletModeOf({ walletMode: 'nope' })).toBe('full');
+        expect(walletModeOf(null)).toBe('full');
     });
 });
 
@@ -285,9 +310,9 @@ describe('validateWallet: encryptedPassphrase (§15.6)', () => {
         expect(createWallet(BASE_INPUT).encryptedPassphrase).toBeNull();
     });
 
-    it('a fresh record is at schema version 3', () => {
-        expect(createWallet(BASE_INPUT).schemaVersion).toBe(3);
-        expect(CURRENT_VERSION).toBe(3);
+    it('a fresh record is at schema version 4', () => {
+        expect(createWallet(BASE_INPUT).schemaVersion).toBe(4);
+        expect(CURRENT_VERSION).toBe(4);
     });
 
     it('accepts null on a bip39 passphrase wallet (the legacy, awaiting-capture state)', () => {

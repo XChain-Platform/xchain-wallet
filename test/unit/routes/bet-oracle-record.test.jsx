@@ -121,6 +121,18 @@ async function mount(Component, messaging, props = {}) {
 
 const text = (utils) => utils.container.textContent || '';
 
+// Only the chosen tab renders (Markets, Resolutions, Disputes, About), so a
+// test opens the tab that holds the line it reads.
+async function openTab(utils, name) {
+    await domAct(async () => {
+        Array.from(utils.container.querySelectorAll('[role="tab"]'))
+            .find((tab) => (tab.textContent || '').trim() === name)
+            .click();
+        await drain();
+    });
+    return text(utils);
+}
+
 describe('OracleRecord (P8)', () => {
 
     it('asks the host for THIS address on THIS chain, and lists only its markets', async () => {
@@ -140,20 +152,20 @@ describe('OracleRecord (P8)', () => {
     it('reports the counts, and gives expired-unresolved its own line', async () => {
         const { messaging } = harness();
         const utils = await mount(OracleRecord, messaging, { chainId: CHAIN, address: ORACLE });
-        const body = text(utils);
 
-        expect(body).toMatch(/Markets opened/);
-        expect(body).toMatch(/Still running/);
-        expect(body).toMatch(/Settled with a result/);
+        const about = await openTab(utils, 'About');
+        expect(about).toMatch(/Markets opened/);
+        expect(about).toMatch(/Still running/);
+        expect(await openTab(utils, 'Resolutions')).toMatch(/Settled with a result/);
         // The screening signal: an oracle that walked away from a market. It must be
         // a line of its own, not folded into a total.
-        expect(body).toMatch(/Left to expire with no result/);
+        expect(await openTab(utils, 'Disputes')).toMatch(/Left to expire with no result/);
     });
 
     it('shows fees earned per wager token', async () => {
         const { messaging } = harness();
         const utils = await mount(OracleRecord, messaging, { chainId: CHAIN, address: ORACLE });
-        const body = text(utils);
+        const body = await openTab(utils, 'About');
         expect(body).toMatch(/PEPECREATURE/);
         expect(body).toMatch(/0\.175/);
         expect(body).toMatch(/XCHAIN/);
@@ -163,13 +175,13 @@ describe('OracleRecord (P8)', () => {
     it('says plainly that an oracle earns nothing from a market it never settles', async () => {
         const { messaging } = harness();
         const utils = await mount(OracleRecord, messaging, { chainId: CHAIN, address: ORACLE });
-        expect(text(utils)).toMatch(/earns nothing from a market it cancels, voids, or lets expire/i);
+        expect(await openTab(utils, 'About')).toMatch(/earns nothing from a market it cancels, voids, or lets expire/i);
     });
 
     it('renders the unbonded / per-address caveat as part of the page', async () => {
         const { messaging } = harness();
         const utils = await mount(OracleRecord, messaging, { chainId: CHAIN, address: ORACLE });
-        const body = text(utils);
+        const body = await openTab(utils, 'About');
         // Spec §5: without these two sentences the page reads as a safety rating,
         // which is the one thing it is not.
         expect(body).toMatch(/not a guarantee/i);
@@ -182,7 +194,7 @@ describe('OracleRecord (P8)', () => {
             betOracle: () => Promise.resolve({ data: [{ ...RECORD, fees_earned: [] }] }),
         });
         const utils = await mount(OracleRecord, messaging, { chainId: CHAIN, address: ORACLE });
-        expect(text(utils)).toMatch(/No settlement fees yet/i);
+        expect(await openTab(utils, 'About')).toMatch(/No settlement fees yet/i);
     });
 
     it('survives an explorer too old to report fees at all', async () => {
@@ -192,8 +204,9 @@ describe('OracleRecord (P8)', () => {
         const utils = await mount(OracleRecord, messaging, { chainId: CHAIN, address: ORACLE });
         // The record still renders; the missing field degrades to "no fees", never
         // to a crash on a non-array.
-        expect(text(utils)).toMatch(/Markets opened/);
-        expect(text(utils)).toMatch(/No settlement fees yet/i);
+        const about = await openTab(utils, 'About');
+        expect(about).toMatch(/Markets opened/);
+        expect(about).toMatch(/No settlement fees yet/i);
     });
 
     it('keeps the record and does not claim there are no markets when the listing fails', async () => {
@@ -202,7 +215,7 @@ describe('OracleRecord (P8)', () => {
         });
         const utils = await mount(OracleRecord, messaging, { chainId: CHAIN, address: ORACLE });
         const body = text(utils);
-        expect(body).toMatch(/Markets opened/);
+        expect(await openTab(utils, 'About')).toMatch(/Markets opened/);
         expect(body).toMatch(/Could not load this address's markets/i);
         expect(body).not.toMatch(/No markets from this address/i);
         expect(body).not.toMatch(/explorer down/);

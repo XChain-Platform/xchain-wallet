@@ -47,13 +47,13 @@ function resolvedValue(values, token) {
 describe('layout token values', () => {
     const root = declarations(tokensCss, ':root');
 
-    it('pins one 12px page gutter for compact, rail, and full layouts', () => {
+    it('pins one 8px page gutter for compact, rail, and full layouts (ruling G80)', () => {
         const rail = { ...root, ...declarations(shellCss, ".layout[data-xc-tier='rail']") };
         const full = { ...root, ...declarations(shellCss, ".layout[data-xc-tier='full']") };
 
-        expect(resolvedValue(root, '--xc-page-gutter')).toBe('12px');
-        expect(resolvedValue(rail, '--xc-page-gutter')).toBe('12px');
-        expect(resolvedValue(full, '--xc-page-gutter')).toBe('12px');
+        expect(resolvedValue(root, '--xc-page-gutter')).toBe('8px');
+        expect(resolvedValue(rail, '--xc-page-gutter')).toBe('8px');
+        expect(resolvedValue(full, '--xc-page-gutter')).toBe('8px');
     });
 
     it('pins mouse and coarse-pointer control geometry', () => {

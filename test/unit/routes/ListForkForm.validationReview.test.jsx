@@ -82,10 +82,10 @@ describe('ListForkForm addition validation', () => {
         const additions = await screen.findByLabelText('Add tokens');
         expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
         fireEvent.change(additions, { target: { value: 'BAD TICK' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Publish edit$/i }));
 
         expect(await screen.findByText('Remove 1 invalid token name before reviewing.')).toBeTruthy();
-        expect(screen.queryByRole('button', { name: 'Publish add' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Publish Add' })).toBeNull();
 
         fireEvent.change(additions, { target: { value: 'GOOD' } });
         expect(screen.queryByText(/invalid token name before reviewing/)).toBeNull();
@@ -96,10 +96,10 @@ describe('ListForkForm addition validation', () => {
         fireEvent.change(await screen.findByLabelText('Add addresses'), {
             target: { value: LITECOIN_ADDRESS },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Publish edit$/i }));
 
         expect(await screen.findByText('Remove 1 invalid address before reviewing.')).toBeTruthy();
-        expect(screen.queryByRole('button', { name: 'Publish add' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Publish Add' })).toBeNull();
     });
 
     // Token-policy inheritance: the explorer's gate flag widens address items to
@@ -114,7 +114,7 @@ describe('ListForkForm addition validation', () => {
         });
 
         expect(await screen.findByText(/1 to add · 0 to remove/)).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Publish edit$/i }));
         expect(screen.queryByText(/invalid address before reviewing/)).toBeNull();
     });
 
@@ -123,7 +123,7 @@ describe('ListForkForm addition validation', () => {
         fireEvent.change(await screen.findByLabelText('Add addresses'), {
             target: { value: LITECOIN_REGTEST_ADDRESS },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Publish edit$/i }));
         expect(await screen.findByText('Remove 1 invalid address before reviewing.')).toBeTruthy();
     });
 
@@ -135,9 +135,9 @@ describe('ListForkForm addition validation', () => {
         });
 
         expect(await screen.findByText(/One entry is an address reference/)).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Publish edit$/i }));
         expect(await screen.findByText('Remove 1 invalid address before reviewing.')).toBeTruthy();
-        expect(screen.queryByRole('button', { name: 'Publish add' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Publish Add' })).toBeNull();
     });
 
     it('counts a Litecoin regtest member stored in uppercase as already on the list', async () => {
@@ -158,11 +158,11 @@ describe('ListForkForm review', () => {
         mountFork();
         fireEvent.click(await screen.findByRole('checkbox', { name: 'REMOVE' }));
         fireEvent.change(screen.getByLabelText('Add tokens'), { target: { value: 'ADD' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Publish edit$/i }));
 
         const details = await screen.findByText('Adding');
         expect(details.closest('dl')?.textContent).toMatch(/Adding1 item/);
         expect(details.closest('dl')?.textContent).toMatch(/Removing1 item/);
-        expect(screen.getByText('Review list edit')).toBeTruthy();
+        expect(screen.getByText('Review List Edit')).toBeTruthy();
     });
 });

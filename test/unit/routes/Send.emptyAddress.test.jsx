@@ -17,6 +17,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { fireEvent, render, screen, cleanup, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
 import { humanizeError } from '../../../packages/core/src/shared/utils/humanizeError.js';
 
@@ -40,7 +41,9 @@ function mount(quantity, {
             : vi.fn().mockResolvedValue({
                 [CHAIN_ID]: [{ address: FROM, balances, error: null }],
             }),
-        getSettings: vi.fn().mockResolvedValue({ walletMode, grace: { testSendThresholdSats: 0 } }),
+        // §20: the mode is the wallet's own, read from the safe wallet list.
+        listWallets: vi.fn().mockResolvedValue([{ id: 'w', name: 'W', walletMode }]),
+        getSettings: vi.fn().mockResolvedValue({ grace: { testSendThresholdSats: 0 } }),
         listContacts: vi.fn().mockResolvedValue([]),
         getRecentDestinations: vi.fn().mockResolvedValue([]),
         listMultisigReceiveAddresses: vi.fn().mockResolvedValue(multisigs),
@@ -62,7 +65,7 @@ function mount(quantity, {
     return { messaging, onReceive };
 }
 
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); resetWalletModes(); });
 
 describe('Send from an address holding no coin', () => {
     it('shows a Receive action instead of the form when the selected network is empty', async () => {

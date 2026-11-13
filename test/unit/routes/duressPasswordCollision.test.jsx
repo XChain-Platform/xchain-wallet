@@ -68,12 +68,12 @@ describe('create wallet', () => {
     it('refuses the duress passphrase as the wallet password', () => {
         submit(DURESS);
         expect(screen.getByRole('alert')).toHaveTextContent(DURESS_PASSWORD_COLLISION_MESSAGE);
-        expect(screen.queryByRole('button', { name: 'Reveal recovery phrase' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Reveal Recovery Phrase' })).toBeNull();
     });
 
     it('accepts any other password', () => {
         submit(OTHER);
-        expect(screen.getByRole('button', { name: 'Reveal recovery phrase' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Reveal Recovery Phrase' })).toBeTruthy();
     });
 });
 
@@ -135,10 +135,10 @@ describe('migrate to a BIP39 wallet', () => {
         );
         fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
         setPasswords('Password', 'Confirm password', DURESS);
-        fireEvent.click(screen.getByRole('button', { name: 'Generate recovery phrase' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Generate Recovery Phrase' }));
 
         expect(await screen.findByText(DURESS_PASSWORD_COLLISION_MESSAGE)).toBeInTheDocument();
-        expect(screen.queryByRole('heading', { level: 1, name: 'Write down your recovery phrase' })).toBeNull();
+        expect(screen.queryByRole('heading', { level: 1, name: 'Write Down Your Recovery Phrase' })).toBeNull();
         expect(addImportedWallet).not.toHaveBeenCalled();
     });
 });

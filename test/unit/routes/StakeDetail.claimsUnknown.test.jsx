@@ -62,7 +62,7 @@ describe('StakeDetail when the claim ledger cannot be read', () => {
     it('shows no notice and the real figure when the ledger loads', async () => {
         mount({ getRewardClaimsForAddress: vi.fn().mockResolvedValue([]) });
 
-        expect(await screen.findByRole('heading', { name: 'Validator stake' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Validator Stake' })).toBeInTheDocument();
         expect(screen.queryByRole('alert')).toBeNull();
         expect(screen.getByRole('button', { name: 'Claim' })).toBeEnabled();
         expect(screen.getByText('Pending rewards').nextElementSibling).toHaveTextContent('30 XCHAIN');

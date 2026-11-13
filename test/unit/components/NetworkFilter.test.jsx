@@ -453,7 +453,9 @@ describe('shared network filter surfaces', () => {
         // Both screens share the ListToolbar, whose class must exist: an undefined one left the controls stacked.
         expect(toolbarCss).toMatch(/\.toolbar\s*\{[^}]*display:\s*flex[^}]*flex-wrap:\s*wrap/s);
         expect(contactsSource).toMatch(/<ListToolbar\b[\s\S]*<NetworkFilterDropdown[\s\S]*announceNetworkCount/);
-        expect(dispensersSource).toMatch(/<ListToolbar\b[\s\S]*<NetworkFilterDropdown[\s\S]*announceNetworkCount/);
+        // Dispensers moved its filter to the title line: the standard ListFilterMenu carries the network filter.
+        expect(dispensersSource).toMatch(/<ListFilterMenu\b[\s\S]*onNetworkFilterChange=\{setNetwork\}/);
+        expect(dispensersSource).not.toMatch(/<ListToolbar\b/);
     });
 });
 

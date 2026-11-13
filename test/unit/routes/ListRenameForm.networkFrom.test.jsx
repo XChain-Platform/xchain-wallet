@@ -70,10 +70,16 @@ afterEach(() => {
     vi.clearAllMocks();
 });
 
+// From and Memo are closed standard sections; open one to reach its fields.
+function openSection(title) {
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${title}\\b`), expanded: false }));
+}
+
 describe('ListRenameForm network, from and labels', () => {
     it('opens with Network then From, both ahead of every other field', async () => {
         mount();
         const from = await screen.findByLabelText('From');
+        openSection('From');
         const network = screen.getByRole('button', { name: /^Network:/ });
         const name = screen.getByLabelText('Name');
         expect(from).toHaveValue(OWNER);
@@ -87,11 +93,12 @@ describe('ListRenameForm network, from and labels', () => {
     it('opens the address picker locked to the list chain and signs from the owner again', async () => {
         const messaging = mount();
         await screen.findByLabelText('From');
+        openSection('From');
         fireEvent.click(screen.getByRole('button', { name: 'Choose source address' }));
         const picker = screen.getByTestId('own-address-picker');
         expect(picker).toHaveAttribute('data-chain-id', CHAIN);
         expect(picker).toHaveAttribute('data-lock', 'true');
-        expect(within(picker).getByRole('heading', { name: 'From address' })).toBeTruthy();
+        expect(within(picker).getByRole('heading', { name: 'From Address' })).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Pick other' }));
         expect(await screen.findByLabelText('From')).toHaveValue(OTHER);
         expect(messaging.getListByActionIndex).toHaveBeenCalled();
@@ -101,6 +108,7 @@ describe('ListRenameForm network, from and labels', () => {
         mount();
         await screen.findByLabelText('From');
         expect(screen.queryByText(/is not an address in this wallet/)).toBeNull();
+        openSection('From');
         fireEvent.click(screen.getByRole('button', { name: 'Choose source address' }));
         fireEvent.click(screen.getByRole('button', { name: 'Pick other' }));
         await screen.findByLabelText('From');
@@ -115,6 +123,8 @@ describe('ListRenameForm network, from and labels', () => {
             expect(field).toBeTruthy();
         }
         expect(document.body.textContent).not.toMatch(/empty means unchanged/);
+        openSection('From');
+        openSection('Memo');
         expect(screen.getAllByRole('button', { name: /^About / }).length).toBeGreaterThanOrEqual(4);
         expect(screen.getAllByRole('button', { name: /^Clear (name|description)$/ })).toHaveLength(2);
         for (const clear of screen.getAllByRole('button', { name: /^Clear (name|description)$/ })) {

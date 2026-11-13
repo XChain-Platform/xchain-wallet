@@ -86,7 +86,7 @@ async function fill({ supply, initialMint, lockSupply, divisible }) {
 }
 
 async function submit() {
-    fireEvent.submit(screen.getByRole('form', { name: 'Issue token' }));
+    fireEvent.submit(screen.getByRole('form', { name: 'Issue Token' }));
 }
 
 function field(label) {
@@ -211,6 +211,9 @@ describe('IssueTokenForm initial mint', () => {
             }),
         });
         await screen.findByLabelText('Ticker');
+        // Network fee and From are closed standard sections; open both.
+        fireEvent.click(screen.getByRole('button', { name: /^Network fee/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^From Bitcoin/ }));
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
             target: { value: '3' },
         });
@@ -241,8 +244,8 @@ describe('IssueTokenForm initial mint', () => {
         const ticker = await screen.findByLabelText('Ticker');
         ticker.focus();
 
-        await user.tab();
-        expect(document.activeElement).toBe(screen.getByRole('button', { name: /^Supply Optional$/ }));
+        // Max supply sits in the Token section with Ticker (the
+        // form standard), so no section header comes between them.
         await user.tab();
         expect(document.activeElement).toBe(screen.getByRole('button', { name: 'About Max supply' }));
         await user.tab();

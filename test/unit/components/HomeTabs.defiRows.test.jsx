@@ -136,23 +136,26 @@ describe('HomeTabs DeFi rows', () => {
     it('labels each row with the shared status badge', () => {
         const { container } = mountDefi();
         const statuses = defiRows(container).map((row) => row.querySelector('[title]')?.textContent);
-        expect(statuses).toEqual(['Pending', 'Confirmed', 'Failed', 'Confirmed', 'Confirmed']);
+        // The list opens sorted by name: contract, dispenser, order, swap, stake.
+        expect(statuses).toEqual(['Failed', 'Pending', 'Confirmed', 'Confirmed', 'Confirmed']);
     });
 
-    it('shows blocks only for settled DeFi rows', () => {
+    it('shows a date and no block number on any DeFi row', () => {
         const { container } = mountDefi();
         const rows = defiRows(container);
-        expect(rows[0]).not.toHaveTextContent(/Block/);
-        expect(rows[0].querySelector('time')).not.toBeNull();
-        expect(rows[1]).toHaveTextContent('Block 12,420');
-        expect(rows[2]).toHaveTextContent('Block 12,395');
-        expect(rows[3]).toHaveTextContent('Block 12,390');
-        expect(rows[4]).toHaveTextContent('Block 12,385');
+        // Rows are two lines, the height of a Coins or Tokens row: the date
+        // sits beside the amount and no row prints a block number.
+        expect(rows).toHaveLength(positions.length);
+        for (const row of rows) {
+            expect(row).not.toHaveTextContent(/Block/);
+            expect(row.querySelector('time')).not.toBeNull();
+        }
     });
 
     it('opens the History-shaped entry for the clicked row', () => {
         const { container, onSelectEntry } = mountDefi();
-        fireEvent.click(defiRows(container)[0]);
+        // The pending dispenser is the second row in the name-sorted list.
+        fireEvent.click(defiRows(container)[1]);
         expect(onSelectEntry).toHaveBeenCalledTimes(1);
         const entry = onSelectEntry.mock.calls[0][0];
         expect(entry).toMatchObject({

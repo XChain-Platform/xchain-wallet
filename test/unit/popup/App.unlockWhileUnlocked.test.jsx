@@ -95,8 +95,12 @@ describe('an unlock announcement in an unlocked extension window', () => {
         // so open the actions screen until it stays open.
         await waitFor(() => {
             if (screen.queryByRole('button', { name: 'Back to home' })) return;
-            const actions = screen.queryByRole('button', { name: 'All actions' });
+            // The All actions row lives in the wallet menu the header opens.
+            const actions = screen.queryByRole('option', { name: /^All actions/ });
             if (actions) fireEvent.click(actions);
+            else if (!screen.queryByRole('dialog', { name: 'Wallet menu' })) {
+                fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+            }
             throw new Error('actions screen not open yet');
         }, { timeout: 15_000 });
         const before = count(sent, 'session.status');

@@ -20,9 +20,13 @@ const messaging = {
 function mount() {
     return render(
         <MessagingContext.Provider value={{ messaging, shell: 'desktop' }}>
-            <Settings onBack={() => {}} activeWallet={{ id: 'wallet-1', name: 'Primary Vault' }} />
+            <Settings onBack={() => {}} activeWallet={{ id: 'wallet-1', name: 'Primary Vault' }} initialSubpageId="g-advanced" />
         </MessagingContext.Provider>,
     );
+}
+
+function backToList() {
+    act(() => { screen.getByRole('button', { name: 'Back to settings' }).click(); });
 }
 
 function installBridge() {
@@ -53,6 +57,8 @@ describe('Settings check for updates', () => {
         });
         expect(bridge.install).toHaveBeenCalledWith('check');
         bridge.emit({ type: 'not-available', userInitiated: true });
+        // The result notice renders on the Settings list, not on the Advanced page.
+        backToList();
         expect(screen.getByText(/is up to date/i)).toBeTruthy();
     });
 
@@ -64,6 +70,7 @@ describe('Settings check for updates', () => {
             await Promise.resolve();
         });
         bridge.emit({ type: 'available', info: { version: '1.2.3' } });
+        backToList();
         expect(screen.getByText('Version 1.2.3 is available.')).toBeTruthy();
     });
 
@@ -75,6 +82,7 @@ describe('Settings check for updates', () => {
             screen.getByRole('button', { name: /check for updates/i }).click();
             await Promise.resolve();
         });
+        backToList();
         const notice = screen.getByText(/couldn.t check for updates/i).closest('[role="alert"]');
         expect(notice).toHaveTextContent(/couldn.t check for updates/i);
         expect(notice.parentElement.firstElementChild).toBe(notice);

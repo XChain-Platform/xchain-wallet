@@ -98,13 +98,13 @@ describe('reset app flow', () => {
     it('requires WIPE, names the erased data, and returns an empty shell to onboarding', async () => {
         render(<ResettableShell />);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Forgot password?' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Use recovery phrase' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Forgot Password?' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Use Recovery Phrase' }));
         const dialog = screen.getByRole('alertdialog', { name: 'Restore wallet access' });
         expect(dialog).toHaveTextContent(/every wallet saved in this app on this device/i);
         expect(dialog).toHaveTextContent(/recovery information, accounts, addresses, and queued transactions/i);
 
-        const wipeButton = screen.getByRole('button', { name: 'Erase vault and restore' });
+        const wipeButton = screen.getByRole('button', { name: 'Erase Vault and Restore' });
         expect(wipeButton).toBeDisabled();
         fireEvent.change(screen.getByLabelText('Type WIPE to confirm'), {
             target: { value: 'not wipe' },
@@ -117,7 +117,7 @@ describe('reset app flow', () => {
         for (const key of DEMO_KEYS) localStorage.setItem(key, `stale data for ${key}`);
         fireEvent.click(wipeButton);
 
-        expect(await screen.findByRole('button', { name: 'Create new wallet' })).toBeEnabled();
+        expect(await screen.findByRole('button', { name: 'Create New Wallet' })).toBeEnabled();
         expect(reload).toHaveBeenCalledTimes(1);
         expect(databases.has('xchain-wallet')).toBe(false);
         await waitFor(() => {

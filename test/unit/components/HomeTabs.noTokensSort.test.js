@@ -119,13 +119,17 @@ describe('Home Tokens sorting', () => {
         mount();
 
         fireEvent.click(screen.getByRole('button', { name: 'Filter and sort' }));
-        expect(screen.getByRole('radio', { name: 'Name' })).toBeChecked();
+        const panel = screen.getByRole('dialog', { name: 'Filter and sort' });
+        const trigger = () => Array.from(panel.querySelectorAll('button[aria-haspopup="listbox"]'))
+            .find((button) => /^Sort by (name|value)$/.test(button.textContent.trim()));
+        expect(trigger().textContent.trim()).toBe('Sort by name');
         expect(renderedKeys()).toEqual([
             'litecoin-mainnet:LTC',
             'bitcoin-mainnet:BTC',
         ]);
 
-        fireEvent.click(screen.getByRole('radio', { name: 'Value' }));
+        fireEvent.click(trigger());
+        fireEvent.click(screen.getByRole('option', { name: /Sort by value/i }));
         expect(renderedKeys()).toEqual([
             'bitcoin-mainnet:BTC',
             'litecoin-mainnet:LTC',

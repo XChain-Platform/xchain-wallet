@@ -54,7 +54,7 @@ describe('plain-language transaction and share labels', () => {
     const EXPECTED = {
         components: {
             'components.watcherResultPanel.unsignedTransactionHex2': 'Unsigned transaction code',
-            'components.watcherResultPanel.copyHex': 'Copy code',
+            'components.watcherResultPanel.copyHex': 'Copy Code',
             'components.watcherResultPanel.copyUnsignedTransactionHex': 'Copy unsigned transaction code',
             'components.rawPsbtViewer.parserNotWiredYetSee':
                 '(parser not wired yet; see the signing request code above for the raw data)',
@@ -62,7 +62,7 @@ describe('plain-language transaction and share labels', () => {
         multisig: {
             'multisig.share.payload': 'Share details',
             'multisig.share.qrAlt': 'QR code for multisig cosigner share details',
-            'multisig.share.copyPayload': 'Copy cosigner share details',
+            'multisig.share.copyPayload': 'Copy Cosigner Share Details',
         },
         scan: {
             'scan.pastePlaceholder': 'xchain:… / bitcoin:… / address / transaction code',

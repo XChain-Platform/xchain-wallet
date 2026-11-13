@@ -111,7 +111,7 @@ describe('CoinpayForm: confirm and review stages show the debt in coins', () => 
             makeMessaging([obligation(coinAmount)]),
         );
         // The prefilled obligation lands on the confirm stage with a Pay order button.
-        return screen.findByRole('button', { name: 'Pay order' });
+        return screen.findByRole('button', { name: 'Pay Order' });
     }
 
     it('[REGRESSION] "10" reads as 10 DOGE on confirm and on review, never 1000000000 DOGE', async () => {
@@ -122,7 +122,7 @@ describe('CoinpayForm: confirm and review stages show the debt in coins', () => 
         expect(screen.queryByText(/1000000000/)).toBeNull();
 
         fireEvent.click(review);
-        await screen.findByText('Review payment');
+        await screen.findByText('Review Payment');
         expect(screen.getByText('648')).toBeInTheDocument();
         expect(screen.getAllByText(/\b10 DOGE\b/).length).toBeGreaterThanOrEqual(1);
         expect(screen.queryByText(/1000000000/)).toBeNull();
@@ -132,7 +132,7 @@ describe('CoinpayForm: confirm and review stages show the debt in coins', () => 
     it('[REGRESSION] "10.5" reads as 10.5 DOGE on review, not 1050000000 DOGE', async () => {
         const review = await mountPrefilled('10.5');
         fireEvent.click(review);
-        await screen.findByText('Review payment');
+        await screen.findByText('Review Payment');
         expect(screen.getByText('648')).toBeInTheDocument();
         expect(screen.getAllByText(/\b10\.5 DOGE\b/).length).toBeGreaterThanOrEqual(1);
         expect(screen.queryByText(/1050000000/)).toBeNull();

@@ -243,6 +243,11 @@ describe('the contracts list names a contract off the chain', () => {
             utils = mount(ContractsList, messaging, { onOpenContract() {} });
             await drain();
         });
+        // The user's own contracts sit under the Mine tab.
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('tab', { name: /Mine/ }));
+            await drain();
+        });
         expect(utils.container.textContent).toContain('Escrow v1.0.0 (C:BTC:12)');
     });
 
@@ -276,6 +281,11 @@ describe('the contracts list names a contract off the chain', () => {
             utils = mount(ContractsList, messaging, { onOpenContract() {} });
             await drain();
         });
+        // Deposit-carried rows sit under the Interactions tab.
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('tab', { name: /Interactions/ }));
+            await drain();
+        });
         expect(utils.container.textContent).toContain('Vesting v2.1.0 (C:BTC:99)');
     });
 
@@ -293,8 +303,13 @@ describe('the contracts list names a contract off the chain', () => {
             utils = mount(ContractsList, messaging, { onOpenContract() {} });
             await drain();
         });
+        // The search box lives in the title-bar filter panel.
         await domAct(async () => {
-            fireEvent.change(utils.getByLabelText('Filter contracts'), { target: { value: 'treas' } });
+            fireEvent.click(utils.getByRole('button', { name: 'Filter contracts' }));
+            await drain();
+        });
+        await domAct(async () => {
+            fireEvent.change(utils.getByLabelText('Search contracts'), { target: { value: 'treas' } });
             await drain();
         });
         expect(utils.container.textContent).toContain('Treasury (C:BTC:2)');

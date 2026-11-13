@@ -209,18 +209,17 @@ describe('web startup imports', () => {
         expect(appSource.match(/onSelect=\{handleMenuSelect\}/g)).toHaveLength(2);
         expect(appSource).toContain("if (view === unlockedView) {");
         expect(appSource).toContain('if (main) main.scrollTop = 0;');
-        expect(appSource).toContain("const returnView = ROUTE_NAV_SECTIONS[unlockedView] === view ? 'home' : unlockedView;");
+        // A tab-bar root starts the history over; every other menu row is a
+        // push, so Back from it returns to the page the user was on.
+        expect(appSource).toContain('if (TAB_BAR_DESTINATIONS.includes(view)) resetNav(view);');
+        expect(appSource).not.toContain('ROUTE_NAV_SECTIONS');
 
         expect(appSource).toContain('setSendPrefill(null);');
         expect(appSource).toContain('setReceivePrefill(null);');
         expect(appSource).toContain("setHistoryInitialQuery('');");
         expect(appSource).toContain('setHistoryInitialFocus(null);');
-        expect(appSource).toContain('setDispensersBackTo(returnView);');
-        expect(appSource).toContain("if (view === 'contacts' || view === 'lists') {");
-        expect(appSource).toContain('setDirectoryReturnView(returnView);');
-        expect(appSource).not.toContain("if (view === 'contacts') setFormReturnView");
-        expect(appSource).toContain('setAlertsReturnView(returnView);');
-        expect(appSource).toContain('setUnlockedView(alertsReturnView);');
+        expect(appSource).not.toMatch(/ReturnView|BackTo\b|ReturnTo\b/);
+        expect(appSource).toMatch(/<AlertsRoute[\s\S]*?onBack=\{goBack\}/);
     });
 
     it('loads the action catalogue together with the Actions menu', () => {

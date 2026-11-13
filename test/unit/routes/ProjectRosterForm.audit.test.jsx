@@ -8,6 +8,24 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ProjectRosterForm } from '../../../packages/core/src/shared/routes/ProjectRosterForm.jsx';
 
+// Tokens join the list only through the token picker; this stand-in picks
+// whatever ticker is typed into it, on the chain the form locked it to.
+vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
+    TokenPicker: ({ title, chainIdFilter, onSelect, onBack }) => (
+        <section aria-label={title}>
+            <input aria-label="Token to pick" id="pick-tick" />
+            <button type="button" onClick={() => onSelect({ chainId: chainIdFilter, tick: document.getElementById('pick-tick').value })}>Pick token</button>
+            <button type="button" onClick={onBack}>Close token picker</button>
+        </section>
+    ),
+}));
+
+function addToken(tick) {
+    fireEvent.click(screen.getByRole('button', { name: 'Add Token' }));
+    fireEvent.change(screen.getByLabelText('Token to pick'), { target: { value: tick } });
+    fireEvent.click(screen.getByRole('button', { name: 'Pick token' }));
+}
+
 const CHAIN = 'dogecoin-testnet';
 const ADDRESS = {
     id: 'address-1',
@@ -54,21 +72,23 @@ describe('ProjectRosterForm editing validation', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
         );
-        expect(screen.getByRole('button', { name: 'Save roster' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /^Create project tokens$/i })).toBeDisabled();
         expect(messaging.createList).not.toHaveBeenCalled();
     });
 
-    it('preserves protocol-valid spelling and removes case-insensitive duplicates', async () => {
+    it('keeps protocol-valid spelling and refuses a case-insensitive duplicate', async () => {
         mount();
         await screen.findByText('No list published yet. This will be the first.');
-        fireEvent.change(screen.getByLabelText('Tokens (one per line)'), {
-            target: { value: 'Wow!\nWOW!\nFLAM1N-H0T-CHEET0S' },
-        });
+        addToken('Wow!');
+        addToken('WOW!');
+        expect(await screen.findByText('WOW! is already on the list.')).toBeTruthy();
+        addToken('FLAM1N-H0T-CHEET0S');
 
-        expect(screen.getByText(/2 valid token names/).textContent).toMatch(/1 duplicate removed/);
-        fireEvent.click(screen.getByRole('button', { name: 'Save roster' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Create project tokens$/i }));
 
         const roster = await screen.findByRole('list', { name: 'Tokens' });
+        const rows = screen.getAllByRole('listitem');
+        expect(rows).toHaveLength(2);
         expect(roster).toHaveTextContent('Wow!');
         expect(roster).toHaveTextContent('FLAM1N-H0T-CHEET0S');
         expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
@@ -77,32 +97,28 @@ describe('ProjectRosterForm editing validation', () => {
     it('returns from review without submitting the compose form again', async () => {
         mount();
         await screen.findByText('No list published yet. This will be the first.');
-        fireEvent.change(screen.getByLabelText('Tokens (one per line)'), {
-            target: { value: 'VALID' },
-        });
-        fireEvent.click(screen.getByRole('button', { name: 'Save roster' }));
+        addToken('VALID');
+        fireEvent.click(screen.getByRole('button', { name: /^Create project tokens$/i }));
         expect(await screen.findByRole('form', { name: 'Review official token list' })).toBeTruthy();
 
-        const clickAllowed = fireEvent.click(screen.getByRole('button', { name: 'Back to edit' }));
+        const clickAllowed = fireEvent.click(screen.getByRole('button', { name: 'Back to Edit' }));
 
         expect(clickAllowed).toBe(false);
-        expect(screen.getByRole('form', { name: 'Official token list' })).toBeTruthy();
+        expect(screen.getByRole('form', { name: 'Project tokens' })).toBeTruthy();
         expect(screen.queryByRole('form', { name: 'Review official token list' })).toBeNull();
     });
 
-    it('rejects malformed references and an overlong memo before review', async () => {
+    it('refuses an empty list and an overlong memo before review', async () => {
         mount();
         await screen.findByText('No list published yet. This will be the first.');
-        fireEvent.change(screen.getByLabelText('Tokens (one per line)'), {
-            target: { value: '^not-an-id' },
-        });
-        fireEvent.click(screen.getByRole('button', { name: 'Save roster' }));
-        expect(await screen.findByText("These don't look like token names: ^not-an-id")).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: /^Create project tokens$/i }));
+        expect(await screen.findByText('Add at least one token to the list.')).toBeTruthy();
 
-        fireEvent.change(screen.getByLabelText('Tokens (one per line)'), { target: { value: 'VALID' } });
+        addToken('VALID');
         fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'x'.repeat(251) } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save roster' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Create project tokens$/i }));
         expect(await screen.findByText(/network accepts at most 250/)).toBeTruthy();
+        expect(screen.queryByRole('form', { name: 'Review official token list' })).toBeNull();
     });
 
     it('shows a roster lookup failure instead of claiming the roster is empty', async () => {
@@ -112,7 +128,7 @@ describe('ProjectRosterForm editing validation', () => {
 
         expect(await screen.findByText(/Failed to load the current official-token list/)).toBeTruthy();
         expect(screen.queryByText('No list published yet. This will be the first.')).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Save roster' })).toBeNull();
+        expect(screen.queryByRole('button', { name: /project tokens$/i })).toBeNull();
     });
 
     it('reports a creation-record request failure separately from an unindexed record', async () => {
@@ -120,8 +136,8 @@ describe('ProjectRosterForm editing validation', () => {
             getGenesisForToken: vi.fn().mockRejectedValue(new Error('offline')),
         }));
         await screen.findByText('No list published yet. This will be the first.');
-        fireEvent.change(screen.getByLabelText('Tokens (one per line)'), { target: { value: 'VALID' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save roster' }));
+        addToken('VALID');
+        fireEvent.click(screen.getByRole('button', { name: /^Create project tokens$/i }));
 
         expect(await screen.findByText(/Couldn't load the creation record for PROJ/)).toBeTruthy();
         expect(screen.queryByText(/isn't indexed yet/)).toBeNull();

@@ -59,46 +59,72 @@ function mountWithSlowPrefill(reviewPreferences = DEFAULTS) {
 
 afterEach(() => cleanup());
 
+// The three preferences are pickers whose trigger is named "<field>: <current
+// choice>". Incoming Sends and Dispensers start closed, so a section is opened
+// before its picker can be queried.
+const FEE_FIELD = 'How the protocol fee is handled';
+const MEMO_FIELD = 'Require memo on incoming sends';
+const DISPENSER_FIELD = 'Who may open dispensers';
+
+async function openSections() {
+    await screen.findByRole('button', { name: /^Update preferences$/i });
+    for (const title of ['Incoming Sends', 'Dispensers']) {
+        const toggle = screen.getByRole('button', { name: new RegExp(`^${title}`) });
+        if (toggle.getAttribute('aria-expanded') === 'false') fireEvent.click(toggle);
+    }
+}
+
+function picker(field) {
+    return screen.getByRole('button', { name: new RegExp(`^${field}: `) });
+}
+
+function chosen(field) {
+    return picker(field).getAttribute('aria-label').slice(field.length + 2);
+}
+
+function pick(field, option) {
+    fireEvent.click(picker(field));
+    fireEvent.click(screen.getByRole('option', { name: option }));
+}
+
 describe('AddressPreferencesForm keeps choices made before the prefill returns', () => {
     it('a late on-chain read does not overwrite the user\'s picks', async () => {
         const { resolvePrefill } = mountWithSlowPrefill();
 
-        const destroy = await screen.findByRole('radio', { name: 'Destroy the fee (reduces supply)' });
+        await openSections();
         expect(document.body.textContent).not.toMatch(/regtest|testnet|not mainnet/i);
-        const memo = screen.getByRole('checkbox', { name: 'Require a memo on any send to this address' });
-        const openDispensers = screen.getByRole('radio', { name: 'Anyone may open a dispenser funded by this address' });
-        fireEvent.click(destroy);
-        fireEvent.click(memo);
-        fireEvent.click(openDispensers);
-        expect(destroy.checked).toBe(true);
+        pick(FEE_FIELD, 'Destroy (reduces supply)');
+        pick(MEMO_FIELD, 'Yes');
+        pick(DISPENSER_FIELD, 'Anyone');
+        expect(chosen(FEE_FIELD)).toBe('Destroy (reduces supply)');
 
         await resolvePrefill(DEFAULTS);
 
-        expect(destroy.checked).toBe(true);
-        expect(memo.checked).toBe(true);
-        expect(openDispensers.checked).toBe(true);
+        expect(chosen(FEE_FIELD)).toBe('Destroy (reduces supply)');
+        expect(chosen(MEMO_FIELD)).toBe('Yes');
+        expect(chosen(DISPENSER_FIELD)).toBe('Anyone');
     });
 
     it('still prefills from chain when the user has not touched the form', async () => {
         const { resolvePrefill } = mountWithSlowPrefill();
-        const destroy = await screen.findByRole('radio', { name: 'Destroy the fee (reduces supply)' });
-        expect(destroy.checked).toBe(false);
+        await openSections();
+        expect(chosen(FEE_FIELD)).toBe('Donate to protocol development');
 
         await resolvePrefill({ onChain: true, feePreference: 1, requireMemo: 1, dispenserPreference: 2 });
 
-        expect(destroy.checked).toBe(true);
-        expect(screen.getByRole('checkbox', { name: 'Require a memo on any send to this address' }).checked).toBe(true);
-        expect(screen.getByRole('radio', { name: 'Anyone may open a dispenser funded by this address' }).checked).toBe(true);
+        expect(chosen(FEE_FIELD)).toBe('Destroy (reduces supply)');
+        expect(chosen(MEMO_FIELD)).toBe('Yes');
+        expect(chosen(DISPENSER_FIELD)).toBe('Anyone');
     });
 
     it('refreshes untouched fields at review without replacing a user choice', async () => {
         const fresh = { onChain: true, feePreference: 2, requireMemo: 1, dispenserPreference: 2 };
         const { resolvePrefill } = mountWithSlowPrefill(fresh);
-        const destroy = await screen.findByRole('radio', { name: 'Destroy the fee (reduces supply)' });
+        await openSections();
 
         await resolvePrefill(DEFAULTS);
-        fireEvent.click(destroy);
-        fireEvent.click(screen.getByRole('button', { name: 'Update preferences' }));
+        pick(FEE_FIELD, 'Destroy (reduces supply)');
+        fireEvent.click(screen.getByRole('button', { name: /^Update preferences$/i }));
 
         expect(await screen.findByText('Destroy the fee (reduces supply) - CHANGED')).toBeTruthy();
         expect(screen.getByText('Memo required on incoming sends (unchanged)')).toBeTruthy();
@@ -108,9 +134,9 @@ describe('AddressPreferencesForm keeps choices made before the prefill returns',
     it('does not let the initial read replace a newer review-time read', async () => {
         const fresh = { onChain: true, feePreference: 1, requireMemo: 1, dispenserPreference: 2 };
         const { resolvePrefill } = mountWithSlowPrefill(fresh);
-        await screen.findByRole('button', { name: 'Update preferences' });
+        await screen.findByRole('button', { name: /^Update preferences$/i });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Update preferences' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Update preferences$/i }));
         expect(await screen.findByText('Destroy the fee (reduces supply) (unchanged)')).toBeTruthy();
         await resolvePrefill(DEFAULTS);
 

@@ -41,10 +41,10 @@ describe('Onboarding wallet choice', () => {
 
     it('drops the brand block under the Add wallet page header so the title and logo are not repeated', () => {
         draw({ onBack: () => {} });
-        expect(screen.getByRole('heading', { name: 'Add wallet' })).toBeTruthy();
+        expect(screen.getByRole('heading', { name: 'Add Wallet' })).toBeTruthy();
         expect(screen.queryByRole('heading', { name: 'XChain Wallet' })).toBeNull();
         expect(screen.queryByRole('img', { name: 'XChain Wallet' })).toBeNull();
         expect(screen.queryByText(/open-source, non-custodial wallet/)).toBeNull();
-        expect(screen.getByRole('button', { name: 'Create new wallet' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Create New Wallet' })).toBeTruthy();
     });
 });

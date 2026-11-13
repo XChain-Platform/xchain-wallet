@@ -86,12 +86,11 @@ describe('History keyboard operation', () => {
         const view = mountHistory({ onSelectEntry });
         const rows = await rowButtons(view);
 
-        // Home's Activity rows carry no chevron and no expanded state; the
-        // same rows in History open the same detail page.
+        // A row that opens the detail page has no expanded state; like every
+        // tappable list row it ends in the forward chevron, not the expand one.
         for (const row of rows) {
             expect(row).not.toHaveAttribute('aria-expanded');
-            // The trailing cell, where the expand chevron sat, is empty.
-            expect(row.lastElementChild.childElementCount).toBe(0);
+            expect(row.lastElementChild.querySelector('[data-row-chevron]')).not.toBeNull();
         }
         fireEvent.click(rows[0]);
         expect(onSelectEntry).toHaveBeenCalledTimes(1);
@@ -145,12 +144,13 @@ describe('History keyboard operation', () => {
         const view = mountHistory();
         await rowButtons(view);
 
-        const disclosure = screen.getByRole('button', { name: 'More filters' });
+        // The filters sit in the title-line filter menu.
+        const disclosure = screen.getByRole('button', { name: 'History filters' });
         disclosure.focus();
         fireEvent.keyDown(disclosure, { key: 'Enter' });
         fireEvent.click(disclosure);
 
-        const chainTrigger = screen.getByRole('button', { name: 'All networks' });
+        const chainTrigger = screen.getByRole('button', { name: 'Filter by network' });
         chainTrigger.focus();
         fireEvent.keyDown(chainTrigger, { key: 'ArrowDown' });
         const chainOptions = await screen.findAllByRole('option');

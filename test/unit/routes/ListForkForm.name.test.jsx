@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { ListForkForm } from '../../../packages/core/src/shared/routes/ListForkForm.jsx';
 
 const { submitConfirmed } = vi.hoisted(() => ({ submitConfirmed: vi.fn() }));
@@ -57,10 +58,13 @@ function mountFork({ name, listRead = 'available', walletMode = 'watcher', getAc
         : listRead === 'failed'
             ? vi.fn().mockRejectedValue(new Error('list read failed'))
             : vi.fn().mockResolvedValue(row);
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode }], activeWalletId: 'wallet-1' });
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: ADDRESS.id } }),
-        getSettings: vi.fn().mockResolvedValue({ walletMode, activeNetwork: 'mainnet' }),
+        getSettings: vi.fn().mockResolvedValue({ activeNetwork: 'mainnet' }),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'W', walletMode }]),
         signerReady: vi.fn().mockResolvedValue({ ready: walletMode === 'full' }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: walletMode === 'full' ? 'unlocked' : 'locked' }),
         getListByActionIndex,
@@ -97,11 +101,12 @@ function mountFork({ name, listRead = 'available', walletMode = 'watcher', getAc
 
 async function openFirstReview() {
     fireEvent.change(await screen.findByLabelText('Add tokens'), { target: { value: 'ADD' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Publish edit$/i }));
 }
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     vi.clearAllMocks();
 });
 
@@ -132,7 +137,7 @@ describe('ListForkForm list names', () => {
         mountFork({ listRead: 'failed' });
 
         expect(await screen.findByText(/Couldn't load list #2700/)).toBeTruthy();
-        expect(screen.queryByRole('button', { name: 'Publish edit' })).toBeNull();
+        expect(screen.queryByRole('button', { name: /^Publish edit$/i })).toBeNull();
     });
 
     it('neutralizes bidi controls in a named review label', async () => {
@@ -156,7 +161,7 @@ describe('ListForkForm list names', () => {
         fireEvent.click(await screen.findByRole('checkbox', { name: 'REMOVE' }));
         await openFirstReview();
         expect(await screen.findByText('Treasury wallets (List #2700)')).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Publish add' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish Add' }));
         await screen.findByText('First transaction (add)');
         await act(async () => { finishIndexing({ action_index: 2701 }); });
 

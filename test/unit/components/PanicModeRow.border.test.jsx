@@ -25,7 +25,7 @@ describe('PanicModeRow style-guide actions', () => {
         expect(activate.className).toMatch(/danger/);
         expect(activate.style.border).toBe('');
         fireEvent.click(activate);
-        const confirm = screen.getByRole('button', { name: 'Confirm 24-hour freeze' });
+        const confirm = screen.getByRole('button', { name: 'Confirm 24-Hour Freeze' });
         expect(confirm.className).toMatch(/danger/);
         fireEvent.click(confirm);
         const deactivate = screen.getByRole('button', { name: 'Deactivate' });

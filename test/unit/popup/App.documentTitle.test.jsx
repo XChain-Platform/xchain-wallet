@@ -53,7 +53,7 @@ describe('extension window title', () => {
         window.history.replaceState(null, '', '/sidepanel.html');
         installChrome({ ok: true, result: { state: 'no-wallet' } });
         render(<App />);
-        await screen.findByRole('button', { name: 'Create new wallet' });
+        await screen.findByRole('button', { name: 'Create New Wallet' });
         // The title is written in a passive effect, which can land after the
         // screen it names has painted on a loaded runner.
         await waitFor(() => expect(document.title).toBe('XChain Wallet - Welcome'));

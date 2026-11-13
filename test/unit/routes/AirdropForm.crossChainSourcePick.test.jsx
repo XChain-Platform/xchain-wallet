@@ -82,13 +82,16 @@ afterEach(() => {
 describe('AirdropForm cross-chain source picker', () => {
     it('switches Network and keeps the picked source address', async () => {
         mountAirdrop();
-        await waitFor(() => expect(screen.getByLabelText('From')).toHaveValue(SOURCE_A));
+        // The standard From section (closed on load) labels the field
+        // "From address"; open it to reach the picker icon.
+        await waitFor(() => expect(screen.getByLabelText('From address')).toHaveValue(SOURCE_A));
 
+        fireEvent.click(screen.getByRole('button', { name: /^From\b/, expanded: false }));
         fireEvent.click(screen.getByRole('button', { name: 'Choose source address' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Pick Litecoin source' }));
 
-        await waitFor(() => expect(screen.getByLabelText('From')).toHaveValue(SOURCE_B));
-        expect(screen.getByRole('button', { name: /^Network:/ })).toHaveTextContent('Litecoin');
+        await waitFor(() => expect(screen.getByLabelText('From address')).toHaveValue(SOURCE_B));
+        expect(screen.getByRole('button', { name: /^Network:/, hidden: true })).toHaveTextContent('Litecoin');
         expect(screen.queryByText(/No address on this network/i)).toBeNull();
     });
 });

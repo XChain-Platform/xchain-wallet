@@ -101,7 +101,8 @@ describe('Dogecoin route flow with mocked SDK messaging', () => {
             <Receive walletId={WALLET_ID} prefill={{ chainId: CHAIN_ID, tick: 'DOGE' }} />,
         ));
 
-        expect(await screen.findByText(OUR_ADDRESS)).toBeInTheDocument();
+        // The address now sits in a read-only field, not plain text.
+        expect(await screen.findByDisplayValue(OUR_ADDRESS)).toBeInTheDocument();
         expect(screen.getByRole('textbox', { name: 'Amount (DOGE)' })).toBeInTheDocument();
         fireEvent.change(screen.getByRole('textbox', { name: 'Amount (DOGE)' }), {
             target: { value: '12.5' },
@@ -176,6 +177,8 @@ describe('Dogecoin route flow with mocked SDK messaging', () => {
         fireEvent.change(amount, { target: { value: '0.001' } });
         await waitFor(() => expect(screen.queryByText(/too small to send/i)).toBeNull());
         expect(screen.queryByRole('switch', { name: /fee bumping/i })).toBeNull();
+        // The Network fee section starts closed; open it to reach the selector.
+        fireEvent.click(screen.getByRole('button', { name: /^Network fee\b/, expanded: false }));
         expect(screen.getByRole('slider', { name: 'Network fee' }))
             .toHaveAttribute('aria-valuetext', expect.stringContaining('0.25'));
 

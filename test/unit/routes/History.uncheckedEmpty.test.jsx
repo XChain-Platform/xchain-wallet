@@ -3,13 +3,13 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// One message per state: an empty History in a wallet whose balances could not
-// be checked says so once (as Send does) instead of "No activity yet" beside
-// the "Some balances may be out of date" notice.
+// An empty History shows its plain empty state even when balances could not
+// be checked: no per-page network error and no Try again, since the app's
+// reachability banner reports network trouble once.
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 
 const reach = vi.hoisted(() => ({ overall: 'degraded', refresh: vi.fn() }));
 vi.mock('../../../packages/core/src/shared/hooks/useReachability.js', () => ({
@@ -54,17 +54,13 @@ beforeEach(() => { reach.overall = 'degraded'; reach.refresh.mockClear(); });
 afterEach(() => { cleanup(); window.localStorage.clear(); });
 
 describe('History empty state when balances could not be checked', () => {
-    it('shows one unchecked message with Try again and no "No activity yet"', async () => {
-        const messaging = makeMessaging();
-        mount(messaging);
+    it('shows "No activity yet" with no unchecked message or Try again', async () => {
+        mount(makeMessaging());
 
-        expect(await screen.findByText("Balances couldn't be checked")).toBeInTheDocument();
-        expect(screen.queryByText('No activity yet')).toBeNull();
-
-        const calls = messaging.getAddressHistory.mock.calls.length;
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
-        expect(reach.refresh).toHaveBeenCalledTimes(1);
-        await waitFor(() => expect(messaging.getAddressHistory.mock.calls.length).toBeGreaterThan(calls));
+        expect(await screen.findByText('No activity yet')).toBeInTheDocument();
+        expect(screen.getByText('Activity appears here after you send or receive.')).toBeInTheDocument();
+        expect(screen.queryByText("Balances couldn't be checked")).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
     });
 
     it('keeps "No activity yet" when balances were checked', async () => {

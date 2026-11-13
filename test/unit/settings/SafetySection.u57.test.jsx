@@ -83,13 +83,13 @@ describe('Safety buttons carry icons (U63)', () => {
         expectAllButtonsIconed(container);
         fireEvent.click(screen.getByRole('button', { name: /Activate/ }));
         expectAllButtonsIconed(container);
-        expect(screen.getByRole('button', { name: /Confirm 24-hour freeze/ }).className).toMatch(/danger/);
+        expect(screen.getByRole('button', { name: /Confirm 24-Hour Freeze/ }).className).toMatch(/danger/);
     });
 
     it('panic active', async () => {
         const { container } = render(<PanicModeRow />);
         fireEvent.click(screen.getByRole('button', { name: /Activate/ }));
-        fireEvent.click(screen.getByRole('button', { name: /Confirm 24-hour freeze/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Confirm 24-Hour Freeze/ }));
         await screen.findByRole('button', { name: /Deactivate/ });
         expectAllButtonsIconed(container);
     });
@@ -99,7 +99,7 @@ describe('Safety buttons carry icons (U63)', () => {
         expectAllButtonsIconed(container);
         fireEvent.click(screen.getByRole('button', { name: /^Set/ }));
         expectAllButtonsIconed(container);
-        const save = screen.getByRole('button', { name: /Save passphrase/ });
+        const save = screen.getByRole('button', { name: /Save Passphrase/ });
         expect(save.getAttribute('type')).toBe('submit');
         expect(save.className).toMatch(/success/);
         expect(container.querySelectorAll('button[class*="success"]').length).toBe(1);
@@ -117,16 +117,16 @@ describe('Safety buttons carry icons (U63)', () => {
         expectAllButtonsIconed(container);
         fireEvent.click(screen.getByRole('button', { name: /^Enable/ }));
         expectAllButtonsIconed(container);
-        const submit = screen.getByRole('button', { name: /Enable biometric unlock/ });
+        const submit = screen.getByRole('button', { name: /Enable Biometric Unlock/ });
         expect(submit.className).toMatch(/success/);
         unmount();
 
         registered = true;
         const second = render(<BiometricRow />);
-        await screen.findByRole('button', { name: /Re-enrol/ });
+        await screen.findByRole('button', { name: /Re-Enrol/ });
         expectAllButtonsIconed(second.container);
-        fireEvent.click(screen.getByRole('button', { name: /Re-enrol/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Re-Enrol/ }));
         expectAllButtonsIconed(second.container);
-        expect(screen.getByRole('button', { name: /Re-enrol biometric unlock/ }).className).toMatch(/success/);
+        expect(screen.getByRole('button', { name: /Re-Enrol Biometric Unlock/ }).className).toMatch(/success/);
     });
 });

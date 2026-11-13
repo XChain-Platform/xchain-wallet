@@ -106,7 +106,7 @@ describe('background settings save failures', () => {
         const previous = control.value;
 
         fireEvent.change(control, { target: { value: 'https://private.example.com' } });
-        fireEvent.click(within(block).getByRole('button', { name: 'Save endpoints' }));
+        fireEvent.click(within(block).getByRole('button', { name: 'Save Endpoints' }));
 
         expect(await within(block).findByRole('alert')).toHaveTextContent('storage failed');
         expect(control.value).toBe(previous);

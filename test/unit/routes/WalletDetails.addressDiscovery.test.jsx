@@ -55,7 +55,7 @@ describe('Wallet details used-address check', () => {
                 <WalletDetails walletId={wallet.id} onBack={() => {}} />
             </MessagingProvider>,
         );
-        fireEvent.click(await screen.findByRole('button', { name: 'Check for used addresses' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Check for Used Addresses' }));
         await waitFor(() => expect(messaging.discoverAddresses).toHaveBeenCalledWith({ walletId: 'w-1' }));
         expect(await screen.findByText('Checking for used addresses (0 of 1 network checked)')).toBeInTheDocument();
 
@@ -63,7 +63,7 @@ describe('Wallet details used-address check', () => {
         expect(await screen.findByText("Couldn't finish checking for used addresses on Bitcoin. Try again", {}, { timeout: 3000 }))
             .toBeInTheDocument();
         current = job({ id: 2, found: 2 });
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         expect(await screen.findByText('Found 2 used addresses')).toBeInTheDocument();
         expect(messaging.discoverAddresses).toHaveBeenCalledTimes(2);
     });
@@ -80,6 +80,6 @@ describe('Wallet details used-address check', () => {
             </MessagingProvider>,
         );
         await screen.findByText('Restored');
-        expect(screen.queryByRole('button', { name: 'Check for used addresses' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Check for Used Addresses' })).toBeNull();
     });
 });

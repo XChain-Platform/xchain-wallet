@@ -15,6 +15,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { BroadcastForm } from '../../../packages/core/src/shared/routes/BroadcastForm.jsx';
 
 const ADDRESS = 'bc1qexampleexampleexampleexampleexampleex';
@@ -53,9 +54,12 @@ function mountForm(chainId = 'bitcoin-mainnet', addresses = ADDRESSES, props = {
         psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 0,
     });
     broadcastAction = vi.fn().mockResolvedValue({ txid: 'deadbeef' });
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode: props.walletMode || 'full' }], activeWalletId: 'w' });
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue(addresses),
-        getSettings: vi.fn().mockResolvedValue({ walletMode: props.walletMode || 'full' }),
+        getSettings: vi.fn().mockResolvedValue({}),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'w', name: 'W', walletMode: props.walletMode || 'full' }]),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         listContacts: vi.fn().mockResolvedValue([]),
         composeForConfirm,
@@ -106,6 +110,7 @@ beforeEach(() => {
 });
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     vi.useRealTimers();
 });
 
@@ -122,7 +127,8 @@ describe('BroadcastForm plain message flow', () => {
     it('renders only the format 0 authoring fields', async () => {
         mountForm();
 
-        expect(await screen.findByRole('button', { name: 'About Network' })).toBeInTheDocument();
+        // Network sits in the standard From section, closed on load.
+        expect(await screen.findByRole('button', { name: 'About Network', hidden: true })).toBeInTheDocument();
         const message = await screen.findByLabelText('Message');
         expect(message.tagName).toBe('TEXTAREA');
         expect(message).toHaveAttribute('required');
@@ -198,7 +204,7 @@ describe('BroadcastForm success screen', () => {
         await waitFor(() => expect(broadcastAction).toHaveBeenCalledTimes(1));
         expect(await screen.findByRole('heading', { name: 'Broadcast pending' })).toBeTruthy();
         expect(screen.getByText('deadbeef')).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Copy transaction ID' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Copy Transaction ID' })).toBeTruthy();
         expect(document.body.textContent).not.toMatch(/Litecoin|regtest|testnet|not mainnet/i);
         expect(screen.getByRole('link', { name: 'View on explorer' })).toHaveAttribute(
             'href',
@@ -207,7 +213,7 @@ describe('BroadcastForm success screen', () => {
         expect(screen.getByRole('status')).toHaveAttribute('aria-atomic', 'true');
         expect(screen.getAllByRole('status')).toHaveLength(1);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Broadcast another' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Broadcast Another' }));
         expect(await screen.findByRole('button', { name: 'Broadcast' })).toBeTruthy();
         expect(screen.queryByText('deadbeef')).toBeNull();
         expect(confirm).not.toBeInTheDocument();
@@ -231,7 +237,10 @@ describe('BroadcastForm field help tips', () => {
         mountForm();
         await screen.findByLabelText('Message');
 
-        const fromTip = screen.getByRole('button', { name: 'About From' });
+        // The From field lives in the standard From section (closed
+        // on load) and is labelled "From address".
+        fireEvent.click(screen.getByRole('button', { name: /^From\b/, expanded: false }));
+        const fromTip = screen.getByRole('button', { name: 'About From address' });
         expect(document.getElementById(fromTip.getAttribute('aria-describedby')).textContent)
             .toBe('The address that signs and pays for this message. The message is recorded on-chain as coming from this address.');
         const messageTip = screen.getByRole('button', { name: 'About Message' });

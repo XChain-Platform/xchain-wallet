@@ -27,7 +27,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BetFeedDetail } from '../../../packages/core/src/shared/routes/BetFeedDetail.jsx';
 import { CreateBetFeedForm } from '../../../packages/core/src/shared/routes/CreateBetFeedForm.jsx';
-import { MyBets } from '../../../packages/core/src/shared/routes/MyBets.jsx';
+import { BetFeedsList } from '../../../packages/core/src/shared/routes/BetFeedsList.jsx';
 import { OracleConsole } from '../../../packages/core/src/shared/routes/OracleConsole.jsx';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -185,6 +185,15 @@ async function openMarket(messaging, feedIndex = '1169') {
     return utils;
 }
 
+// The market page opens on Details and shows only the chosen tab's content,
+// so the bet form appears once the Bet tab is chosen.
+async function chooseBetTab(utils) {
+    await domAct(async () => {
+        fireEvent.click(utils.getByRole('tab', { name: 'Bet' }));
+        await drain();
+    });
+}
+
 describe('(a) BetFeedDetail: the pool respects the token, not the sum column', () => {
     it('renders a 0-decimal token\'s pool without the DECIMAL(65,18) tail', async () => {
         const { messaging } = harness();
@@ -229,10 +238,10 @@ describe('(b) counts are pluralized', () => {
             await drain();
         });
         await domAct(async () => {
-            typeIn(utils, 'What is being bet on', 'Will it ship?');
-            typeIn(utils, 'Outcome 0', 'Yes');
-            typeIn(utils, 'Outcome 1', 'No');
-            typeIn(utils, 'Betting closes', '2027-06-01T12:00');
+            typeIn(utils, 'Question', 'Will it ship?');
+            typeIn(utils, 'Outcome 1', 'Yes');
+            typeIn(utils, 'Outcome 2', 'No');
+            typeIn(utils, 'Closes', '2027-06-01T12:00');
             await drain();
         });
         const shown = utils.container.textContent;
@@ -246,6 +255,7 @@ describe('(c) the confirm screens name the outcome the market names', () => {
     it('BetFeedDetail: the place-bet intent reads the label AND keeps the index', async () => {
         const { messaging } = harness();
         const utils = await openMarket(messaging);
+        await chooseBetTab(utils);
         await domAct(async () => {
             fireEvent.click(button(utils, /^Yes$/));
             await drain();
@@ -282,7 +292,7 @@ describe('(c) the confirm screens name the outcome the market names', () => {
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(button(utils, /Publish result/i));
+            fireEvent.click(button(utils, /Publish Result/));
             await drain();
         });
 
@@ -298,7 +308,9 @@ describe('(c) the confirm screens name the outcome the market names', () => {
             betFeed: () => Promise.resolve({ data: [{ ...ZERO_DECIMAL_FEED, outcomes: '' }] }),
         });
         const utils = await openMarket(messaging);
+        // Details says so; the Bet tab then offers nothing to back.
         expect(utils.container.textContent).toContain('No outcomes recorded');
+        await chooseBetTab(utils);
         // Keep Review active when the feed has no outcomes so the form can explain
         // why it cannot continue.
         const review = button(utils, /Place bet/i);
@@ -308,7 +320,8 @@ describe('(c) the confirm screens name the outcome the market names', () => {
     });
 });
 
-describe('(c) MyBets names each row\'s outcome', () => {
+// My bets is a tab of Bet Markets (view 'bets').
+describe('(c) the My bets tab names each row\'s outcome', () => {
     const BET_ROW = Object.freeze({
         action_index: '5001',
         feed_action_index: '1169',
@@ -321,7 +334,7 @@ describe('(c) MyBets names each row\'s outcome', () => {
     async function openMyBets(messaging, props = {}) {
         let utils;
         await domAct(async () => {
-            utils = mount(MyBets, messaging, props);
+            utils = mount(BetFeedsList, messaging, { view: 'bets', onOpenMarket() {}, ...props });
             await drain();
         });
         // The label read is a second wave of effects behind the bet list.

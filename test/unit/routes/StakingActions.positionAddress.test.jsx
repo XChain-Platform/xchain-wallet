@@ -54,7 +54,7 @@ describe('validator actions opened from a stake detail', () => {
         expect(await screen.findByText('9 XCHAIN available')).toBeInTheDocument();
         await waitFor(() => expect(screen.getByLabelText('Amount (XCHAIN)')).toHaveValue('9'));
         expect(messaging.getRewardsForAddress).toHaveBeenCalledWith({ chainId: CHAIN, address: OWNER });
-        fireEvent.click(screen.getByRole('button', { name: 'Claim rewards' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Claim Rewards$/ }));
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled());
         expect(messaging.composeForConfirm.mock.calls[0][0].from.address).toBe(OWNER);
     });

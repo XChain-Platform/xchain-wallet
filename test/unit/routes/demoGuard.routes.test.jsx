@@ -96,9 +96,8 @@ const base = {
 
 const ROUTES = [
     ['Swap', SwapForm],
-    ['Create token (wizard)', TokenWizard, {}, async () => {
-        fireEvent.click(await screen.findByRole('button', { name: /^Custom/ }));
-    }],
+    // The wizard is one Issue Token form now, so no mode button is clicked first.
+    ['Create token (wizard)', TokenWizard],
     ['Issue token', IssueTokenForm],
     ['Mint', MintForm],
     ['Destroy', DestroyForm],
@@ -185,13 +184,14 @@ describe('demo wallets cannot move funds from any compose route', () => {
         const { calls, view } = mount(Route, extra);
         if (step) await step();
 
-        const note = await waitFor(() => {
+        // Some forms swap their loading frame for the real one, which remounts
+        // the note, so the exit button is checked on the note that is still attached.
+        await waitFor(() => {
             const hit = screen.getAllByRole('status').find((node) => DEMO_NOTE.test(node.textContent || ''));
             expect(hit).toBeTruthy();
-            return hit;
+            expect(within(hit).getByRole('button', { name: 'Create a Real Wallet' })).toBeInTheDocument();
         }, { timeout: 4000 });
 
-        expect(within(note).getByRole('button', { name: 'Create a real wallet' })).toBeInTheDocument();
         const submits = [...view.container.querySelectorAll('button[type="submit"]')];
         expect(submits.filter((button) => !button.disabled)).toEqual([]);
 
@@ -202,7 +202,7 @@ describe('demo wallets cannot move funds from any compose route', () => {
 
     it('opens the exit confirmation from the note', async () => {
         mount(SwapForm);
-        fireEvent.click(await screen.findByRole('button', { name: 'Create a real wallet' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Create a Real Wallet' }));
         expect(await screen.findByRole('dialog', { name: 'Exit demo and delete its data?' })).toBeInTheDocument();
     });
 

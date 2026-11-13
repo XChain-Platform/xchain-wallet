@@ -104,7 +104,7 @@ describe('I through P route rendering at 320px', () => {
             },
         );
 
-        expect(await screen.findByRole('button', { name: /^Link actions$/ })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: 'Link Actions' })).toBeInTheDocument();
         expectNoFixedWidthBeyondViewport(container, issueTokenCss);
     });
 
@@ -151,7 +151,7 @@ describe('I through P route rendering at 320px', () => {
             },
         );
 
-        expect(await screen.findByRole('button', { name: 'Create token' })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: 'Create Token' })).toBeInTheDocument();
         expectNoFixedWidthBeyondViewport(container, myTokensCss);
     });
 

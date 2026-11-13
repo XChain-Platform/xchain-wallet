@@ -15,7 +15,9 @@ import {
     compareMergedEntries,
     directionFor,
     DROPPED_GRACE_MS,
+    entryOrderTimeMs,
     firstSeenToMs,
+    isInFlightEntry,
     isLivePendingStatus,
     mempoolRowToEntry,
     mergeMonotonicChainHeights,
@@ -645,5 +647,91 @@ describe('a send another transaction spent around', () => {
         expect(t(copy.headline)).toBe('Replaced');
         expect(t(copy.help)).toBe("Another transaction spent the same coins. This one won't confirm.");
         expect(PENDING_WARNING_STATES.has('replaced-elsewhere')).toBe(true);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// A row sits with the rows its status pill names: only an in-flight row ranks
+// with the pending ones, and a settled blockless row (Confirmed or Failed)
+// orders among the settled rows by its own time.
+// ---------------------------------------------------------------------------
+
+describe('isInFlightEntry and the settled order', () => {
+    const SEC = Math.floor(NOW / 1000);
+    const LATER = NOW + NETWORK_SEEN_WINDOW_MS * 4;
+    const indexed = (secs, over = {}) => ({
+        chainId: CHAIN, blockIndex: 7700, actionIndex: '1', timestamp: secs, raw: {}, ...over,
+    });
+    const proved = (confirmedAt) => fromLocal({
+        status: 'indexed',
+        chainConfirmed: true,
+        confirmedBlockIndex: 7701,
+        confirmedAt,
+        broadcastAt: new Date(NOW - 3_600_000).toISOString(),
+    });
+
+    it('reads in flight exactly when classifyEntryStatus reads pending, in every display state', () => {
+        const cases = [
+            ['seen in a mempool', fromMempool(), NOW],
+            ['awaiting the network', fromLocal({ broadcastAt: new Date(NOW).toISOString() }), NOW],
+            ['not seen past the window', fromLocal(), LATER],
+            ['seen, then dropped', fromLocal({ mempoolSeenAt: new Date(NOW).toISOString() }), NOW + DROPPED_GRACE_MS + 1],
+            ['seen, inside the grace', fromLocal({ mempoolSeenAt: new Date(NOW).toISOString() }), NOW + 1000],
+            ['replaced by our RBF', fromLocal({ status: 'rbf-replaced', rbfReplacement: 'EE' }), NOW],
+            ['coins spent elsewhere', fromLocal({ replacedElsewhere: true }), LATER],
+            ['failed before the network', fromLocal({ status: 'failed', txid: null, error: 'x' }), NOW],
+            ['proved into a block', proved(new Date(NOW).toISOString()), NOW],
+            ['indexed', indexed(SEC), NOW],
+            ['indexed but rejected', indexed(SEC, { raw: { status: 'invalid' } }), NOW],
+            ['blockless with no meta', { chainId: CHAIN, blockIndex: 0, timestamp: NOW, raw: {} }, NOW],
+        ];
+        for (const [name, entry, at] of cases) {
+            expect([name, isInFlightEntry(entry, at)])
+                .toEqual([name, classifyEntryStatus(entry, at) === 'pending']);
+        }
+    });
+
+    it('dates a proved row by when its block was learned, falling back to its own clock', () => {
+        const at = Date.parse('2026-08-27T00:05:00.000Z');
+        // One clock: the row shows, sorts and files under the same time.
+        expect(proved('2026-08-27T00:05:00.000Z').timestamp).toBe(at);
+        expect(entryOrderTimeMs(proved('2026-08-27T00:05:00.000Z'))).toBe(at);
+        const noStamp = proved(null);
+        expect(entryOrderTimeMs(noStamp)).toBe(noStamp.timestamp);
+        expect(entryOrderTimeMs(indexed(SEC))).toBe(SEC * 1000);
+    });
+
+    it('orders a proved row among the confirmed rows by its block time, below every in-flight row', () => {
+        const list = [
+            indexed(SEC - 120, { actionIndex: 'older' }),
+            proved(new Date(NOW - 60_000).toISOString()),
+            fromMempool({ first_seen: SEC - 3600 }),
+            indexed(SEC - 10, { actionIndex: 'newer' }),
+        ].sort((a, b) => compareMergedEntries(a, b, NOW));
+        expect(list.map((e) => (e.pending?.chainConfirmed ? 'proved' : e.actionIndex || 'in-flight')))
+            .toEqual(['in-flight', 'newer', 'proved', 'older']);
+    });
+
+    it('orders failed and dropped rows among the settled rows by their own time', () => {
+        const at = NOW + DROPPED_GRACE_MS + 1;
+        const failed = fromLocal({
+            id: 'ptx-failed', status: 'failed', txid: null, error: 'x',
+            updatedAt: new Date(NOW - 30_000).toISOString(),
+        });
+        const dropped = fromLocal({ txid: 'D1', mempoolSeenAt: new Date(NOW - 90_000).toISOString() });
+        const list = [
+            indexed(SEC - 200, { actionIndex: 'older' }),
+            dropped,
+            failed,
+            indexed(SEC - 10, { actionIndex: 'newer' }),
+        ].sort((a, b) => compareMergedEntries(a, b, at));
+        expect(list.map((e) => (e.pending?.failed ? 'failed' : e.pending ? 'dropped' : e.actionIndex)))
+            .toEqual(['newer', 'failed', 'dropped', 'older']);
+    });
+
+    it('keeps a send that has not dropped yet at the top while it waits out the grace', () => {
+        const waiting = fromLocal({ mempoolSeenAt: new Date(NOW - 60_000).toISOString() });
+        const list = [indexed(SEC), waiting].sort((a, b) => compareMergedEntries(a, b, NOW));
+        expect(list[0]).toBe(waiting);
     });
 });

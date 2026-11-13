@@ -61,10 +61,10 @@ describe('Pause token wake block at Approve', () => {
                 <SleepForm walletId="w" mode="tick" initialChainId={CHAIN} initialTick="GATE" onBack={() => {}} />
             </MessagingProvider>,
         );
-        await screen.findByText('GATE is currently active (not paused).');
+        await screen.findByText('Active, not paused'); // The state badge.
         fireEvent.change(screen.getByRole('slider', { name: 'Duration' }), { target: { value: '4' } });
         fireEvent.change(screen.getByLabelText('Blocks'), { target: { value: '5' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Pause token' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Pause token$/i }));
         const approve = await screen.findByRole('button', { name: 'Approve' });
         getIndexerWatermark.mockResolvedValue({ watermark: 110 });
         await waitFor(() => expect(approve).toBeEnabled());

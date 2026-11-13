@@ -97,7 +97,7 @@ describe('Locked: the one-time capture step', () => {
         expect(screen.getByText(STORAGE_SENTENCE)).toBeTruthy();
         expect(screen.getByLabelText('Passphrase')).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Continue' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Not now' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Not Now' })).toBeTruthy();
         expect(onUnlocked).not.toHaveBeenCalled();
     });
 
@@ -202,7 +202,7 @@ describe('Locked: several legacy wallets, one at a time', () => {
         submitPassword();
         await expectStepTwoFor(COLD.name);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Not now' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Not Now' }));
 
         await waitFor(() => expect(onUnlocked).toHaveBeenCalledTimes(1));
         expect(capturePassphrase).not.toHaveBeenCalled();

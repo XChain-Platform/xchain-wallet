@@ -41,7 +41,7 @@ describe('GovernancePolls states', () => {
     it('shows the initial loading state while wallet addresses resolve', () => {
         mount({ getAddressesByChain: vi.fn(() => pending()) });
 
-        expect(screen.getByRole('heading', { name: 'Governance polls' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Governance Polls' })).toBeInTheDocument();
         const notice = screen.getByRole('status');
         expect(notice).toHaveTextContent(/Loading/);
         expect(notice.parentElement.firstElementChild).toBe(notice);
@@ -66,7 +66,9 @@ describe('GovernancePolls states', () => {
         expect(heading).toBeInTheDocument();
         // The empty state sits inside the ListPage template, like the loading and error states.
         expect(heading.closest(`.${listPageStyles.page}`)).not.toBeNull();
-        expect(screen.queryByRole('button', { name: 'Create poll' })).toBeNull();
+        // Create poll lives in the plus menu, which only exists once a governance address does.
+        expect(screen.queryByRole('button', { name: 'New poll or delegation' })).toBeNull();
+        expect(screen.queryByRole('menuitem', { name: 'Create poll' })).toBeNull();
     });
 
     it('shows address-loading failures without an empty-state claim', async () => {
@@ -93,7 +95,8 @@ describe('GovernancePolls states', () => {
         await screen.findByText('Ship the release?');
         fireEvent.click(screen.getByRole('button', { name: /Ship the release/ }));
         expect(onOpenPoll).toHaveBeenCalledWith(CHAIN, 11);
-        expect(screen.getByRole('button', { name: 'Create poll' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'New poll or delegation' }));
+        expect(screen.getByRole('menuitem', { name: 'Create poll' })).toBeInTheDocument();
     });
 
     it('renders polls as one flush list with governance icons and ruled actions', async () => {
@@ -131,17 +134,19 @@ describe('GovernancePolls states', () => {
         for (const item of items) {
             const row = item.querySelector('button');
             expect(row).not.toBeNull();
-            expect(item.querySelector('[aria-hidden="true"] svg')).not.toBeNull();
+            // The leading icon is the chain badge, named for the poll's network.
+            expect(item.querySelector('[aria-label="Bitcoin"]')).not.toBeNull();
         }
 
-        const create = screen.getByRole('button', { name: 'Create poll' });
-        expect(create).toHaveClass(buttonStyles.success);
+        // Create poll and Delegate votes are plus-menu items, each with an icon, and no
+        // success-styled button sits on the page.
+        const plus = screen.getByRole('button', { name: 'New poll or delegation' });
+        expect(plus.querySelector('svg')).not.toBeNull();
+        expect(document.querySelectorAll(`.${buttonStyles.success}`)).toHaveLength(0);
+        fireEvent.click(plus);
+        const create = screen.getByRole('menuitem', { name: 'Create poll' });
         expect(create.querySelector('svg')).not.toBeNull();
-        expect(document.querySelectorAll(`.${buttonStyles.success}`)).toHaveLength(1);
-
-        const delegate = screen.getByRole('button', { name: 'Delegate votes' });
-        expect(delegate).toHaveClass(buttonStyles.secondary);
-        expect(delegate).not.toHaveClass(buttonStyles.success);
+        const delegate = screen.getByRole('menuitem', { name: 'Delegate votes' });
         expect(delegate.querySelector('svg')).not.toBeNull();
     });
 });

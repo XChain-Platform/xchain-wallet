@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// M2.4: the Send success card gains a "View in history" action landing on
+// M2.4: the Send success card gains a "View in History" action landing on
 // the merged entry, which the wallet builds from its own PendingTx record
 // the instant broadcast succeeds - before the network has necessarily
 // reported it. These drive the REAL Send component end to end (fill ->
@@ -124,7 +124,7 @@ async function driveToBroadcastDone(messaging) {
 
 afterEach(() => cleanup());
 
-describe('Send success card: "View in history" (M2.4)', () => {
+describe('Send success card: "View in History" (M2.4)', () => {
     it('updates pending, failed, and confirmed status without remounting', async () => {
         const statusHarness = { phase: 'pending' };
         const { messaging } = mount({ statusHarness });
@@ -146,7 +146,7 @@ describe('Send success card: "View in history" (M2.4)', () => {
         const { messaging } = mount({ onViewHistory });
         await driveToBroadcastDone(messaging);
 
-        const button = screen.getByRole('button', { name: /View in history/i });
+        const button = screen.getByRole('button', { name: /View in History/i });
         expect(button).toBeInTheDocument();
 
         // Pre-validation honesty (§7): a broadcast is not a network sighting.
@@ -162,7 +162,7 @@ describe('Send success card: "View in history" (M2.4)', () => {
         const { messaging } = mount({ onViewHistory });
         await driveToBroadcastDone(messaging);
 
-        fireEvent.click(screen.getByRole('button', { name: /View in history/i }));
+        fireEvent.click(screen.getByRole('button', { name: /View in History/i }));
 
         expect(onViewHistory).toHaveBeenCalledTimes(1);
         expect(onViewHistory).toHaveBeenCalledWith({ chainId: CHAIN_ID, txHash: TXID });
@@ -172,11 +172,11 @@ describe('Send success card: "View in history" (M2.4)', () => {
         const { messaging } = mount({ onViewHistory: undefined });
         await driveToBroadcastDone(messaging);
 
-        expect(screen.queryByRole('button', { name: /View in history/i })).toBeNull();
+        expect(screen.queryByRole('button', { name: /View in History/i })).toBeNull();
         expect(screen.queryByText(/already appears in History/i)).toBeNull();
         // The rest of the card is untouched: still exactly the two
         // pre-existing actions.
-        expect(screen.getByRole('button', { name: /^Send another$/ })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^Send Another$/ })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /^Done$/ })).toBeInTheDocument();
     });
 
@@ -188,7 +188,7 @@ describe('Send success card: "View in history" (M2.4)', () => {
         const { messaging } = mount();
         await driveToBroadcastDone(messaging);
 
-        const copyButton = screen.getByRole('button', { name: /Copy transaction ID/i });
+        const copyButton = screen.getByRole('button', { name: /Copy Transaction ID/i });
         fireEvent.click(copyButton);
 
         await waitFor(() => expect(copyButton).toHaveAttribute('data-state', 'failed'));

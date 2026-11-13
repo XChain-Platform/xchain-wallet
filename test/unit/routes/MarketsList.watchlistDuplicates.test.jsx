@@ -56,7 +56,9 @@ describe('MarketsList watchlist duplicates', () => {
     it('clears every row for the market and turns the star off', async () => {
         const { messaging, rows } = renderList([entry('a'), entry('b'), entry('c', 'PEPE')]);
         await screen.findByText('XCP');
-        fireEvent.click(screen.getByRole('tab', { name: 'All' }));
+        // The Show choice sits in the title-line filter menu.
+        fireEvent.click(screen.getByRole('button', { name: 'Filter markets' }));
+        fireEvent.change(screen.getByRole('combobox', { name: 'Show' }), { target: { value: 'all' } });
         const xcpRow = screen.getByRole('button', { name: 'Open XCP market' }).closest('li');
         const star = xcpRow.querySelector('button[aria-label="Remove from watchlist"]');
         fireEvent.click(star);

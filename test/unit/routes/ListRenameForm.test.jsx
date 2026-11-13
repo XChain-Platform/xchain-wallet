@@ -117,7 +117,7 @@ describe('ListRenameForm', () => {
         fireEvent.change(await screen.findByLabelText('Name'), {
             target: { value: 'Treasury' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Rename list' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Rename list$/i }));
 
         expect(await screen.findByText('List reference must be a positive whole number.')).toBeTruthy();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
@@ -145,7 +145,7 @@ describe('ListRenameForm', () => {
             chainId: CHAIN,
         });
         expect(screen.getByLabelText('Name').disabled).toBe(true);
-        expect(screen.getByRole('button', { name: 'Rename list' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: /^Rename list$/i }).disabled).toBe(true);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
         expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
     });
@@ -170,7 +170,7 @@ describe('ListRenameForm', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Clear name' }));
         fireEvent.click(screen.getByRole('button', { name: 'Clear description' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Rename list' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Rename list$/i }));
 
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
         expect(messaging.composeForConfirm.mock.calls[0][0].actionData.params).toEqual({
@@ -186,7 +186,7 @@ describe('ListRenameForm', () => {
         const messaging = mount();
         await screen.findByLabelText('Name');
 
-        fireEvent.click(screen.getByRole('button', { name: 'Rename list' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Rename list$/i }));
 
         expect(await screen.findByText(/no change/i)).toBeTruthy();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
@@ -225,7 +225,7 @@ describe('ListRenameForm', () => {
         fireEvent.change(screen.getByLabelText('Memo'), {
             target: { value: ' quarterly ' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Rename list' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Rename list$/i }));
 
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
         expect(messaging.composeForConfirm.mock.calls[0][0]).toMatchObject({

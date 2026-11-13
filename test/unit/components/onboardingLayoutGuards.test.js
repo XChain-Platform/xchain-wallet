@@ -34,10 +34,6 @@ const totalBalanceCss = readFileSync(
     'packages/core/src/shared/components/TotalBalanceHero.module.css',
     'utf8',
 );
-const walletPickerCss = readFileSync(
-    'packages/core/src/shared/routes/WalletPicker.module.css',
-    'utf8',
-);
 const homeCss = readFileSync(
     'packages/core/src/shared/routes/Home.module.css',
     'utf8',
@@ -48,6 +44,11 @@ const lockedCss = readFileSync(
 );
 const onboardingCss = readFileSync(
     'packages/core/src/shared/routes/Onboarding.module.css',
+    'utf8',
+);
+// The license lines are the shared warning lines.
+const warningCardCss = readFileSync(
+    'packages/core/src/shared/components/WarningCard.module.css',
     'utf8',
 );
 const carouselCss = readFileSync(
@@ -68,7 +69,6 @@ describe('onboarding and Home layout guards', () => {
         expect(balanceCss).toMatch(/\.row > \.rowContent\s*\{[^}]*flex-wrap:\s*wrap;/s);
         expect(balanceCss).toMatch(/\.name\s*\{[^}]*white-space:\s*normal;[^}]*overflow-wrap:\s*anywhere;/s);
         expect(balanceCss).not.toMatch(/\.name\s*\{[^}]*(text-overflow:\s*ellipsis|overflow:\s*hidden)/s);
-        expect(walletPickerCss).toMatch(/\.rowName\s*\{[^}]*text-overflow:\s*ellipsis;/s);
         // The hero amount takes a full-width grid row of its own below the
         // label and actions, so a long total never shares a line with them.
         expect(totalBalanceCss).toMatch(/\.row\s*\{[^}]*'amount amount';[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto;/s);
@@ -83,10 +83,10 @@ describe('onboarding and Home layout guards', () => {
         // tier narrows it.
         expect(onboardingCss).not.toMatch(/^\.licenseGate\s*\{[^}]*max-width:/m);
         expect(carouselCss).not.toMatch(/\.stack\s*\{[^}]*padding:/s);
-        expect(onboardingSource).toContain('label="License agreement"');
+        expect(onboardingSource).toContain('label="License Agreement"');
         // From 834px the terms card narrows to two-thirds of the lane in CSS
         // (U32); below it the form keeps the full lane width.
-        expect(onboardingSource).toMatch(/label="License agreement"\s+fill\b/);
+        expect(onboardingSource).toMatch(/label="License Agreement"\s+fill\b/);
         // The top-level terms panel never caps itself at a fraction of the
         // screen; only the wide tier bounds it to the gate height.
         expect(onboardingCss).not.toMatch(/^\.licenseScroll\s*\{[^}]*max-height:/m);
@@ -100,7 +100,7 @@ describe('onboarding and Home layout guards', () => {
         // The filled form body stops at its content, so Accept and continue
         // follows the card instead of the bottom of a tall window.
         expect(wideLicense).toMatch(/form\.licenseForm > \[data-form-stack\]\s*\{[^}]*flex:\s*0 1 auto;/s);
-        expect(onboardingSource).toMatch(/label="License agreement"\s+fill\s+fullWidth\s+className=\{styles\.licenseForm\}/);
+        expect(onboardingSource).toMatch(/label="License Agreement"\s+fill\s+fullWidth\s+className=\{styles\.licenseForm\}/);
         // At every width, phones included, the card wraps its text and the
         // checkbox and Accept follow it directly (U48); the panel only shrinks
         // and scrolls on a screen too short for the whole text. It never
@@ -110,7 +110,7 @@ describe('onboarding and Home layout guards', () => {
         expect(licenseScrollBase).not.toMatch(/flex:\s*1 1 auto/);
         expect(wideLicense).not.toMatch(/flex:\s*1 1 auto/);
         expect(onboardingSource).toContain('label="Wallet setup"');
-        expect(onboardingSource).toContain('title="License agreement"');
+        expect(onboardingSource).toContain('title="License Agreement"');
         expect(onboardingSource).toContain('data-onboarding-welcome-header=""');
         expect(onboardingCss).toMatch(/\.welcomeHeader\s*\{[^}]*display:\s*flex;[^}]*flex-direction:\s*column;/s);
         expect(onboardingCss).not.toMatch(/min\(\s*40%\s*,\s*140px\s*\)/);
@@ -129,7 +129,8 @@ describe('onboarding and Home layout guards', () => {
     });
 
     it('keeps the license gate full-width with one compact acknowledgement row', () => {
-        expect(onboardingCss).toMatch(/\.licenseParagraph\s*\{[^}]*max-width:\s*none;/s);
+        expect(onboardingCss).toMatch(/\.licenseParagraph\s*\{[^}]*composes:\s*paragraph from '\.\.\/components\/WarningCard\.module\.css';/s);
+        expect(warningCardCss).toMatch(/\.paragraph\s*\{[^}]*max-width:\s*none;/s);
         expect(onboardingCss).not.toMatch(/\.licenseAck\s*\{[^}]*display:\s*flex;/s);
         expect(onboardingCss).toMatch(/\.licenseAck\s*\{[^}]*white-space:\s*nowrap;/s);
         // The acknowledgement and Accept share one wrapper, while the
@@ -155,9 +156,19 @@ describe('onboarding and Home layout guards', () => {
         expect(balanceSource).not.toContain("color: '#FFFFFF'");
         expect(homeTabsSource).not.toContain("color: '#FFFFFF'");
         expect(balanceCss).toContain('background: var(--xc-surface);');
-        expect(homeSource).toContain("color: 'var(--xc-on-accent)'");
+        // The unread badge left the Home tiles with the alerts overlay; Home keeps no raw white.
+        expect(homeSource).not.toContain("color: '#FFFFFF'");
         expect(portfolioCss).toContain('color: var(--xc-on-accent);');
-        expect(totalBalanceCss).not.toMatch(/#[0-9a-f]{3,8}|rgba?\(/i);
+        // The balance card's frosted buttons and chart overlay sit on the brand
+        // gradient in every theme, so those translucent fills are fixed by design
+        // (approved Home-style hero); its gain and loss readouts use the brand
+        // card tokens. Nothing else may be raw.
+        const heroLiterals = new Set((totalBalanceCss.match(/#[0-9a-f]{3,8}\b|rgba?\([^)]*\)/gi) || [])
+            .map((literal) => literal.toLowerCase()));
+        expect([...heroLiterals].sort()).toEqual([
+            'rgba(0, 0, 0, 0.55)',
+            'rgba(255, 255, 255, 0.2)', 'rgba(255, 255, 255, 0.3)',
+        ]);
         expect(homeTabsCss).not.toMatch(/#[0-9a-f]{3,8}|rgba?\(/i);
     });
 

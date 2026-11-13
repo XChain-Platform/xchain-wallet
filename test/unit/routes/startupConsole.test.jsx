@@ -97,7 +97,8 @@ const routes = [
             activeWallet={{ id: 'wallet-1', name: 'Main wallet' }}
             activeAccount={{ id: 'account-1', name: 'Account 1', index: 0 }}
         />,
-        () => screen.findByLabelText('Theme'),
+        // Settings opens on its list of groups; Appearance holds the Theme field.
+        () => screen.findByRole('button', { name: /^Appearance/ }),
     ],
 ];
 

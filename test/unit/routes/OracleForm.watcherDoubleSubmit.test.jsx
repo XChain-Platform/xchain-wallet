@@ -8,10 +8,13 @@
 // unsigned publishes of the same price, and a Signer-mode wallet that signs
 // both pays for both; the second is inert for 24 hours anyway.
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, act as domAct, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
+
+afterEach(() => { resetWalletModes(); });
 import { OracleForm } from '../../../packages/core/src/shared/routes/OracleForm.jsx';
 import { ORACLE_ACTIVATION_DELAY_S } from '../../../packages/core/src/flows/oracleQueries.js';
 beforeEach(() => {
@@ -47,7 +50,7 @@ async function drainMicrotasks(rounds = 12) {
 }
 function recordingMessaging({
     byChain = { 'bitcoin-mainnet': [BTC_ADDRESS] },
-    settings = { walletMode: 'full' },
+    walletMode = 'full',
     feeds = [],
     consumers = { supported: true, dispensers: [] },
     preflight = PASS,
@@ -57,12 +60,15 @@ function recordingMessaging({
     signerStatus = 'unlocked',
 } = {}) {
     const calls = [];
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const log = (method, value) => (args) => { calls.push({ method, args }); return Promise.resolve(value); };
     const target = {
         getAddressesByChain: () => Promise.resolve(byChain),
         getActiveAddresses: () => Promise.resolve({}),
         signerReady: () => Promise.resolve({ ready: true }),
-        getSettings: () => Promise.resolve(settings),
+        getSettings: () => Promise.resolve({}),
+        listWallets: () => Promise.resolve([{ id: 'w', name: 'W', walletMode }]),
         getSignerStatus: () => Promise.resolve({ status: signerStatus }),
         oracleFeeds: log('oracleFeeds', feeds),
         oracleConsumers: log('oracleConsumers', consumers),
@@ -120,14 +126,14 @@ async function fill(utils, { tick = 'PEPECASH', value = '0.05', fee, memo, coin 
 
 describe('OracleForm watcher review', () => {
     it('builds one unsigned publish for two submits in one turn', async () => {
-        const { utils, calls } = await mountForm({ settings: { walletMode: 'watcher' } });
+        const { utils, calls } = await mountForm({ walletMode: 'watcher' });
         await fill(utils);
-        expect(utils.getByRole('button', { name: 'Publish price' })).toBeTruthy();
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Publish price' })));
+        expect(utils.getByRole('button', { name: /^Publish price$/i })).toBeTruthy();
+        await step(() => fireEvent.click(utils.getByRole('button', { name: /^Publish price$/i })));
         expect(utils.getByText(
             'Watcher mode: this prepares the transaction for your offline signer. Sign it there, then bring the signed transaction to a wallet that can broadcast it.',
         )).toBeTruthy();
-        const build = utils.getByRole('button', { name: 'Create unsigned transaction' });
+        const build = utils.getByRole('button', { name: 'Create Unsigned Transaction' });
         await step(() => {
             fireEvent.submit(build.closest('form'));
             fireEvent.submit(build.closest('form'));

@@ -144,8 +144,8 @@ describe('detail screens with sparse records', () => {
         expect(valueBeside('Total supply')).toHaveTextContent('1,234.56');
         expect(valueBeside('Current balance')).toHaveTextContent('1,234.56 PRECISE');
 
-        fireEvent.click(screen.getByRole('button', { name: 'More info' }));
-        fireEvent.click(screen.getByRole('menuitem', { name: 'Holders' }));
+        // Holders is a link row at the foot of the Details tab.
+        fireEvent.click(screen.getByRole('button', { name: 'Holders' }));
         const holders = await screen.findByRole('list', { name: 'Holder balances' });
         expect(within(holders).getByText('1,234.56')).toBeTruthy();
     });
@@ -247,7 +247,7 @@ describe('detail screens with sparse records', () => {
         expect(within(list).getByText('Give - → get -')).toBeTruthy();
         expect(list.textContent).toContain('#-');
         fireEvent.click(within(list).getByRole('button', { name: 'Edit' }));
-        await screen.findByRole('heading', { name: 'Edit order' });
+        await screen.findByRole('heading', { name: 'Edit Order' });
         expect(valueBeside('Order')).toHaveTextContent('#-');
         expectNoEmptyDetailCells(view.container);
     });

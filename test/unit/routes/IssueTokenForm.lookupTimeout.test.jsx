@@ -72,7 +72,7 @@ async function advance(ms) {
 
 async function submit() {
     await act(async () => {
-        fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
         await vi.advanceTimersByTimeAsync(0);
     });
 }

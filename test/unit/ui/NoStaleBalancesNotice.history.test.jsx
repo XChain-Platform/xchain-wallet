@@ -71,12 +71,13 @@ function mountHistory() {
 }
 
 describe('History empty state names no stale balances', () => {
-    it('says once that activity shows when the network answers while degraded', async () => {
+    it('shows the plain empty state once while degraded, with no balance claim', async () => {
         mountHistory();
-        expect(await screen.findByText("Balances couldn't be checked")).toBeInTheDocument();
-        expect(screen.getAllByText(HISTORY_BODY)).toHaveLength(1);
+        expect(await screen.findByText('No activity yet')).toBeInTheDocument();
+        expect(screen.getAllByText('Activity appears here after you send or receive.')).toHaveLength(1);
         expect(screen.queryByText(/out of date/)).toBeNull();
-        expect(screen.queryByText('No activity yet')).toBeNull();
+        expect(screen.queryByText("Balances couldn't be checked")).toBeNull();
+        expect(screen.queryByText(HISTORY_BODY)).toBeNull();
     });
 
     it('carries no stale-balance claim and no second notice while offline', async () => {

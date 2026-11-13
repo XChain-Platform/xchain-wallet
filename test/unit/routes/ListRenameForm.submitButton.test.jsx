@@ -29,6 +29,7 @@ vi.mock('../../../packages/core/src/shared/components/OwnAddressPickerScreen.jsx
 }));
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { ListRenameForm } from '../../../packages/core/src/shared/routes/ListRenameForm.jsx';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -37,10 +38,13 @@ const OTHER_RECORD = { id: 'other-address', address: OTHER, publicKey: '02bb', d
 
 function mount({ shared = { lists: [] }, walletMode = 'full' } = {}) {
     listMetaSupported.mockResolvedValue(true);
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode }], activeWalletId: 'wallet-1' });
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [OTHER_RECORD, OWNER_RECORD] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: OTHER_RECORD.id } }),
-        getSettings: vi.fn().mockResolvedValue({ walletMode }),
+        getSettings: vi.fn().mockResolvedValue({}),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'W', walletMode }]),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
         getListByActionIndex: vi.fn().mockResolvedValue({
@@ -67,13 +71,14 @@ function mount({ shared = { lists: [] }, walletMode = 'full' } = {}) {
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     vi.clearAllMocks();
 });
 
 describe('ListRenameForm submit button', () => {
     it('shows the Rename list action as a green submit with an icon', async () => {
         mount();
-        const submit = await screen.findByRole('button', { name: 'Rename list' });
+        const submit = await screen.findByRole('button', { name: /^Rename list$/i });
         await waitFor(() => expect(submit).toBeEnabled());
         expect(submit).toHaveAttribute('type', 'submit');
         expect(submit.querySelector('svg')).not.toBeNull();
@@ -83,9 +88,9 @@ describe('ListRenameForm submit button', () => {
 
     it('keeps the Create unsigned transaction label with an icon in watcher mode', async () => {
         mount({ walletMode: 'watcher' });
-        const submit = await screen.findByRole('button', { name: 'Create unsigned transaction' });
+        const submit = await screen.findByRole('button', { name: /^Create unsigned transaction$/i });
         expect(submit.querySelector('svg')).not.toBeNull();
         expect(submit.className).toMatch(/success/);
-        expect(screen.queryByRole('button', { name: 'Rename list' })).toBeNull();
+        expect(screen.queryByRole('button', { name: /^Rename list$/i })).toBeNull();
     });
 });

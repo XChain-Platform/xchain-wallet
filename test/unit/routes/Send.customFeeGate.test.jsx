@@ -19,6 +19,8 @@ describe('Send custom fee gate', () => {
     ])('refuses review with custom fee rate %j instead of composing with the default fee', async (rate, expected) => {
         const messaging = mountSend();
         await fillNativeSend('0.001');
+        // The Network fee section starts closed: open it to reach the slider.
+        fireEvent.click(screen.getByRole('button', { name: /^Network fee/, expanded: false }));
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), { target: { value: '3' } });
         fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: rate } });
         fireEvent.click(sendButton());
@@ -30,6 +32,8 @@ describe('Send custom fee gate', () => {
     it('composes with the typed rate when the custom fee is valid', async () => {
         const messaging = mountSend();
         await fillNativeSend('0.001');
+        // The Network fee section starts closed: open it to reach the slider.
+        fireEvent.click(screen.getByRole('button', { name: /^Network fee/, expanded: false }));
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), { target: { value: '3' } });
         fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '12' } });
         fireEvent.click(sendButton());

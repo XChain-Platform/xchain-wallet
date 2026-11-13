@@ -81,7 +81,7 @@ describe('HwSignBlock device instructions', () => {
             expect(container.querySelector('[data-status="disconnected"]')).toBeTruthy();
         });
         expect(screen.getByRole('status')).toHaveTextContent(
-            'This Ledger is not connected in this session. Connect it again with Pair hardware signer, then try again.',
+            'This Ledger is not connected in this session. Connect it again with Pair hardware wallet, then try again.',
         );
         expect(screen.getByRole('status')).not.toHaveTextContent('signer bridge');
         expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();

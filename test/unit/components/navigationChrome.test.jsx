@@ -154,7 +154,6 @@ describe('navigation route highlighting', () => {
 
     it.each([
         ['send-picker', 'send'],
-        ['receive-picker', 'receive'],
         ['action-detail', 'history'],
         ['cross-chain-order', 'markets'],
         ['market-activity', 'market-activity'],
@@ -355,8 +354,9 @@ describe('Settings account picker navigation', () => {
         expect(screen.getByRole('button', { name: 'Back to previous screen' })).toBeInTheDocument();
 
         const webApp = readFileSync('packages/web/src/App.jsx', 'utf8');
+        // The label follows the navigation history: Settings below the picker.
         expect(webApp).toContain(
-            "backLabel={accountPickerBackTo === 'settings' ? t('shell.settings.back') : undefined}",
+            "backLabel={nav.previousView === 'settings' ? t('shell.settings.back') : undefined}",
         );
     });
 });
@@ -435,7 +435,8 @@ describe('AppHeader button labels and tooltips', () => {
         expect(menu).toHaveAttribute('title', 'Open menu');
         expect(menu).toHaveAttribute('aria-haspopup', 'dialog');
         expect(menu).toHaveAttribute('aria-expanded', 'true');
-        expect(screen.getByText('Primary wallet')).toBeInTheDocument();
+        // The approved header carries icons only; the wallet's name is no longer drawn in it.
+        expect(screen.queryByText('Primary wallet')).toBeNull();
 
         fireEvent.click(menu);
         expect(onMenuToggle).toHaveBeenCalledOnce();

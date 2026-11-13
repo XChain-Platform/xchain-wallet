@@ -4,9 +4,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { LinkForm } from '../../../packages/core/src/shared/routes/LinkForm.jsx';
 
 const BTC = 'bitcoin-mainnet';
@@ -20,7 +21,12 @@ const address = (id, chain) => ({
     signerId: 'signer-1',
 });
 
-afterEach(cleanup);
+// Every case here runs as a watch-only wallet. The mode comes from the wallet
+// list, not from settings.
+beforeEach(() => {
+    publishWalletModes({ wallets: [{ id: 'w', walletMode: 'watcher' }], activeWalletId: 'w' });
+});
+afterEach(() => { cleanup(); resetWalletModes(); });
 
 describe('LinkForm with an action number the explorer does not hold', () => {
     it('says no action was found instead of printing the explorer request', async () => {
@@ -29,7 +35,7 @@ describe('LinkForm with an action number the explorer does not hold', () => {
         const client = {
             getAddressesByChain: vi.fn().mockResolvedValue({ [BTC]: [btc], [LTC]: [ltc] }),
             getActiveAddresses: vi.fn().mockResolvedValue({ [BTC]: btc, [LTC]: ltc }),
-            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            getSettings: vi.fn().mockResolvedValue({}),
             signerReady: vi.fn().mockResolvedValue({ ready: false }),
             getActionByIndex: vi.fn(({ chainId }) => (chainId === BTC
                 ? Promise.reject(new Error('Explorer returned HTTP 404 for /BTC/api/action/10'))

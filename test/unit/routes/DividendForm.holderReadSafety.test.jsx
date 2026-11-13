@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { DividendForm } from '../../../packages/core/src/shared/routes/DividendForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 import { fakeHoldersFor } from '../../../packages/web/src/devFakeBalances.js';
@@ -15,6 +16,8 @@ const CHAIN = 'bitcoin-mainnet';
 const SOURCE = 'bc1qexampleexampleexampleexampleexampleex';
 
 function mountDividend(holderRead, walletMode = 'full') {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue({
             [CHAIN]: [{
@@ -23,7 +26,8 @@ function mountDividend(holderRead, walletMode = 'full') {
             }],
         }),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
-        getSettings: vi.fn().mockResolvedValue({ walletMode }),
+        getSettings: vi.fn().mockResolvedValue({}),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'w', name: 'W', walletMode }]),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
         getHoldersForToken: vi.fn(holderRead),
@@ -77,6 +81,7 @@ async function fillDividend() {
 beforeEach(() => { vi.useFakeTimers(); });
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     __clearTokenInfoCache();
     vi.useRealTimers();
 });
@@ -86,14 +91,14 @@ describe('Dividend holder reads fail closed', () => {
         mountDividend(async () => fakeHoldersFor('SHARES', CHAIN), 'watcher');
         await fillDividend();
 
-        expect(screen.getByRole('button', { name: 'Pay dividend' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Pay Dividend' })).toBeEnabled();
         expect(document.body.textContent).toMatch(/12 eligible holders/);
     });
 
     it('does not compose after the explorer refuses the holder read', async () => {
         const messaging = mountDividend(async () => { throw new Error('explorer 500'); }, 'watcher');
         await fillDividend();
-        const preview = screen.getByRole('button', { name: 'Pay dividend' });
+        const preview = screen.getByRole('button', { name: 'Pay Dividend' });
         expect(preview).toBeDisabled();
         fireEvent.click(preview);
         await flushTimers();
@@ -103,7 +108,7 @@ describe('Dividend holder reads fail closed', () => {
     it('does not compose after a malformed holder envelope', async () => {
         const messaging = mountDividend(async () => ({}));
         await fillDividend();
-        fireEvent.click(screen.getByRole('button', { name: 'Pay dividend' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Pay Dividend' }));
         await flushTimers();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
@@ -115,7 +120,7 @@ describe('Dividend holder reads fail closed', () => {
         }));
         await fillDividend();
         expect(document.body.textContent).toMatch(/holder list is incomplete/i);
-        expect(screen.getByRole('button', { name: 'Pay dividend' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Pay Dividend' }).disabled).toBe(true);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -127,11 +132,11 @@ describe('Dividend holder reads fail closed', () => {
             return { total: 1, data: [{ address: 'bc1qholderone', amount: '10' }] };
         });
         await fillDividend();
-        fireEvent.click(screen.getByRole('button', { name: 'Retry holder list' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Retry Holder List' }));
         await flushTimers();
         expect(document.body.textContent).toMatch(/1 eligible holder/);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Pay dividend' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Pay Dividend' }));
         await flushTimers();
         expect(messaging.composeForConfirm).toHaveBeenCalledOnce();
     });
@@ -145,13 +150,13 @@ describe('Dividend holder reads fail closed', () => {
             return attempt === 1 ? { total: 1, data: one } : { total: 2, data: two };
         });
         await fillDividend();
-        fireEvent.click(screen.getByRole('button', { name: 'Pay dividend' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Pay Dividend' }));
         await flushTimers();
         expect(document.body.textContent).toMatch(/holder list changed/i);
         expect(document.body.textContent).toMatch(/2 eligible holders/);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Pay dividend' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Pay Dividend' }));
         await flushTimers();
         expect(messaging.composeForConfirm).toHaveBeenCalledOnce();
     });

@@ -77,7 +77,7 @@ describe('CoSignerProvision own-address picker', () => {
         await waitFor(() => expect(screen.getByRole('button', { name: 'Create agent account' })).toBeEnabled());
         fireEvent.click(screen.getByRole('button', { name: 'Create agent account' }));
 
-        expect(await screen.findByRole('heading', { name: 'Review agent account' })).toBeTruthy();
+        expect(await screen.findByRole('heading', { name: 'Review Agent Account' })).toBeTruthy();
         expect(screen.getByLabelText(ADDRESS_B.address)).toBeTruthy();
         expect(screen.getByText(ADDRESS_B.publicKey)).toBeTruthy();
     });

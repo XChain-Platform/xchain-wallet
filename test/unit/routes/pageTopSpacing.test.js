@@ -32,14 +32,17 @@ describe('route page-top ownership', () => {
     it('keeps TokenDetail on the top-spacing-free ListPage root', () => {
         const source = read('packages/core/src/shared/routes/TokenDetail.jsx');
         const page = rule(read('packages/core/src/ui/ListPage.module.css'), '.page');
-        expect(source.match(/<ListPage(?:>|><)/g)).toHaveLength(2);
+        expect(source.match(/<ListPage(?:>|><| className=\{styles\.detailPage\}>)/g)).toHaveLength(2);
         expect(page).not.toMatch(/(?:margin|padding)(?:-block-start|-top)?\s*:/);
     });
 
     it('keeps each Send FormPage root flush with Screen', () => {
         const source = read('packages/core/src/shared/routes/Send.jsx');
         const form = rule(read('packages/core/src/ui/FormPage.module.css'), '.form');
-        expect(source.match(/<FormPage\b/g)).toHaveLength(2);
+        // The review stage is a FormPage; the compose stage is a FormFrame,
+        // which renders its own FormPage root.
+        expect(source.match(/<FormPage\b/g)).toHaveLength(1);
+        expect(source.match(/<FormFrame\b/g)).toHaveLength(1);
         expect(form).toMatch(/margin:\s*0/);
         expect(form).toMatch(/padding:\s*0/);
     });

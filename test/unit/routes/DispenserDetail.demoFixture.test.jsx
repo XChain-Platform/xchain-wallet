@@ -111,10 +111,15 @@ describe('DispenserDetail for a demo wallet', () => {
                 );
                 for (let i = 0; i < 24; i += 1) await Promise.resolve();
             });
-            const controls = ['Close', 'Refill', 'Edit'].map((name) => ({
-                name,
-                present: Boolean(utils.queryByRole('button', { name })),
-            }));
+            // Close and Refill are the page's action buttons; editing lives in the
+            // Settings tab, which only the dispenser's owner gets.
+            const controls = [
+                ...['Close', 'Refill'].map((name) => ({
+                    name,
+                    present: Boolean(utils.queryByRole('button', { name })),
+                })),
+                { name: 'Settings', present: Boolean(utils.queryByRole('tab', { name: 'Settings' })) },
+            ];
             utils.unmount();
             if (demo) clearDemoWalletId();
             return controls;
@@ -124,6 +129,6 @@ describe('DispenserDetail for a demo wallet', () => {
         const demoControls = await mount(WALLET, true);
         expect(demoControls).toEqual(liveControls);
         expect(demoControls.filter((control) => control.present).map((control) => control.name))
-            .toEqual(['Close', 'Refill', 'Edit']);
+            .toEqual(['Close', 'Refill', 'Settings']);
     });
 });

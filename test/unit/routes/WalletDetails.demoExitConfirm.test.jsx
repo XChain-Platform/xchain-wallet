@@ -59,7 +59,7 @@ describe('WalletDetails demo exit confirmation', () => {
 
         const dialog = screen.getByRole('dialog');
         expect(exitDemoWallet).not.toHaveBeenCalled();
-        fireEvent.click(within(dialog).getByRole('button', { name: 'Exit demo & wipe' }));
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Exit Demo & Wipe' }));
         expect(exitDemoWallet).toHaveBeenCalledWith(expect.objectContaining({ walletId: wallet.id }));
     });
 
@@ -77,10 +77,10 @@ describe('WalletDetails demo exit confirmation', () => {
         await mount();
         fireEvent.click(screen.getByRole('button', { name: 'Exit demo & wipe' }));
         const dialog = screen.getByRole('dialog');
-        fireEvent.click(within(dialog).getByRole('button', { name: 'Exit demo & wipe' }));
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Exit Demo & Wipe' }));
 
         expect(await within(dialog).findByRole('alert')).toHaveTextContent('vault is busy');
-        expect(within(dialog).getByRole('button', { name: 'Exit demo & wipe' })).toBeEnabled();
+        expect(within(dialog).getByRole('button', { name: 'Exit Demo & Wipe' })).toBeEnabled();
         expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeEnabled();
     });
 });

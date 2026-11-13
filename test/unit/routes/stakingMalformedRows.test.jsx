@@ -70,24 +70,24 @@ describe('staking screens given rows with object fields', () => {
     it('keeps the validator detail standing', async () => {
         mount(<StakeDetail walletId="w" kind="validator" chainId={CHAIN} address={ADDRESS} onBack={() => {}} />);
 
-        expect(await screen.findByRole('heading', { name: 'Validator stake' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Validator Stake' })).toBeInTheDocument();
         await waitFor(() => expect(screen.getByText('Pending rewards')).toBeInTheDocument());
     });
 
     it('keeps the contract detail standing on every tab', async () => {
         mount(<StakeDetail walletId="w" kind="contract" contractActionIndex="7" chainId={CHAIN} address={ADDRESS} onBack={() => {}} />);
 
-        expect(await screen.findByRole('heading', { name: 'Contract #7 stake' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Contract #7 Stake' })).toBeInTheDocument();
         for (const name of ['Penalties', 'Details', 'Positions']) {
             fireEvent.click(screen.getByRole('tab', { name }));
-            expect(screen.getByRole('heading', { name: 'Contract #7 stake' })).toBeInTheDocument();
+            expect(screen.getByRole('heading', { name: 'Contract #7 Stake' })).toBeInTheDocument();
         }
     });
 
     it('keeps the operator dashboard standing', async () => {
         mount(<OperatorDashboard walletId="w" chainId={CHAIN} address={ADDRESS} onBack={() => {}} />);
 
-        expect(await screen.findByRole('heading', { name: 'Operator dashboard' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Operator Dashboard' })).toBeInTheDocument();
         await waitFor(() => expect(screen.getByText('Staking status')).toBeInTheDocument());
     });
 });

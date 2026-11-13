@@ -233,7 +233,7 @@ describe('notification permission feedback', () => {
         };
         try {
             render(<NotificationsSection />);
-            const button = screen.getByRole('button', { name: 'Request permission' });
+            const button = screen.getByRole('button', { name: 'Request Permission' });
             expect(button.className).toMatch(/success/);
             expect(button.style.color).toBe('');
             expect(button.querySelector('svg path[d^="M18 8a6 6"]')).not.toBeNull();

@@ -15,7 +15,7 @@ describe('Scan route UI rulings', () => {
     it('uses a green icon action for pasted text, including while disabled', () => {
         render(<ScanRoute onClassified={() => {}} />);
 
-        const submit = screen.getByRole('button', { name: 'Use pasted text' });
+        const submit = screen.getByRole('button', { name: 'Use Pasted Text' });
         expect(submit).toBeDisabled();
         expect(submit.classList.contains(buttonStyles.success)).toBe(true);
         expect(submit.querySelector('svg')).toBeTruthy();

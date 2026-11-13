@@ -66,7 +66,7 @@ describe('change wallet password errors', () => {
         fireEvent.change(current, { target: { value: 'wrong-password' } });
         fireEvent.change(next, { target: { value: 'replacement-1' } });
         fireEvent.change(confirm, { target: { value: 'replacement-1' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Change password' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Change Password' }));
 
         expect(await screen.findByText('Current wallet password is incorrect.')).toBeInTheDocument();
         expect(errorUnder(current)).toBe('Current wallet password is incorrect.');
@@ -77,7 +77,7 @@ describe('change wallet password errors', () => {
         const { current, next, confirm } = openChange({ changePassword: vi.fn() });
         fireEvent.change(current, { target: { value: 'old-password' } });
         fireEvent.change(next, { target: { value: 'short' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Change password' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Change Password' }));
         expect(errorUnder(next)).toBe('New password must be at least 8 characters.');
 
         fireEvent.change(next, { target: { value: 'replacement-1' } });
@@ -97,7 +97,7 @@ describe('change wallet password errors', () => {
         fireEvent.change(current, { target: { value: 'old-password' } });
         fireEvent.change(next, { target: { value: 'replacement-1' } });
         fireEvent.change(confirm, { target: { value: 'replacement-1' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Change password' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Change Password' }));
         expect(await screen.findByRole('alert')).toHaveTextContent('Vault is busy.');
         expect(current).not.toHaveAttribute('aria-invalid', 'true');
     });
@@ -128,7 +128,7 @@ describe('Backup password errors', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Show…' }));
         const field = screen.getByLabelText('Wallet password');
         fireEvent.change(field, { target: { value: 'wrong-password' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Reveal phrase' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal Phrase' }));
 
         expect(await screen.findByText('Incorrect password.')).toBeInTheDocument();
         expect(errorUnder(field)).toBe('Incorrect password.');

@@ -26,6 +26,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { act, render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { ContractStakeForm } from '../../../packages/core/src/shared/routes/ContractStakeForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
@@ -60,7 +61,10 @@ const ADDRESSES = {
 
 const POSITION_PUBKEY = '03f0e1d2c3b4a5968778695a4b3c2d1e0fa1b2c3d4e5f60718293a4b5c6d7e8f9';
 
-function mountForm(props = {}, messagingExtra = {}) {
+// `walletMode` among the extras is the mode of wallet `w`, published the way the
+// shell does from the wallet list; every other entry is a messaging method.
+function mountForm(props = {}, { walletMode = 'full', ...messagingExtra } = {}) {
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         // Shaped like the real host's getActiveAddresses(): a map of chainId
@@ -102,6 +106,7 @@ function mountForm(props = {}, messagingExtra = {}) {
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     __clearTokenInfoCache();
 });
 
@@ -125,7 +130,8 @@ describe('ContractStakeForm seeds from the position that opened it', () => {
 
         // From: the position's own address, not whichever address the
         // active-address default would otherwise have picked.
-        const fromField = await screen.findByLabelText('From');
+        // The standard From section labels the field "From address".
+        const fromField = await screen.findByLabelText('From address');
         expect(fromField.value).toBe(POSITION_ADDRESS);
     });
 
@@ -139,7 +145,8 @@ describe('ContractStakeForm seeds from the position that opened it', () => {
         expect(pubkeyField.value).toBe('');
 
         // No initialFromAddress: the ordinary active-address default wins.
-        const fromField = await screen.findByLabelText('From');
+        // The standard From section labels the field "From address".
+        const fromField = await screen.findByLabelText('From address');
         expect(fromField.value).toBe(ACTIVE_ADDRESS);
     });
 });
@@ -297,7 +304,7 @@ describe('ContractStakeForm stake amount validation', () => {
             initialMode: 'stake',
             initialSigningPubkey: signingPubkey,
         }, {
-            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            walletMode: 'watcher',
             getWalletBalances: vi.fn().mockResolvedValue({
                 [CHAIN]: [{
                     address: ACTIVE_ADDRESS,
@@ -362,7 +369,7 @@ describe('ContractStakeForm penalty warning', () => {
             initialMode: 'stake',
             initialSigningPubkey: 'a'.repeat(64),
         }, {
-            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            walletMode: 'watcher',
             getWalletBalances: vi.fn().mockResolvedValue({
                 [CHAIN]: [{
                     address: ACTIVE_ADDRESS,

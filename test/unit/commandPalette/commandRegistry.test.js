@@ -160,12 +160,12 @@ describe('buildCommands', () => {
         expect(destinationRows.map((command) => command.id)).toEqual(['nav-scan']);
     });
 
-    it('returns exactly one Cross-chain navigation destination row when searching for Cross-chain', () => {
+    it('offers no Cross chain templates destination row because that page is retired', () => {
         const commands = buildCommands({ navigate() {} });
         const destinationRows = filterCommands(commands, 'cross')
             .filter((command) => ['nav-cross-chain-templates', 'trade-xchain-templates'].includes(command.id));
 
-        expect(destinationRows.map((command) => command.id)).toEqual(['nav-cross-chain-templates']);
+        expect(destinationRows.map((command) => command.id)).toEqual([]);
     });
 
     it('marks integrated menu search sources without changing base categories', () => {
@@ -262,10 +262,25 @@ describe('buildCommands', () => {
 
         findById(commands, 'nav-betting').run();
         expect(navigate).toHaveBeenCalledWith('bet-markets');
+        // My bets and My markets are Bet Markets tabs, not routes of their own:
+        // without a tab opener they land on the hub.
+        navigate.mockClear();
         findById(commands, 'nav-my-bets').run();
-        expect(navigate).toHaveBeenCalledWith('my-bets');
         findById(commands, 'nav-bet-oracle-console').run();
-        expect(navigate).toHaveBeenCalledWith('bet-oracle-console');
+        expect(navigate.mock.calls).toEqual([['bet-markets'], ['bet-markets']]);
+    });
+
+    it('opens Bet Markets on the My bets and My markets tabs through the shell tab opener', () => {
+        const navigate = vi.fn();
+        const openBetTab = vi.fn();
+        const commands = buildCommands({ navigate, openBetTab });
+
+        findById(commands, 'nav-my-bets').run();
+        findById(commands, 'nav-bet-oracle-console').run();
+
+        expect(openBetTab.mock.calls).toEqual([['bets'], ['markets']]);
+        // The retired my-bets and bet-oracle-console routes are never navigated to.
+        expect(navigate).not.toHaveBeenCalled();
     });
 
     it('finds betting by the words users actually type', () => {

@@ -20,7 +20,6 @@ import {
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const animatedSurfaces = [
-    'packages/core/src/shared/components/AlertsOverlay.module.css',
     'packages/core/src/shared/components/GatedFileViewer.module.css',
     'packages/core/src/shared/components/NoticeModal.module.css',
     'packages/core/src/shared/components/ToastStack.module.css',
@@ -35,7 +34,6 @@ const transitionSurfaces = [
 
 const motionCssByCategory = {
     sheets: [
-        'packages/core/src/shared/components/AlertsOverlay.module.css',
         'packages/core/src/shared/components/GatedFileViewer.module.css',
         'packages/core/src/shared/components/NoticeModal.module.css',
     ],

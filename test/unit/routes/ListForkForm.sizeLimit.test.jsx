@@ -99,12 +99,10 @@ describe('ListForkForm refuses an edit too large to verify, before review', () =
 
         expect(await screen.findByText('This change has 300 items (12,915 bytes), but one action holds 8,192 bytes, which fits 190 of them. Remove 110 items.')).toBeInTheDocument();
         expect(messaging.getListByActionIndex).toHaveBeenCalled();
-        expect(document.body.textContent).not.toMatch(/Review list edit/);
-    });
+        expect(document.body.textContent).not.toMatch(/Review List Edit/);    });
 
     it('reviews an edit that fits', async () => {
         mount(addresses(2));
         await addAndReview(addresses(50, 100));
-        await waitFor(() => expect(document.body.textContent).toMatch(/Review list edit/));
-    });
+        await waitFor(() => expect(document.body.textContent).toMatch(/Review List Edit/));    });
 });

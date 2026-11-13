@@ -97,14 +97,14 @@ describe('popup onboarding lanes keep the window through their own first-wallet 
     it('does not offer hardware setup among the fresh-wallet choices yet', async () => {
         boot();
         render(<App />);
-        expect(await screen.findByRole('button', { name: 'Pair an offline signer' })).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Connect a hardware wallet' })).toBeNull();
+        expect(await screen.findByRole('button', { name: 'Pair an Offline Signer' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Connect a Hardware Wallet' })).toBeNull();
     });
 
     it('reaches the pairing code exchange after the lane imports the shared phrase', async () => {
         const { sent } = boot();
         render(<App />);
-        fireEvent.click(await screen.findByRole('button', { name: 'Pair an offline signer' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Pair an Offline Signer' }));
         fireEvent.click(screen.getByRole('button', { name: 'This device watches. Pair a signer' }));
         fireEvent.change(screen.getByLabelText('Shared recovery phrase'), { target: { value: PHRASE } });
         fireEvent.change(screen.getByLabelText('Password for this device'), { target: { value: PASSWORD } });
@@ -121,7 +121,7 @@ describe('popup onboarding lanes keep the window through their own first-wallet 
     it('shows the donation notice after the lane imports a recovery phrase', async () => {
         const { sent } = boot();
         render(<App />);
-        fireEvent.click(await screen.findByRole('button', { name: 'Import wallet' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Import Wallet' }));
         fireEvent.change(await screen.findByLabelText('Recovery phrase'), { target: { value: PHRASE } });
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
         fireEvent.change(screen.getByLabelText(/^Confirm( password)?$/), { target: { value: PASSWORD } });
@@ -135,7 +135,7 @@ describe('popup onboarding lanes keep the window through their own first-wallet 
     it('still follows an unlock from another window while the lane has written nothing', async () => {
         const { state, sent, emit } = boot();
         render(<App />);
-        fireEvent.click(await screen.findByRole('button', { name: 'Import wallet' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Import Wallet' }));
         await screen.findByLabelText('Recovery phrase');
         const sessionReads = count(sent, 'session.status');
 

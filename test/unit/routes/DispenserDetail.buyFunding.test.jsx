@@ -92,11 +92,21 @@ function mount({ buyerHolds, dispenser = DISPENSER }) {
     return messaging;
 }
 
-const buyButton = () => screen.getByRole('button', { name: /^Buy \d+ fills?$/ });
+const buyButton = () => screen.getByRole('button', { name: /^Buy \d+ Dispenses?$/ });
+const dispensesField = () => screen.getByLabelText(/^How Many Dispenses/i);
 
 async function settle() {
     for (let pass = 0; pass < 3; pass += 1) {
         await act(async () => {
+            await vi.advanceTimersByTimeAsync(400);
+        });
+    }
+    // The page opens on Details and shows only the chosen tab; the buy
+    // panel needs the Buy tab picked.
+    const buyTab = screen.queryByRole('tab', { name: /^Buy$/ });
+    if (buyTab && buyTab.getAttribute('aria-selected') !== 'true') {
+        await act(async () => {
+            fireEvent.click(buyTab);
             await vi.advanceTimersByTimeAsync(400);
         });
     }
@@ -143,10 +153,10 @@ describe('dispenser Buy panel funding check (D-37)', () => {
         await settle();
         expect(screen.getByText(/12 MEMEVALID available/)).toBeInTheDocument();
         // 3 fills = 15 MEMEVALID against a 12 balance.
-        fireEvent.change(screen.getByLabelText(/^Fills/i), { target: { value: '3' } });
+        fireEvent.change(dispensesField(), { target: { value: '3' } });
         expect(buyButton()).toBeDisabled();
         // 2 fills = 10 MEMEVALID, affordable.
-        fireEvent.change(screen.getByLabelText(/^Fills/i), { target: { value: '2' } });
+        fireEvent.change(dispensesField(), { target: { value: '2' } });
         expect(buyButton()).toBeEnabled();
     });
 
@@ -156,12 +166,12 @@ describe('dispenser Buy panel funding check (D-37)', () => {
         expect(screen.getByText(/12 MEMEVALID available/)).toBeInTheDocument();
         // Help text in the buy form lines up with its fields.
         expect(screen.getByTestId('buy-balance').className).toMatch(/hintLeft/);
-        const max = screen.getByRole('button', { name: 'Use max available amount' });
-        // Max sits inside the Fills field, as on every other amount field.
-        expect(screen.getByLabelText(/^Fills/i).closest('[class*="amountFieldWrap"]')).toContainElement(max);
+        // Max is the stepper's "Up to N" link, beside the count field.
+        const max = screen.getByRole('button', { name: /^Up to 2$/ });
+        expect(screen.getByTestId('buy-stepper')).toContainElement(max);
         fireEvent.click(max);
         // floor(12 / 5) = 2, never 2.4 and never a float-misfloored 1.
-        expect(screen.getByLabelText(/^Fills/i)).toHaveValue('2');
+        expect(dispensesField()).toHaveValue('2');
         expect(buyButton()).toBeEnabled();
     });
 
@@ -186,7 +196,7 @@ describe('dispenser Buy panel funding check (D-37)', () => {
         });
         await settle();
         expect(screen.getByText(/90,071,992\.54740993 MEMEVALID available/)).toBeInTheDocument();
-        fireEvent.change(screen.getByLabelText(/^Fills/i), {
+        fireEvent.change(dispensesField(), {
             target: { value: '9007199254740993' },
         });
         fireEvent.click(buyButton());

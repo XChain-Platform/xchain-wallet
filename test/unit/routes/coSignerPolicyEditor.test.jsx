@@ -30,6 +30,23 @@ const DAEMON = '02' + 'b'.repeat(64);
 
 afterEach(() => cleanup());
 
+// Each policy group is a collapsible section; only Allowed actions starts open,
+// and a closed group's controls are not reachable by role until it is opened.
+function openSection(title) {
+    const toggle = screen.getAllByRole('button')
+        .find((button) => button.hasAttribute('aria-expanded') && button.textContent.startsWith(title));
+    if (toggle.getAttribute('aria-expanded') === 'false') fireEvent.click(toggle);
+}
+
+const POLICY_GROUPS = [
+    'Allowed actions',
+    'Per-action amount limits',
+    'Rolling limit',
+    'Extra-confirmation threshold',
+    'Allowed recipients',
+    'Allowed transaction outputs',
+];
+
 describe('CoSignerPolicyEditor helpers', () => {
     it('requires at least one allowed action', () => {
         const out = buildPolicyDraft(emptyPolicyDraft());
@@ -223,11 +240,11 @@ describe('CoSignerPolicyEditor allowed-actions vocabulary', () => {
 
     it('asks the owner to tick labelled actions instead of typing protocol codes', () => {
         const { container } = render(<CoSignerPolicyEditor value={emptyPolicyDraft()} onChange={() => {}} />);
-        const fieldset = container.querySelector('fieldset');
-        expect(fieldset.querySelector('legend > span').textContent).toBe('Allowed actions');
-        expect(fieldset.querySelector('textarea')).toBeNull();
-        expect(fieldset.textContent).not.toContain('SEND for');
-        expect(fieldset.textContent).not.toContain('SEND, ISSUE');
+        const section = container.querySelector('section[aria-label="Allowed actions"]');
+        expect(section.querySelector('button[aria-expanded]').textContent).toContain('Allowed actions');
+        expect(section.querySelector('textarea')).toBeNull();
+        expect(section.textContent).not.toContain('SEND for');
+        expect(section.textContent).not.toContain('SEND, ISSUE');
     });
 
     it('still stores the raw protocol key, never the display label', () => {
@@ -288,6 +305,7 @@ describe('CoSignerPolicyEditor per-action limit actions', () => {
 
     it('shows a stored stray key as flagged rather than silently as another option', () => {
         render(<CoSignerPolicyEditor value={withLimit('SEND', 'SENDD')} onChange={() => {}} />);
+        openSection('Per-action amount limits');
         const select = screen.getByLabelText('Action');
         expect(select.value).toBe('SENDD');
         expect(document.body.textContent).toContain('SENDD (not in the allowed actions above)');
@@ -321,6 +339,7 @@ describe('CoSignerPolicyEditor allowed-actions picker', () => {
     it('uses a switch for the rolling-limit setting and preserves its handler', () => {
         const onChange = vi.fn();
         render(<CoSignerPolicyEditor value={emptyPolicyDraft()} onChange={onChange} />);
+        openSection('Rolling limit');
         const toggle = screen.getByRole('switch', { name: 'Enforce a rolling limit' });
 
         expect(toggle).not.toBeChecked();
@@ -390,18 +409,24 @@ describe('CoSignerPolicyEditor field guidance and actions', () => {
         allowedOutputs: [{ address: 'bc1qout', maxValue: '' }],
     };
 
-    it('puts policy explanations in tips on every group and field', () => {
+    it('puts policy explanations in a line on every group and in tips on every field', () => {
         const { container } = render(
             <CoSignerPolicyEditor value={completeDraft} onChange={() => {}} />,
         );
+        for (const title of POLICY_GROUPS) openSection(title);
 
+        // A group's explanation is the muted first line of its section.
+        for (const line of [
+            'Choose which actions the agent may sign. The agent can never sign an action that is not selected.',
+            'Optionally cap how much the agent may move in one action for a specific token or for every token.',
+            "Turn this on to cap the agent's total activity over a moving time window, such as 10 actions per 24 hours.",
+            'Optionally highlight requests above a token amount on the approval screen. Every request still asks for your approval.',
+            'Optionally restrict the agent to paying only the listed recipient addresses. With no addresses listed, any recipient is allowed.',
+            "Optionally add an anti-drain guard so every signed transaction output must use a listed address and stay within its maximum value in the chain's base units.",
+        ]) {
+            expect(screen.getByText(line)).toBeInTheDocument();
+        }
         for (const name of [
-            'About allowed actions',
-            'About per-action amount limits',
-            'About the rolling limit',
-            'About extra-confirmation thresholds',
-            'About allowed recipients',
-            'About allowed transaction outputs',
             'About Action',
             'About Max actions per window',
             'About Window length (hours)',
@@ -415,16 +440,18 @@ describe('CoSignerPolicyEditor field guidance and actions', () => {
         }
         expect(screen.getAllByRole('button', { name: 'About Token' })).toHaveLength(3);
         expect(screen.getByRole('button', { name: /About Max amount/ })).toBeInTheDocument();
-        expect(container.querySelectorAll('fieldset > p')).toHaveLength(1);
+        expect(container.querySelectorAll('[data-testid="allowed-actions-preview"]')).toHaveLength(1);
         expect(screen.getByTestId('allowed-actions-preview')).toBeInTheDocument();
     });
 
     it('uses Optional state and icon-bearing add and remove actions', () => {
         render(<CoSignerPolicyEditor value={completeDraft} onChange={() => {}} />);
+        for (const title of POLICY_GROUPS) openSection(title);
 
         expect(screen.getByLabelText('Max value')).toHaveAttribute('aria-required', 'false');
         expect(screen.queryByLabelText('Max value (optional)')).toBeNull();
-        expect(screen.getAllByText('Optional', { selector: 'span' })).toHaveLength(2);
+        // Five optional groups carry the pill, and so do the two optional fields.
+        expect(screen.getAllByText('Optional', { selector: 'span' })).toHaveLength(7);
 
         for (const name of [
             'Add limit',

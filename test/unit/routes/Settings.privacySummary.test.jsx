@@ -12,7 +12,7 @@
 // including the ones that default on when the stored value is absent.
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { render, cleanup } from '@testing-library/react';
+import { render, cleanup, fireEvent, screen } from '@testing-library/react';
 import {
     setShellCapabilities,
     resetShellCapabilities,
@@ -36,13 +36,16 @@ const messaging = {
     listConnectedSites: () => Promise.resolve([]),
 };
 
+// The Privacy group page lists one row per switch with its own On or Off
+// subtitle; this opens it and returns the rows as "TitleSubtitle" strings.
 function summaryText() {
     const { container } = render(
         <MessagingProvider shell="web" messaging={messaging}>
             <Settings onBack={() => {}} />
         </MessagingProvider>,
     );
-    return container.textContent;
+    fireEvent.click(screen.getByRole('button', { name: /^Privacy/ }));
+    return Array.from(container.querySelectorAll('li')).map((li) => li.textContent).join('|');
 }
 
 afterEach(() => {
@@ -59,22 +62,36 @@ describe('Privacy row summary', () => {
             blurOnBlur: false,
             labelsSurviveRestore: false,
         };
-        expect(summaryText()).toContain('3 of 7 on');
+        const rows = summaryText();
+        expect(rows).toContain('Coin price dataOn');
+        expect(rows).toContain('Token metadataOn');
+        expect(rows).toContain('Haptic feedbackOn');
+        expect(rows).toContain('Change-address rotationOff');
+        expect(rows).toContain('Labels survive restoreOff');
+        expect(rows).toContain('Blur when the window loses focusOff');
+        expect(rows).toContain('Hardware cross-checkOff');
     });
 
     it('drops a default-on switch once it is stored false', () => {
         privacy = { hapticsEnabled: false, priceDataEnabled: false, metadataFetchEnabled: false };
-        expect(summaryText()).toContain('0 of 7 on');
+        const rows = summaryText();
+        expect(rows).toContain('Coin price dataOff');
+        expect(rows).toContain('Token metadataOff');
+        expect(rows).toContain('Haptic feedbackOff');
     });
 
-    it('counts the switches beyond the first five', () => {
+    it('reads the stored on state of the switches that default off', () => {
         privacy = { alwaysRequireHwExplicitConfirm: true, changeAddressRotation: true };
-        expect(summaryText()).toContain('5 of 7 on');
+        const rows = summaryText();
+        expect(rows).toContain('Hardware cross-checkAlways required');
+        expect(rows).toContain('Change-address rotationOn');
     });
 
-    it('adds Tor routing to the total only where the shell can proxy', () => {
-        setShellCapabilities({ socksProxy: true });
+    it('reports Tor routing only where the shell can proxy', () => {
         privacy = { torRouting: true };
-        expect(summaryText()).toContain('4 of 8 on');
+        expect(summaryText()).toContain('Tor routingNot available here');
+        cleanup();
+        setShellCapabilities({ socksProxy: true });
+        expect(summaryText()).toContain('Tor routingOn');
     });
 });

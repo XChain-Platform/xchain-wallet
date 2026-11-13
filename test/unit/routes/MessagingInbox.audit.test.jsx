@@ -219,7 +219,7 @@ describe('MessagingInbox audit states', () => {
         mount(messaging);
 
         const password = await screen.findByLabelText('Password', { selector: 'input' });
-        const unlock = screen.getByRole('button', { name: 'Unlock inbox' });
+        const unlock = screen.getByRole('button', { name: 'Unlock Inbox' });
         expect(password).not.toHaveAccessibleDescription("Decrypts this account's messages.");
         fireEvent.click(screen.getByRole('button', { name: 'About Password' }));
         expect(screen.getByRole('tooltip')).toHaveTextContent("Decrypts this account's messages.");
@@ -241,7 +241,7 @@ describe('MessagingInbox audit states', () => {
         mount(messagingFor({ messages: [REQUEST] }));
 
         const decline = await screen.findByRole('button', { name: 'Decline' });
-        const share = screen.getByRole('button', { name: 'Share my key' });
+        const share = screen.getByRole('button', { name: 'Share My Key' });
         expect(decline.querySelector('svg')).not.toBeNull();
         expect(share.querySelector('svg')).not.toBeNull();
         expect(share.className).toMatch(/success/);
@@ -278,7 +278,7 @@ describe('MessagingInbox audit states', () => {
         }));
 
         await screen.findByText('No messages yet');
-        expect(screen.queryByRole('button', { name: 'Share my key' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Share My Key' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Decline' })).toBeNull();
     });
 
@@ -290,7 +290,7 @@ describe('MessagingInbox audit states', () => {
         messaging.composeForConfirm = vi.fn().mockRejectedValue(failure);
         mount(messaging);
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Share my key' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Share My Key' }));
 
         const alert = await screen.findByRole('alert');
         expect(alert.textContent).toMatch(/could not reach the transaction service/i);

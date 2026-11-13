@@ -12,7 +12,7 @@
 // onboarding explainer carousel. Drives the real component:
 //   - paginated frames advance via Next / dots / arrow keys, with no
 //     in-page Back beside Next
-//   - the last frame's "Get started" completes; "Skip" dismisses early
+//   - the last frame's "Get Started" completes; "Skip" dismisses early
 //   - both call onDone (with completed = true / false)
 //   - reduced-motion drops stepping and stacks every frame
 // plus the Onboarding gating: the carousel shows once on the fresh path,
@@ -106,7 +106,7 @@ describe('OnboardingCarousel: paginated (default motion)', () => {
 
         // Last frame: Next is replaced by Get started; there is no Next.
         expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();
-        const getStarted = screen.getByRole('button', { name: 'Get started' });
+        const getStarted = screen.getByRole('button', { name: 'Get Started' });
         expect(getStarted.className).toMatch(/success/);
         expect(getStarted.querySelector('svg')).not.toBeNull();
         fireEvent.click(getStarted);
@@ -123,7 +123,7 @@ describe('OnboardingCarousel: paginated (default motion)', () => {
         expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument();
 
         fireEvent.click(screen.getAllByRole('tab')[2]);
-        expect(within(nav).getAllByRole('button').map((b) => b.textContent)).toEqual(['Get started']);
+        expect(within(nav).getAllByRole('button').map((b) => b.textContent)).toEqual(['Get Started']);
         expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();
     });
@@ -259,7 +259,7 @@ describe('OnboardingCarousel: reduced motion', () => {
             expect(screen.getByRole('button', { name: 'Skip' })).toBeInTheDocument();
             expect(intervalSpy).not.toHaveBeenCalled();
 
-            const getStarted = screen.getByRole('button', { name: 'Get started' });
+            const getStarted = screen.getByRole('button', { name: 'Get Started' });
             expect(getStarted.className).toMatch(/success/);
             expect(getStarted.querySelector('svg')).not.toBeNull();
             fireEvent.click(getStarted);
@@ -319,13 +319,13 @@ describe('Onboarding: explainer gating', () => {
         mountOnboarding();
         // Carousel is up (first explainer frame + Skip), welcome buttons hidden.
         expect(screen.getByTestId('onboarding-carousel')).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: /Create new wallet/ })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Create New Wallet/ })).not.toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
 
         // Now the welcome screen with the create/import fork.
         expect(screen.queryByTestId('onboarding-carousel')).not.toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /Create new wallet/ })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Create New Wallet/ })).toBeInTheDocument();
     });
 
     it('introduces the XChain Platform before naming current chain support', () => {
@@ -353,8 +353,8 @@ describe('Onboarding: explainer gating', () => {
 
         mountOnboarding();
         expect(screen.queryByTestId('onboarding-carousel')).not.toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Create new wallet' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Import wallet' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Create New Wallet' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Import Wallet' })).toBeInTheDocument();
     });
 
     it('keeps the fresh welcome hierarchy and full-width success and primary actions', () => {
@@ -366,8 +366,8 @@ describe('Onboarding: explainer gating', () => {
         expect(screen.queryByRole('heading', { name: 'Wallet setup' })).not.toBeInTheDocument();
         expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(branding.PRODUCT_NAME);
 
-        const create = screen.getByRole('button', { name: 'Create new wallet' });
-        const importWallet = screen.getByRole('button', { name: 'Import wallet' });
+        const create = screen.getByRole('button', { name: 'Create New Wallet' });
+        const importWallet = screen.getByRole('button', { name: 'Import Wallet' });
         expect(create.className).toMatch(/success/);
         expect(importWallet.className).toMatch(/primary/);
         expect(create.className).toMatch(/block/);
@@ -381,7 +381,7 @@ describe('Onboarding: explainer gating', () => {
         acceptLicense();
         mountOnboarding({ onBack() {} });
         expect(screen.queryByTestId('onboarding-carousel')).not.toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /Create new wallet/ })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Create New Wallet/ })).toBeInTheDocument();
     });
 
     it('skips the carousel once the seen-flag is set', () => {
@@ -390,7 +390,7 @@ describe('Onboarding: explainer gating', () => {
         globalThis.localStorage.setItem('xc:onboardingExplainerSeenAt', new Date().toISOString());
         mountOnboarding();
         expect(screen.queryByTestId('onboarding-carousel')).not.toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /Create new wallet/ })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Create New Wallet/ })).toBeInTheDocument();
     });
 
     it('supports returning from create and then entering import', () => {
@@ -417,13 +417,13 @@ describe('Onboarding: explainer gating', () => {
         }
 
         render(<FlowHarness />);
-        fireEvent.click(screen.getByRole('button', { name: 'Create new wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create New Wallet' }));
         fireEvent.click(screen.getByRole('button', { name: 'Back from create' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Import wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Import Wallet' }));
         fireEvent.click(screen.getByRole('button', { name: 'Back from import' }));
 
-        expect(screen.getByRole('button', { name: 'Create new wallet' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Import wallet' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Create New Wallet' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Import Wallet' })).toBeInTheDocument();
     });
 });
 
@@ -483,7 +483,7 @@ describe('Onboarding: license gate', () => {
             mountLicenseGate();
             await waitFor(() => expect(screen.getByRole('checkbox')).toBeEnabled());
             fireEvent.click(screen.getByRole('checkbox'));
-            expect(screen.getByRole('button', { name: 'Accept and continue' })).toBeEnabled();
+            expect(screen.getByRole('button', { name: 'Accept and Continue' })).toBeEnabled();
         });
     });
 
@@ -514,7 +514,7 @@ describe('Onboarding: license gate', () => {
         await withElementDimensions({ scrollHeight: 600, clientHeight: 200 }, async () => {
             mountLicenseGate();
             const checkbox = screen.getByRole('checkbox');
-            const accept = screen.getByRole('button', { name: 'Accept and continue' });
+            const accept = screen.getByRole('button', { name: 'Accept and Continue' });
             expect(checkbox).toBeDisabled();
             expect(accept).toBeDisabled();
             expect(accept).toHaveAccessibleDescription('Review all license terms to continue.');
@@ -548,7 +548,7 @@ describe('Onboarding: demo entry', () => {
                 <Onboarding onCreate={() => {}} onImport={() => {}} onDemoEntered={() => {}} />
             </MessagingProvider>,
         );
-        fireEvent.click(screen.getByRole('button', { name: 'Try in demo mode' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try in Demo Mode' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'This wallet changed in another window. Nothing was lost. Reload to see the latest, then try again.',
@@ -573,7 +573,7 @@ describe('Onboarding: demo entry', () => {
             </MessagingProvider>,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: 'Try in demo mode' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try in Demo Mode' }));
         await waitFor(() => expect(onDemoEntered).toHaveBeenCalledTimes(1));
 
         expect(importMnemonic).toHaveBeenCalledTimes(1);
@@ -616,7 +616,7 @@ describe('Onboarding: demo entry', () => {
             </MessagingProvider>,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: 'Try in demo mode' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try in Demo Mode' }));
         const alert = await screen.findByRole('alert');
         expect(alert).toHaveTextContent('This device already has a wallet. Unlock it to continue.');
         fireEvent.click(within(alert).getByRole('button', { name: 'Unlock' }));
@@ -637,7 +637,7 @@ describe('Onboarding: demo entry', () => {
             </MessagingProvider>,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: 'Try in demo mode' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try in Demo Mode' }));
         const alert = await screen.findByRole('alert');
         expect(alert).toHaveTextContent('Storage is full.');
         expect(within(alert).queryByRole('button', { name: 'Unlock' })).toBeNull();

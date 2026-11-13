@@ -75,7 +75,9 @@ function mount(Component, props, messaging = messagingWith()) {
 describe('primary actions explain missing form input', () => {
     it('BetFeedDetail asks for an outcome when Place bet is pressed', async () => {
         mount(BetFeedDetail, { walletId: 'wallet-1', chainId: BTC, feedIndex: '123', onBack() {} });
-        const action = await screen.findByRole('button', { name: 'Place bet' });
+        // The bet form shows only on the Bet tab; Details is the default.
+        fireEvent.click(await screen.findByRole('tab', { name: 'Bet' }));
+        const action = await screen.findByRole('button', { name: 'Place Bet' });
 
         expect(action).toBeEnabled();
         fireEvent.click(action);
@@ -89,9 +91,11 @@ describe('primary actions explain missing form input', () => {
         });
         await screen.findByDisplayValue(ADDRESS.address);
 
+        // The oracle address picker sits in the closed From section; open it first.
+        fireEvent.click(screen.getByRole('button', { name: /^From\b/, expanded: false }));
         fireEvent.click(screen.getByRole('button', { name: 'Choose oracle address' }));
         fireEvent.click(screen.getByRole('button', { name: 'Pick unavailable address' }));
-        const action = screen.getByRole('button', { name: 'Open market' });
+        const action = screen.getByRole('button', { name: 'Open Market' });
         expect(action).toBeEnabled();
         fireEvent.click(action);
 
@@ -101,7 +105,7 @@ describe('primary actions explain missing form input', () => {
     it('CreatePollForm asks for its governance token', async () => {
         mount(CreatePollForm, { walletId: 'wallet-1', chainId: BTC, onBack() {} });
         await screen.findByDisplayValue(ADDRESS.address);
-        const action = screen.getByRole('button', { name: 'Create poll' });
+        const action = screen.getByRole('button', { name: /^Create poll$/i });
 
         expect(action).toBeEnabled();
         fireEvent.click(action);
@@ -112,7 +116,7 @@ describe('primary actions explain missing form input', () => {
     it('OracleForm asks for the token ticker', async () => {
         mount(OracleForm, { walletId: 'wallet-1', initialChainId: BTC, onBack() {} });
         await screen.findByDisplayValue(ADDRESS.address);
-        const action = screen.getByRole('button', { name: 'Publish price' });
+        const action = screen.getByRole('button', { name: /^Publish price$/i });
 
         expect(action).toBeEnabled();
         fireEvent.click(action);

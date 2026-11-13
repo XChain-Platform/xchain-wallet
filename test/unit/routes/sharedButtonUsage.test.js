@@ -62,32 +62,37 @@ const listRowRoutes = [
     'CoSignerAccountList',
     'GovernancePolls',
     'MarketActivity',
-    'MyBets',
+    // My bets is the Bet Markets tab drawn by BetMyBetsPanel.
+    '../components/BetMyBetsPanel',
     'MyLists',
 ];
 
 const choicePrimitiveRoutes = {
     AttachContentForm: ['Checkbox'],
-    GatedPublishForm: ['Checkbox', 'RadioGroup'],
-    PublishFileForm: ['Checkbox', 'RadioGroup'],
+    // The publish forms carry no acknowledgement checkbox; permanence is a
+    // confirm-screen notice.
+    GatedPublishForm: ['RadioGroup'],
+    PublishFileForm: ['RadioGroup'],
     SleepForm: ['RadioGroup'],
 };
 const tokenControlRoutes = [
     ['IssueTokenForm', { Switch: 2 }],
     // Lock token's flags are Issue-style lock switches; the bridge checkboxes stay.
     ['TokenAdminForm', { Checkbox: 2, Switch: 1 }],
-    ['TokenWizard', { Checkbox: 1, Switch: 2 }],
-    ['SweepForm', { Checkbox: 2 }],
+    // The sweep's one checkbox group is the category list; its acknowledgement
+    // moved to the confirm screen.
+    ['SweepForm', { Checkbox: 1 }],
     ['StakeForm', { RadioGroup: 1 }],
     ['ContractStakeForm', { RadioGroup: 1 }],
 ];
 
 describe('shared route button usage', () => {
     it.each([
+        // MarketsList left this list: its Show choice (Popular, All, Watchlist)
+        // is a Select in the title-line filter menu, not a tab strip. TokenPicker
+        // left it too: its asset kind is an IconSelect in the same filter.
         'ImportWallet',
-        'MarketsList',
         'TokenDetail',
-        'TokenPicker',
     ])('%s uses the shared Tabs component', (routeName) => {
         const source = readFileSync(
             resolve(process.cwd(), `packages/core/src/shared/routes/${routeName}.jsx`),
@@ -130,9 +135,11 @@ describe('shared route button usage', () => {
             'utf8',
         );
 
-        expect(source).toMatch(/import\s+\{[^}]*\bCheckbox\b[^}]*\bRadioGroup\b[^}]*\}\s+from\s+'@xchain-wallet\/core\/ui'/s);
-        expect(source).toMatch(/<Checkbox\b/);
+        expect(source).toMatch(/import\s+\{[^}]*\bRadioGroup\b[^}]*\}\s+from\s+'@xchain-wallet\/core\/ui'/s);
         expect(source).toMatch(/<RadioGroup\b/);
+        // No acknowledgement checkbox, and the file input is the shared field.
+        expect(source).not.toMatch(/<Checkbox\b/);
+        expect(source).toMatch(/<FileField\b/);
         expect(source).not.toMatch(/<input\b/);
     });
 
@@ -164,9 +171,12 @@ describe('shared route button usage', () => {
     it.each([
         ['SellOwnershipForm', ['Button', 'Input'], 0],
         ['Settings', ['Button', 'Input'], 1],
-        ['SignMessageForm', ['AddressField', 'Button', 'CopyButton', 'Input', 'Textarea'], 0],
-        ['TokenPicker', ['Button', 'Input', 'Tabs'], 0],
-        ['VerifySignatureForm', ['Button', 'Input', 'Textarea'], 0],
+        // The From section holds the address picker and the FormAction is the
+        // one submit, so the form draws neither a raw AddressField nor a Button.
+        ['SignMessageForm', ['FromSection', 'FormAction', 'CopyButton', 'Input', 'Textarea'], 0],
+        // Search, network and kind sit in the shared title-line filter.
+        ['TokenPicker', ['ListFilterMenu', 'IconSelect'], 0],
+        ['VerifySignatureForm', ['FormAction', 'Input', 'Textarea'], 0],
         ['WalletPicker', ['Button', 'ListRow'], 0],
     ])('%s adopts kit controls and documents any native list row', (routeName, primitives, nativeRowCount) => {
         const source = readFileSync(
@@ -281,7 +291,8 @@ describe('shared route button usage', () => {
         ), 'utf8');
         const walletMode = readFileSync(resolve(
             process.cwd(),
-            'packages/core/src/shared/components/settings/WalletModeSection.jsx',
+            // §20: the per-wallet mode field that replaced the Settings section.
+            'packages/core/src/shared/components/WalletModeField.jsx',
         ), 'utf8');
 
         expect(primitives).toMatch(/import\s+\{[^}]*\bSwitch\b[^}]*\}\s+from\s+'@xchain-wallet\/core\/ui'/);
@@ -291,7 +302,7 @@ describe('shared route button usage', () => {
         expect(primitives).not.toMatch(/1px dashed/);
         expect(primitives).toMatch(/<Switch\b/);
         expect(primitives).not.toMatch(/<input\b/);
-        expect(walletMode).toMatch(/import\s+\{\s*RadioGroup\s*\}\s+from\s+'@xchain-wallet\/core\/ui'/);
+        expect(walletMode).toMatch(/import\s+\{[^}]*\bRadioGroup\b[^}]*\}\s+from\s+'@xchain-wallet\/core\/ui'/);
         expect(walletMode).toMatch(/<RadioGroup\b/);
         expect(walletMode).not.toMatch(/<input\b/);
     });
@@ -299,10 +310,12 @@ describe('shared route button usage', () => {
 
 describe('trade form style guide primitives', () => {
     const tradeChoicePrimitiveRoutes = {
-        CreateOrderForm: ['Checkbox', 'RadioGroup', 'Switch'],
-        CrossChainOrderForm: ['Checkbox', 'RadioGroup'],
-        CrossChainSwapForm: ['Checkbox', 'RadioGroup'],
-        DispenserExplorer: ['RadioGroup'],
+        // The acknowledgement checkboxes left these forms with the confirm summary.
+        CreateOrderForm: ['RadioGroup', 'Switch'],
+        CrossChainOrderForm: ['RadioGroup'],
+        CrossChainSwapForm: ['RadioGroup'],
+        // The explorer chooses with a Select and a Tab strip now, not a radio group.
+        DispenserExplorer: ['Select', 'Tabs'],
         DispenserForm: ['RadioGroup'],
         MyOrdersView: ['Switch'],
     };
@@ -347,22 +360,19 @@ describe('trade form style guide primitives', () => {
 
         expect(source.match(/<input\b[^>]*>/g) || []).toEqual([]);
         expect(source).toMatch(/<RadioGroup\s+legend="Expiration"/);
-        expect((source.match(/<Checkbox\b/g) || []).length).toBe(2);
+        expect(source).not.toMatch(/<Checkbox\b/);
     });
 
     it.each([
         'packages/core/src/shared/routes/CreateOrderForm.jsx',
         'packages/core/src/shared/routes/DispenserForm.jsx',
         'packages/core/src/shared/routes/SwapForm.jsx',
-    ])('%s draws its advanced-options toggle as the one left-aligned link with a chevron', (file) => {
+    ])('%s has no advanced-options toggle button; the closed form sections replaced it', (file) => {
         const source = readFileSync(resolve(process.cwd(), file), 'utf8');
-        const toggle = source.match(/<Button\b(?:(?!<\/Button>)[\s\S])*?Advanced options[\s\S]*?<\/Button>/)?.[0] || '';
 
-        expect(toggle).toMatch(/variant="link"/);
-        expect(toggle).toMatch(/className=\{styles\.advancedToggle\}/);
-        expect(toggle).toMatch(/aria-expanded=\{showAdvanced\}/);
-        expect(toggle).toMatch(/Icon\.ChevronDownIcon/);
-        expect(toggle).not.toMatch(/[▸▾]/);
+        expect(source).not.toMatch(/<Button\b(?:(?!<\/Button>)[\s\S])*?Advanced options[\s\S]*?<\/Button>/);
+        expect(source).not.toMatch(/styles\.advancedToggle/);
+        expect(source).toMatch(/<FormSection\b/);
     });
 
     it.each([
@@ -372,9 +382,10 @@ describe('trade form style guide primitives', () => {
     ])('%s groups its allow-list and block-list buttons under one field-style label', (file) => {
         const source = readFileSync(resolve(process.cwd(), file), 'utf8');
 
-        // The label may carry its own help tip after the Optional pill (U57).
-        expect(source).toMatch(/<p className=\{styles\.choiceGroupLabel\}>\s*Restrict who can (?:buy|match) <OptionalPill \/>(?:\s*<InfoTip [^>]*\/>)?\s*<\/p>\s*<div className=\{styles\.choiceButtons\}>/);
-        expect(source).not.toMatch(/Restrict who can (?:buy|match) <OptionalPill \/>(?:\s*<InfoTip [^>]*\/>)?\s*<\/p>\s*<div className=\{styles\.actions\}>/);
+        // The label may carry its own help tip, and an Optional pill only where
+        // its section does not already carry the Optional tag.
+        expect(source).toMatch(/<p className=\{styles\.choiceGroupLabel\}>\s*Restrict who can (?:buy|match)(?: <OptionalPill \/>)?(?:\s*<InfoTip [^>]*\/>)?\s*<\/p>\s*<div className=\{styles\.choiceButtons\}>/);
+        expect(source).not.toMatch(/Restrict who can (?:buy|match)(?: <OptionalPill \/>)?(?:\s*<InfoTip [^>]*\/>)?\s*<\/p>\s*<div className=\{styles\.actions\}>/);
     });
 
     it('uses kit choice controls throughout the shared order panels', () => {
@@ -421,11 +432,14 @@ describe('trade form style guide primitives', () => {
         expect(createOrder).toMatch(/<AddressField\s+label="Receive at(?: \(optional\)"|"\s+optional)/);
         expect(dispenser).toMatch(/<Select[\s\S]*label="Priced in fiat(?: \(optional\)"|"\s+optional)/);
         expect(dispenser).toMatch(/<AddressField[\s\S]*id="dispenser-oracle"/);
-        expect(swap).toMatch(/<AddressField\s+label="Receive at(?: \(optional\)"|"\s+optional)/);
+        // Swap's terms section carries the Optional tag, so its field carries none.
+        expect(swap).toMatch(/<AddressField\s+label="Receive at"/);
         expect(placeOrder).toMatch(/<FormPage\b/);
         expect(placeOrder).toMatch(/<EmptyState\b/);
         expect(placeOrder).toMatch(/<Select[\s\S]*label="Expiration"/);
-        expect(placeOrder.match(/<Checkbox\b/g)).toHaveLength(2);
+        // The auto-pay opt-in is the one checkbox left; the acknowledgement
+        // moved to the confirm summary.
+        expect(placeOrder.match(/<Checkbox\b/g)).toHaveLength(1);
         expect(placeOrder).toMatch(/<SegmentedControl\b/);
         expect(placeOrder).not.toMatch(/<button\b/);
     });
@@ -474,9 +488,9 @@ describe('trade form style guide primitives', () => {
         const preferences = readRoute('AddressPreferencesForm');
         const tokens = readRoute('MyTokens');
 
-        expect(markets).toMatch(/<Input\b/);
+        expect(markets).toMatch(/<ListFilterMenu\b/);
+        expect(markets).toMatch(/<Select\b/);
         expect(markets).toMatch(/<Button\b/);
-        expect(markets).toMatch(/<Tabs\b/);
         expect(markets).not.toMatch(/<button\b/);
 
         for (const component of ['AddressField', 'Input', 'Select', 'Textarea', 'Button', 'EmptyState', 'SectionHeader']) {
@@ -485,15 +499,16 @@ describe('trade form style guide primitives', () => {
         expect(contacts).not.toMatch(/<(?:button|input|select|textarea)\b/);
 
         expect(preferences).toMatch(/<FormSection\b/);
-        expect(preferences).toMatch(/<FeeSelector\b/);
-        expect(preferences.match(/<RadioGroup\b/g)).toHaveLength(2);
+        expect(preferences).toMatch(/<FeeSection\b/);
+        // The fee, require-memo and dispenser choices are icon selects, never
+        // native radios or checkboxes.
+        expect(preferences.match(/<IconSelect\b/g)).toHaveLength(3);
+        expect(preferences).not.toMatch(/<(?:RadioGroup|Checkbox)\b/);
         expect(preferences).not.toMatch(/<(?:button|select|textarea)\b/);
-        // The require-memo choice is the kit Checkbox, not a native input.
-        expect(preferences.match(/<Checkbox\b/g)).toHaveLength(1);
         expect(preferences).not.toMatch(/<input\b/);
 
-        expect(tokens).toMatch(/<ListToolbar\b/);
-        expect(tokens).toMatch(/<Select\b/);
+        expect(tokens).toMatch(/<ListFilterMenu\b/);
+        expect(tokens).toMatch(/<IconSelect\b/);
         expect(tokens).toMatch(/<Button\b/);
         expect(tokens).toMatch(/<EmptyState\b/);
         expect(tokens).not.toMatch(/<(?:button|input|select)\b/);

@@ -155,7 +155,6 @@ describe('viewport surfaces keep content inside device safe areas', () => {
     });
 
     it.each([
-        ['Alerts overlay', 'packages/core/src/shared/components/AlertsOverlay.module.css', '.overlay'],
         ['Notice modal', 'packages/core/src/shared/components/OverlaySurface.module.css', '.dialogOverlay'],
         ['Gated file viewer', 'packages/core/src/shared/components/GatedFileViewer.module.css', '.overlay'],
         ['Contacts modal', 'packages/core/src/shared/routes/ContactsList.module.css', '.modalOverlay'],

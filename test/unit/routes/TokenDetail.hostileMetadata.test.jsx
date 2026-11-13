@@ -52,9 +52,15 @@ function renderInfo(tokenInfo) {
 
 const hrefs = () => [...document.querySelectorAll('a[href]')].map((a) => a.getAttribute('href'));
 
+// The page opens on its Actions tab; the details, and the About and Media rows at their foot,
+// are on the Details tab, and only the chosen tab renders.
+async function openDetails() {
+    fireEvent.click(await screen.findByRole('tab', { name: /Details/ }));
+}
+
 async function openMore(label) {
-    fireEvent.click(await screen.findByRole('button', { name: 'More info' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: label }));
+    await openDetails();
+    fireEvent.click(await screen.findByRole('button', { name: label }));
 }
 
 describe('TokenDetail issuer metadata', () => {
@@ -103,6 +109,7 @@ describe('TokenDetail issuer metadata', () => {
         const markup = '<img src=x onerror=alert(1)><script>alert(2)</script> ‮evil‬ ';
         const description = markup + 'long text '.repeat(1100);
         renderInfo({ description });
+        await openDetails();
         await screen.findByText('Description');
         const body = document.querySelector('[class*="descriptionValue"]');
         expect(body).not.toBeNull();
@@ -120,14 +127,15 @@ describe('TokenDetail issuer metadata', () => {
 
     it('hides About when files are the only supplemental metadata', async () => {
         renderInfo({ files: [{ url: 'https://files.example/a.txt', name: 'A', type: 'text/plain' }] });
-        fireEvent.click(await screen.findByRole('button', { name: 'More info' }));
-        expect(screen.queryByRole('menuitem', { name: 'About' })).toBeNull();
-        expect(screen.getByRole('menuitem', { name: 'Media' })).toBeTruthy();
+        await openDetails();
+        expect(await screen.findByRole('button', { name: 'Media' })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'About' })).toBeNull();
         expect(screen.queryByText('Links')).toBeNull();
     });
 
     it('does not load a script-scheme icon', async () => {
         renderInfo({ images: [{ type: 'icon', url: 'javascript:alert(1)' }], description: 'plain' });
+        await openDetails();
         await screen.findByText('plain');
         const sources = [...document.querySelectorAll('img')].map((img) => img.getAttribute('src'));
         expect(sources.filter((src) => /^javascript:/i.test(src))).toEqual([]);
@@ -170,7 +178,11 @@ describe('TokenDetail market panel when token information cannot be read', () =>
                 <TokenDetail walletId="w1" chainId="bitcoin-mainnet" tick="OFFLINE2" kind="token" quantity="1" onBack={() => {}} />
             </MessagingProvider>,
         );
-        expect(await screen.findByText('Market data is unavailable.')).toBeTruthy();
-        expect(screen.queryByText('Loading market data…')).toBeNull();
+        // Market figures are rows in the Details tab; once the read has failed the price row must
+        // not sit in its loading state (the failure notice above says the details are unavailable).
+        await screen.findByText('Token details could not be loaded from the explorer. Try again in a moment.');
+        await openDetails();
+        await screen.findByText('Price');
+        expect(screen.queryByLabelText('Loading')).toBeNull();
     });
 });

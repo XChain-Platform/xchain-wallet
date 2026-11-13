@@ -52,7 +52,8 @@ describe('ContractFundsForm: every wrap() call passes a page template', () => {
         const roots = wrapCallRoots('ContractFundsForm.jsx');
         expect(roots.length).toBeGreaterThanOrEqual(8);
         const faults = roots
-            .filter(({ name }) => !['FormPage', 'ListPage', 'ResultScreen'].includes(name))
+            // FormFrame is the Wallet Form Standard frame around FormPage.
+            .filter(({ name }) => !['FormPage', 'FormFrame', 'ListPage', 'ResultScreen'].includes(name))
             .map(({ line, name }) => `ContractFundsForm.jsx:${line} wrap(${name})`);
         expect(faults).toEqual([]);
     });

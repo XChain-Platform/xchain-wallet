@@ -26,6 +26,7 @@ vi.mock('../../../packages/core/src/shared/components/OwnAddressPickerScreen.jsx
 }));
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { Icon } from '../../../packages/core/src/ui/index.js';
 import { AddressPreferencesForm } from '../../../packages/core/src/shared/routes/AddressPreferencesForm.jsx';
 
 afterEach(() => cleanup());
@@ -55,39 +56,69 @@ function mount() {
 }
 
 describe('AddressPreferencesForm rulings', () => {
-    it('opens with Network, then From, with tips and no disclosure box', async () => {
+    it('opens Address Info with the QR icon, and closed it shows the address shortened', async () => {
         mount();
-        const from = await screen.findByLabelText('From');
+        await screen.findByLabelText('Address');
+        const header = screen.getByRole('button', { name: /^Address Info/ });
+        expect(header).toHaveAttribute('aria-expanded', 'true');
+        // The generic QR code icon, not the wallet icon the From section uses.
+        const { container: qr } = render(<Icon.ReceiveIcon />);
+        expect(header.querySelector('svg').innerHTML).toBe(qr.querySelector('svg').innerHTML);
+
+        fireEvent.click(header);
+        expect(header).toHaveAttribute('aria-expanded', 'false');
+        expect(header).toHaveTextContent('bcrt...fs00');
+    });
+
+    it('opens with Network, then Address, with tips and no disclosure box', async () => {
+        mount();
+        const from = await screen.findByLabelText('Address');
         expect(from).toHaveValue(ADDR_A.address);
         const network = screen.getByRole('button', { name: /^Network:/ });
         const follows = Node.DOCUMENT_POSITION_FOLLOWING;
         expect(network.compareDocumentPosition(from) & follows).toBeTruthy();
-        expect(from.compareDocumentPosition(screen.getByRole('group', { name: 'Choose how the protocol fee is handled' })) & follows).toBeTruthy();
+        // Protocol Fee Handling is the open main section right after Address Info.
+        const feeChoice = screen.getByRole('button', { name: /^How the protocol fee is handled:/ });
+        expect(from.compareDocumentPosition(feeChoice) & follows).toBeTruthy();
         expect(screen.queryByText('Who can see these preferences?')).toBeNull();
-        for (const name of ['About From', 'About Choose how the protocol fee is handled', 'About Incoming sends', 'About Who may open dispensers', 'About Memo']) {
+        openSection(/^Incoming Sends/);
+        openSection(/^Dispensers/);
+        openSection(/^Memo/);
+        for (const name of ['About Address', 'About How the protocol fee is handled', 'About Require memo on incoming sends', 'About Who may open dispensers', 'About Memo']) {
             expect(screen.getByRole('button', { name })).toBeInTheDocument();
         }
     });
 
     it('keeps Memo and the network fee out of the Dispensers section', async () => {
         mount();
-        await screen.findByLabelText('From');
-        const dispensers = screen.getByRole('group', { name: 'Who may open dispensers' });
+        await screen.findByLabelText('Address');
+        openSection(/^Dispensers/);
+        openSection(/^Memo/);
+        const dispensers = screen.getByRole('button', { name: /^Who may open dispensers:/ }).closest('section');
         const memo = screen.getByLabelText('Memo');
-        expect(dispensers.parentElement.contains(memo)).toBe(false);
-        expect(screen.getByRole('heading', { name: 'Memo and network fee' })).toBeInTheDocument();
+        expect(dispensers.contains(memo)).toBe(false);
+        // Memo is its own optional section, and the network fee is the shared
+        // Network fee section; neither sits inside Dispensers.
+        expect(memo.closest('section')).toHaveAttribute('data-form-section', 'memo');
+        const feeToggle = screen.getByRole('button', { name: /^Network fee/ });
+        expect(dispensers.contains(feeToggle)).toBe(false);
+        expect(screen.queryByRole('heading', { name: 'Memo and network fee' })).toBeNull();
     });
 
-    it('uses the kit Checkbox for the memo requirement', async () => {
+    it('offers the memo requirement as a No or Yes choice', async () => {
         mount();
-        await screen.findByLabelText('From');
-        expect(screen.getByRole('checkbox', { name: 'Require a memo on any send to this address' })).toBeInTheDocument();
+        await screen.findByLabelText('Address');
+        openSection(/^Incoming Sends/);
+        fireEvent.click(screen.getByRole('button', { name: 'Require memo on incoming sends: No' }));
+        expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['No', 'Yes']);
+        fireEvent.click(screen.getByRole('option', { name: 'Yes' }));
+        expect(screen.getByRole('button', { name: 'Require memo on incoming sends: Yes' })).toBeInTheDocument();
     });
 
-    it('names its main action Update preferences with an icon', async () => {
+    it('names its main action Update Preferences with an icon', async () => {
         mount();
-        await screen.findByLabelText('From');
-        const submit = screen.getByRole('button', { name: 'Update preferences' });
+        await screen.findByLabelText('Address');
+        const submit = screen.getByRole('button', { name: 'Update Preferences' });
         expect(submit.className).toMatch(/success/);
         expect(submit.querySelector('svg')).not.toBeNull();
         expect(screen.queryByRole('button', { name: 'Review' })).toBeNull();
@@ -97,14 +128,25 @@ describe('AddressPreferencesForm rulings', () => {
         const { getAddressPreferences } = mount();
         await waitFor(() => expect(getAddressPreferences).toHaveBeenCalledWith({ chainId: CHAIN, address: ADDR_A.address }));
         // A pick made for the first address must not carry over.
-        fireEvent.click(await screen.findByLabelText('Destroy the fee (reduces supply)'));
+        fireEvent.click(await screen.findByRole('button', { name: 'How the protocol fee is handled: Donate to protocol development' }));
+        fireEvent.click(screen.getByRole('option', { name: 'Destroy (reduces supply)' }));
         fireEvent.click(screen.getByRole('button', { name: 'Choose source address' }));
         expect(screen.getByTestId('own-address-picker')).toHaveAttribute('data-chain-id', CHAIN);
         fireEvent.click(screen.getByRole('button', { name: 'Pick the other address' }));
 
-        expect(await screen.findByLabelText('From')).toHaveValue(ADDR_B.address);
+        expect(await screen.findByLabelText('Address')).toHaveValue(ADDR_B.address);
         await waitFor(() => expect(getAddressPreferences).toHaveBeenCalledWith({ chainId: CHAIN, address: ADDR_B.address }));
-        await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Require a memo on any send to this address' })).toBeChecked());
-        expect(screen.getByLabelText('Anyone may open a dispenser funded by this address')).toBeChecked();
+        openSection(/^Incoming Sends/);
+        openSection(/^Dispensers/);
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Require memo on incoming sends: Yes' })).toBeInTheDocument());
+        expect(screen.getByRole('button', { name: 'Who may open dispensers: Anyone' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'How the protocol fee is handled: Destroy (reduces supply)' })).toBeInTheDocument();
     });
 });
+
+// Opens a closed Form Standard section by its header (title plus summary).
+function openSection(title) {
+    const header = screen.getByRole('button', { name: title, expanded: false });
+    fireEvent.click(header);
+    expect(header).toHaveAttribute('aria-expanded', 'true');
+}

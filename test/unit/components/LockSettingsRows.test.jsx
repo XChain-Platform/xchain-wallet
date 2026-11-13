@@ -119,7 +119,7 @@ describe('BiometricRow', () => {
 
         fireEvent.click(await screen.findByRole('button', { name: 'Enable' }));
         fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'wrong' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Enable biometric unlock' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Enable Biometric Unlock' }));
 
         expect(await screen.findByText('Incorrect wallet password.')).toBeTruthy();
         expect(biometric.register).not.toHaveBeenCalled();
@@ -133,10 +133,10 @@ describe('BiometricRow', () => {
 
         fireEvent.click(await screen.findByRole('button', { name: 'Enable' }));
         fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'correct' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Enable biometric unlock' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Enable Biometric Unlock' }));
 
         expect(await screen.findByText('Sensor unavailable.')).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         expect(await screen.findByText(/Enabled\. Use device unlock/)).toBeTruthy();
         expect(messaging.unlockWallet).toHaveBeenCalledTimes(2);
     });
@@ -146,14 +146,14 @@ describe('BiometricRow', () => {
         biometric.clear.mockImplementation(() => {});
         render(<BiometricRow />);
 
-        expect(await screen.findByRole('button', { name: 'Re-enrol' })).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Re-enrol' }));
-        expect(screen.getAllByText('Re-enrol biometric unlock').length).toBeGreaterThan(0);
+        expect(await screen.findByRole('button', { name: 'Re-Enrol' })).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Re-Enrol' }));
+        expect(screen.getAllByText('Re-Enrol Biometric Unlock').length).toBeGreaterThan(0);
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
         fireEvent.click(screen.getByRole('button', { name: 'Disable' }));
         expect(await screen.findByText('Biometric unlock could not be disabled.')).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Try Again' })).toBeTruthy();
     });
 });
 
@@ -163,7 +163,7 @@ describe('DuressPassphraseRow', () => {
         fireEvent.change(screen.getByLabelText('Current wallet password'), { target: { value: current } });
         fireEvent.change(screen.getByLabelText('Duress passphrase'), { target: { value: pass } });
         fireEvent.change(screen.getByLabelText('Confirm duress passphrase'), { target: { value: confirm } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save passphrase' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save Passphrase' }));
     }
 
     it('uses style-guide controls without changing accessible names', () => {
@@ -199,7 +199,7 @@ describe('DuressPassphraseRow', () => {
         expect(duress.set).not.toHaveBeenCalled();
 
         fireEvent.change(screen.getByLabelText('Current wallet password'), { target: { value: 'correct' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save passphrase' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save Passphrase' }));
         expect(await screen.findByText(/Configured\. Entering this passphrase/)).toBeTruthy();
         expect(duress.set).toHaveBeenCalledWith('emergency-only');
     });
@@ -213,7 +213,7 @@ describe('PanicModeRow', () => {
         expect(panic.activate).not.toHaveBeenCalled();
         expect(screen.getByText('Confirm panic mode')).toBeTruthy();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Confirm 24-hour freeze' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Confirm 24-Hour Freeze' }));
         expect(panic.activate).toHaveBeenCalledTimes(1);
         expect(screen.getByText('Panic mode is active')).toBeTruthy();
     });

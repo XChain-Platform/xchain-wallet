@@ -19,6 +19,7 @@ import {
     callbackTermsError,
 } from '../../../packages/core/src/shared/routes/CallbackForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const SOURCE = Object.freeze({
@@ -72,6 +73,14 @@ function messagingFor(overrides = {}) {
 
 function mount(overrides = {}, props = {}) {
     const messaging = messagingFor(overrides);
+    // A wallet's mode is published from the wallet list, not read from
+    // settings; the harness publishes the mode the settings mock names.
+    Promise.resolve(messaging.getSettings()).then((settings) => {
+        publishWalletModes({
+            wallets: [{ id: 'wallet-1', walletMode: settings?.walletMode || 'full' }],
+            activeWalletId: 'wallet-1',
+        });
+    });
     render(
         <MessagingProvider shell="web" messaging={messaging}>
             <CallbackForm
@@ -88,7 +97,7 @@ function mount(overrides = {}, props = {}) {
 }
 
 async function readySubmit() {
-    const button = await screen.findByRole('button', { name: 'Execute callback' });
+    const button = await screen.findByRole('button', { name: /^Execute callback$/i });
     await waitFor(() => expect(button.disabled).toBe(false));
     return button;
 }
@@ -97,6 +106,7 @@ afterEach(() => {
     cleanup();
     vi.clearAllMocks();
     __clearTokenInfoCache();
+    resetWalletModes();
 });
 
 describe('callback field validation', () => {
@@ -122,7 +132,7 @@ describe('callback field validation', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
         );
-        expect(screen.getByRole('button', { name: 'Execute callback' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /^Execute callback$/i })).toBeDisabled();
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
@@ -172,7 +182,7 @@ describe('CallbackForm review safety', () => {
         const messages = await screen.findAllByText(/no callback configured/i);
         expect(messages).toHaveLength(1);
         expect(messages[0].closest('dd')).not.toBeNull();
-        expect(screen.getByRole('button', { name: 'Execute callback' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /^Execute callback$/i })).toBeDisabled();
         expect(screen.queryByText(/nothing to recall/i)).toBeNull();
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
@@ -216,7 +226,10 @@ describe('CallbackForm review safety', () => {
         mount();
         await readySubmit();
 
-        const tip = screen.getByRole('button', { name: 'About From (token owner)' });
+        // The address sits in the standard From section (closed by
+        // default) and carries the standard "From address" label.
+        fireEvent.click(screen.getByRole('button', { name: /^From\b/ }));
+        const tip = screen.getByRole('button', { name: 'About From address' });
         fireEvent.click(tip);
         expect(screen.getByText(
             "The token owner's address. Only the owner can run a callback, so this must be the address that owns the token.",
@@ -303,6 +316,9 @@ describe('CallbackForm review safety', () => {
     it('refuses an invalid custom fee instead of silently using the default', async () => {
         const messaging = mount();
         const submit = await readySubmit();
+        // The fee selector sits in the standard Network fee section,
+        // closed by default.
+        fireEvent.click(screen.getByRole('button', { name: /^Network fee\b/ }));
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
             target: { value: '3' },
         });
@@ -430,7 +446,7 @@ describe('CallbackForm with an unread token record', () => {
         expect(screen.queryByText(/has no callback configured/)).toBeNull();
         expect(screen.queryByText(/No callback configured/)).toBeNull();
         expect(screen.getAllByText('Unavailable').length).toBeGreaterThan(0);
-        expect(screen.getByRole('button', { name: 'Execute callback' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /^Execute callback$/i })).toBeDisabled();
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 });
@@ -480,8 +496,11 @@ describe('CallbackForm opened without a token context', () => {
             initialFromAddress: undefined,
         });
 
+        // Network and the address sit in the standard From section
+        // (closed by default), labelled "From address".
+        fireEvent.click(await screen.findByRole('button', { name: /^From\b/ }));
         const network = await screen.findByRole('button', { name: /^Network: Bitcoin/ });
-        const from = await screen.findByLabelText('From (token owner)');
+        const from = await screen.findByLabelText('From address');
         const token = screen.getByRole('button', { name: 'Token: Select a token' });
         expect(network.compareDocumentPosition(from) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(from.compareDocumentPosition(token) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -500,21 +519,45 @@ describe('CallbackForm opened without a token context', () => {
         })));
     });
 
-    it('clears a picked token when Network changes to another chain', async () => {
+    // Network stays an ordinary field after a token pick; the token still
+    // decides the network, so moving Network off its chain clears the token.
+    it('keeps Network editable after a token pick and clears the token on a chain change', async () => {
         mount(unlockedMessaging(), {
             initialChainId: undefined,
             initialTick: undefined,
             initialFromAddress: undefined,
         });
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Token: Select a token' }));
+        // Before a token is picked, Network changes the source address.
+        fireEvent.click(await screen.findByRole('button', { name: /^From\b/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^Network: Bitcoin/ }));
+        fireEvent.click(await screen.findByRole('button', { name: /^Select Litecoin/ }));
+        expect(await screen.findByLabelText('From address')).toHaveValue(LITE_SOURCE.address);
+        fireEvent.click(screen.getByRole('button', { name: /^Network: Litecoin/ }));
+        fireEvent.click(await screen.findByRole('button', { name: /^Select Bitcoin/ }));
+        expect(await screen.findByLabelText('From address')).toHaveValue(SOURCE.address);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Token: Select a token' }));
         fireEvent.click(await screen.findByLabelText(/^Select CALLABLE\b/i));
         await screen.findByRole('button', { name: /^Token: CALLABLE on Bitcoin/ });
 
-        fireEvent.click(screen.getByRole('button', { name: /^Network: Bitcoin/ }));
+        const network = screen.getByRole('button', { name: /^Network: Bitcoin/ });
+        expect(network).toBeEnabled();
+        fireEvent.click(network);
         fireEvent.click(await screen.findByRole('button', { name: /^Select Litecoin/ }));
+        expect(await screen.findByLabelText('From address')).toHaveValue(LITE_SOURCE.address);
+        expect(screen.getByRole('button', { name: 'Token: Select a token' })).toBeInTheDocument();
+    });
 
-        expect(await screen.findByRole('button', { name: 'Token: Select a token' })).toBeTruthy();
-        expect(await screen.findByLabelText('From (token owner)')).toHaveValue(LITE_SOURCE.address);
+    it('shows the normal Network, From and Token fields when the token arrives preset', async () => {
+        mount(unlockedMessaging());
+
+        fireEvent.click(await screen.findByRole('button', { name: /^From\b/ }));
+        const network = await screen.findByRole('button', { name: /^Network: Bitcoin/ });
+        expect(network).toBeEnabled();
+        const from = await screen.findByLabelText('From address');
+        const token = await screen.findByRole('button', { name: /^Token: CALLABLE on Bitcoin/ });
+        expect(network.compareDocumentPosition(from) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(from.compareDocumentPosition(token) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 });

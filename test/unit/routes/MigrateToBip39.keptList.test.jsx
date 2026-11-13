@@ -81,18 +81,19 @@ async function upgradeToDone(messaging) {
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password1' } });
     fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: 'password1' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Generate recovery phrase' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Reveal recovery phrase' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Recovery Phrase' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Reveal Recovery Phrase' }));
     fireEvent.click(screen.getByRole('checkbox'));
-    fireEvent.click(screen.getByRole('button', { name: 'Verify recovery phrase' }));
-    await screen.findByRole('heading', { level: 1, name: 'Verify your written copy' });
+    fireEvent.click(screen.getByRole('button', { name: 'Verify Recovery Phrase' }));
+    // The page title stays Upgrade Wallet; the step line names the check.
+    await screen.findByText('Step 4 of 4: Check your copy');
     for (const input of screen.getAllByLabelText(/^Word \d+$/)) {
         const position = Number(input.labels[0].textContent.match(/\d+/)[0]);
         fireEvent.change(input, { target: { value: WORDS[position - 1] } });
     }
-    fireEvent.click(screen.getByRole('button', { name: 'Create BIP39 wallet' }));
-    await screen.findByRole('heading', { level: 1, name: 'New BIP39 wallet ready' });
-    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Review sweep' })).toHaveLength(5));
+    fireEvent.click(screen.getByRole('button', { name: 'Create BIP39 Wallet' }));
+    await screen.findByText('New wallet ready');
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Review Sweep' })).toHaveLength(5));
     return mounted;
 }
 
@@ -119,17 +120,18 @@ describe('MigrateToBip39 keeps its sweep list outside the screen', () => {
     it('returns from a sweep to the same list with that row marked and the rest still offered', async () => {
         const messaging = makeMessaging();
         const first = await upgradeToDone(messaging);
-        fireEvent.click(screen.getAllByRole('button', { name: 'Review sweep' })[0]);
+        fireEvent.click(screen.getAllByRole('button', { name: 'Review Sweep' })[0]);
         expect(first.onSweepChain).toHaveBeenCalledWith(expect.objectContaining({ fromAddress: 'legacy-address-0' }));
         first.unmount();
         sweepRow(0);
 
         const back = mount(messaging, { resumeList: true });
-        expect(screen.getByRole('heading', { level: 1, name: 'New BIP39 wallet ready' })).toBeInTheDocument();
-        await waitFor(() => expect(screen.getAllByRole('button', { name: 'Review sweep' })).toHaveLength(4));
+        expect(screen.getByRole('heading', { level: 1, name: 'Upgrade Wallet' })).toBeInTheDocument();
+        expect(screen.getByText('New wallet ready')).toBeInTheDocument();
+        await waitFor(() => expect(screen.getAllByRole('button', { name: 'Review Sweep' })).toHaveLength(4));
         expect(screen.getByText('txid-0')).toBeInTheDocument();
         expect(screen.getByText('Swept')).toBeInTheDocument();
-        fireEvent.click(screen.getAllByRole('button', { name: 'Review sweep' })[0]);
+        fireEvent.click(screen.getAllByRole('button', { name: 'Review Sweep' })[0]);
         expect(back.onSweepChain).toHaveBeenLastCalledWith(expect.objectContaining({
             legacyWalletId: 'wallet-old',
             newWalletId: 'wallet-new',
@@ -147,7 +149,7 @@ describe('MigrateToBip39 keeps its sweep list outside the screen', () => {
         sweepRow(1);
 
         mount(messaging);
-        await waitFor(() => expect(screen.getAllByRole('button', { name: 'Review sweep' })).toHaveLength(3));
+        await waitFor(() => expect(screen.getAllByRole('button', { name: 'Review Sweep' })).toHaveLength(3));
         expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull();
     });
 
@@ -159,27 +161,27 @@ describe('MigrateToBip39 keeps its sweep list outside the screen', () => {
 
         const back = mount(messaging, { resumeList: true });
         await waitFor(() => expect(screen.getAllByText('Swept')).toHaveLength(5));
-        expect(screen.queryByRole('button', { name: 'Review sweep' })).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Dismiss list' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Review Sweep' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Dismiss List' })).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
         expect(back.onBack).toHaveBeenCalled();
         expect(readMigrationSweeps('wallet-old')).toBeNull();
         back.unmount();
 
         mount(messaging);
-        expect(screen.getByRole('heading', { level: 1, name: 'Upgrade to a standard recovery phrase' })).toBeInTheDocument();
+        expect(screen.getByText('Step 1 of 4: Why upgrade')).toBeInTheDocument();
     });
 
     it('Dismiss list stops offering the list', async () => {
         const messaging = makeMessaging();
         const first = await upgradeToDone(messaging);
-        fireEvent.click(screen.getByRole('button', { name: 'Dismiss list' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Dismiss List' }));
         expect(first.onBack).toHaveBeenCalled();
         expect(readMigrationSweeps('wallet-old')).toBeNull();
         first.unmount();
 
         mount(messaging);
-        expect(screen.getByRole('heading', { level: 1, name: 'Upgrade to a standard recovery phrase' })).toBeInTheDocument();
+        expect(screen.getByText('Step 1 of 4: Why upgrade')).toBeInTheDocument();
     });
 
     it('drops a kept list whose destination wallet is gone and starts over', async () => {
@@ -187,8 +189,8 @@ describe('MigrateToBip39 keeps its sweep list outside the screen', () => {
         const messaging = makeMessaging({ wallets: ['wallet-old'] });
 
         mount(messaging);
-        await screen.findByRole('heading', { level: 1, name: 'Upgrade to a standard recovery phrase' });
+        await screen.findByText('Step 1 of 4: Why upgrade');
         expect(readMigrationSweeps('wallet-old')).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Review sweep' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Review Sweep' })).toBeNull();
     });
 });

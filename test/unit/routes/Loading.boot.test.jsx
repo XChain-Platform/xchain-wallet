@@ -229,7 +229,9 @@ describe('web shell boot', () => {
         await act(async () => { settleRetry({ hasWallet: true, hasSession: false, state: 'locked' }); });
         await waitFor(() => expect(loadingDots()).toBeNull());
         expect(screen.queryByRole('heading', FAILED)).toBeNull();
-        expect(screen.queryByRole('heading', WELCOME)).toBeNull();
+        // The unlock screen now carries the product name as its own heading, so
+        // the onboarding welcome is told apart by its header marker instead.
+        expect(document.querySelector('[data-onboarding-welcome-header]')).toBeNull();
         expect(document.querySelector('input[type="password"]')).not.toBeNull();
     });
 

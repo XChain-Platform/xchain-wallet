@@ -67,6 +67,8 @@ async function mountSweep() {
         expect(submit().disabled).toBe(false);
     });
     fireEvent.change(screen.getByLabelText(/^Destination address/), { target: { value: DESTINATION } });
+    // The fee selector sits in the standard Network fee section, closed on load.
+    fireEvent.click(screen.getByRole('button', { name: /^Network fee/ }));
     fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), { target: { value: '3' } });
     return { container, submit, composeForConfirm };
 }

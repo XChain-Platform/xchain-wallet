@@ -69,12 +69,12 @@ afterEach(() => {
 });
 
 describe('NotificationsSection forward action and icons', () => {
-    it('shows Request permission and Add alert as green form actions, with icons', () => {
+    it('shows Request permission and Add Alert as green form actions, with icons', () => {
         setPermission('default');
         render(<NotificationsSection walletId="wallet-1" />);
 
-        const request = screen.getByRole('button', { name: 'Request permission' });
-        const addAlert = screen.getByRole('button', { name: 'Add alert' });
+        const request = screen.getByRole('button', { name: 'Request Permission' });
+        const addAlert = screen.getByRole('button', { name: 'Add Alert' });
         expect(request.className).toMatch(/success/);
         expect(request.querySelector('svg')).not.toBeNull();
         expect(addAlert.className).toMatch(/success/);
@@ -86,9 +86,9 @@ describe('NotificationsSection forward action and icons', () => {
         setPermission('granted');
         render(<NotificationsSection walletId="wallet-1" />);
 
-        expect(screen.queryByRole('button', { name: 'Request permission' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Request Permission' })).toBeNull();
         expect(successButtons()).toEqual([
-            screen.getByRole('button', { name: 'Add alert' }),
+            screen.getByRole('button', { name: 'Add Alert' }),
         ]);
     });
 
@@ -103,11 +103,11 @@ describe('NotificationsSection forward action and icons', () => {
         };
         try {
             render(<NotificationsSection walletId="wallet-1" />);
-            const revoke = await screen.findByRole('button', { name: 'Revoke permission' });
+            const revoke = await screen.findByRole('button', { name: 'Revoke Permission' });
             expect(revoke.querySelector('svg')).not.toBeNull();
             expect(revoke.className).not.toMatch(/success/);
             expect(successButtons()).toEqual([
-                screen.getByRole('button', { name: 'Add alert' }),
+                screen.getByRole('button', { name: 'Add Alert' }),
             ]);
         } finally {
             globalThis.chrome = prior;
@@ -118,7 +118,7 @@ describe('NotificationsSection forward action and icons', () => {
         setPermission('granted');
         render(<NotificationsSection walletId="wallet-1" />);
 
-        expect(screen.getByRole('button', { name: 'Re-arm' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Re-Arm' })).toBeTruthy();
         expect(screen.getByRole('button', { name: /^Edit/ })).toBeTruthy();
         expect(screen.getByRole('button', { name: /^Remove/ })).toBeTruthy();
         expect(screen.getAllByRole('button', { name: /^Preview/ }).length).toBeGreaterThan(0);
@@ -131,11 +131,11 @@ describe('NotificationsSection forward action and icons', () => {
         render(<NotificationsSection walletId="wallet-1" />);
 
         expect(screen.getByRole('button', { name: /^Remove/ }).className).toMatch(/danger/);
-        for (const name of ['Re-arm', /^Edit/]) {
+        for (const name of ['Re-Arm', /^Edit/]) {
             expect(screen.getByRole('button', { name })).not.toHaveProperty('className', expect.stringMatching(/success/));
         }
         expect(successButtons()).toEqual([
-            screen.getByRole('button', { name: 'Add alert' }),
+            screen.getByRole('button', { name: 'Add Alert' }),
         ]);
     });
 });

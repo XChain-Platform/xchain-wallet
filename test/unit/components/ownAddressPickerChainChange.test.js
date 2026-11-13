@@ -11,10 +11,10 @@ import { describe, expect, it } from 'vitest';
 
 const root = process.cwd();
 const sourceRoot = join(root, 'packages/core/src');
-// Forms whose chain comes from a record (a contract, a token's callback
-// chain), so their From picker keeps to that chain and hides the switch.
+// Forms whose chain comes from a record (a contract), so their From picker
+// keeps to that chain and hides the switch. Callback now has a Network field
+// of its own and follows a cross-chain pick like any other form.
 const fixedChainHosts = [
-    'shared/routes/CallbackForm.jsx',
     'shared/routes/ContractFundsForm.jsx',
     'shared/routes/ContractStakeForm.jsx',
     'shared/routes/ExecuteContractForm.jsx',
@@ -36,12 +36,18 @@ function pickerUsages() {
             rel,
             at: `${rel}:${source.slice(0, match.index).split('\n').length}`,
             switches: /\bonChainChange=\{/.test(match[0]),
-            locked: /\blockNetwork\b/.test(match[0]),
+            // A bare lockNetwork holds the picker to the form chain always;
+            // lockNetwork={...} holds it only while the form's own Network
+            // field is locked (a picked token, say).
+            locked: /\blockNetwork(?!=)\b|\blockNetwork=\{true\}/.test(match[0]),
         }));
     });
 }
 
 describe('own-address picker chain changes', () => {
+    // Whenever the picker may show other networks, the form must be able to
+    // move its Network to a picked address's chain; a picker that never
+    // shows them has no use for the handler.
     it('either follows a cross-chain pick or keeps the picker on the form chain', () => {
         const offenders = pickerUsages()
             .filter((usage) => usage.switches === usage.locked)

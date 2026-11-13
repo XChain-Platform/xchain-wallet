@@ -49,18 +49,19 @@ afterEach(() => {
 describe('SleepForm pause state read', () => {
     it('does not claim the token is active when the read fails', async () => {
         mount(vi.fn().mockRejectedValue(new Error('explorer 500')));
-        expect(await screen.findByText('The current pause state could not be read.')).toBeInTheDocument();
+        // The state line is a short badge.
+        expect(await screen.findByText('Current state unavailable')).toBeInTheDocument();
         expect(screen.queryByText(/active \(not paused\)/)).toBeNull();
     });
 
     it('says it is checking while the read is pending', async () => {
         mount(vi.fn(() => new Promise(() => {})));
-        expect(await screen.findByText('Checking the current pause state.')).toBeInTheDocument();
+        expect(await screen.findByText('Checking current state')).toBeInTheDocument();
         expect(screen.queryByText(/active \(not paused\)/)).toBeNull();
     });
 
     it('still reports an active token once the read answers', async () => {
         mount(vi.fn().mockResolvedValue({ resumeBlock: null }));
-        expect(await screen.findByText('gate is currently active (not paused).')).toBeInTheDocument();
+        expect(await screen.findByText('Active, not paused')).toBeInTheDocument();
     });
 });

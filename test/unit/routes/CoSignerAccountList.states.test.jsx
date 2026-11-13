@@ -42,7 +42,7 @@ describe('CoSignerAccountList states', () => {
     it('shows loading while agent accounts resolve', () => {
         mount(vi.fn(() => pending()));
 
-        expect(screen.getByRole('heading', { name: 'Agent accounts' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Agent Accounts' })).toBeInTheDocument();
         expect(screen.getByText(/Loading/)).toBeInTheDocument();
         expect(screen.queryByText('No agent accounts yet')).toBeNull();
     });
@@ -112,7 +112,9 @@ describe('CoSignerAccountList states', () => {
         // No how-it-works box: the provision form's field tips carry that help (U57, U95).
         expect(screen.queryByText('How agent accounts work')).toBeNull();
         expect(screen.getByText('Active')).toBeInTheDocument();
-        expect(document.body.textContent).not.toMatch(/Bitcoin|regtest|testnet|not mainnet/i);
+        // The row names its network in one plain line, never a "not mainnet" warning.
+        expect(screen.getByText('Network: Bitcoin Regtest')).toBeInTheDocument();
+        expect(document.body.textContent).not.toMatch(/not mainnet/i);
         fireEvent.click(screen.getByRole('button', { name: /Build agent/ }));
         expect(onOpen).toHaveBeenCalledWith('account-1');
     });

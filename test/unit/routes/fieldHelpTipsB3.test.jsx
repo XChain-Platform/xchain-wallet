@@ -121,6 +121,8 @@ describe('Route field help tips', () => {
             </MessagingProvider>,
         );
 
+        // The expiration choice lives in the closed Swap Terms section.
+        fireEvent.click(await screen.findByRole('button', { name: /^Swap Terms\b/, expanded: false }));
         fireEvent.click(await screen.findByRole('radio', { name: 'Expire at a specific time' }));
 
         expectTip({

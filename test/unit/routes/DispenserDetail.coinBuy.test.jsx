@@ -18,6 +18,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { DispenserDetail } from '../../../packages/core/src/shared/routes/DispenserDetail.jsx';
 import { nativePaymentOutput } from '../../../packages/core/src/flows/nativePayment.js';
 
@@ -74,8 +75,11 @@ async function mount(dispenser, {
     dogeSats = '1000000000',
     destinationRows = [],
     settings = {},
+    walletMode = 'full',
     preflight = PASS,
 } = {}) {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     vi.useFakeTimers();
     const messaging = {
         getDispenserByActionIndex: vi.fn().mockResolvedValue(dispenser),
@@ -128,14 +132,19 @@ async function mount(dispenser, {
         });
     }
     vi.useRealTimers();
+    // The page opens on Details and shows only the chosen tab, so the buy
+    // form needs the Buy tab picked.
+    fireEvent.click(await screen.findByRole('tab', { name: /^Buy$/ }));
     return messaging;
 }
 
-const buyButton = () => screen.findByRole('button', { name: /^Buy \d+ fills?$/ });
-const noBuyButton = () => screen.queryByRole('button', { name: /^Buy \d+ fills?$/ });
+const buyButton = () => screen.findByRole('button', { name: /^Buy \d+ Dispenses?$/ });
+const noBuyButton = () => screen.queryByRole('button', { name: /^Buy \d+ Dispenses?$/ });
+const dispensesField = () => screen.findByLabelText(/^How Many Dispenses/i);
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     vi.useRealTimers();
 });
 
@@ -154,14 +163,14 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
         expect(await screen.findByText(/10 DOGE available/)).toBeInTheDocument();
         // The other-wallet path stays for buyers who prefer it.
         expect(screen.getByText(OWNER, { selector: 'code' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /^Copy dispenser payment address$/ })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^Copy Dispenser Payment Address$/ })).toBeInTheDocument();
         expect(document.body.textContent).not.toMatch(/on the roadmap/);
     });
 
     it('signs 3 fills of 2 DOGE as one native send of 600000000 base units to the dispenser', async () => {
         const messaging = await mount(COIN_PAID);
         await screen.findByText(/10 DOGE available/);
-        fireEvent.change(await screen.findByLabelText(/^Fills/i), { target: { value: '3' } });
+        fireEvent.change(await dispensesField(), { target: { value: '3' } });
         const buy = await buyButton();
         await waitFor(() => expect(buy).toBeEnabled());
         fireEvent.click(buy);
@@ -224,7 +233,7 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
         const messaging = await mount(COIN_PAID, { destinationRows: [COIN_PAID] });
         await screen.findByText(/10 DOGE available/);
         vi.useFakeTimers();
-        fireEvent.click(screen.getByRole('button', { name: /^Buy \d+ fills?$/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^Buy \d+ Dispenses?$/ }));
         await settleDestinationLookup();
 
         expect(screen.getByText(/This pays dispenser #816/))
@@ -260,9 +269,9 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
         ['coin', COIN_PAID, 'DOGE', '2'],
         ['token', TOKEN_PAID, 'MEMEVALID', '5'],
     ])('builds an unsigned %s purchase in watcher mode', async (_kind, dispenser, tick, amount) => {
-        const messaging = await mount(dispenser, { settings: { walletMode: 'watcher' } });
+        const messaging = await mount(dispenser, { walletMode: 'watcher' });
         await screen.findByText(new RegExp(`${tick} available`));
-        const build = await screen.findByRole('button', { name: 'Create unsigned transaction' });
+        const build = await screen.findByRole('button', { name: 'Create Unsigned Transaction' });
         await waitFor(() => expect(build).toBeEnabled());
         fireEvent.click(build);
 
@@ -283,7 +292,7 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
         // 10 DOGE buys 5 fills, not 6.
         await mount(COIN_PAID);
         await screen.findByText(/10 DOGE available/);
-        fireEvent.change(await screen.findByLabelText(/^Fills/i), { target: { value: '6' } });
+        fireEvent.change(await dispensesField(), { target: { value: '6' } });
         await waitFor(async () => expect(await buyButton()).toBeDisabled());
         expect(await screen.findByTestId('preflight-chip')).toHaveTextContent(/Will likely fail/);
     });
@@ -291,29 +300,32 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
     it('shows per-fill terms and validates whole, available fills before review', async () => {
         await mount({ ...COIN_PAID, escrow_remaining: '200' });
         await screen.findByText(/10 DOGE available/);
+        // The per-dispense terms are the stepper's hint; the totals box shows what one buy costs.
+        expect(screen.getByText(/Each dispense gives 100 DOGESWAP for 2/)).toBeInTheDocument();
         const totals = screen.getByTestId('buy-totals');
-        expect(totals).toHaveTextContent('Price per fill2.00000000 DOGE');
-        expect(totals).toHaveTextContent('You receive per fill100 DOGESWAP');
         expect(totals).toHaveTextContent('You pay2 DOGE');
-        expect(totals).toHaveTextContent('You receive100 DOGESWAP');
+        expect(totals).toHaveTextContent('You get100 DOGESWAP');
 
-        fireEvent.change(screen.getByLabelText(/^Fills/i), { target: { value: '1.5' } });
+        fireEvent.change(await dispensesField(), { target: { value: '1.5' } });
         expect(screen.getByRole('alert')).toHaveTextContent(/whole number of fills/i);
-        expect(screen.getByRole('button', { name: /^Buy fills$/ })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /^Buy Dispenses$/ })).toBeDisabled();
 
-        fireEvent.change(screen.getByLabelText(/^Fills/i), { target: { value: '3' } });
+        fireEvent.change(await dispensesField(), { target: { value: '3' } });
         expect(screen.getByRole('alert')).toHaveTextContent(/Only 2 complete fills remain/);
         expect(await buyButton()).toBeDisabled();
     });
 
     it.each([
-        ['closed', { current_status: 'cancelled', escrow_remaining: '1000' }, 'Closed'],
-        ['empty', { current_status: 'open', escrow_remaining: '0' }, 'Open'],
-    ])('does not offer payment controls for a %s dispenser', async (_name, state, statusText) => {
+        ['closed', { current_status: 'cancelled', escrow_remaining: '1000' }, 'Closed', 'This dispenser is not open, so it does not sell right now.'],
+        ['empty', { current_status: 'open', escrow_remaining: '0' }, 'Open', 'Nothing is left to buy from this dispenser.'],
+    ])('does not offer payment controls for a %s dispenser', async (_name, state, statusText, buyNote) => {
         await mount({ ...COIN_PAID, ...state });
-        await screen.findByText(statusText, { selector: 'dd' });
+        // The Buy tab says why there is nothing to buy; the status is on Details.
+        expect(await screen.findByText(buyNote)).toBeInTheDocument();
         expect(noBuyButton()).toBeNull();
         expect(screen.queryByText('Pay to buy')).toBeNull();
+        fireEvent.click(screen.getByRole('tab', { name: /^Details$/ }));
+        await screen.findByText(statusText, { selector: 'dd' });
         if (state.escrow_remaining === '0') {
             expect(screen.getByText(/no complete fills left to buy/i)).toBeInTheDocument();
         }
@@ -346,14 +358,14 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
 describe('dispenser owned by the viewer', () => {
     it('shows no Buy control and no pay-here panel on a coin-paid dispenser', async () => {
         await mount(COIN_PAID, { addresses: [buyerAddress, ownerAddress] });
-        await screen.findByText(/\(you\)/);
+        await screen.findByText('This wallet owns this dispenser, so it does not buy from it here.');
         expect(noBuyButton()).toBeNull();
         expect(screen.queryByText(/Pay to buy/)).toBeNull();
     });
 
     it('shows no Buy control on a token-paid dispenser', async () => {
         await mount(TOKEN_PAID, { addresses: [buyerAddress, ownerAddress] });
-        await screen.findByText(/\(you\)/);
+        await screen.findByText('This wallet owns this dispenser, so it does not buy from it here.');
         expect(noBuyButton()).toBeNull();
     });
 });

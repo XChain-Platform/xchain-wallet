@@ -80,6 +80,14 @@ function messagingWithRefusal() {
 }
 
 async function pickAddress(utils, address) {
+    // The dispenser address lives in the Dispenser Terms section, closed on load.
+    const terms = utils.getByRole('button', { name: /^Dispenser Terms/ });
+    if (terms.getAttribute('aria-expanded') !== 'true') {
+        await domAct(async () => {
+            fireEvent.click(terms);
+            await drainMicrotasks();
+        });
+    }
     await domAct(async () => {
         fireEvent.click(utils.getByRole('button', { name: 'Change dispenser address' }));
         await drainMicrotasks();
@@ -92,7 +100,7 @@ async function pickAddress(utils, address) {
 
 async function refuseCreate(utils) {
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('button', { name: 'Create dispenser' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Create Dispenser' }));
         await drainMicrotasks();
     });
     expect(utils.getByText(/network would refuse a dispenser at this address/i)).toBeInTheDocument();

@@ -45,7 +45,7 @@ describe('StakeDetail rendering', () => {
             </MessagingProvider>,
         );
 
-        expect(await screen.findByRole('heading', { name: 'Validator stake' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Validator Stake' })).toBeInTheDocument();
         expect(screen.getByText('25 XCHAIN')).toBeInTheDocument();
         expect(screen.getAllByText('3 XCHAIN')).toHaveLength(3);
 

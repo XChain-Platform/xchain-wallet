@@ -141,7 +141,7 @@ describe('TokenAdminForm list names', () => {
             getListByActionIndex: vi.fn().mockReturnValue(pendingDetail),
         });
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Choose allow-list' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Choose Allow-List' }));
         fireEvent.click(screen.getByRole('button', { name: 'Pick named list' }));
 
         expect(screen.getByText('Picker policy (List #303) · 4 members')).toBeTruthy();
@@ -172,7 +172,7 @@ describe('TokenAdminForm list names', () => {
             }],
         });
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Choose list' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Choose List' }));
 
         expect(await screen.findByText('List #204 (shared from LTC list #9) · 3 members')).toBeTruthy();
         expect(screen.queryByText(/Bound target metadata/)).toBeNull();

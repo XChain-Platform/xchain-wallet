@@ -84,8 +84,8 @@ function mountFork({ getActionByTxid = vi.fn() } = {}) {
 }
 
 async function reviewAndPublishFirst() {
-    fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
-    const publish = await screen.findByRole('button', { name: /^Publish (add|remove)$/ });
+    fireEvent.click(screen.getByRole('button', { name: /^Publish edit$/i }));
+    const publish = await screen.findByRole('button', { name: /^Publish (Add|Remove)$/ });
     fireEvent.click(publish);
 }
 
@@ -131,7 +131,7 @@ describe('ListForkForm success transaction labels', () => {
 
         expect(await screen.findByText('First transaction (add)')).toBeTruthy();
         await act(async () => { finishIndexing({ action_index: 2701 }); });
-        fireEvent.click(await screen.findByRole('button', { name: 'Publish remove' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Publish Remove' }));
 
         expect(await screen.findByText('First transaction (add)')).toBeTruthy();
         expect(screen.getByText('Second transaction (remove)')).toBeTruthy();

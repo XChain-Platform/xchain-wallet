@@ -12,6 +12,7 @@ import { afterEach, describe, it, expect } from 'vitest';
 import { render, act as domAct, cleanup, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { DeployContractForm } from '../../../packages/core/src/shared/routes/DeployContractForm.jsx';
 import contractStyles from '../../../packages/core/src/shared/routes/ContractScreens.module.css';
 
@@ -34,12 +35,16 @@ const ADDRESS = Object.freeze({
     signerId: 'signer-1',
 });
 
-function messagingWithValidation(result, overrides = {}) {
+// `walletMode` among the overrides is the mode of wallet `w`, published the way
+// the shell does from the wallet list; every other override is a messaging method.
+function messagingWithValidation(result, { walletMode = 'full', ...overrides } = {}) {
     const fallback = () => Promise.resolve({});
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const target = {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [ADDRESS] }),
         getActiveAddresses: () => Promise.resolve({}),
-        getSettings: () => Promise.resolve({ walletMode: 'full' }),
+        getSettings: () => Promise.resolve({}),
+        listWallets: () => Promise.resolve([{ id: 'w', name: 'W', walletMode }]),
         signerReady: () => Promise.resolve({ ready: false }),
         getSignerStatus: () => Promise.resolve({ status: 'locked' }),
         listContractTemplates: () => Promise.resolve({ templates: [], patterns: [] }),
@@ -56,7 +61,7 @@ function messagingWithValidation(result, overrides = {}) {
     });
 }
 
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); resetWalletModes(); });
 
 async function drain(rounds = 16) {
     for (let i = 0; i < rounds; i += 1) await Promise.resolve();
@@ -77,7 +82,7 @@ async function renderAndValidate(result) {
         await drain();
     });
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('button', { name: 'Validate code' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Validate Code' }));
         await drain();
     });
     return utils;
@@ -100,12 +105,12 @@ describe('DeployContractForm validation diagnostics', () => {
             });
 
             const source = utils.getByLabelText('Code source');
-            const tools = utils.getByRole('button', { name: 'Validate code' }).parentElement;
+            const tools = utils.getByRole('button', { name: 'Validate Code' }).parentElement;
             expect(source).toHaveClass(contractStyles.codeSource);
             expect(source).toHaveAttribute('wrap', 'off');
             expect(tools).toHaveClass(contractStyles.toolActions);
-            expect(utils.getByRole('button', { name: 'Estimate size' })).toBeInTheDocument();
-            expect(utils.getByRole('button', { name: 'Suggest gas' })).toBeInTheDocument();
+            expect(utils.getByRole('button', { name: 'Estimate Size' })).toBeInTheDocument();
+            expect(utils.getByRole('button', { name: 'Suggest Gas' })).toBeInTheDocument();
         } finally {
             if (widthDescriptor) Object.defineProperty(window, 'innerWidth', widthDescriptor);
         }
@@ -204,7 +209,7 @@ describe('DeployContractForm validation diagnostics', () => {
         fireEvent.change(utils.getByLabelText('Gas limit'), { target: { value: '100000' } });
         fireEvent.change(utils.getByLabelText('Constructor params'), { target: { value: 'first|second' } });
         fireEvent.change(utils.getByLabelText('Cooldown blocks'), { target: { value: '10' } });
-        fireEvent.click(utils.getByRole('button', { name: 'Publish contract' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Publish Contract' }));
 
         expect(await utils.findByRole('alert')).toHaveTextContent(
             'A stake-enabled contract accepts one constructor argument.',
@@ -224,7 +229,7 @@ describe('DeployContractForm validation diagnostics', () => {
 
         fireEvent.change(utils.getByLabelText('Code source'), { target: { value: SOURCE } });
         fireEvent.change(utils.getByLabelText('Gas limit'), { target: { value: '1e5' } });
-        fireEvent.click(utils.getByRole('button', { name: 'Publish contract' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Publish Contract' }));
 
         expect(await utils.findByRole('alert')).toHaveTextContent('Gas limit must be a positive whole number.');
     });
@@ -267,7 +272,7 @@ describe('DeployContractForm validation diagnostics', () => {
             await drain();
         });
 
-        const submit = utils.getByRole('button', { name: 'Publish contract' });
+        const submit = utils.getByRole('button', { name: 'Publish Contract' });
         expect(submit).toBeEnabled();
         fireEvent.click(submit);
         expect(await utils.findByRole('alert')).toHaveTextContent('Contract source is required.');
@@ -289,7 +294,7 @@ describe('DeployContractForm validation diagnostics', () => {
         fireEvent.change(utils.getByLabelText('Slash destination'), {
             target: { value: 'not-an-address' },
         });
-        fireEvent.click(utils.getByRole('button', { name: 'Publish contract' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Publish Contract' }));
 
         expect(await utils.findByRole('alert'))
             .toHaveTextContent('Slash destination must be BURN or a valid address for Bitcoin.');
@@ -302,7 +307,7 @@ describe('DeployContractForm validation diagnostics', () => {
                 <MessagingProvider
                     shell="web"
                     messaging={messagingWithValidation({ valid: true }, {
-                        getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+                        walletMode: 'watcher',
                     })}
                 >
                     <DeployContractForm walletId="w" onBack={() => {}} />
@@ -315,9 +320,9 @@ describe('DeployContractForm validation diagnostics', () => {
         fireEvent.change(utils.getByLabelText('Constructor params'), {
             target: { value: 'first|second' },
         });
-        fireEvent.click(utils.getByRole('button', { name: 'Publish contract' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Publish Contract' }));
 
-        expect(await utils.findByRole('heading', { name: 'Review publish' })).toBeInTheDocument();
+        expect(await utils.findByRole('heading', { name: 'Review Publish' })).toBeInTheDocument();
         expect(utils.getByText(WATCHER_HINT)).toBeInTheDocument();
         const constructorRow = utils.getByText('Constructor').nextElementSibling;
         expect(Array.from(constructorRow.querySelectorAll('li')).map((node) => node.textContent))
@@ -336,7 +341,7 @@ describe('DeployContractForm validation diagnostics', () => {
                 <MessagingProvider
                     shell="web"
                     messaging={messagingWithValidation({ valid: true }, {
-                        getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+                        walletMode: 'watcher',
                     })}
                 >
                     <DeployContractForm walletId="w" onBack={() => {}} />
@@ -349,9 +354,9 @@ describe('DeployContractForm validation diagnostics', () => {
         fireEvent.change(utils.getByLabelText('Constructor params'), {
             target: { value: '<img src=x>⚡|9007199254740993' },
         });
-        fireEvent.click(utils.getByRole('button', { name: 'Publish contract' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Publish Contract' }));
 
-        expect(await utils.findByRole('heading', { name: 'Review publish' })).toBeInTheDocument();
+        expect(await utils.findByRole('heading', { name: 'Review Publish' })).toBeInTheDocument();
         const constructorRow = utils.getByText('Constructor').nextElementSibling;
         expect(Array.from(constructorRow.querySelectorAll('li')).map((node) => node.textContent))
             .toEqual(['<img src=x>⚡', '9007199254740993']);
@@ -388,7 +393,7 @@ describe('DeployContractForm suggested gas label', () => {
 
     async function suggest(utils) {
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Suggest gas' }));
+            fireEvent.click(utils.getByRole('button', { name: 'Suggest Gas' }));
             await drain();
         });
         return utils.getByText(/Suggested gas limit:/);

@@ -61,7 +61,7 @@ describe('Settings window title', () => {
         ['keyboard', 'Keyboard'],
         ['backup', 'Backup'],
         ['fees', 'Fees'],
-        ['network-endpoints', 'Network & endpoints'],
+        ['network-endpoints', 'Network & Endpoints'],
         ['about', 'About'],
     ])('titles the %s sub-screen with the heading it shows', (id, heading) => {
         render(<Shell initialSubpageId={id} />);

@@ -130,7 +130,7 @@ const maxButton = () => screen.getByRole('button', { name: /max available/i });
 // Hidden Max and inert Max are both acceptable; a LIVE Max on an
 // uncomputable amount is not.
 const maxButtonOrNull = () => screen.queryByRole('button', { name: /max available/i });
-const submitButton = () => screen.getByRole('button', { name: /^Review recipients$/ });
+const submitButton = () => screen.getByRole('button', { name: /^Review recipients$/i });
 
 // The route loads its addresses asynchronously, so every case waits for
 // the compose form itself before touching a field.
@@ -157,7 +157,8 @@ const maxReady = async () => {
 
 // The summary line is assembled from several JSX expressions inside one
 // paragraph, so its text lands in separate DOM text nodes; match against
-// the rendered text as a whole.
+// the rendered text as a whole. Review titles are Title Case
+// ("Review Address List").
 const expectText = async (re) => {
     await flushTimers();
     expect(document.body.textContent).toMatch(re);
@@ -312,7 +313,7 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         await maxReady();
         fireEvent.change(amountField(), { target: { value: '2499.5' } });
         fireEvent.click(submitButton());
-        await expectText(/Review address list/);
+        await expectText(/Review Address List/);
     });
 
     it('Back from recipient review keeps the amount and recipients', async () => {
@@ -320,7 +321,7 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         await pasteRecipients();
         fireEvent.change(amountField(), { target: { value: '10.00' } });
         fireEvent.click(submitButton());
-        await expectText(/Review address list/);
+        await expectText(/Review Address List/);
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
 
@@ -384,7 +385,7 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         await pasteRecipients();
         fireEvent.change(amountField(), { target: { value: '4999' } });
         fireEvent.click(submitButton());
-        await expectText(/Review address list/);
+        await expectText(/Review Address List/);
     });
 });
 
@@ -431,7 +432,7 @@ describe('AirdropForm counts only the recipients the token pays', () => {
         await pasteRecipients();
         fireEvent.change(amountField(), { target: { value: '1' } });
         fireEvent.click(submitButton());
-        await expectText(/Review address list/);
+        await expectText(/Review Address List/);
         expect(document.body.textContent).toContain('As the lists stand now, this airdrop pays 0.');
     });
 
@@ -440,7 +441,7 @@ describe('AirdropForm counts only the recipients the token pays', () => {
         await pasteRecipients();
         fireEvent.change(amountField(), { target: { value: '1' } });
         fireEvent.click(submitButton());
-        await expectText(/Review address list/);
+        await expectText(/Review Address List/);
         expect(document.body.textContent).toContain(
             'excludes 1 of these addresses, and the network pays it nothing. As the lists stand now, '
                 + 'this airdrop pays 1. The lists can change before the airdrop confirms, so Max and the '
@@ -462,7 +463,7 @@ describe('AirdropForm counts only the recipients the token pays', () => {
         fireEvent.change(amountField(), { target: { value: '1' } });
         await expectText(/total ~2 XCHAIN/);
         fireEvent.click(submitButton());
-        await expectText(/Review address list/);
+        await expectText(/Review Address List/);
         expect(document.body.textContent).toContain(
             'It combines other lists, which this wallet cannot count. This token has an allow or block list, '
                 + 'so the network may pay fewer addresses than shown here.',
@@ -480,14 +481,34 @@ describe('AirdropForm counts only the recipients the token pays', () => {
 });
 
 describe('AirdropForm CSV upload control', () => {
-    it('opens the hidden file input from an outlined button', async () => {
+    it('opens the hidden file input from the standard file field', async () => {
         mountAirdrop();
         await flushTimers();
         const input = screen.getByLabelText('Upload CSV of addresses');
         expect(input.style.display).toBe('none');
         const click = vi.spyOn(input, 'click');
-        fireEvent.click(screen.getByRole('button', { name: 'Upload a CSV or text file' }));
-        expect(click).toHaveBeenCalledTimes(1);
+        // The field's Upload icon and the field itself both open the dialog.
+        fireEvent.click(screen.getByRole('button', { name: 'Choose a file' }));
+        fireEvent.click(screen.getByLabelText(/^Recipients file \(CSV or TXT\)/));
+        expect(click).toHaveBeenCalledTimes(2);
+        expect(screen.queryByRole('button', { name: 'Upload a CSV or text file' })).toBeNull();
+    });
+
+    it('shows the loaded file in the field and its X clears the loaded addresses', async () => {
+        mountAirdrop();
+        await flushTimers();
+        const input = screen.getByLabelText('Upload CSV of addresses');
+        const list = new File(['bc1qexample1\nbc1qexample2'], 'recipients.csv', { type: 'text/csv' });
+        await act(async () => {
+            fireEvent.change(input, { target: { files: [list] } });
+        });
+        await flushTimers();
+        expect(screen.getByLabelText(/^Recipients file \(CSV or TXT\)/)).toHaveValue('recipients.csv');
+        expect(screen.getByLabelText('Recipients').value).toContain('bc1qexample1');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Remove file' }));
+        expect(screen.getByLabelText(/^Recipients file \(CSV or TXT\)/)).toHaveValue('');
+        expect(screen.getByLabelText('Recipients').value).toBe('');
     });
 
     it('refuses a picked file over the size cap instead of loading it', async () => {

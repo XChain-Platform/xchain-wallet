@@ -61,7 +61,10 @@ vi.mock('@xchain-wallet/core/shared/hooks/useWalletMode.js', () => ({
         isFullMode: true,
         isWatcherMode: false,
         isSignerMode: false,
+        walletModeKnown: true,
     }),
+    useActiveWalletModeSource: () => {},
+    notifyWalletModesChanged: () => {},
 }));
 vi.mock('@xchain-wallet/core/shared/hooks/useMessagingUnread.js', () => ({
     useMessagingUnread: () => boot.messagingUnread,
@@ -144,7 +147,12 @@ vi.mock('@xchain-wallet/core/shared/routes/DispensersList.jsx', () => ({
     ),
 }));
 vi.mock('@xchain-wallet/core/shared/routes/DispenserDetail.jsx', () => ({
-    DispenserDetail: () => <h1>Dispenser detail screen</h1>,
+    DispenserDetail: ({ onBack }) => (
+        <section>
+            <h1>Dispenser detail screen</h1>
+            <button type="button" onClick={onBack}>Back from dispenser detail</button>
+        </section>
+    ),
 }));
 vi.mock('@xchain-wallet/core/shared/routes/MarketsList.jsx', () => ({
     MarketsList: (props) => {
@@ -266,7 +274,7 @@ describe('desktop renderer shell', () => {
 
         await importRenderer();
 
-        expect(await screen.findByRole('heading', { name: 'Unlock wallet' })).toBeInTheDocument();
+        expect(await screen.findByRole('form', { name: 'Unlock wallet' })).toBeInTheDocument();
         expect(boot.installErrorCapture).toHaveBeenCalledOnce();
         expect(boot.installFiatRateSource).toHaveBeenCalledOnce();
         expect(boot.setShellCapabilities).toHaveBeenCalledWith({ socksProxy: true });
@@ -336,7 +344,7 @@ describe('desktop renderer shell', () => {
         expect(await screen.findByRole('heading', { name: 'Settings screen' })).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Lock wallet' }));
-        expect(await screen.findByRole('heading', { name: 'Unlock wallet' })).toBeInTheDocument();
+        expect(await screen.findByRole('form', { name: 'Unlock wallet' })).toBeInTheDocument();
         expect(bridge.sendMessage).toHaveBeenCalledWith({ type: 'wallet.lock', request: undefined });
     });
 
@@ -344,7 +352,7 @@ describe('desktop renderer shell', () => {
         boot.messagingUnread = 3;
         window.xchainWalletBridge = createPreloadBridge();
         render(<App />);
-        await screen.findByRole('heading', { name: 'Unlock wallet' });
+        await screen.findByRole('form', { name: 'Unlock wallet' });
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
         fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
         await screen.findByRole('heading', { name: 'Home screen' });
@@ -360,7 +368,7 @@ describe('desktop renderer shell', () => {
     it('keeps a chosen DEX asset when the Markets row is selected again later', async () => {
         window.xchainWalletBridge = createPreloadBridge();
         render(<App />);
-        await screen.findByRole('heading', { name: 'Unlock wallet' });
+        await screen.findByRole('form', { name: 'Unlock wallet' });
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
         fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
         await screen.findByRole('heading', { name: 'Home screen' });
@@ -380,10 +388,10 @@ describe('desktop renderer shell', () => {
         expect(boot.marketsProps.selectedAsset).toMatchObject({ tick: 'CUSTOM' });
     });
 
-    it('returns Home after choosing Dispensers from a dispenser drilldown', async () => {
+    it('walks Back through the true history after choosing Dispensers from a dispenser drilldown', async () => {
         window.xchainWalletBridge = createPreloadBridge();
         render(<App />);
-        await screen.findByRole('heading', { name: 'Unlock wallet' });
+        await screen.findByRole('form', { name: 'Unlock wallet' });
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
         fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
         await screen.findByRole('heading', { name: 'Home screen' });
@@ -394,6 +402,12 @@ describe('desktop renderer shell', () => {
         await screen.findByRole('heading', { name: 'Dispenser detail screen' });
         act(() => { boot.commandPaletteProps.menu.onSelect('dispensers-list'); });
         await screen.findByRole('heading', { name: 'Dispensers screen' });
+        // Back returns to the page the user came from: the dispenser detail,
+        // then the first Dispensers list, then Home.
+        fireEvent.click(screen.getByRole('button', { name: 'Back from dispensers' }));
+        await screen.findByRole('heading', { name: 'Dispenser detail screen' });
+        fireEvent.click(screen.getByRole('button', { name: /^Back from dispenser detail/ }));
+        await screen.findByRole('heading', { name: 'Dispensers screen' });
         fireEvent.click(screen.getByRole('button', { name: 'Back from dispensers' }));
 
         expect(await screen.findByRole('heading', { name: 'Home screen' })).toBeInTheDocument();
@@ -402,7 +416,7 @@ describe('desktop renderer shell', () => {
     it('preserves the Contacts origin when the active row is selected again', async () => {
         window.xchainWalletBridge = createPreloadBridge();
         render(<App />);
-        await screen.findByRole('heading', { name: 'Unlock wallet' });
+        await screen.findByRole('form', { name: 'Unlock wallet' });
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
         fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
         await screen.findByRole('heading', { name: 'Home screen' });
@@ -421,7 +435,7 @@ describe('desktop renderer shell', () => {
         const bridge = createPreloadBridge();
         window.xchainWalletBridge = bridge;
         render(<App />);
-        await screen.findByRole('heading', { name: 'Unlock wallet' });
+        await screen.findByRole('form', { name: 'Unlock wallet' });
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'correct horse' } });
         fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
         await screen.findByRole('heading', { name: 'Home screen' });
@@ -430,7 +444,7 @@ describe('desktop renderer shell', () => {
         bridge.sendMessage.mockImplementation((msg) => (msg.type === 'wallet.lock' ? new Promise(() => {}) : hung(msg)));
         await act(async () => { void boot.autoLockOpts.lock(); });
 
-        expect(screen.getByRole('heading', { name: 'Unlock wallet' })).toBeInTheDocument();
+        expect(screen.getByRole('form', { name: 'Unlock wallet' })).toBeInTheDocument();
         expect(screen.queryByRole('heading', { name: 'Home screen' })).toBeNull();
         expect(bridge.sendMessage).toHaveBeenCalledWith({ type: 'wallet.lock', request: undefined });
     });
@@ -438,7 +452,7 @@ describe('desktop renderer shell', () => {
     it('explains a refused auto-lock arm on the locked screen', async () => {
         window.xchainWalletBridge = createPreloadBridge();
         render(<App />);
-        await screen.findByRole('heading', { name: 'Unlock wallet' });
+        await screen.findByRole('form', { name: 'Unlock wallet' });
 
         act(() => { boot.autoLockOpts.onArmRefused(); });
 
@@ -453,7 +467,7 @@ describe('desktop renderer shell', () => {
         window.xchainWalletBridge = bridge;
 
         render(<App />);
-        await screen.findByRole('heading', { name: 'Unlock wallet' });
+        await screen.findByRole('form', { name: 'Unlock wallet' });
 
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
         fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
@@ -461,7 +475,7 @@ describe('desktop renderer shell', () => {
         // The failure is reported in plain copy; the raw IPC text stays off screen.
         expect(await screen.findByText('Could not unlock the wallet. Close and reopen the app, then try again.')).toBeInTheDocument();
         expect(screen.queryByText('IPC channel unavailable')).toBeNull();
-        expect(screen.getByRole('heading', { name: 'Unlock wallet' })).toBeInTheDocument();
+        expect(screen.getByRole('form', { name: 'Unlock wallet' })).toBeInTheDocument();
         // The failed attempt clears the typed password; typing again re-enables submit.
         expect(screen.getByLabelText('Password')).toBeEnabled();
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });

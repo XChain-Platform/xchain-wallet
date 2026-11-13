@@ -52,7 +52,6 @@ const FEE_BEARING_SURFACES = new Set([
     'routes/SellOwnershipForm.jsx',
     'routes/SwapForm.jsx',
     'routes/SweepForm.jsx',
-    'routes/TokenWizard.jsx',
 ]);
 
 function feeControlSurfaces() {
@@ -61,7 +60,9 @@ function feeControlSurfaces() {
         for (const file of readdirSync(dir)) {
             if (!file.endsWith('.jsx') || file === 'NativeFeeToggle.jsx' || file === 'FeesCard.jsx') continue;
             const source = readFileSync(join(dir, file), 'utf8');
-            if (source.includes('<NativeFeeToggle') || source.includes('<FeesCard')) {
+            // A form with a protocol fee hands its toggle props to the Network fee section.
+            if (source.includes('<NativeFeeToggle') || source.includes('<FeesCard')
+                || source.includes('nativeFeeProps')) {
                 surfaces.push(`${kind}/${file}`);
             }
         }

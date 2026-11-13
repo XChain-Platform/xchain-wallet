@@ -64,7 +64,6 @@ describe('Home offline behavior', () => {
         setNavigatorOnline(true);
         const onSend = vi.fn();
         const onSwap = vi.fn();
-        const onCreateToken = vi.fn();
         const messaging = {
             listWallets: vi.fn().mockResolvedValue([WALLET]),
             listAccounts: vi.fn().mockResolvedValue([]),
@@ -73,7 +72,7 @@ describe('Home offline behavior', () => {
             getSettings: vi.fn().mockResolvedValue({}),
             getAddressesByChain: vi.fn().mockResolvedValue({}),
         };
-        mountHome(messaging, onSend, { onSwap, onCreateToken });
+        mountHome(messaging, onSend, { onSwap });
 
         await waitFor(() => expect(screen.getByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeTruthy());
         expect(screen.queryByText(/^Updated /)).toBeNull();
@@ -90,9 +89,10 @@ describe('Home offline behavior', () => {
         setNavigatorOnline(false);
         act(() => { window.dispatchEvent(new Event('offline')); });
         await waitFor(() => expect(screen.getByText(/Showing cached balances/)).toBeTruthy());
-        // Offline, the freshness label names the saved data and keeps the last
-        // sync time in its title.
-        expect(screen.getByText('Offline, showing saved data').getAttribute('title')).toBeTruthy();
+        // Offline, the cached-balances notice is the one message: the balance
+        // card carries no freshness line (Settings, About shows the last load).
+        expect(screen.queryByText('Offline, showing saved data')).toBeNull();
+        expect(screen.queryByText(/^Updated /)).toBeNull();
 
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
         expect(onSend).not.toHaveBeenCalled();
@@ -100,11 +100,11 @@ describe('Home offline behavior', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Swap' }));
         expect(onSwap).not.toHaveBeenCalled();
         expect(screen.getByText(/Swapping needs a network connection/)).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Create token' }));
-        expect(onCreateToken).not.toHaveBeenCalled();
-        expect(screen.getByText(/Creating a token needs a network connection/)).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Balance actions' }));
-        fireEvent.click(screen.getByRole('menuitem', { name: 'Refresh portfolio' }));
+        // Home has no bottom action row: Create token lives in More.
+        expect(screen.queryByRole('button', { name: 'Create token' })).toBeNull();
+        // The balance card's menu no longer carries a Refresh portfolio row,
+        // so the offline guard is shown by the read count staying put.
+        expect(screen.queryByRole('menuitem', { name: 'Refresh portfolio' })).toBeNull();
         expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2);
 
         messaging.getWalletBalances.mockResolvedValue(BALANCES);

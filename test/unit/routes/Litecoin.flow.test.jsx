@@ -129,12 +129,13 @@ describe('Litecoin receive flow', () => {
         render(provider(messaging, <Receive walletId={WALLET_ID} />));
 
         const address = await screen.findByRole('textbox', {
-            name: 'Litecoin savings',
+            name: 'Address',
         });
         expect(address).toHaveValue(SOURCE.address);
         expect(address.value).toMatch(/^ltc1q/);
-        expect(screen.getByLabelText('Address type')).toHaveValue('p2wpkh');
-        expect(screen.getByRole('option', { name: 'SegWit' })).toBeInTheDocument();
+        // Receive has no Address type select; the SegWit type shows in the
+        // ltc1q address itself.
+        expect(screen.queryByLabelText('Address type')).toBeNull();
 
         fireEvent.change(screen.getByRole('textbox', { name: 'Amount (LTC)' }), {
             target: { value: '0.125' },
@@ -159,8 +160,10 @@ describe('Litecoin send flow', () => {
     it('enforces the Litecoin dust floor and composes a valid address with sat/vB fee units', async () => {
         const messaging = mountSend();
 
-        expect(await screen.findByLabelText('From')).toHaveValue(SOURCE.address);
+        expect(await screen.findByLabelText('From address')).toHaveValue(SOURCE.address);
         await waitFor(() => expect(messaging.estimateFee).toHaveBeenCalledWith({ chainId: CHAIN }));
+        // The Network fee section starts closed: open it to see the rate and the amount.
+        fireEvent.click(screen.getByRole('button', { name: /^Network fee/, expanded: false }));
         expect(screen.getByRole('button', { name: 'Edit fee rate (sat/vB)' }))
             .toHaveTextContent('4 sat/vB');
         expect(screen.getByRole('button', { name: 'Edit exact fee amount' }).closest('[role="status"]'))
@@ -303,7 +306,8 @@ describe('Litecoin history flow', () => {
                 action: 'SEND',
                 action_index: '91',
                 block_index: 1234,
-                timestamp: 1791900000,
+                // An hour ago, inside History's default last-30-days window.
+                timestamp: Math.floor(Date.now() / 1000) - 3600,
                 tx_hash: 'a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff0',
                 details: {
                     source: external,

@@ -82,7 +82,7 @@ describe('CreateWallet security options', () => {
 
         expect(generateBip39Mnemonic).toHaveBeenCalledWith(256);
         expect(screen.queryByRole('list', { name: 'Recovery phrase' })).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Reveal recovery phrase' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal Recovery Phrase' }));
         const grid = await screen.findByRole('list', { name: 'Recovery phrase' });
         const words = within(grid).getAllByRole('listitem');
         expect(words).toHaveLength(24);
@@ -129,9 +129,9 @@ describe('CreateWallet security options', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
         const main = container.querySelector('main');
-        fireEvent.click(await screen.findByRole('button', { name: 'Reveal recovery phrase' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Reveal Recovery Phrase' }));
         const phrase = await screen.findByRole('list', { name: 'Recovery phrase' });
-        const verify = screen.getByRole('button', { name: 'Verify recovery phrase' });
+        const verify = screen.getByRole('button', { name: 'Verify Recovery Phrase' });
         expect(main).toContainElement(phrase);
         expect(main).toContainElement(verify);
 
@@ -141,7 +141,7 @@ describe('CreateWallet security options', () => {
         expect(within(main).queryByRole('button', { name: 'Back' })).toBeNull();
         expect(screen.getByRole('button', { name: 'Back to previous step' }).closest('header'))
             .not.toBeNull();
-        expect(main).toContainElement(within(main).getByRole('button', { name: 'Create wallet' }));
+        expect(main).toContainElement(within(main).getByRole('button', { name: 'Create Wallet' }));
         expect(screen.getAllByLabelText(/^Word \d+$/)).toHaveLength(3);
     });
 
@@ -151,8 +151,12 @@ describe('CreateWallet security options', () => {
         fillPasswords();
         fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
-        const warning = screen.getByRole('alert');
-        expect(warning).toHaveAttribute('data-variant', 'error');
+        // The warning is the shared warning card: plain lines plus one
+        // red-edged critical line.
+        const critical = container.querySelector('[data-warning-line="critical"]');
+        expect(critical).not.toBeNull();
+        const warning = critical.parentElement;
+        expect(warning.querySelectorAll('[data-warning-line]')).toHaveLength(3);
         expect(warning).toHaveTextContent('Write these 12 words on paper.');
         expect(warning).toHaveTextContent('Store your recovery phrase safely.');
         expect(warning).toHaveTextContent(
@@ -166,14 +170,14 @@ describe('CreateWallet security options', () => {
         expect(card.nextElementSibling).toBe(copyNote);
 
         const checkbox = screen.getByRole('checkbox', { name: /saved my recovery phrase/i });
-        const verify = screen.getByRole('button', { name: 'Verify recovery phrase' });
+        const verify = screen.getByRole('button', { name: 'Verify Recovery Phrase' });
         expect(checkbox.closest('label').nextElementSibling).toBe(verify);
 
         fireEvent.click(checkbox);
         fireEvent.click(verify);
 
         const lastWord = screen.getAllByLabelText(/^Word \d+$/).at(-1);
-        const create = screen.getByRole('button', { name: 'Create wallet' });
+        const create = screen.getByRole('button', { name: 'Create Wallet' });
         expect(lastWord.closest('ol').nextElementSibling).toBe(create);
     });
 });
@@ -205,7 +209,7 @@ describe('MnemonicGrid narrow layout', () => {
     it('reveals the phrase inside its card once and prevents copying it', () => {
         const view = render(<MnemonicGrid mnemonic="abandon ability able about" variant="small" />);
 
-        const reveal = screen.getByRole('button', { name: 'Reveal recovery phrase' });
+        const reveal = screen.getByRole('button', { name: 'Reveal Recovery Phrase' });
         const card = view.container.querySelector('[data-mnemonic-card]');
         expect(card).toContainElement(reveal);
         expect(reveal).toHaveAttribute('aria-expanded', 'false');
@@ -216,20 +220,20 @@ describe('MnemonicGrid narrow layout', () => {
 
         const grid = screen.getByRole('list', { name: 'Recovery phrase' });
         expect(card).toContainElement(grid);
-        expect(screen.queryByRole('button', { name: 'Reveal recovery phrase' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Reveal Recovery Phrase' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Hide recovery phrase' })).toBeNull();
         expect(within(grid).getAllByRole('listitem')[0]).toHaveAccessibleName('1. abandon');
         expect(fireEvent.copy(grid)).toBe(false);
 
         view.rerender(<MnemonicGrid mnemonic="abandon ability able about" variant="small" />);
         expect(screen.getByText('abandon')).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Reveal recovery phrase' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Reveal Recovery Phrase' })).toBeNull();
     });
 
     it('requires a fresh reveal when returning to an earlier phrase', () => {
         const view = render(<MnemonicGrid mnemonic="abandon ability able about" />);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Reveal recovery phrase' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal Recovery Phrase' }));
         expect(screen.getByText('abandon')).toBeInTheDocument();
 
         view.rerender(<MnemonicGrid mnemonic="zoo zone zero zebra" />);
@@ -237,7 +241,7 @@ describe('MnemonicGrid narrow layout', () => {
 
         view.rerender(<MnemonicGrid mnemonic="abandon ability able about" />);
         expect(screen.queryByText('abandon')).not.toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Reveal recovery phrase' }))
+        expect(screen.getByRole('button', { name: 'Reveal Recovery Phrase' }))
             .toHaveAttribute('aria-expanded', 'false');
     });
 

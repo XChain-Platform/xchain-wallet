@@ -113,7 +113,6 @@ function makeBackground(chrome) {
         ...createDefaultSettings(),
         activeNetwork: 'mainnet',
         fees: { [CHAIN_ID]: {} },
-        walletMode: 'watcher',
         verifyProofs: false,
         privacy: {
             ...createDefaultSettings().privacy,
@@ -143,6 +142,7 @@ function makeBackground(chrome) {
             origin: 'imported',
             importedKeys: [],
             multisigs: [],
+            walletMode: 'watcher',
             createdAt: '2026-10-13T00:00:00.000Z',
         }]),
         accounts: collection([{
@@ -244,16 +244,16 @@ describe('extension popup with the background message router', () => {
         fireEvent.click(within(quickActions).getByRole('button', { name: 'Receive' }));
 
         expect(await screen.findByRole('heading', { name: 'Receive' })).toBeInTheDocument();
-        expect(await screen.findByText(FROM)).toBeInTheDocument();
+        // The address sits in Receive's read-only address field.
+        expect(await screen.findByDisplayValue(FROM)).toBeInTheDocument();
         expect(chrome.messages).toContainEqual({
             type: 'addresses.newest',
             request: { walletId: WALLET_ID, chainId: CHAIN_ID, accountId: ACCOUNT_ID },
         });
-        const addressType = screen.getByLabelText('Address type');
-        fireEvent.change(addressType, { target: { value: 'p2pkh' } });
-        expect(screen.queryByText(FROM)).not.toBeInTheDocument();
-        fireEvent.change(addressType, { target: { value: 'p2wpkh' } });
-        expect(await screen.findByText(FROM)).toBeInTheDocument();
+        // Receive has no Address type select any more: the address field's own
+        // picker icon opens the address list instead.
+        expect(screen.queryByLabelText('Address type')).toBeNull();
+        expect(screen.getByRole('button', { name: 'Choose receive address' })).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to home' }));
         const homeActions = await screen.findByRole('group', { name: 'Quick actions' });

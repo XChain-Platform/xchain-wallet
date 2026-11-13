@@ -121,7 +121,7 @@ afterEach(() => {
 describe('ListRenameForm: every stage renders inside FormPage', () => {
     it('keeps the Rename list page header', async () => {
         mount();
-        expect(await screen.findByRole('heading', { name: 'Rename list' })).toBeTruthy();
+        expect(await screen.findByRole('heading', { name: 'Rename List' })).toBeTruthy();
     });
 
     it('lays out the load error as its own box inside FormPage', async () => {
@@ -132,7 +132,7 @@ describe('ListRenameForm: every stage renders inside FormPage', () => {
         const box = status.closest('[data-variant="error"]');
         expect(box, 'its own error box').not.toBeNull();
         renamePage(box, container);
-        expect(screen.getByRole('heading', { name: 'Rename list' })).toBeTruthy();
+        expect(screen.getByRole('heading', { name: 'Rename List' })).toBeTruthy();
     });
 
     it('lays out the loading line inside FormPage', () => {
@@ -146,7 +146,7 @@ describe('ListRenameForm: every stage renders inside FormPage', () => {
         fireEvent.change(await screen.findByLabelText('Name'), {
             target: { value: 'Treasury' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Rename list' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Rename List' }));
 
         const notice = await screen.findByText('List rename submitted.');
         expect(laneRun).toHaveBeenCalledTimes(1);
@@ -161,6 +161,6 @@ describe('ListRenameForm: every stage renders inside FormPage', () => {
         const actionsRow = done.parentElement;
         expect(actionsRow.parentElement, 'Done sits in the FormPage actions row').toBe(page);
         expect(actionsRow.lastElementChild).toBe(done);
-        expect(screen.getByRole('heading', { name: 'Rename list' })).toBeTruthy();
+        expect(screen.getByRole('heading', { name: 'Rename List' })).toBeTruthy();
     });
 });

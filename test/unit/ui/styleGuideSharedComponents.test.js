@@ -19,10 +19,9 @@ const guideDir = path.join(root, 'packages/web/src/style-guide/sections');
 // Routes that import a component by this many files count as using it widely.
 const WIDE_USE = 3;
 
-// Imported by routes but not a visual component, so it has no example.
-const INTERNAL_ONLY = Object.freeze({
-    LockedTokenContext: 'a React context module that carries the locked token; it renders nothing',
-});
+// Imported by routes but not a visual component, so it has no example. Each
+// entry must still be imported by a route (the second test drops stale ones).
+const INTERNAL_ONLY = Object.freeze({});
 
 // The shell and screen parts the UI survey found missing; each keeps a live
 // example whatever the route import count becomes.

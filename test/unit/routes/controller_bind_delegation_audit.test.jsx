@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { ControllerBindForm } from '../../../packages/core/src/shared/routes/ControllerBindForm.jsx';
 import { DelegationActionForm } from '../../../packages/core/src/shared/routes/DelegationActionForm.jsx';
 
@@ -25,6 +26,8 @@ function messagingFor({
     tokenInfoPending = false,
     ownedTokens = [],
 } = {}) {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode }], activeWalletId: 'wallet-1' });
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({
             [CHAIN]: [{
@@ -39,7 +42,8 @@ function messagingFor({
         getControllerActionClasses: vi.fn(() => (
             actionClasses || Promise.resolve({ actionClasses: ['transfer'] })
         )),
-        getSettings: vi.fn().mockResolvedValue({ walletMode }),
+        getSettings: vi.fn().mockResolvedValue({}),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'W', walletMode }]),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         getOwnedTokens: vi.fn().mockResolvedValue(ownedTokens),
         // A pending lookup never settles, so a test can submit while the
@@ -99,7 +103,7 @@ function mountDelegation(options) {
     return messaging;
 }
 
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); resetWalletModes(); });
 
 describe('controller binding and signing-key delegation disclosures', () => {
     it('refuses at submit when the explorer names no issuer', async () => {
@@ -108,7 +112,7 @@ describe('controller binding and signing-key delegation disclosures', () => {
 
         fireEvent.change(await screen.findByLabelText('Guard contract'), { target: { value: '7' } });
         await waitFor(() => expect(messaging.getTokenInfo).toHaveBeenCalled());
-        fireEvent.click(screen.getByRole('button', { name: 'Bind token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Bind Token' }));
         await waitFor(() => expect(screen.getByText(
             "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
         )).toBeInTheDocument());
@@ -120,7 +124,7 @@ describe('controller binding and signing-key delegation disclosures', () => {
 
         fireEvent.change(await screen.findByLabelText('Guard contract'), { target: { value: '7' } });
         expect(screen.queryByText(/does not own/)).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Bind token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Bind Token' }));
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'Wait for the wallet to verify the current owner of CONTROLLED.',
         );
@@ -168,8 +172,9 @@ describe('controller binding and signing-key delegation disclosures', () => {
     });
 
     it.each([
-        ['controller binding', mountController, 'Guard contract', '7', 'Bind address'],
-        ['delegation', mountDelegation, 'New signing pubkey', 'a'.repeat(64), 'Delegate signing key'],
+        // The action buttons read in Title Case.
+        ['controller binding', mountController, 'Guard contract', '7', 'Bind Address'],
+        ['delegation', mountDelegation, 'New signing pubkey', 'a'.repeat(64), 'Delegate Signing Key'],
     ])('rejects an invalid selected address before composing %s', async (
         _name,
         mount,
@@ -199,7 +204,7 @@ describe('controller binding and signing-key delegation disclosures', () => {
         const messaging = mountController();
         const field = await screen.findByLabelText('Guard contract');
         fireEvent.change(field, { target: { value } });
-        fireEvent.click(screen.getByRole('button', { name: 'Bind address' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Bind Address' }));
 
         expect(await screen.findByText(message)).toBeTruthy();
         expect(messaging.buildControllerBindParams).not.toHaveBeenCalled();
@@ -214,7 +219,7 @@ describe('controller binding and signing-key delegation disclosures', () => {
         const messaging = mountController();
         fireEvent.change(await screen.findByLabelText('Guard contract'), { target: { value: '7' } });
         fireEvent.change(screen.getByLabelText('Cooldown blocks'), { target: { value } });
-        fireEvent.click(screen.getByRole('button', { name: 'Bind address' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Bind Address' }));
 
         expect(await screen.findByText(message)).toBeTruthy();
         expect(messaging.buildControllerBindParams).not.toHaveBeenCalled();
@@ -223,14 +228,14 @@ describe('controller binding and signing-key delegation disclosures', () => {
     it('validates the token name and memo before compose', async () => {
         const messaging = mountController({ tick: 'TWO WORDS' });
         fireEvent.change(await screen.findByLabelText('Guard contract'), { target: { value: '7' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Bind token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Bind Token' }));
         expect(await screen.findByText(/Token can only use/)).toBeTruthy();
 
         cleanup();
         const nextMessaging = mountController();
         fireEvent.change(await screen.findByLabelText('Guard contract'), { target: { value: '7' } });
         fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'a|b' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Bind address' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Bind Address' }));
         expect(await screen.findByText('Memo cannot contain | or ; characters.')).toBeTruthy();
         expect(messaging.buildControllerBindParams).not.toHaveBeenCalled();
         expect(nextMessaging.buildControllerBindParams).not.toHaveBeenCalled();
@@ -239,13 +244,15 @@ describe('controller binding and signing-key delegation disclosures', () => {
     it('refuses an invalid custom fee instead of silently composing with the default', async () => {
         const messaging = mountController();
         fireEvent.change(await screen.findByLabelText('Guard contract'), { target: { value: '7' } });
+        // The fee selector sits in the closed Network fee section.
+        fireEvent.click(screen.getByRole('button', { name: /^Network fee\b/, expanded: false }));
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
             target: { value: '3' },
         });
         fireEvent.change(await screen.findByLabelText(/Custom fee rate/), {
             target: { value: '1.123456789' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Bind address' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Bind Address' }));
 
         expect(await screen.findAllByText('Custom fee rate can have at most 8 decimal places.')).toHaveLength(1);
         expect(messaging.buildControllerBindParams).not.toHaveBeenCalled();
@@ -256,7 +263,7 @@ describe('controller binding and signing-key delegation disclosures', () => {
         const actionClasses = new Promise((resolve) => { resolveClasses = resolve; });
         const messaging = mountController({ actionClasses });
         fireEvent.change(await screen.findByLabelText('Guard contract'), { target: { value: '7' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Bind address' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Bind Address' }));
 
         expect(await screen.findByText(/Action classes are still refreshing/)).toBeTruthy();
         expect(messaging.buildControllerBindParams).not.toHaveBeenCalled();
@@ -268,7 +275,7 @@ describe('controller binding and signing-key delegation disclosures', () => {
         fireEvent.change(await screen.findByLabelText('Guard contract'), { target: { value: '007' } });
         fireEvent.change(screen.getByLabelText('Cooldown blocks'), { target: { value: '000' } });
         fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'keep me' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Bind address' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Bind Address' }));
 
         await screen.findByTestId('confirm-modal');
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
@@ -283,7 +290,7 @@ describe('controller binding and signing-key delegation disclosures', () => {
         fireEvent.change(await screen.findByLabelText('Guard contract'), { target: { value: '007' } });
         fireEvent.change(screen.getByLabelText('Cooldown blocks'), { target: { value: '000' } });
         fireEvent.change(screen.getByLabelText('Memo'), { target: { value: ' note ' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Bind address' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Bind Address' }));
 
         expect(await screen.findByText('#007')).toBeTruthy();
         expect(screen.getByText('000 blocks')).toBeTruthy();
@@ -291,7 +298,7 @@ describe('controller binding and signing-key delegation disclosures', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(await screen.findByDisplayValue('007')).toBeTruthy();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Bind address' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Bind Address' }));
         fireEvent.click(await screen.findByRole('button', {
             name: 'Bind controller',
         }));
@@ -311,7 +318,7 @@ describe('controller binding and signing-key delegation disclosures', () => {
         );
         const messaging = mountController({ composeError: failure });
         fireEvent.change(await screen.findByLabelText('Guard contract'), { target: { value: '7' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Bind address' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Bind Address' }));
 
         expect(await screen.findByText(/This address needs BTC for the protocol fee and the network fee/)).toBeTruthy();
         expect(document.body.textContent).not.toMatch(/UTXO/i);

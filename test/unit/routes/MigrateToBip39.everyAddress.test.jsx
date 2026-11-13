@@ -75,17 +75,18 @@ async function reachDone(legacyByChain, newByChain) {
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password1' } });
     fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: 'password1' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Generate recovery phrase' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Reveal recovery phrase' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Recovery Phrase' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Reveal Recovery Phrase' }));
     fireEvent.click(screen.getByRole('checkbox'));
-    fireEvent.click(screen.getByRole('button', { name: 'Verify recovery phrase' }));
-    await screen.findByRole('heading', { level: 1, name: 'Verify your written copy' });
+    fireEvent.click(screen.getByRole('button', { name: 'Verify Recovery Phrase' }));
+    // Every step is titled Upgrade Wallet; the step reads in the subtitle.
+    await screen.findByText('Step 4 of 4: Check your copy');
     for (const input of screen.getAllByLabelText(/^Word \d+$/)) {
         const position = Number(input.labels[0].textContent.match(/\d+/)[0]);
         fireEvent.change(input, { target: { value: WORDS[position - 1] } });
     }
-    fireEvent.click(screen.getByRole('button', { name: 'Create BIP39 wallet' }));
-    await screen.findByRole('heading', { level: 1, name: 'New BIP39 wallet ready' });
+    fireEvent.click(screen.getByRole('button', { name: 'Create BIP39 Wallet' }));
+    await screen.findByText('New wallet ready');
     await waitFor(() => expect(messaging.getAddressesByChain).toHaveBeenCalledTimes(2));
     return { onSweepChain };
 }
@@ -105,7 +106,7 @@ describe('MigrateToBip39 sweep list covers every legacy address', () => {
             { [CHAIN]: [NEW_ADDRESS] },
         );
 
-        const buttons = await screen.findAllByRole('button', { name: 'Review sweep' });
+        const buttons = await screen.findAllByRole('button', { name: 'Review Sweep' });
         expect(buttons).toHaveLength(3);
         expect(screen.queryByText('legacy-change')).toBeNull();
         buttons.forEach((button) => fireEvent.click(button));
@@ -138,7 +139,7 @@ describe('MigrateToBip39 sweep list covers every legacy address', () => {
             { [CHAIN]: [NEW_ADDRESS], [OTHER_CHAIN]: [NEW_OTHER] },
         );
 
-        const buttons = await screen.findAllByRole('button', { name: 'Review sweep' });
+        const buttons = await screen.findAllByRole('button', { name: 'Review Sweep' });
         expect(buttons).toHaveLength(3);
         expect(screen.queryByText('legacy-watched')).toBeNull();
         buttons.forEach((button) => fireEvent.click(button));

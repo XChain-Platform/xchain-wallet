@@ -141,15 +141,20 @@ async function step(fn) {
     await domAct(async () => { fn(); await drainMicrotasks(); });
 }
 
+// Close and Refill sit under the card for the owner only; Edit is on the
+// Settings tab, which only an owner has. A non-owner sees none of them.
 const ownerButtons = (utils) => ['Close', 'Refill', 'Edit']
     .map((name) => utils.queryByRole('button', { name }));
+async function openSettings(utils) {
+    await step(() => fireEvent.click(utils.getByRole('tab', { name: 'Settings' })));
+}
 const approveButton = (utils) => utils.container.querySelector('[data-testid="confirm-approve"]');
 const signCalls = (calls) => calls.filter((c) => c.method === 'dispenserAction' || c.method === 'dispenserActionHw');
 
 async function closeThroughConfirm(utils) {
     await step(() => fireEvent.click(utils.getByRole('button', { name: 'Close' })));
     const formNote = utils.getByTestId('close-escrow-destination').textContent;
-    await step(() => fireEvent.click(utils.getByRole('button', { name: 'Close dispenser' })));
+    await step(() => fireEvent.click(utils.getByRole('button', { name: 'Close Dispenser' })));
     const confirmNote = utils.getByTestId('close-escrow-destination').textContent;
     const btn = approveButton(utils);
     if (btn && !btn.disabled) await step(() => fireEvent.click(btn));
@@ -159,10 +164,11 @@ async function closeThroughConfirm(utils) {
 describe('a wallet holding only the dispenser address', () => {
     it('gets Close, Refill and Edit enabled on an open dispenser', async () => {
         const { utils } = await mount({ addresses: [HOST_ADDRESS] });
+        await openSettings(utils);
         const [close, refill, edit] = ownerButtons(utils);
         expect([close.disabled, refill.disabled, edit.disabled]).toEqual([false, false, false]);
         expect(close.getAttribute('title')).toBe('Close this dispenser');
-        for (const action of [close, refill, edit, utils.getByRole('button', { name: 'More' })]) {
+        for (const action of [close, refill, edit]) {
             expect(action.querySelector('svg')).toBeTruthy();
         }
     });
@@ -193,7 +199,7 @@ describe('a wallet holding only the dispenser address', () => {
         fireEvent.click(utils.getByRole('button', { name: 'About Refill amount (XCHAIN)' }));
         expect(utils.getByRole('tooltip')).toHaveTextContent('Amount of XCHAIN to add to escrow.');
         await step(() => fireEvent.change(utils.getByLabelText(/^Refill amount/), { target: { value: '50' } }));
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Refill dispenser' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Refill Dispenser' })));
         const btn = approveButton(utils);
         if (btn && !btn.disabled) await step(() => fireEvent.click(btn));
 
@@ -204,13 +210,14 @@ describe('a wallet holding only the dispenser address', () => {
 
     it('edits from the dispenser address', async () => {
         const { utils, calls } = await mount({ addresses: [HOST_ADDRESS] });
+        await openSettings(utils);
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Edit' })));
         expect(utils.queryByText(/Edit dispenser #4100/)).toBeNull();
         expect(utils.getByLabelText(/^Block list/)).toHaveAccessibleDescription('Optional Current: none.');
         fireEvent.click(utils.getByRole('button', { name: 'About Block list' }));
         expect(utils.getByRole('tooltip')).toHaveTextContent(/leave blank to keep it/i);
         await step(() => fireEvent.change(utils.getByLabelText(/^Block list/), { target: { value: '2702' } }));
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Update dispenser' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Update Dispenser' })));
         const btn = approveButton(utils);
         if (btn && !btn.disabled) await step(() => fireEvent.click(btn));
 
@@ -230,7 +237,7 @@ describe('a wallet holding only the dispenser address', () => {
 
     it('on a terminal status gets no Open again, and a note says why', async () => {
         const { utils } = await mount({ addresses: [HOST_ADDRESS], dispenser: SOLD_OUT });
-        expect(utils.queryByRole('button', { name: 'Open again' })).toBeNull();
+        expect(utils.queryByRole('button', { name: 'Open Again' })).toBeNull();
         expect(ownerButtons(utils)).toEqual([null, null, null]);
         expect(utils.getByTestId('reopen-origin-note').textContent)
             .toBe('Only the address that opened this dispenser can open it again.');
@@ -253,23 +260,24 @@ describe('a wallet holding the creator address', () => {
 
     it('keeps Open again on a terminal status, with no origin note', async () => {
         const { utils } = await mount({ addresses: [CREATOR_ADDRESS], dispenser: SOLD_OUT });
-        expect(utils.getByRole('button', { name: 'Open again' })).toBeTruthy();
+        expect(utils.getByRole('button', { name: 'Open Again' })).toBeTruthy();
         expect(utils.queryByTestId('reopen-origin-note')).toBeNull();
     });
 });
 
 describe('a wallet holding neither address', () => {
-    it('keeps Close, Refill and Edit disabled and never signs', async () => {
+    it('offers no Close, Refill or Edit and never signs', async () => {
         const { utils, calls } = await mount({ addresses: [STRANGER_ADDRESS] });
-        const [close, refill, edit] = ownerButtons(utils);
-        expect([close.disabled, refill.disabled, edit.disabled]).toEqual([true, true, true]);
-        expect(close.getAttribute('title')).toBe('Only the owner can close');
+        // The owner's buttons are not drawn at all for a wallet that owns neither
+        // address, and the Settings tab that holds Edit does not exist for it.
+        expect(ownerButtons(utils)).toEqual([null, null, null]);
+        expect(utils.queryByRole('tab', { name: 'Settings' })).toBeNull();
         expect(signCalls(calls)).toHaveLength(0);
     });
 
     it('on a terminal status shows neither Open again nor the origin note', async () => {
         const { utils } = await mount({ addresses: [STRANGER_ADDRESS], dispenser: SOLD_OUT });
-        expect(utils.queryByRole('button', { name: 'Open again' })).toBeNull();
+        expect(utils.queryByRole('button', { name: 'Open Again' })).toBeNull();
         expect(utils.queryByTestId('reopen-origin-note')).toBeNull();
     });
 });

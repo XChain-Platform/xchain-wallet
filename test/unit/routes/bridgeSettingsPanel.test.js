@@ -62,7 +62,7 @@ function mountAdmin(tokenInfo) {
     return messaging;
 }
 
-const applyButton = () => screen.getByRole('button', { name: /Bridge settings|Sign|Apply|Update/i });
+const applyButton = () => screen.getByRole('button', { name: 'Update Bridge Settings' });
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); __clearTokenInfoCache(); });
 
@@ -142,8 +142,9 @@ describe('TokenAdminForm bridge settings: policy and freeze refusals', () => {
 
     it('warns that the freeze is one-way before it is signed', async () => {
         mountAdmin({ chainId: DOGE, tick: 'FUFU', locks: {} });
-        await waitFor(() => expect(screen.getByLabelText(/Freeze these settings/i)).toBeInTheDocument(), WAIT);
-        fireEvent.click(screen.getByLabelText(/Freeze these settings/i));
+        // The checkbox itself, not its '?' help tip, which names the same label.
+        await waitFor(() => expect(screen.getByRole('checkbox', { name: /Freeze these settings/i })).toBeInTheDocument(), WAIT);
+        fireEvent.click(screen.getByRole('checkbox', { name: /Freeze these settings/i }));
         const msg = await screen.findByText(/Freezing is one-way/i, {}, WAIT);
         expect(msg.textContent).toContain('by you or by a future owner');
     });

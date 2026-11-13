@@ -26,7 +26,7 @@ function cssBlock(source, selector) {
 
 describe('inline amount figures isolate their direction', () => {
     for (const [file, selector] of [
-        ['shared/routes/TokenDetail.module.css', 'balanceHeroAmountFitInner'],
+        ['shared/components/TotalBalanceHero.module.css', 'amount'],
         ['ui/FeeSelector.module.css', 'sliderReadoutFiat'],
         ['shared/routes/StakingList.module.css', 'rewardChip'],
     ]) {

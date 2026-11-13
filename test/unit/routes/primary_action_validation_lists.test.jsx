@@ -65,7 +65,7 @@ describe('primary actions explain missing list, publisher, and migration input',
         });
         fireEvent.click(await screen.findByRole('button', { name: 'Enter publisher mode' }));
         await waitFor(() => expect(screen.queryByText('Loading source address…')).toBeNull());
-        const action = screen.getByRole('button', { name: 'Publish value' });
+        const action = screen.getByRole('button', { name: 'Publish Value' });
 
         expect(action).toBeEnabled();
         fireEvent.click(action);
@@ -78,7 +78,7 @@ describe('primary actions explain missing list, publisher, and migration input',
             walletId: 'wallet-1', chainId: CHAIN, initialType: '1', onBack() {},
         });
         await screen.findByDisplayValue(ADDRESS.address);
-        const action = screen.getByRole('button', { name: 'Publish list' });
+        const action = screen.getByRole('button', { name: /^Publish List$/ });
 
         expect(action).toBeEnabled();
         fireEvent.click(action);
@@ -102,7 +102,7 @@ describe('primary actions explain missing list, publisher, and migration input',
             onDone() {},
         });
         await screen.findByText(/Forking token list #2700/);
-        const action = screen.getByRole('button', { name: 'Publish edit' });
+        const action = screen.getByRole('button', { name: /^Publish edit$/i });
 
         expect(action).toBeEnabled();
         fireEvent.click(action);
@@ -115,7 +115,7 @@ describe('primary actions explain missing list, publisher, and migration input',
             legacyWalletId: 'legacy-wallet', onBack() {},
         });
         fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
-        const action = screen.getByRole('button', { name: 'Generate recovery phrase' });
+        const action = screen.getByRole('button', { name: 'Generate Recovery Phrase' });
 
         expect(action).toBeEnabled();
         fireEvent.click(action);

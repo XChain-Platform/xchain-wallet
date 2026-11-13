@@ -17,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act as domAct, cleanup, fireEvent, render } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { OracleForm } from '../../../packages/core/src/shared/routes/OracleForm.jsx';
 
 const SOURCE_PATH = 'packages/core/src/shared/routes/OracleForm.jsx';
@@ -42,6 +43,7 @@ beforeEach(() => {
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     vi.useRealTimers();
 });
 
@@ -57,11 +59,14 @@ async function drainMicrotasks(rounds = 12) {
  * returns `built`, so the done stage shows that result.
  */
 function messagingFor({ getAddressesByChain, built = { txid: 'oracle-txid' } } = {}) {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode: 'watcher' }], activeWalletId: 'w' });
     const target = {
         getAddressesByChain: getAddressesByChain || (() => Promise.resolve({ 'bitcoin-mainnet': [BTC_ADDRESS] })),
         getActiveAddresses: () => Promise.resolve({}),
         signerReady: () => Promise.resolve({ ready: true }),
-        getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+        getSettings: () => Promise.resolve({}),
+        listWallets: () => Promise.resolve([{ id: 'w', name: 'W', walletMode: 'watcher' }]),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
         oracleFeeds: () => Promise.resolve([]),
         oracleConsumers: () => Promise.resolve({ supported: true, dispensers: [] }),
@@ -97,8 +102,8 @@ async function step(fn) {
 async function publish(utils) {
     await step(() => fireEvent.change(utils.getByLabelText(/^Token ticker/), { target: { value: 'PEPECASH' } }));
     await step(() => fireEvent.change(utils.getByLabelText(/^Price of one/), { target: { value: '0.05' } }));
-    await step(() => fireEvent.click(utils.getByRole('button', { name: 'Publish price' })));
-    const build = utils.getByRole('button', { name: 'Create unsigned transaction' });
+    await step(() => fireEvent.click(utils.getByRole('button', { name: /^Publish price$/i })));
+    const build = utils.getByRole('button', { name: 'Create Unsigned Transaction' });
     await step(() => fireEvent.submit(build.closest('form')));
 }
 
@@ -133,7 +138,7 @@ describe('OracleForm lays out every page state through FormPage', () => {
         const form = title.closest('form');
         expect(form).not.toBeNull();
         expect(form.textContent).toContain('oracle-txid');
-        expect(byText(form, 'button', 'Publish another')).not.toBeNull();
+        expect(byText(form, 'button', 'Publish Another')).not.toBeNull();
         expect(byText(form, 'button', 'Done')).not.toBeNull();
         expect(utils.container.querySelectorAll('h2')).toHaveLength(1);
     });
@@ -153,6 +158,7 @@ describe('OracleForm lays out every page state through FormPage', () => {
         const source = readFileSync(SOURCE_PATH, 'utf8');
         const roots = [...source.matchAll(/\bwrap\(\s*<(\w*)/g)].map((match) => match[1]);
         expect(roots.length).toBeGreaterThan(0);
-        expect(roots.filter((root) => root !== 'FormPage' && root !== 'ListPage')).toEqual([]);
+        // FormFrame is the Form Standard's page template; it renders FormPage.
+        expect(roots.filter((root) => root !== 'FormPage' && root !== 'FormFrame' && root !== 'ListPage')).toEqual([]);
     });
 });

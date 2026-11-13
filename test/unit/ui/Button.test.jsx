@@ -55,12 +55,12 @@ describe('<Button>', () => {
         const imported = readSource('routes/ImportWallet.jsx');
 
         expect(order).toMatch(/loading=\{accountLoading \|\| actionConfirm\.composing\}[\s\S]*?\{t\('components\.placeOrderPanel\.placeOrder', \{ side \}\)\}/);
-        expect(dispenser).toMatch(/loading=\{derivingGetAddress \|\| actionConfirm\.composing\}[\s\S]*?>\s*Create dispenser\s*<\/Button>/);
+        expect(dispenser).toMatch(/loading=\{derivingGetAddress \|\| actionConfirm\.composing\}[\s\S]*?>\s*Create Dispenser\s*<\/(?:Button|FormAction)>/);
         expect(vote).not.toMatch(/actionConfirm\.composing \? 'Preparing review/);
         expect(create.match(/variant="success"/g)).toHaveLength(4);
         expect(create.match(/icon=\{<Icon\.[A-Za-z]+ \/>\}/g)).toHaveLength(4);
         expect(create).not.toMatch(/variant="primary"/);
-        expect(create).toMatch(/<Button variant="success" loading icon=\{<Icon\.CheckIcon \/>\}>Create wallet<\/Button>/);
+        expect(create).toMatch(/<Button variant="success" loading icon=\{<Icon\.CheckIcon \/>\}>Create Wallet<\/Button>/);
         expect(imported).not.toMatch(/\{busy \? t\('importWallet\.(?:importing|restoring)'\)/);
     });
 
@@ -98,7 +98,7 @@ describe('<Button>', () => {
         expect(button.querySelector('svg')).toBeInTheDocument();
     });
 
-    it.each(['Not now', 'Learn more', 'Cancel', 'Skip', 'Show more'])(
+    it.each(['Not Now', 'Learn more', 'Cancel', 'Skip', 'Show more'])(
         'resolves an icon for the common link action "%s"',
         (label) => {
             render(<Button variant="link">{label}</Button>);
@@ -112,7 +112,6 @@ describe('<Button>', () => {
         'shared/components/LearnNote.jsx',
         'shared/routes/BetFeedDetail.jsx',
         'shared/routes/ContactsList.jsx',
-        'shared/routes/CreateOrderForm.jsx',
         'shared/routes/Locked.jsx',
     ])('%s does not suppress the link button icon', (path) => {
         const source = readFileSync(`packages/core/src/${path}`, 'utf8');

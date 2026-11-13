@@ -108,12 +108,12 @@ describe('flows/pairPartner role helpers', () => {
         const watcher = describePairingLane('watcher');
         expect(watcher.available).toBe(true);
         expect(watcher.partnerMode).toBe('signer');
-        expect(watcher.cta).toBe('Pair a signer');
+        expect(watcher.cta).toBe('Pair a Signer');
 
         const signer = describePairingLane('signer');
         expect(signer.available).toBe(true);
         expect(signer.partnerMode).toBe('watcher');
-        expect(signer.cta).toBe('Pair a watcher');
+        expect(signer.cta).toBe('Pair a Watcher');
     });
 
     it('reports the lane unavailable for a full wallet', () => {

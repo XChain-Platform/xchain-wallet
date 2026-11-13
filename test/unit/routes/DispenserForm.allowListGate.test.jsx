@@ -143,9 +143,16 @@ async function fillAmounts(utils) {
     });
 }
 
+/** The address, allow-list and block-list controls live in the closed Dispenser Terms section. */
+async function openTerms(utils) {
+    const header = utils.getByRole('button', { name: /^Dispenser Terms/ });
+    if (header.getAttribute('aria-expanded') !== 'true') await step(() => fireEvent.click(header));
+}
+
 /** Open the allow-list picker and return the row's member-count text before picking it. */
 async function pickAllowList(utils) {
-    await step(() => fireEvent.click(utils.getByRole('button', { name: 'Set allow-list' })));
+    await openTerms(utils);
+    await step(() => fireEvent.click(utils.getByRole('button', { name: 'Set Allow-List' })));
     const row = utils.getByText(`Address list #${LIST}`).closest('button');
     const countText = row.textContent;
     await step(() => fireEvent.click(row));
@@ -153,17 +160,19 @@ async function pickAllowList(utils) {
 }
 
 async function pickBlockList(utils) {
-    await step(() => fireEvent.click(utils.getByRole('button', { name: 'Set block-list' })));
+    await openTerms(utils);
+    await step(() => fireEvent.click(utils.getByRole('button', { name: 'Set Block-List' })));
     const row = utils.getByText(`Address list #${LIST}`).closest('button');
     await step(() => fireEvent.click(row));
 }
 
 async function pickDispenserAddress(utils, address) {
+    await openTerms(utils);
     await step(() => fireEvent.click(utils.getByRole('button', { name: 'Change dispenser address' })));
     await step(() => fireEvent.click(utils.getByRole('button', { name: `View address ${address}` })));
 }
 
-const clickCreate = (utils) => step(() => fireEvent.click(utils.getByRole('button', { name: 'Create dispenser' })));
+const clickCreate = (utils) => step(() => fireEvent.click(utils.getByRole('button', { name: 'Create Dispenser' })));
 
 describe('DispenserForm allow-list self-check reads the list as the network resolves it', () => {
     it('an edit that added the dispenser address clears the warning, and the picker counts the edit', async () => {
@@ -234,7 +243,7 @@ describe('DispenserForm Create feedback', () => {
     it('names a missing token instead of disabling Create', async () => {
         const { messaging } = recordingMessaging({ created: [], current: [] });
         const utils = await mountForm(messaging, '');
-        const create = utils.getByRole('button', { name: 'Create dispenser' });
+        const create = utils.getByRole('button', { name: 'Create Dispenser' });
         expect(create.disabled).toBe(false);
 
         await clickCreate(utils);
@@ -244,7 +253,7 @@ describe('DispenserForm Create feedback', () => {
     it('keeps Create actionable and names each missing required amount', async () => {
         const { messaging } = recordingMessaging({ created: [], current: [] });
         const utils = await mountForm(messaging);
-        const create = utils.getByRole('button', { name: 'Create dispenser' });
+        const create = utils.getByRole('button', { name: 'Create Dispenser' });
         expect(create.disabled).toBe(false);
 
         await clickCreate(utils);

@@ -12,10 +12,13 @@
 // with an icon; field explanations live in help tips; every button carries
 // an icon.
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, act as domAct, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
+
+afterEach(() => { resetWalletModes(); });
 import { BetFeedDetail } from '../../../packages/core/src/shared/routes/BetFeedDetail.jsx';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -35,6 +38,8 @@ const ADDRS = [
 ];
 
 function harness(walletMode = 'full') {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const getAddressBalances = vi.fn((chainId, address) => Promise.resolve({
         tokens: [{
             tick: 'EXAMPLE',
@@ -45,7 +50,8 @@ function harness(walletMode = 'full') {
     const target = {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: ADDRS }),
         getActiveAddresses: () => Promise.resolve({ [CHAIN]: { id: 'a0', address: OWN } }),
-        getSettings: () => Promise.resolve({ walletMode }),
+        getSettings: () => Promise.resolve({}),
+        listWallets: () => Promise.resolve([{ id: 'w', name: 'W', walletMode }]),
         getTokenInfo: () => Promise.resolve({ tick: 'EXAMPLE', divisibility: 3 }),
         getAddressBalances,
         betFeed: () => Promise.resolve({ data: [FEED] }),
@@ -66,6 +72,12 @@ async function openMarket(walletMode) {
             { shell: 'web', messaging: harness(walletMode) },
             React.createElement(BetFeedDetail, { walletId: 'w', chainId: CHAIN, feedIndex: '730010', onBack() {} }),
         ));
+        await drain();
+    });
+    // Only the chosen tab's content shows, and the page opens on Details, so
+    // the bet form appears once the Bet tab is chosen.
+    await domAct(async () => {
+        fireEvent.click(utils.getByRole('tab', { name: 'Bet' }));
         await drain();
     });
     return utils;
@@ -124,7 +136,7 @@ describe('Place a bet form rulings', () => {
 
     it('makes Place bet the one green action with an icon', async () => {
         const utils = await openMarket();
-        const main = named(utils, /^Place bet$/);
+        const main = named(utils, /^Place Bet$/);
         expect(main).toBeTruthy();
         expect(main.className).toMatch(/success/);
         expect(main.querySelector('svg')).toBeTruthy();
@@ -133,7 +145,7 @@ describe('Place a bet form rulings', () => {
 
     it('keeps the watcher build green with an icon', async () => {
         const utils = await openMarket('watcher');
-        const main = named(utils, /^Create unsigned transaction$/);
+        const main = named(utils, /^Create Unsigned Transaction$/);
         expect(main.className).toMatch(/success/);
         expect(main.querySelector('svg')).toBeTruthy();
     });
@@ -154,6 +166,8 @@ describe('Place a bet form rulings', () => {
         for (const b of form.querySelectorAll('button')) {
             if (isInfoTrigger(b)) continue;
             if (/max available amount/i.test(b.getAttribute('aria-label') || '')) continue;
+            // The 25, 50, 75 and 100 percent stake chips and Max are amount shortcuts.
+            if (/^(max|\d+%)$/i.test(b.textContent.trim())) continue;
             expect(b.querySelector('svg'), `button "${(b.getAttribute('aria-label') || b.textContent).trim()}"`).toBeTruthy();
         }
     });

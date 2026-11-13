@@ -11,9 +11,10 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { SignerSelectForm } from '../../../packages/core/src/shared/routes/SignerSelectForm.jsx';
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); resetWalletModes(); });
 
 const HARDWARE_SIGNER = {
     id: 'signer-ledger',
@@ -31,7 +32,9 @@ function mount({
     walletMode = 'full',
 } = {}) {
     const listSigners = vi.fn().mockResolvedValue(list);
-    const getSettings = vi.fn().mockResolvedValue({ walletMode });
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode }], activeWalletId: 'wallet-1' });
+    const getSettings = vi.fn().mockResolvedValue({});
     const view = render(
         <MessagingProvider shell="web" messaging={{ listSigners, getSettings }}>
             <SignerSelectForm walletId="wallet-1" value={value} onChange={onChange} />

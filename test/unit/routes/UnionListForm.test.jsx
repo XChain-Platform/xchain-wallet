@@ -92,7 +92,7 @@ afterEach(() => {
 describe('UnionListForm', () => {
     it('explains that a member list is required when Review is pressed empty', async () => {
         const messaging = mount();
-        const review = await screen.findByRole('button', { name: 'Create union list' });
+        const review = await screen.findByRole('button', { name: /^Create union list$/i });
 
         expect(review.disabled).toBe(false);
         fireEvent.click(review);
@@ -156,7 +156,7 @@ describe('UnionListForm', () => {
         const messaging = mount();
         fireEvent.click(await screen.findByRole('checkbox', { name: 'Token list #101' }));
         fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'combined' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Create union list' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Create union list$/i }));
 
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
         const request = messaging.composeForConfirm.mock.calls[0][0];
@@ -188,7 +188,7 @@ describe('UnionListForm', () => {
 
         expect(screen.getByText(`Estimated merged membership: ${memberCount.toLocaleString()}`)).toBeTruthy();
         expect(screen.getByText('The estimated merged membership is over 10,000.')).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Create union list' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: /^Create union list$/i }).disabled).toBe(true);
     });
 
     it.each([
@@ -205,6 +205,6 @@ describe('UnionListForm', () => {
         expect(messaging.getActionFormats).not.toHaveBeenCalled();
         expect(screen.getByRole('checkbox', { name: 'Token list #101' }).disabled).toBe(true);
         expect(screen.getByLabelText('Memo').disabled).toBe(true);
-        expect(screen.getByRole('button', { name: 'Create union list' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: /^Create union list$/i }).disabled).toBe(true);
     });
 });

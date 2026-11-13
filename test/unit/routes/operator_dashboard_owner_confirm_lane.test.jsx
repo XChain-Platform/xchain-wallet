@@ -9,6 +9,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { OperatorDashboard } from '../../../packages/core/src/shared/routes/OperatorDashboard.jsx';
 import { __clearSignerInfoCache } from '../../../packages/core/src/shared/hooks/useSignerInfo.js';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const OWNER = Object.freeze({
@@ -34,6 +35,8 @@ const PASS = Object.freeze({ verdict: 'pass', findings: [] });
 afterEach(() => {
     cleanup();
     __clearSignerInfoCache();
+    // Each test publishes its own wallet mode; forget it.
+    resetWalletModes();
 });
 
 function makeMessaging({
@@ -79,6 +82,11 @@ function makeMessaging({
 
 function mount(options) {
     const harness = makeMessaging(options);
+    // Wallet mode is a property of the wallet record, not of settings.
+    publishWalletModes({
+        wallets: [{ id: 'wallet-1', walletMode: options?.settings?.walletMode || 'full' }],
+        activeWalletId: 'wallet-1',
+    });
     render(React.createElement(
         MessagingProvider,
         { shell: 'web', messaging: harness.messaging },
@@ -96,7 +104,7 @@ async function openPublisher() {
 
 async function publishValue(value = '123.45') {
     fireEvent.change(screen.getByLabelText('Value'), { target: { value } });
-    fireEvent.click(screen.getByRole('button', { name: 'Publish value' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Publish Value' }));
 }
 
 async function approve() {
@@ -157,7 +165,7 @@ describe('operator publisher owner-action lane', () => {
         const { methods } = mount();
         await openPublisher();
 
-        const button = screen.getByRole('button', { name: 'Publish value' });
+        const button = screen.getByRole('button', { name: 'Publish Value' });
         expect(button).toBeEnabled();
         fireEvent.click(button);
 
@@ -169,6 +177,8 @@ describe('operator publisher owner-action lane', () => {
     it('blocks an invalid custom network fee before review', async () => {
         const { methods } = mount();
         await openPublisher();
+        // The Network fee is the standard section, closed until opened.
+        fireEvent.click(screen.getByRole('button', { name: /^Network fee/, expanded: false }));
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
             target: { value: '3' },
         });
@@ -273,9 +283,9 @@ describe('operator publisher alternate signer modes', () => {
     it('builds and displays an unsigned transaction in watcher mode', async () => {
         const { methods } = mount({ settings: { walletMode: 'watcher' } });
         await openPublisher();
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Create unsigned transaction' })).toBeEnabled());
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Create Unsigned Transaction' })).toBeEnabled());
         fireEvent.change(screen.getByLabelText('Value'), { target: { value: '123.45' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Unsigned Transaction' }));
 
         expect(await screen.findByLabelText('Unsigned transaction code')).toHaveValue('bb00');
         expect(methods.buildActionPsbtRequest).toHaveBeenCalledWith(expect.objectContaining({

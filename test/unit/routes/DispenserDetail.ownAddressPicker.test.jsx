@@ -118,6 +118,8 @@ afterEach(cleanup);
 describe('DispenserDetail own-address picker', () => {
     it('locks payment picks to the dispenser network and reviews the picked payer', async () => {
         const messaging = mount();
+        // The buy panel shows only on the Buy tab; Details is the default.
+        fireEvent.click(await screen.findByRole('tab', { name: /^Buy$/ }));
         const field = await screen.findByRole('textbox', { name: 'Pay from' });
         expect(field).toHaveAttribute('readonly');
         expect(field).toHaveValue(BUYER_ONE);
@@ -126,11 +128,9 @@ describe('DispenserDetail own-address picker', () => {
         fireEvent.click(screen.getByRole('button', { name: 'About Pay from' }));
         expect(screen.getByRole('tooltip')).toHaveTextContent('Wallet address that sends the payment for this dispenser purchase.');
         fireEvent.click(screen.getByRole('button', { name: 'About Pay from' }));
-        fireEvent.click(screen.getByRole('button', { name: 'About Fills' }));
-        expect(screen.getAllByRole('tooltip').some((tip) => (
-            /Number of whole dispenser fills to buy/.test(tip.textContent || '')
-        ))).toBe(true);
-        fireEvent.click(screen.getByRole('button', { name: 'About Fills' }));
+        // The count field is the dispense stepper, which explains itself in a line under it.
+        expect(screen.getByLabelText(/^How Many Dispenses/i)).toHaveAttribute('aria-describedby');
+        expect(screen.getByText(/^Each dispense gives /)).toBeTruthy();
 
         fireEvent.click(screen.getByRole('button', { name: 'Choose payment address' }));
         expect(screen.getByTestId('network-lock')).toHaveTextContent('locked');
@@ -138,7 +138,7 @@ describe('DispenserDetail own-address picker', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Pick second buyer' }));
 
         await waitFor(() => expect(screen.getByRole('textbox', { name: 'Pay from' })).toHaveValue(BUYER_TWO));
-        const buy = screen.getByRole('button', { name: 'Buy 1 fill' });
+        const buy = screen.getByRole('button', { name: 'Buy 1 Dispense' });
         await waitFor(() => expect(buy).toBeEnabled());
         expect(buy.className).toMatch(/success/);
         expect(buy.querySelector('svg')).toBeTruthy();

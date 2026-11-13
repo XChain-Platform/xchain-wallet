@@ -88,14 +88,14 @@ describe('N through S route keyboard flows', () => {
         await user.keyboard('{Enter}');
         expect(onBack).toHaveBeenCalledOnce();
 
-        await expectTab(user, screen.getByRole('button', { name: 'Refresh payments' }));
+        await expectTab(user, screen.getByRole('button', { name: 'Refresh Payments' }));
         await user.keyboard('{Enter}');
         expect(obligationState.refresh).toHaveBeenCalledOnce();
 
         // The truncated payee and paying addresses are tab stops that reveal the full value.
         await expectTab(user, screen.getByLabelText('bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4'));
         await expectTab(user, screen.getByLabelText(ADDRESS));
-        await expectTab(user, screen.getByRole('button', { name: 'Pay now' }));
+        await expectTab(user, screen.getByRole('button', { name: 'Pay Now' }));
         await user.keyboard('{Enter}');
         expect(onPay).toHaveBeenCalledWith({
             chainId: CHAIN_ID,
@@ -130,19 +130,34 @@ describe('N through S route keyboard flows', () => {
         await user.type('Savings');
         expect(name).toHaveValue('Savings');
 
-        // Back leads the page, then the field's help tip, then the field, then
-        // Rename account closes the form.
+        // Back leads the page, then the open Account section header, the
+        // field's help tip, the field, the closed Look section header, and
+        // Save Changes closes the form.
+        const accountHeader = screen.getByRole('button', { name: /^Account/, expanded: true });
         await user.tab({ shift: true });
         expect(document.activeElement).toBe(screen.getByRole('button', { name: 'About Account name' }));
+        await user.tab({ shift: true });
+        expect(document.activeElement).toBe(accountHeader);
         await user.tab({ shift: true });
         expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Back to previous screen' }));
         await user.keyboard('{Enter}');
         expect(onBack).toHaveBeenCalledOnce();
 
-        // The label's help tip sits between Back and the field.
+        // The label's help tip sits between the section header and the field.
+        await expectTab(user, accountHeader);
         await expectTab(user, screen.getByRole('button', { name: 'About Account name' }));
         await expectTab(user, name);
-        await expectTab(user, screen.getByRole('button', { name: 'Rename account' }));
+        await expectTab(user, screen.getByRole('button', { name: /^Look/, expanded: false }));
+        // jsdom keeps the closed Look section's controls in the tab order
+        // where a browser skips them, so step past them to Save Changes.
+        const save = screen.getByRole('button', { name: 'Save Changes' });
+        for (let step = 0; step < 20 && document.activeElement !== save; step += 1) {
+            await user.tab();
+            if (document.activeElement !== save) {
+                expect(document.activeElement.closest('[hidden]')).not.toBeNull();
+            }
+        }
+        expect(document.activeElement).toBe(save);
         await user.keyboard('{Enter}');
         await waitFor(() => expect(onRenamed).toHaveBeenCalledWith({
             id: 'account-1',
@@ -170,7 +185,7 @@ describe('N through S route keyboard flows', () => {
         await user.type(ADDRESS);
         expect(paste).toHaveValue(ADDRESS);
 
-        await expectTab(user, screen.getByRole('button', { name: 'Use pasted text' }));
+        await expectTab(user, screen.getByRole('button', { name: 'Use Pasted Text' }));
         await user.keyboard('{Enter}');
         expect(onClassified).toHaveBeenCalledWith({
             kind: 'send',
@@ -233,21 +248,21 @@ describe('N through S route keyboard flows', () => {
         await user.keyboard('{Enter}');
         expect(more).toHaveAttribute('aria-expanded', 'true');
 
-        await expectTab(user, screen.getByRole('menuitem', { name: 'Revoke delegation' }));
-        await expectTab(user, screen.getByRole('menuitem', { name: 'Operator view' }));
+        await expectTab(user, screen.getByRole('menuitem', { name: 'Revoke Delegation' }));
+        await expectTab(user, screen.getByRole('menuitem', { name: 'Operator View' }));
         await user.keyboard('{Escape}');
         expect(screen.queryByRole('menu')).toBeNull();
         expect(document.activeElement).toBe(more);
 
         await user.keyboard('{Enter}');
-        await expectTab(user, screen.getByRole('menuitem', { name: 'Revoke delegation' }));
+        await expectTab(user, screen.getByRole('menuitem', { name: 'Revoke Delegation' }));
         await user.keyboard('{Enter}');
         expect(actions.onRevokeDelegation).toHaveBeenCalledOnce();
 
         await tabToStakeMore(user);
         await user.keyboard('{Enter}');
-        await expectTab(user, screen.getByRole('menuitem', { name: 'Revoke delegation' }));
-        await expectTab(user, screen.getByRole('menuitem', { name: 'Operator view' }));
+        await expectTab(user, screen.getByRole('menuitem', { name: 'Revoke Delegation' }));
+        await expectTab(user, screen.getByRole('menuitem', { name: 'Operator View' }));
         await user.keyboard('{Enter}');
         expect(actions.onOpenOperatorDashboard).toHaveBeenCalledOnce();
 

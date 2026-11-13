@@ -43,10 +43,10 @@ describe('Onboarding entry choices', () => {
         expect(freeWallet.className).toMatch(/freeWalletButton/);
         expect(freeWallet.querySelector('img')?.getAttribute('src')).toContain('freewallet-wally-180.png');
 
-        const pair = screen.getByRole('button', { name: 'Pair an offline signer' });
+        const pair = screen.getByRole('button', { name: 'Pair an Offline Signer' });
         expect(pair.className).toMatch(/primary/);
 
-        const demo = screen.getByRole('button', { name: 'Try in demo mode' });
+        const demo = screen.getByRole('button', { name: 'Try in Demo Mode' });
         expect(demo.className).toMatch(/danger/);
         expect(demo.querySelector('svg')).not.toBeNull();
     });
@@ -55,7 +55,7 @@ describe('Onboarding entry choices', () => {
         expect(HARDWARE_ONLY_WALLET_SUPPORTED).toBe(false);
         const onConnectHardware = vi.fn();
         mount({ onConnectHardware });
-        expect(screen.queryByRole('button', { name: 'Connect a hardware wallet' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Connect a Hardware Wallet' })).toBeNull();
         expect(onConnectHardware).not.toHaveBeenCalled();
     });
 });

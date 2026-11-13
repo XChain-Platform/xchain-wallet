@@ -88,7 +88,7 @@ async function openCancelResult() {
         await flush();
     });
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('button', { name: 'Cancel swap' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Cancel Swap' }));
         await flush();
     });
     return utils;

@@ -113,7 +113,7 @@ describe('History large-list performance', () => {
             .toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
-        const showMore = screen.getByRole('button', { name: 'Show more history' });
+        const showMore = screen.getByRole('button', { name: 'Show More History' });
         showMore.focus();
         expect(document.activeElement).toBe(showMore);
         fireEvent.click(showMore);
@@ -121,6 +121,8 @@ describe('History large-list performance', () => {
             expect(view.container.querySelectorAll('[data-history-key]')).toHaveLength(200);
         });
 
+        // Search sits in the title-bar filter panel.
+        fireEvent.click(screen.getByRole('button', { name: 'History filters' }));
         fireEvent.change(screen.getByLabelText('Search history'), {
             target: { value: 'rltc1qdestination4999' },
         });
@@ -132,7 +134,7 @@ describe('History large-list performance', () => {
                 `${CHAIN}:1:${ADDRESS}`,
             );
         });
-        expect(screen.queryByRole('button', { name: 'Show more history' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Show More History' })).toBeNull();
     });
 
     it('retains expanded rows when a refresh inserts and overlaps a page boundary', async () => {
@@ -143,7 +145,7 @@ describe('History large-list performance', () => {
         await waitFor(() => {
             expect(view.container.querySelectorAll('[data-history-key]')).toHaveLength(100);
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Show more history' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Show More History' }));
         await waitFor(() => {
             expect(view.container.querySelectorAll('[data-history-key]')).toHaveLength(200);
         });

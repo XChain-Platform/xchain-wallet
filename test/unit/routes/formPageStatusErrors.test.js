@@ -96,7 +96,9 @@ function formPages(file) {
     const sources = listSources(ast);
     const pages = [];
     walk(ast, (node) => {
-        if (node.type === 'JSXElement' && node.openingElement.name.name === 'FormPage') {
+        // A Form Standard form wraps its FormPage in FormFrame, which passes
+        // status and onChangeCapture straight through.
+        if (node.type === 'JSXElement' && ['FormPage', 'FormFrame'].includes(node.openingElement.name.name)) {
             pages.push(Object.assign(node, { listSources: sources }));
         }
     });
@@ -155,7 +157,6 @@ describe('form-level error placement', () => {
             ['Send.jsx', 'setFormError'],
             ['StakeForm.jsx', 'setFormError'],
             ['SwapForm.jsx', 'setFormError'],
-            ['TokenWizard.jsx', 'onEdit'],
         ]);
 
         for (const [name, clearHandler] of files) {
@@ -168,11 +169,6 @@ describe('form-level error placement', () => {
                 candidates.some((page) => references(attribute(page, 'onChangeCapture'), clearHandler)),
                 `${name} change clearing`,
             ).toBe(true);
-            if (name === 'TokenWizard.jsx') {
-                expect(readFileSync(join(routesDir, name), 'utf8')).toContain(
-                    'onEdit: () => { if (formError) setFormError(null); }',
-                );
-            }
         }
     });
 });

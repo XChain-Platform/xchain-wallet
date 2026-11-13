@@ -89,7 +89,8 @@ describe('createDefaultSettings', () => {
         expect(s.learnMode).toBe(false);
         expect(s.ads.enabled).toBe(ADS_DEFAULT_ENABLED);
         expect(s.backupReminders).toBe('off');
-        expect(s.walletMode).toBe('full');
+        // §20: wallet mode is per wallet now; the legacy key has no default.
+        expect('walletMode' in s).toBe(false);
         expect(s.activeNetwork).toBe('mainnet');
         expect(s.privacy.clipboardAutoClearSeconds).toBe(CLIPBOARD_AUTO_CLEAR_DEFAULT);
         expect(s.smallBalanceThreshold).toBe('dust');

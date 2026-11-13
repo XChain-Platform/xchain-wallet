@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // The add-alert form reads as three rows on a phone: the coin, then the
-// direction with the price, then Add alert (with Cancel). jsdom has no layout,
+// direction with the price, then Add Alert (with Cancel). jsdom has no layout,
 // so the rows are pinned by their data-row groups and DOM order.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -25,7 +25,7 @@ function follows(a, b) {
 function expectRows({ coin, onCancel }) {
     const direction = screen.getByRole('combobox', { name: 'Direction' });
     const price = screen.getByRole('textbox', { name: 'Target price' });
-    const add = screen.getByRole('button', { name: 'Add alert' });
+    const add = screen.getByRole('button', { name: 'Add Alert' });
 
     const coinRow = rowOf(coin);
     const filterRow = rowOf(direction);
@@ -56,12 +56,12 @@ function expectRows({ coin, onCancel }) {
 }
 
 describe('PriceAlertForm row order', () => {
-    it('puts the coin picker, then direction with price, then Add alert in their own rows', () => {
+    it('puts the coin picker, then direction with price, then Add Alert in their own rows', () => {
         render(<PriceAlertForm onCreate={vi.fn()} />);
         expectRows({ coin: screen.getByRole('combobox', { name: 'Coin' }) });
     });
 
-    it('keeps Cancel in the action row beside Add alert', () => {
+    it('keeps Cancel in the action row beside Add Alert', () => {
         render(<PriceAlertForm onCreate={vi.fn()} onCancel={vi.fn()} />);
         expectRows({ coin: screen.getByRole('combobox', { name: 'Coin' }), onCancel: true });
     });

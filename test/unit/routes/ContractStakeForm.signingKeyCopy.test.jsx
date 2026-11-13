@@ -15,12 +15,14 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { ContractStakeForm } from '../../../packages/core/src/shared/routes/ContractStakeForm.jsx';
 
 const CHAIN = 'bitcoin-regtest';
 const ADDRESS = 'bcrt1qactiveactiveactiveactiveactiveactive0';
 
 function mountForm(props, walletMode = 'full') {
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({
             [CHAIN]: [{ id: 'addr-1', address: ADDRESS, publicKey: '02ab', derivationPath: "m/84'/1'/0'/0/0", source: 'hd' }],
@@ -29,7 +31,8 @@ function mountForm(props, walletMode = 'full') {
         getContractByActionIndex: vi.fn().mockResolvedValue({
             row: { cooldown_blocks: 10, slash_destination: 'bcrt1qslashdestinationexampleexampleexample' },
         }),
-        getSettings: vi.fn().mockResolvedValue({ walletMode }),
+        getSettings: vi.fn().mockResolvedValue({}),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'w', name: 'W', walletMode }]),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
     };
     const messaging = new Proxy(target, {
@@ -54,7 +57,8 @@ function mountForm(props, walletMode = 'full') {
 }
 
 async function submitUntil(check) {
-    await screen.findByLabelText('From');
+    // The standard From section labels the field "From address".
+    await screen.findByLabelText('From address');
     const form = screen.getByLabelText(/signing public key/i, { selector: 'input' }).closest('form');
     await waitFor(() => {
         if (form.isConnected) fireEvent.submit(form);
@@ -64,7 +68,7 @@ async function submitUntil(check) {
 
 const reviewLabels = () => [...document.querySelectorAll('dt')].map((el) => el.textContent);
 
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); resetWalletModes(); });
 
 describe('ContractStakeForm signing-key copy', () => {
     it('words the stake-mode key error with the input label', async () => {

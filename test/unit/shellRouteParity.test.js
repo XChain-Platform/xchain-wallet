@@ -74,10 +74,10 @@ const SHELL_ONLY = {
             kind: 'intended',
             reason: 'Only the web shell currently exposes the DEX surface to advanced actions.',
         },
-        'AppHeader.onPopOut': {
-            shells: ['web'],
+        'ExportWalletBackup.onExportInTab': {
+            shells: ['extension'],
             kind: 'intended',
-            reason: 'Only the web shell supplies its own pop-out handler; the other shells use the header default.',
+            reason: 'The extension toolbar popup closes when the download takes focus, so only it continues the export in a tab.',
         },
         'BatchComposerForm.hasDexSurface': {
             shells: ['web'],
@@ -128,26 +128,6 @@ const SHELL_ONLY = {
             shells: ['web'],
             kind: 'intended',
             reason: 'Only the web shell currently exposes the DEX surface to parallel composition.',
-        },
-        'ReceivePicker.kindFilter': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web receive picker shares the compact-layout asset filters.',
-        },
-        'ReceivePicker.networkFilter': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web receive picker shares the compact-layout asset filters.',
-        },
-        'ReceivePicker.onKindFilterChange': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web receive picker shares the compact-layout asset filters.',
-        },
-        'ReceivePicker.onNetworkFilterChange': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web receive picker shares the compact-layout asset filters.',
         },
         'RenameAccountForm.refreshKey': {
             shells: ['desktop', 'extension'],
@@ -435,8 +415,10 @@ describe('shell route parity', () => {
             expect(shell.app, `${shellName} Custom template`).toContain(
                 "onCustom={() => setUnlockedView('issue')}",
             );
-            expect(shell.app, `${shellName} Custom form Back`).toContain(
-                "onBack={() => setUnlockedView('wizard')}",
+            // The Custom form opens on top of the wizard, so Back through the
+            // navigation history returns to it.
+            expect(shell.app, `${shellName} Custom form Back`).toMatch(
+                /<IssueTokenForm[\s\S]*?onBack=\{goBack\}/,
             );
             expect(shell.app, `${shellName} direct issue entry`).not.toMatch(
                 /onIssue(?::|=).*setUnlockedView\('issue'\)/,

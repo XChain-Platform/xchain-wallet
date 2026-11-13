@@ -85,10 +85,11 @@ describe('TokenDetail "Manage token" action', () => {
     it('keeps the balance label and amount ahead of the hero actions in DOM reading order', () => {
         renderDetail({ creator: OTHER });
 
-        const hero = screen.getByRole('region', { name: 'S18PROBE balance' });
-        const label = within(hero).getByText('Total balance');
-        const amountUnit = within(hero).getByText('S18PROBE');
-        const action = within(hero).getByRole('button', { name: 'Balance actions' });
+        // The card's caption is the asset; the amount follows it, then the round buttons.
+        const hero = screen.getByRole('region', { name: /S18PROBE$/ });
+        const label = within(hero).getByText('S18PROBE', { selector: '[class*="cardCaptionText"]' });
+        const amountUnit = within(hero).getByText('S18PROBE', { selector: 'span[class*="amountCode"]' });
+        const action = within(hero).getByRole('button', { name: 'Hide balance' });
 
         expect(label.compareDocumentPosition(amountUnit) & Node.DOCUMENT_POSITION_FOLLOWING)
             .toBeTruthy();
@@ -99,17 +100,18 @@ describe('TokenDetail "Manage token" action', () => {
     it('renders and navigates for the issuing wallet', async () => {
         const { onManageToken } = renderDetail({ creator: MINE, withPrimaryActions: true });
 
-        const more = await screen.findByRole('button', { name: 'More info' });
-        const actions = within(screen.getByRole('group', { name: 'Quick actions' }))
+        // The Actions tab opens first: the basics lead the main group, and the
+        // issuer's Manage token tile sits in its own group below.
+        const manage = await screen.findByRole('button', { name: 'Manage token' });
+        const actions = within(screen.getByRole('group', { name: 'Actions for S18PROBE' }))
             .getAllByRole('button');
-        expect(actions.map((button) => button.getAttribute('aria-label') || button.textContent)).toEqual([
+        expect(actions.slice(0, 3).map((button) => button.textContent)).toEqual([
             'Send',
             'Receive',
             'Exchange',
-            'More info',
         ]);
-        fireEvent.click(more);
-        fireEvent.click(await screen.findByRole('menuitem', { name: 'Manage' }));
+        expect(actions.some((button) => button.textContent === 'Manage token')).toBe(false);
+        fireEvent.click(manage);
 
         expect(onManageToken).toHaveBeenCalledTimes(1);
     });
@@ -118,15 +120,15 @@ describe('TokenDetail "Manage token" action', () => {
         const { messaging } = renderDetail({ creator: OTHER });
 
         await waitFor(() => expect(messaging.getAddressesByChain).toHaveBeenCalled());
-        fireEvent.click(screen.getByRole('button', { name: 'More info' }));
-        expect(screen.queryByRole('menuitem', { name: 'Manage' })).toBeNull();
+        expect(screen.getByRole('group', { name: 'Actions for S18PROBE' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Manage token' })).toBeNull();
     });
 
     it('does not render Manage for a native coin', () => {
         renderDetail({ creator: MINE, kind: 'native' });
-        fireEvent.click(screen.getByRole('button', { name: 'More info' }));
 
-        expect(screen.queryByRole('menuitem', { name: 'Manage' })).toBeNull();
+        expect(screen.getByRole('group', { name: 'Actions for S18PROBE' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Manage token' })).toBeNull();
     });
 
     it('refetches a balance when restored route state omits quantity', async () => {
@@ -144,7 +146,7 @@ describe('TokenDetail "Manage token" action', () => {
 
         await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalledWith('w1', 'account-2'));
         await waitFor(() => expect(
-            within(screen.getByRole('region', { name: 'S18PROBE balance' })).getByText('2.50000000'),
+            within(screen.getByRole('region', { name: /S18PROBE$/ })).getByText('2.50000000'),
         ).toBeInTheDocument());
     });
 });

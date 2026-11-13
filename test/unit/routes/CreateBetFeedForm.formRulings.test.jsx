@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Open a market follows the form rulings: the main action is the one green
-// button and names what it does (Open market) with an icon, optional fields
+// button and names what it does (Open Market) with an icon, optional fields
 // carry the Optional pill instead of "(optional)" in their labels, field
 // explanations live in each label's help tip rather than as paragraphs under
 // the fields, and every button carries an icon.
@@ -17,13 +17,20 @@ import { act as domAct, cleanup, fireEvent, render } from '@testing-library/reac
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { CreateBetFeedForm } from '../../../packages/core/src/shared/routes/CreateBetFeedForm.jsx';
+import * as walletModes from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const HD_ADDRESS = Object.freeze({
     id: 'addr-hd-0', address: 'bc1qexampleexampleexampleexampleexampleex', publicKey: '02aabbcc', derivationPath: "m/84'/0'/0'/0/0", source: 'hd', signerId: 'signer-1',
 });
 
-afterEach(() => cleanup());
+// The Quick | Full choice is remembered in localStorage; reset it so each test
+// starts on the default Quick view.
+afterEach(() => {
+    cleanup();
+    globalThis.localStorage?.clear();
+    walletModes.resetWalletModes?.();
+});
 
 async function drain(rounds = 16) {
     for (let i = 0; i < rounds; i += 1) await Promise.resolve();
@@ -42,6 +49,8 @@ function messaging(walletMode) {
 }
 
 async function mount(walletMode = 'full') {
+    // A wallet's mode is published by the shell from the wallet list, not read from settings.
+    walletModes.publishWalletModes?.({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     let utils;
     await domAct(async () => {
         utils = render(
@@ -66,44 +75,50 @@ const isInfoTrigger = (b) => b.getAttribute('aria-describedby') && b.textContent
 describe('Open a market form rulings', () => {
     it('makes Open market the one green action with an icon', async () => {
         const utils = await mount();
-        const main = named(utils, /^Open market$/);
+        const main = named(utils, /^Open Market$/);
         expect(main).toBeTruthy();
         expect(main.className).toMatch(/success/);
         expect(main.querySelector('svg')).toBeTruthy();
-        expect(named(utils, /^Review market$/)).toBeUndefined();
+        expect(named(utils, /^Review Market$/i)).toBeUndefined();
         expect(buttons(utils).filter((b) => /success/.test(b.className))).toHaveLength(1);
     });
 
     it('keeps the watcher build green with an icon', async () => {
         const utils = await mount('watcher');
-        const main = named(utils, /^Create unsigned transaction$/);
+        const main = named(utils, /^Create unsigned transaction$/i);
         expect(main.className).toMatch(/success/);
         expect(main.querySelector('svg')).toBeTruthy();
     });
 
     it('shows Optional pills, never "(optional)" in label or button text', async () => {
         const utils = await mount();
+        // Description and Category live in the Full view; the closed sections
+        // stay mounted, so their labels are queryable without opening them.
         await domAct(async () => {
-            fireEvent.click(named(utils, /^Add a description/));
-            fireEvent.click(named(utils, /^Restrict who can bet$/));
+            fireEvent.click(named(utils, /^Full$/));
             await drain();
         });
         for (const el of utils.container.querySelectorAll('label, button')) {
             expect(el.textContent).not.toMatch(/\(optional\)/i);
         }
-        for (const lbl of ['Your fee', 'Smallest bet allowed', 'Description', 'Category', 'Memo']) {
+        for (const lbl of ['Your Fee', 'Smallest Bet Allowed', 'Description', 'Category']) {
             const label = [...utils.container.querySelectorAll('label')].find((l) => l.textContent.trim().startsWith(lbl));
             expect(label?.parentElement?.querySelector('[data-optional-pill]'), `${lbl} Optional pill`).toBeTruthy();
         }
+        // Memo is its own optional section, so the pill sits on its header.
+        expect(utils.container.querySelector('[data-form-section="memo"] [data-form-section-toggle] [data-optional-pill]'), 'Memo Optional pill').toBeTruthy();
     });
 
     it('moves field explanations into help tips', async () => {
         const utils = await mount();
-        expect(tipFor(utils, 'Your oracle address')).toMatch(/only one that can publish the result/);
-        expect(tipFor(utils, 'What is being bet on')).toMatch(/permanent once it is on the chain/);
-        expect(tipFor(utils, 'Outcome 0')).toMatch(/Exactly one outcome can win/);
-        expect(tipFor(utils, 'Betting closes')).toBeTruthy();
-        expect(tipFor(utils, 'Time to publish the result')).toMatch(/longer window costs more/);
+        // The oracle address is the From address; the Quick view's Market
+        // section holds the question, the Outcomes group and Closes.
+        expect(tipFor(utils, 'From address')).toMatch(/only one that can publish the result/);
+        expect(tipFor(utils, 'Question')).toMatch(/permanent once it is on the chain/);
+        const outcomesLabel = [...utils.container.querySelectorAll('span')].find((s) => s.textContent.trim() === 'Outcomes');
+        expect(outcomesLabel?.parentElement?.querySelector('[role="tooltip"]')?.textContent || '').toMatch(/Exactly one outcome can win/);
+        expect(tipFor(utils, 'Closes')).toBeTruthy();
+        expect(tipFor(utils, 'Time to Publish the Result')).toMatch(/longer window costs more/);
         const paragraphs = [...utils.container.querySelectorAll('p, span')].filter((el) => !el.closest('[role="tooltip"]')).map((el) => el.textContent);
         expect(paragraphs.some((t) => /This address IS the market/.test(t))).toBe(false);
         expect(paragraphs.some((t) => /^Everything above is permanent/.test(t.trim()))).toBe(false);

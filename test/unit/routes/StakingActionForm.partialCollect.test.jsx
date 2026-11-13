@@ -62,7 +62,7 @@ describe('StakingActionForm partial COLLECT', () => {
         const messaging = mountForm();
         await screen.findByText('15 XCHAIN available');
         fireEvent.change(await screen.findByLabelText(/^Amount/), { target: { value: '4' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Claim rewards' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Claim Rewards$/ }));
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
         expect(messaging.composeForConfirm.mock.calls[0][0].actionData.params).toEqual({ VERSION: '0', AMOUNT: '4' });
     });
@@ -70,7 +70,7 @@ describe('StakingActionForm partial COLLECT', () => {
     it('omits AMOUNT when claiming the full pending balance', async () => {
         const messaging = mountForm();
         await screen.findByText('15 XCHAIN available');
-        fireEvent.click(screen.getByRole('button', { name: 'Claim rewards' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Claim Rewards$/ }));
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
         expect(messaging.composeForConfirm.mock.calls[0][0].actionData.params).toEqual({ VERSION: '0' });
     });

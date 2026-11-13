@@ -73,12 +73,12 @@ describe('ResultScreen states', () => {
                 state="failure"
                 message="Could not send."
                 onDone={() => {}}
-                secondaryLabel="Try again"
+                secondaryLabel="Try Again"
                 onSecondary={onSecondary}
             />,
         );
         const buttons = screen.getAllByRole('button');
-        expect(buttons.map((b) => b.textContent)).toEqual(['Try again', 'Done']);
+        expect(buttons.map((b) => b.textContent)).toEqual(['Try Again', 'Done']);
         fireEvent.click(buttons[0]);
         expect(onSecondary).toHaveBeenCalledTimes(1);
     });
@@ -86,8 +86,8 @@ describe('ResultScreen states', () => {
     it('offers Build another beside Done in the unsigned state', () => {
         const onBuildAnother = vi.fn();
         render(<ResultScreen state="unsigned" result={{ psbtHex: 'deadbeef' }} onBuildAnother={onBuildAnother} onDone={() => {}} />);
-        const buttons = screen.getAllByRole('button').filter((b) => ['Build another', 'Done'].includes(b.textContent));
-        expect(buttons.map((b) => b.textContent)).toEqual(['Build another', 'Done']);
+        const buttons = screen.getAllByRole('button').filter((b) => ['Build Another', 'Done'].includes(b.textContent));
+        expect(buttons.map((b) => b.textContent)).toEqual(['Build Another', 'Done']);
         fireEvent.click(buttons[0]);
         expect(onBuildAnother).toHaveBeenCalledTimes(1);
     });

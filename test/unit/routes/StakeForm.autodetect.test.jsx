@@ -98,10 +98,10 @@ describe('StakeForm new-vs-top-up auto-detect (getStakesForAddress)', () => {
         // Existing stake found -> Top up hint + mode radio auto-checked.
         expect(await screen.findByText(/Existing stake found/)).toBeInTheDocument();
         expect(
-            screen.getByRole('radio', { name: /Top up an existing stake/ }),
+            screen.getByRole('radio', { name: /Top up an existing stake/, hidden: true }),
         ).toBeChecked();
         expect(
-            screen.getByRole('radio', { name: /New stake/ }),
+            screen.getByRole('radio', { name: /New stake/, hidden: true }),
         ).not.toBeChecked();
     });
 
@@ -117,10 +117,10 @@ describe('StakeForm new-vs-top-up auto-detect (getStakesForAddress)', () => {
 
         expect(await screen.findByText(/No existing stake for this public key/)).toBeInTheDocument();
         expect(
-            screen.getByRole('radio', { name: /New stake/ }),
+            screen.getByRole('radio', { name: /New stake/, hidden: true }),
         ).toBeChecked();
         expect(
-            screen.getByRole('radio', { name: /Top up an existing stake/ }),
+            screen.getByRole('radio', { name: /Top up an existing stake/, hidden: true }),
         ).not.toBeChecked();
     });
 
@@ -139,7 +139,7 @@ describe('StakeForm new-vs-top-up auto-detect (getStakesForAddress)', () => {
         await enterPubkey();
 
         expect(await screen.findByText(/No existing stake for this public key/)).toBeInTheDocument();
-        expect(screen.getByRole('radio', { name: /New stake/ })).toBeChecked();
+        expect(screen.getByRole('radio', { name: /New stake/, hidden: true })).toBeChecked();
     });
 
     it('surfaces a manual-choice hint (and does not throw) when the indexer query rejects', async () => {
@@ -196,6 +196,11 @@ describe('StakeForm new-vs-top-up auto-detect (getStakesForAddress)', () => {
     });
 });
 
+// Network lives in the standard's From section, closed on load.
+async function openFromSection() {
+    fireEvent.click(await screen.findByRole('button', { name: /^From/, expanded: false }));
+}
+
 describe('StakeForm network picker', () => {
     it('does not render the selected network kind', async () => {
         const chainId = 'bitcoin-regtest';
@@ -205,6 +210,7 @@ describe('StakeForm network picker', () => {
             }),
         }, chainId);
 
+        await openFromSection();
         await screen.findByRole('button', { name: 'Network: Bitcoin' });
         expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
@@ -212,6 +218,7 @@ describe('StakeForm network picker', () => {
     it('offers only Bitcoin chains even when the wallet holds Litecoin and Dogecoin addresses', async () => {
         const held = { ...ADDRESSES, 'litecoin-mainnet': ADDRESSES['bitcoin-mainnet'], 'dogecoin-mainnet': ADDRESSES['bitcoin-mainnet'] };
         mountForm(vi.fn().mockResolvedValue([]), { getAddressesByChain: vi.fn().mockResolvedValue(held) });
+        await openFromSection();
         fireEvent.click(await screen.findByRole('button', { name: /^Network:/ }));
         const offered = screen.getAllByRole('button', { name: /^Select / }).map((o) => o.textContent);
         expect(offered.some((t) => /Bitcoin/.test(t))).toBe(true);

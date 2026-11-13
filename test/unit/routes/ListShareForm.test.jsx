@@ -136,7 +136,7 @@ describe('ListShareForm', () => {
         fireEvent.change(await screen.findByLabelText('Type SHARE to confirm'), {
             target: { value: 'SHARE' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Share list' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Share list$/i }));
 
         expect(await screen.findByText('List reference must be a positive whole number.')).toBeTruthy();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
@@ -191,7 +191,7 @@ describe('ListShareForm', () => {
         const messaging = mount(options);
 
         expect(await screen.findByText(reason)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Share list' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: /^Share list$/i }).disabled).toBe(true);
         expect(screen.getByLabelText('Memo').disabled).toBe(true);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
@@ -199,7 +199,7 @@ describe('ListShareForm', () => {
     it('requires exact uppercase SHARE before Review', async () => {
         const messaging = mount();
         const confirm = await screen.findByLabelText('Type SHARE to confirm');
-        const review = screen.getByRole('button', { name: 'Share list' });
+        const review = screen.getByRole('button', { name: /^Share list$/i });
 
         expect(review.disabled).toBe(true);
         for (const value of ['share', ' SHARE', 'SHARE ', 'Share']) {
@@ -218,7 +218,7 @@ describe('ListShareForm', () => {
         fireEvent.click(feeChoice);
         fireEvent.change(screen.getByLabelText('Memo'), { target: { value: ' worldwide ' } });
         fireEvent.change(screen.getByLabelText('Type SHARE to confirm'), { target: { value: 'SHARE' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Share list' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Share list$/i }));
 
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
         const request = messaging.composeForConfirm.mock.calls[0][0];
@@ -265,7 +265,7 @@ describe('ListShareForm', () => {
         fireEvent.change(await screen.findByLabelText('Type SHARE to confirm'), {
             target: { value: 'SHARE' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Share list' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Share list$/i }));
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
 
         expect(messaging.getListByActionIndex).toHaveBeenCalledWith({
@@ -308,7 +308,7 @@ describe('ListShareForm', () => {
         expect(screen.getByLabelText('Memo').disabled).toBe(true);
         expect(screen.getByLabelText('Type SHARE to confirm').disabled).toBe(true);
         expect(screen.getByLabelText('Pay protocol fee in BTC').disabled).toBe(true);
-        expect(screen.getByRole('button', { name: 'Share list' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: /^Share list$/i }).disabled).toBe(true);
     });
 
     it('stops before signing when the list changed owner after the form opened', async () => {
@@ -319,7 +319,7 @@ describe('ListShareForm', () => {
         messaging.getListByActionIndex.mockResolvedValueOnce(baseDetail({
             state: { owner: ROOT_OWNER, edit_resolution_active: true, current_list: ['bc1qmember'] },
         }));
-        fireEvent.click(screen.getByRole('button', { name: 'Share list' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Share list$/i }));
 
         expect(await screen.findByText(
             'This list has a different owner than when this screen opened. Review the owner and try again.',

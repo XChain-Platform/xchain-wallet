@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { ListForkForm } from '../../../packages/core/src/shared/routes/ListForkForm.jsx';
 
 const pickerProps = vi.hoisted(() => ({ last: null }));
@@ -40,10 +41,13 @@ function mountFork({ type = '1', items = MEMBERS } = {}) {
         action_index: 2700, type, source: OWNER.address, list: items,
         state: { edit_resolution_active: true, current_list: items, owner: OWNER.address },
     };
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode: 'watcher' }], activeWalletId: 'wallet-1' });
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [OWNER, OTHER] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: OTHER.id } }),
-        getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher', activeNetwork: 'mainnet' }),
+        getSettings: vi.fn().mockResolvedValue({ activeNetwork: 'mainnet' }),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'W', walletMode: 'watcher' }]),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'locked' }),
         getListByActionIndex: vi.fn().mockResolvedValue(row),
@@ -65,6 +69,7 @@ function mountFork({ type = '1', items = MEMBERS } = {}) {
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     pickerProps.last = null;
 });
 
@@ -87,9 +92,11 @@ describe('ListForkForm network, from and field help', () => {
         mountFork();
         const from = await screen.findByLabelText('From');
         await waitFor(() => expect(from).toHaveValue(OWNER.address));
+        // From is a closed standard section; open it to reach its picker.
+        fireEvent.click(screen.getByRole('button', { name: /^From\b/, expanded: false }));
         fireEvent.click(screen.getByRole('button', { name: 'Choose source address' }));
         expect(await screen.findByTestId('own-address-picker')).toBeTruthy();
-        expect(pickerProps.last.title).toBe('From address');
+        expect(pickerProps.last.title).toBe('From Address');
         expect(pickerProps.last.chainId).toBe(CHAIN);
         expect(pickerProps.last.lockNetwork).toBe(true);
         fireEvent.click(screen.getByText('pick owner'));
@@ -100,14 +107,16 @@ describe('ListForkForm network, from and field help', () => {
     it('shows the existing ownership blocker when another address is picked and refuses to publish', async () => {
         mountFork();
         await waitFor(() => expect(screen.getByLabelText('From')).toHaveValue(OWNER.address));
+        // From is a closed standard section; open it to reach its picker.
+        fireEvent.click(screen.getByRole('button', { name: /^From\b/, expanded: false }));
         fireEvent.click(screen.getByRole('button', { name: 'Choose source address' }));
         fireEvent.click(await screen.findByText('pick other'));
         await waitFor(() => expect(screen.getByLabelText('From')).toHaveValue(OTHER.address));
         expect(await screen.findByText(/List #2700 is owned by DOwnerOw….*, which is not an address in this wallet\. This wallet cannot edit it\./)).toBeTruthy();
         fireEvent.change(screen.getByLabelText('Add tokens'), { target: { value: 'ADD' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Publish edit$/i }));
         expect(screen.getByText(/which is not an address in this wallet/)).toBeTruthy();
-        expect(screen.queryByText('Review list edit')).toBeNull();
+        expect(screen.queryByText('Review List Edit')).toBeNull();
     });
 
     it('gives the add field and the current members a help tip, and the memo its own', async () => {
@@ -135,7 +144,7 @@ describe('ListForkForm network, from and field help', () => {
 
     it('names the main action Publish edit, in green, with an icon', async () => {
         mountFork();
-        const button = await screen.findByRole('button', { name: 'Publish edit' });
+        const button = await screen.findByRole('button', { name: /^Publish edit$/i });
         expect(button.type).toBe('submit');
         expect(button.querySelector('svg')).toBeTruthy();
         expect(button.className).toMatch(/success/);

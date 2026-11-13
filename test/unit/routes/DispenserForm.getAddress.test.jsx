@@ -148,7 +148,7 @@ async function driveCreate({ steps = [], pricingSteps = [] } = {}) {
         // eslint-disable-next-line no-await-in-loop
         await domAct(async () => { step(utils); await drainMicrotasks(); });
     }
-    const create = utils.getByRole('button', { name: 'Create dispenser' });
+    const create = utils.getByRole('button', { name: 'Create Dispenser' });
     expect(create.disabled).toBe(false);
     await domAct(async () => {
         fireEvent.click(create);
@@ -164,6 +164,10 @@ async function driveCreate({ steps = [], pricingSteps = [] } = {}) {
     return { calls, utils };
 }
 
+// The dispenser address and the fiat and oracle pricing live in the closed Dispenser Terms section.
+const openTerms = (utils) => {
+    fireEvent.click(utils.getByRole('button', { name: /^Dispenser Terms/ }));
+};
 const openDispenserAddressPicker = (utils) => {
     fireEvent.click(utils.getByRole('button', { name: 'Change dispenser address' }));
 };
@@ -196,7 +200,7 @@ describe('DispenserForm GET_ADDRESS by address mode', () => {
 
     it('mode existing: a reused dispenser address rides as GET_ADDRESS, and nothing is derived', async () => {
         const { calls } = await driveCreate({
-            steps: [openDispenserAddressPicker, pickAddress(REUSABLE.address)],
+            steps: [openTerms, openDispenserAddressPicker, pickAddress(REUSABLE.address)],
         });
         expect(calls.some((c) => c.method === 'generateDispenserAddress')).toBe(false);
         const { composed, submitted } = composeAndSubmitParams(calls);
@@ -206,7 +210,7 @@ describe('DispenserForm GET_ADDRESS by address mode', () => {
 
     it('mode current: picking the source itself omits GET_ADDRESS so the protocol defaults to SOURCE', async () => {
         const { calls } = await driveCreate({
-            steps: [openDispenserAddressPicker, pickAddress(SOURCE.address)],
+            steps: [openTerms, openDispenserAddressPicker, pickAddress(SOURCE.address)],
         });
         expect(calls.some((c) => c.method === 'generateDispenserAddress')).toBe(false);
         const { composed, submitted } = composeAndSubmitParams(calls);
@@ -220,12 +224,16 @@ describe('DispenserForm Mode B pricing', () => {
         let triggerWasHidden = false;
         const { calls } = await driveCreate({
             pricingSteps: [
-                (utils) => fireEvent.click(utils.getByRole('button', { name: /Advanced options/ })),
+                openTerms,
                 (utils) => {
                     setValue(utils, 'Priced in fiat', 'USD');
                     setValue(utils, /^Oracle address/, '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2');
                 },
-                (utils) => { triggerWasHidden = utils.queryByLabelText(/^Trigger price/) === null; },
+                // Quick keeps the Get card but holds the native price: empty and disabled.
+                (utils) => {
+                    const trigger = utils.queryByLabelText(/^Trigger price/);
+                    triggerWasHidden = trigger === null || (trigger.disabled && trigger.value === '');
+                },
             ],
         });
         const { composed, submitted } = composeAndSubmitParams(calls);

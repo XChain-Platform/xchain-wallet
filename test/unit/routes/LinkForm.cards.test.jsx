@@ -38,9 +38,11 @@ function mount(getActionByIndex) {
 describe('LinkForm cards', () => {
     it('gives From a help tip and the forward button the success style with an icon', async () => {
         mount(vi.fn());
-        await screen.findByRole('heading', { level: 1, name: 'Link actions' });
+        // The title and action are Title Case; From sits in the closed From section.
+        await screen.findByRole('heading', { level: 1, name: 'Link Actions' });
+        fireEvent.click(await screen.findByRole('button', { name: /^From\b/, expanded: false }));
         expect(await screen.findByRole('button', { name: /About From/i })).toBeInTheDocument();
-        const submit = screen.getByRole('button', { name: 'Link actions' });
+        const submit = screen.getByRole('button', { name: 'Link Actions' });
         expect(submit.className).toMatch(/success/);
         expect(submit.querySelector('svg')).not.toBeNull();
     });

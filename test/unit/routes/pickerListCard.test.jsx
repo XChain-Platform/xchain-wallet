@@ -19,7 +19,8 @@ import menuStyles from '../../../packages/core/src/shared/routes/ActionsMenu.mod
 
 afterEach(() => cleanup());
 
-const pickerCss = readFileSync('packages/core/src/shared/routes/WalletPicker.module.css', 'utf8');
+// Both pickers draw their list with the shared list card of CoSignerAccountList.
+const pickerCss = readFileSync('packages/core/src/shared/routes/CoSignerAccountList.module.css', 'utf8');
 
 function expectOneListCard(listName, rowCount) {
     const list = screen.getByRole('list', { name: listName });
@@ -32,7 +33,7 @@ function expectOneListCard(listName, rowCount) {
 }
 
 describe('picker rows sit in one list card', () => {
-    it('Wallets: rows in one list, Add wallet green with an icon, Manage wallet not green', async () => {
+    it('Wallets: rows in one list, Add wallet is the title-bar plus icon, and a row opens the wallet page', async () => {
         const wallets = [
             { id: 'w1', name: 'Primary', format: 'bip39' },
             { id: 'w2', name: 'Savings', format: 'bip39' },
@@ -45,16 +46,16 @@ describe('picker rows sit in one list card', () => {
             );
             await Promise.resolve();
         });
-        expectOneListCard('Wallets', 2);
-        const add = screen.getByRole('button', { name: 'Add wallet' });
-        expect(add).toHaveClass(buttonStyles.success);
+        expectOneListCard('My Wallets', 2);
+        // Add is the plus icon on the title line, not a green button under the list.
+        const add = screen.getByRole('button', { name: 'Add Wallet' });
+        expect(add).not.toHaveClass(buttonStyles.success);
         expect(add.querySelector('svg')).not.toBeNull();
-        const manage = screen.getByRole('button', { name: 'Manage wallet' });
-        expect(manage).not.toHaveClass(buttonStyles.success);
-        expect(manage.querySelector('svg')).not.toBeNull();
+        expect(screen.queryByRole('button', { name: 'Manage Wallet' })).toBeNull();
+        expect(document.querySelector(`.${buttonStyles.success}`)).toBeNull();
     });
 
-    it('Accounts: rows in one list, Add account green with an icon, Manage not green', async () => {
+    it('Accounts: rows in one list and Add account is the title-bar plus icon', async () => {
         const accounts = [
             { id: 'a1', index: 0, name: 'Main' },
             { id: 'a2', index: 1, name: 'Spare' },
@@ -67,13 +68,12 @@ describe('picker rows sit in one list card', () => {
             );
             await Promise.resolve();
         });
-        expectOneListCard('Accounts', 2);
-        const add = screen.getByRole('button', { name: 'Add account' });
-        expect(add).toHaveClass(buttonStyles.success);
+        expectOneListCard('My Accounts', 2);
+        const add = screen.getByRole('button', { name: 'Add Account' });
+        expect(add).not.toHaveClass(buttonStyles.success);
         expect(add.querySelector('svg')).not.toBeNull();
-        const manage = screen.getByRole('button', { name: 'Manage' });
-        expect(manage).not.toHaveClass(buttonStyles.success);
-        expect(manage.querySelector('svg')).not.toBeNull();
+        expect(screen.queryByRole('button', { name: 'Manage' })).toBeNull();
+        expect(document.querySelector(`.${buttonStyles.success}`)).toBeNull();
     });
 
     it('the list card composes the flush card and draws dividers between rows', () => {

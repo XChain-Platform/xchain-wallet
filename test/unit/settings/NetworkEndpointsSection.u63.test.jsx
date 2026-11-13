@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // U63 and U57 on Settings > Network endpoints: Save is the one green,
-// iconed, named action ("Save endpoints"), Reset to default and the
+// iconed, named action ("Save Endpoints"), Reset to default and the
 // registry refresh carry icons, and every URL field has its own tip.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -42,11 +42,11 @@ describe('Network endpoints actions (U63)', () => {
         fireEvent.change(within(block).getByRole('textbox', { name: 'Explorer URL' }), {
             target: { value: 'https://explorer.example.com' },
         });
-        const save = within(block).getByRole('button', { name: 'Save endpoints' });
+        const save = within(block).getByRole('button', { name: 'Save Endpoints' });
         expect(save.className).toMatch(/success/);
         expect(save.querySelector('svg')).not.toBeNull();
         expect(within(block).queryByRole('button', { name: 'Save' })).toBeNull();
-        const reset = within(block).getByRole('button', { name: /Reset to default/ });
+        const reset = within(block).getByRole('button', { name: /Reset to Default/ });
         expect(reset.querySelector('svg')).not.toBeNull();
         expect(reset.className).not.toMatch(/success/);
         expect(document.querySelectorAll('button[class*="success"]')).toHaveLength(1);

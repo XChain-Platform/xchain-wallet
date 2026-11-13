@@ -218,17 +218,18 @@ describe('live fee quotes for issue and dispenser forms', () => {
         const messaging = makeMessaging();
         mount(<TokenWizard walletId="wallet-1" onBack={() => {}} />, messaging);
 
-        fireEvent.click(await screen.findByRole('button', { name: /Meme token/ }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
-        fireEvent.change(await screen.findByLabelText('Token name (ticker)'), { target: { value: 'MEME' } });
-        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1000' } });
+        // The wizard entry is the one Issue Token form; Meme token is its template.
+        fireEvent.click(await screen.findByRole('button', { name: /Select template/ }));
+        fireEvent.click(await screen.findByRole('option', { name: /Meme token/ }));
+        fireEvent.change(await screen.findByLabelText('Ticker'), { target: { value: 'MEME' } });
+        fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '1000' } });
 
         await expectLiveQuote(messaging, {
             action: 'ISSUE',
             params: {
                 VERSION: '0', TICK: 'MEME', DECIMALS: '0',
                 MAX_SUPPLY: '1000', MINT_SUPPLY: '1000',
-                LOCK_MAX_SUPPLY: '1', LOCK_MINT: '1', LOCK_MINT_SUPPLY: '1',
+                LOCK_MAX_SUPPLY: '1', LOCK_MINT: '1', LOCK_MINT_SUPPLY: '1', LOCK_MAX_MINT: '1',
             },
         });
     });
@@ -240,7 +241,11 @@ describe('live fee quotes for issue and dispenser forms', () => {
             messaging,
         );
 
-        fireEvent.click(await screen.findByRole('tab', { name: 'Instant buy' }));
+        // Selling at once to the first buyer is the Dispenser choice of Sell via.
+        const sellVia = (await screen.findAllByRole('button', { name: /Sell via/ }))
+            .find((button) => !/^About/.test(button.getAttribute('aria-label') || ''));
+        fireEvent.click(sellVia);
+        fireEvent.click(await screen.findByRole('option', { name: /Dispenser/ }));
         fireEvent.change(screen.getByLabelText(/^Price/), { target: { value: '5' } });
 
         await expectLiveQuote(messaging, {

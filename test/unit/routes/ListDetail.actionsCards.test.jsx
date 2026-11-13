@@ -51,7 +51,7 @@ afterEach(cleanup);
 describe('ListDetail actions and member cards', () => {
     it('gives every action button an icon', async () => {
         mountDetail();
-        for (const name of ['Share list', 'Transfer list', 'Fork & edit']) {
+        for (const name of ['Share List', 'Transfer List', 'Fork & Edit']) {
             const button = await screen.findByRole('button', { name });
             expect(button.querySelector('svg'), name).toBeTruthy();
         }
@@ -59,10 +59,10 @@ describe('ListDetail actions and member cards', () => {
 
     it('gives Load more members an icon and keeps it with the card', async () => {
         mountDetail({ row: { list: members(30) } });
-        const more = await screen.findByRole('button', { name: 'Load more members' });
+        const more = await screen.findByRole('button', { name: 'Load More Members' });
         expect(more.querySelector('svg')).toBeTruthy();
         fireEvent.click(more);
-        expect(screen.queryByRole('button', { name: 'Load more members' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Load More Members' })).toBeNull();
     });
 
     it('draws the members in one list card with no inline styles', async () => {

@@ -108,8 +108,8 @@ describe('AddressPreferencesForm shared confirmation', () => {
             await drain();
         });
 
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Update preferences' })));
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Continue to confirmation' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Update Preferences' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Continue to Confirmation' })));
 
         const compose = calls.find((call) => call.method === 'composeForConfirm');
         expect(compose.args.actionData).toEqual({

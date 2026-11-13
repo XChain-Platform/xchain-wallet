@@ -19,6 +19,7 @@ vi.mock('../../../packages/core/src/flows/listFormatSupport.js', () => ({
 }));
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { ListTransferForm } from '../../../packages/core/src/shared/routes/ListTransferForm.jsx';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -48,10 +49,13 @@ const COMPOSED = Object.freeze({
 });
 
 function makeMessaging({ walletMode = 'full', listError = null } = {}) {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode }], activeWalletId: 'wallet-1' });
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ACTIVE_RECORD, OWNER_RECORD] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: ACTIVE_RECORD.id } }),
-        getSettings: vi.fn().mockResolvedValue({ walletMode }),
+        getSettings: vi.fn().mockResolvedValue({}),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'W', walletMode }]),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
         getListByActionIndex: vi.fn().mockImplementation(async () => {
@@ -106,6 +110,7 @@ async function fillTransfer({ destination = DESTINATION, memo = '' } = {}) {
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     vi.clearAllMocks();
 });
 
@@ -113,7 +118,7 @@ describe('ListTransferForm', () => {
     it('refuses a malformed list reference before review', async () => {
         const messaging = mount({ actionIndex: 'not-an-index' });
         await fillTransfer();
-        fireEvent.click(screen.getByRole('button', { name: 'Transfer list' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Transfer list$/i }));
 
         expect(await screen.findByText('List reference must be a positive whole number.')).toBeTruthy();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
@@ -135,12 +140,12 @@ describe('ListTransferForm', () => {
         const messaging = mount();
         await fillTransfer({ destination: 'not-an-address' });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Transfer list' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Transfer list$/i }));
         expect(await screen.findByText(/Destination must be one valid address/)).toBeTruthy();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
 
         fireEvent.change(screen.getByLabelText('New owner'), { target: { value: OWNER } });
-        fireEvent.click(screen.getByRole('button', { name: 'Transfer list' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Transfer list$/i }));
         expect(await screen.findByText('Destination must be different from the current owner.')).toBeTruthy();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
@@ -149,23 +154,23 @@ describe('ListTransferForm', () => {
         const messaging = mount();
         fireEvent.change(await screen.findByLabelText('New owner'), { target: { value: DESTINATION } });
 
-        expect(screen.getByRole('button', { name: 'Transfer list' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: /^Transfer list$/i }).disabled).toBe(true);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
 
         const confirm = screen.getByLabelText('Type TRANSFER to confirm');
         for (const value of ['transfer', ' TRANSFER', 'TRANSFER ', 'Transfer']) {
             fireEvent.change(confirm, { target: { value } });
-            expect(screen.getByRole('button', { name: 'Transfer list' }).disabled).toBe(true);
+            expect(screen.getByRole('button', { name: /^Transfer list$/i }).disabled).toBe(true);
         }
         fireEvent.change(confirm, { target: { value: 'TRANSFER' } });
-        expect(screen.getByRole('button', { name: 'Transfer list' }).disabled).toBe(false);
+        expect(screen.getByRole('button', { name: /^Transfer list$/i }).disabled).toBe(false);
         expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
     });
 
     it('composes format 3 from the current owner and submits it through createList', async () => {
         const messaging = mount();
         await fillTransfer({ memo: 'handoff' });
-        fireEvent.click(screen.getByRole('button', { name: 'Transfer list' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Transfer list$/i }));
 
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
         const request = messaging.composeForConfirm.mock.calls[0][0];
@@ -203,7 +208,7 @@ describe('ListTransferForm', () => {
     it('shows the unsigned transaction in watcher mode without asking for a password', async () => {
         const messaging = mount({ walletMode: 'watcher' });
         await fillTransfer({ memo: 'handoff' });
-        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Create unsigned transaction$/i }));
 
         await waitFor(() => expect(messaging.buildActionPsbtRequest).toHaveBeenCalledOnce());
         expect(await screen.findByLabelText('Unsigned transaction code')).toBeTruthy();
@@ -226,7 +231,7 @@ describe('ListTransferForm', () => {
         expect(messaging.getActionFormats).not.toHaveBeenCalled();
         expect(screen.getByLabelText('New owner').disabled).toBe(true);
         expect(screen.getByLabelText('Type TRANSFER to confirm').disabled).toBe(true);
-        expect(screen.getByRole('button', { name: 'Transfer list' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: /^Transfer list$/i }).disabled).toBe(true);
     });
 
     it('stops before signing when the list changed owner after the form opened', async () => {
@@ -237,7 +242,7 @@ describe('ListTransferForm', () => {
             source: OWNER,
             state: { owner: ACTIVE_RECORD.address },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Transfer list' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Transfer list$/i }));
 
         expect(await screen.findByText(
             'This list has a different owner than when this screen opened. Review the owner and try again.',
@@ -250,7 +255,7 @@ describe('ListTransferForm', () => {
         const messaging = mount();
         await fillTransfer();
         messaging.getListByActionIndex.mockRejectedValueOnce(new Error('Explorer returned HTTP 502'));
-        fireEvent.click(screen.getByRole('button', { name: 'Transfer list' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Transfer list$/i }));
 
         expect(await screen.findByText(
             "Couldn't confirm this list's current owner. Check your connection and try again.",

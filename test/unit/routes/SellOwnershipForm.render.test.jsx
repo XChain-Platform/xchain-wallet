@@ -8,6 +8,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { SellOwnershipForm } from '../../../packages/core/src/shared/routes/SellOwnershipForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const BTC_TESTNET = 'bitcoin-testnet';
@@ -47,6 +48,14 @@ function messagingWith(overrides = {}) {
 }
 
 function mount(messaging, props = {}) {
+    // A wallet's mode is published by the shell from the wallet list, not read
+    // from settings; the harness publishes the mode the settings mock names.
+    Promise.resolve(messaging.getSettings?.()).then((settings) => {
+        publishWalletModes({
+            wallets: [{ id: 'wallet-1', walletMode: settings?.walletMode || 'full' }],
+            activeWalletId: 'wallet-1',
+        });
+    });
     return render(
         <MessagingProvider shell="web" messaging={messaging}>
             <SellOwnershipForm
@@ -62,6 +71,7 @@ function mount(messaging, props = {}) {
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     __clearTokenInfoCache();
 });
 
@@ -77,34 +87,47 @@ describe('SellOwnershipForm rendering', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
         );
-        expect(screen.getByRole('button', { name: 'List name for sale' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /^List name for sale$/i })).toBeDisabled();
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
-    it('renders both sale choices and updates their selected tabs', async () => {
+    it('renders both sale choices and updates the selected one', async () => {
+        // The sale choice is the "Sell via" dropdown and the payment asset is
+        // the one "Get paid in" picker (the network coin or any token on it).
         mount(messagingWith());
 
-        expect(await screen.findByRole('heading', { name: 'Sell alpha name' })).toBeInTheDocument();
-        const openOrder = screen.getByRole('tab', { name: 'Open order' });
-        const instantBuy = screen.getByRole('tab', { name: 'Instant buy' });
-        expect(openOrder).toHaveAttribute('aria-selected', 'true');
+        expect(await screen.findByRole('heading', { name: 'Sell alpha Name' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Sell via: Exchange' }));
+        fireEvent.click(screen.getByRole('option', { name: /^Dispenser/ }));
 
-        fireEvent.click(instantBuy);
-
-        expect(instantBuy).toHaveAttribute('aria-selected', 'true');
+        expect(screen.getByRole('button', { name: 'Sell via: Dispenser' })).toBeInTheDocument();
         expect(screen.queryByText('Instant buy: a dispenser sells the name to the first buyer who pays your price.'))
             .not.toBeInTheDocument();
 
-        const nativeCoin = screen.getByRole('tab', { name: 'Native coin (BTC)' });
-        const anotherToken = screen.getByRole('tab', { name: 'Another token' });
-        expect(nativeCoin).toHaveAttribute('aria-selected', 'true');
-        fireEvent.click(anotherToken);
-        expect(anotherToken).toHaveAttribute('aria-selected', 'true');
-        expect(screen.getByRole('button', { name: /^price token:/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Get paid in: BTC on Bitcoin' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /^Get paid in/ }));
+        expect(await screen.findByRole('heading', { name: 'Get Paid in' })).toBeInTheDocument();
     });
 
     it('validates the price token, expiration, and memo before review', async () => {
-        mount(messagingWith());
+        mount(messagingWith({
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS], [LTC_CHAIN]: [LTC_ADDRESS] }),
+            getActiveAddresses: vi.fn().mockResolvedValue({}),
+            getWalletBalances: vi.fn().mockResolvedValue({
+                [CHAIN]: [{
+                    address: ADDRESS.address,
+                    balances: {
+                        native: { tick: 'BTC', quantity: '1', divisibility: 8 },
+                        tokens: [{ tick: 'GOLD', quantity: '5', divisibility: 0 }],
+                    },
+                }],
+            }),
+            getTokenInfo: vi.fn(async ({ chainId, tick }) => (
+                String(tick).toUpperCase() === 'ALPHA'
+                    ? { tick, creator: chainId === LTC_CHAIN ? LTC_ADDRESS.address : ADDRESS.address }
+                    : { tick, divisibility: 0 }
+            )),
+        }));
 
         const price = await screen.findByLabelText(/^Price/);
         fireEvent.change(price, { target: { value: '5' } });
@@ -115,21 +138,31 @@ describe('SellOwnershipForm rendering', () => {
         fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'bad|memo' } });
         expect(await screen.findByRole('alert')).toHaveTextContent('Memo cannot contain "|" or ";".');
 
+        // Picking a token and then changing the network clears the token, so
+        // the form must refuse to review until a new price token is chosen.
         fireEvent.change(screen.getByLabelText('Memo'), { target: { value: '' } });
-        fireEvent.click(screen.getByRole('tab', { name: 'Another token' }));
-        fireEvent.click(screen.getByRole('button', { name: 'List name for sale' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Get paid in/ }));
+        fireEvent.click(await screen.findByRole('button', { name: /^Select GOLD on Bitcoin/ }));
+        expect(await screen.findByRole('button', { name: 'Get paid in: GOLD on Bitcoin' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /^From/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^Network:/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Select Litecoin/ }));
+        expect(await screen.findByRole('button', { name: 'Get paid in: Select an asset' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /^List name for sale$/i }));
         expect(await screen.findByRole('alert')).toHaveTextContent('Select a price token.');
     });
 
     it('does not review a custom network fee that the builder would drop', async () => {
         mount(messagingWith());
         fireEvent.change(await screen.findByLabelText(/^Price/), { target: { value: '5' } });
+        // The fee selector sits in the Network fee section, closed on load.
+        fireEvent.click(screen.getByRole('button', { name: /^Network fee/ }));
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), { target: { value: '3' } });
         fireEvent.change(screen.getByLabelText(/^Custom fee rate/), { target: { value: '' } });
-        fireEvent.click(screen.getByRole('button', { name: 'List name for sale' }));
+        fireEvent.click(screen.getByRole('button', { name: /^List name for sale$/i }));
 
         expect(screen.getAllByText('Enter a custom fee rate.')).toHaveLength(1);
-        expect(screen.getByRole('heading', { name: 'Sell alpha name' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Sell alpha Name' })).toBeInTheDocument();
     });
 
     it('rejects an invalid price-token ticker returned by wallet data', async () => {
@@ -145,14 +178,13 @@ describe('SellOwnershipForm rendering', () => {
             }),
         }));
         await screen.findByLabelText(/^Price/);
-        fireEvent.click(screen.getByRole('tab', { name: 'Another token' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Price token: Select a token' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Get paid in/ }));
         fireEvent.click(await screen.findByRole('button', { name: /^Select BAD\|TOKEN on Bitcoin/ }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'Price token can only use letters, numbers, dots and',
         );
-        expect(screen.getByRole('heading', { name: 'Sell alpha name' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Sell alpha Name' })).toBeInTheDocument();
     });
 
     it('shows price tokens only from the sale network', async () => {
@@ -175,8 +207,7 @@ describe('SellOwnershipForm rendering', () => {
             }),
         }));
         await screen.findByLabelText(/^Price/);
-        fireEvent.click(screen.getByRole('tab', { name: 'Another token' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Price token: Select a token' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Get paid in/ }));
 
         expect(await screen.findByRole('button', { name: /^Select MAINONLY on Bitcoin/ })).toBeInTheDocument();
         expect(screen.queryByText('TESTONLY')).not.toBeInTheDocument();
@@ -207,7 +238,8 @@ describe('SellOwnershipForm rendering', () => {
             )),
         });
         const view = mount(messaging);
-        expect(await screen.findByLabelText('From')).toHaveValue(ADDRESS.address);
+        // The From section labels the field "From address".
+        expect(await screen.findByLabelText('From address')).toHaveValue(ADDRESS.address);
 
         view.rerender(
             <MessagingProvider shell="web" messaging={messaging}>
@@ -221,7 +253,7 @@ describe('SellOwnershipForm rendering', () => {
         );
 
         expect(screen.getByText('Loading your addresses.')).toBeInTheDocument();
-        expect(screen.queryByLabelText('From')).not.toBeInTheDocument();
+        expect(screen.queryByLabelText('From address')).not.toBeInTheDocument();
     });
 
     it('never renders the previous network source while the selected network loads', async () => {
@@ -234,13 +266,15 @@ describe('SellOwnershipForm rendering', () => {
             getActiveAddresses: vi.fn().mockResolvedValue({}),
         });
         mount(messaging);
-        expect(await screen.findByLabelText('From')).toHaveValue(ADDRESS.address);
+        expect(await screen.findByLabelText('From address')).toHaveValue(ADDRESS.address);
 
+        // Network sits in the From section, closed on load.
+        fireEvent.click(screen.getByRole('button', { name: /^From/ }));
         fireEvent.click(screen.getByRole('button', { name: /^Network:/ }));
         fireEvent.click(screen.getByRole('button', { name: /Select Litecoin/ }));
 
         expect(screen.getByText('Loading your addresses.')).toBeInTheDocument();
-        expect(screen.queryByLabelText('From')).not.toBeInTheDocument();
+        expect(screen.queryByLabelText('From address')).not.toBeInTheDocument();
     });
 
     it('reviews the trimmed builder values, keeps form input on Back, and builds those values', async () => {
@@ -254,7 +288,7 @@ describe('SellOwnershipForm rendering', () => {
         fireEvent.change(await screen.findByLabelText(/^Price/), { target: { value: ' 5.00 ' } });
         fireEvent.change(screen.getByLabelText(/^Expires after/), { target: { value: ' 12 ' } });
         fireEvent.change(screen.getByLabelText('Memo'), { target: { value: ' note ' } });
-        fireEvent.click(await screen.findByRole('button', { name: 'List name for sale' }));
+        fireEvent.click(await screen.findByRole('button', { name: /^List name for sale$/i }));
 
         const review = await screen.findByRole('form', { name: 'Review ownership sale' });
         expect(within(review).getByText('5.00 BTC')).toBeInTheDocument();
@@ -267,8 +301,8 @@ describe('SellOwnershipForm rendering', () => {
         expect(screen.getByLabelText(/^Expires after/)).toHaveValue(' 12 ');
         expect(screen.getByLabelText('Memo')).toHaveValue(' note ');
 
-        fireEvent.click(screen.getByRole('button', { name: 'List name for sale' }));
-        fireEvent.click(await screen.findByRole('button', { name: /Create unsigned transaction/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^List name for sale$/i }));
+        fireEvent.click(await screen.findByRole('button', { name: /Create Unsigned Transaction/ }));
         await waitFor(() => expect(buildActionPsbtRequest).toHaveBeenCalledTimes(1));
         expect(buildActionPsbtRequest.mock.calls[0][0].actionData).toEqual({
             action: 'ORDER',
@@ -294,8 +328,8 @@ describe('SellOwnershipForm rendering', () => {
             buildActionPsbtRequest,
         }));
         fireEvent.change(await screen.findByLabelText(/^Price/), { target: { value: '5' } });
-        fireEvent.click(await screen.findByRole('button', { name: 'List name for sale' }));
-        fireEvent.click(await screen.findByRole('button', { name: /Create unsigned transaction/ }));
+        fireEvent.click(await screen.findByRole('button', { name: /^List name for sale$/i }));
+        fireEvent.click(await screen.findByRole('button', { name: /Create Unsigned Transaction/ }));
 
         const alert = await screen.findByRole('alert');
         expect(alert).toHaveTextContent(/couldn't complete|review|try again/i);

@@ -154,7 +154,7 @@ describe('one notice box per form', () => {
         expect(shown[0]).toHaveTextContent("You're offline. Some information may be out of date.");
         expect(shown[0]).toHaveTextContent('Destroy is irreversible.');
         expect(screen.queryByRole('button', { name: 'Details' })).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         expect(refresh).toHaveBeenCalledTimes(1);
     });
 

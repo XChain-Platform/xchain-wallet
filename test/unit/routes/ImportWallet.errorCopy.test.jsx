@@ -126,20 +126,20 @@ describe('onboarding persistence failures', () => {
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
         fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
         fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Reveal recovery phrase' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Reveal Recovery Phrase' }));
         const phraseWords = screen.getAllByRole('listitem').map((item) => (
             item.textContent.replace(/^\d+\.\s*/, '').trim()
         ));
         fireEvent.click(screen.getByRole('checkbox', { name: /saved my recovery phrase/i }));
-        fireEvent.click(screen.getByRole('button', { name: 'Verify recovery phrase' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Verify Recovery Phrase' }));
         for (const input of screen.getAllByLabelText(/^Word \d+$/)) {
             const position = Number(input.labels[0].textContent.replace('Word ', ''));
             fireEvent.change(input, { target: { value: phraseWords[position - 1] } });
         }
-        fireEvent.click(screen.getByRole('button', { name: 'Create wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Wallet' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent(VAULT_CONFLICT_MESSAGE);
-        fireEvent.click(screen.getByRole('button', { name: 'Create wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Wallet' }));
         expect(await screen.findByRole('alert')).toHaveTextContent('Failed to create wallet. Try again.');
     });
 
@@ -161,21 +161,21 @@ describe('onboarding persistence failures', () => {
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
         fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
         fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Reveal recovery phrase' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Reveal Recovery Phrase' }));
         const phraseWords = screen.getAllByRole('listitem').map((item) => (
             item.textContent.replace(/^\d+\.\s*/, '').trim()
         ));
         fireEvent.click(screen.getByRole('checkbox', { name: /saved my recovery phrase/i }));
-        fireEvent.click(screen.getByRole('button', { name: 'Verify recovery phrase' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Verify Recovery Phrase' }));
         for (const input of screen.getAllByLabelText(/^Word \d+$/)) {
             const position = Number(input.labels[0].textContent.replace('Word ', ''));
             fireEvent.change(input, { target: { value: phraseWords[position - 1] } });
         }
-        fireEvent.click(screen.getByRole('button', { name: 'Create wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Wallet' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent('Failed to create wallet. Try again.');
         expect(screen.queryByText('vault transaction aborted')).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Create wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Wallet' }));
         await waitFor(() => expect(importMnemonic).toHaveBeenCalledTimes(2));
         expect(importMnemonic.mock.calls[1][0].name).toBe('Rainy Day');
     });

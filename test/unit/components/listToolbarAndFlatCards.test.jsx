@@ -41,9 +41,16 @@ describe('ListToolbar', () => {
 });
 
 describe('list screens share one toolbar', () => {
-    it.each(['DispensersList', 'ContactsList', 'MyLists', 'MessagingInbox'])('%s uses ListToolbar', (name) => {
+    it.each(['ContactsList', 'MyLists', 'MessagingInbox'])('%s uses ListToolbar', (name) => {
         const source = route(name);
         expect(source).toMatch(/<ListToolbar\b/);
+        expect(source).not.toMatch(/type="search"/);
+    });
+
+    it('DispensersList draws its search in the title-line filter menu, not a page toolbar', () => {
+        const source = route('DispensersList');
+        expect(source).toMatch(/<ListFilterMenu\b/);
+        expect(source).not.toMatch(/<ListToolbar\b/);
         expect(source).not.toMatch(/type="search"/);
     });
 });

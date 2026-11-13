@@ -84,7 +84,7 @@ async function fill({ supply, initialMint, owner, holder }) {
 }
 
 async function submit() {
-    fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
 }
 
 async function composedParams() {

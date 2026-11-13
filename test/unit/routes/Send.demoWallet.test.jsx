@@ -67,7 +67,7 @@ describe('Send in a demo wallet', () => {
         expect(note).toBeTruthy();
         expect(form.querySelector('button[type="submit"]')).toBeDisabled();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Create a real wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create a Real Wallet' }));
         expect(await screen.findByRole('dialog', { name: 'Exit demo and delete its data?' })).toBeInTheDocument();
     });
 

@@ -97,32 +97,40 @@ describe('CoinpayForm forward actions', () => {
             { chainId: CHAIN, address: PAYER, orderMatchActionIndex: '648' },
             makeMessaging([obligation('648')]),
         );
-        return screen.findByRole('button', { name: 'Pay order' });
+        return screen.findByRole('button', { name: 'Pay Order' });
     }
 
-    it('names the form action "Pay order" as a green button with an icon', async () => {
+    it('names the form action "Pay Order" as a green button with an icon', async () => {
         const button = await mountPrefilled();
         expect(button.className).toMatch(/success/);
         expect(button.querySelector('svg')).not.toBeNull();
         expect(screen.queryByRole('button', { name: 'Review' })).toBeNull();
     });
 
-    it('labels the paying row "From" and shows the network as an icon without its name', async () => {
+    // The Wallet Form Standard puts Network and the paying address
+    // in the From section at the top (its closed summary names the network,
+    // as every form's From does), so the details list does not repeat them.
+    it('puts the paying address in the From section and keeps the network out of the details', async () => {
         await mountPrefilled();
         const form = screen.getByRole('form', { name: 'Selected payment' });
+        const from = within(form).getByRole('button', { name: /^From\b/ });
+        expect(from).toHaveAttribute('aria-expanded', 'false');
+        expect(within(form).getByLabelText('From address')).toHaveValue(PAYER);
         const dl = form.querySelector('dl');
-        expect(within(dl).getByText('From')).toBeInTheDocument();
+        expect(within(dl).queryByText('From')).toBeNull();
         expect(within(dl).queryByText('Paying from')).toBeNull();
-        const network = within(dl).getByText('Network').nextElementSibling;
-        expect(network.textContent).not.toMatch(/Dogecoin/i);
-        expect(within(network).getByRole('img')).toBeInTheDocument();
+        expect(within(dl).queryByText('Network')).toBeNull();
+        expect(dl.textContent).not.toMatch(/Dogecoin/i);
     });
 
-    it('names the review action with the amount, green, with an icon', async () => {
+    // The action is a verb only; the amount and ticker stay in the rows above it.
+    it('names the review action Pay, green, with an icon and no amount', async () => {
         const button = await mountPrefilled();
         fireEvent.click(button);
-        await screen.findByText('Review payment');
-        const pay = await screen.findByRole('button', { name: 'Pay 10 DOGE' });
+        // Page titles are Title Case.
+        await screen.findByText('Review Payment');
+        const pay = await screen.findByRole('button', { name: 'Pay' });
+        expect(pay.textContent).not.toMatch(/DOGE|\d/);
         expect(pay.className).toMatch(/success/);
         expect(pay.querySelector('svg')).not.toBeNull();
         const network = screen.getByText('Network').nextElementSibling;

@@ -75,7 +75,7 @@ describe('Manage notifications order', () => {
             expect(priceSwitch).toBeChecked();
             const quietHours = screen.getByRole('switch', { name: t('settings.notifications.quietHours') });
             const sounds = screen.getByRole('switch', { name: t('settings.notifications.notificationSounds') });
-            const manager = screen.getByRole('button', { name: 'Add alert' });
+            const manager = screen.getByRole('button', { name: 'Add Alert' });
 
             expect(precedes(quietHours, manager)).toBe(true);
             expect(precedes(sounds, manager)).toBe(true);

@@ -204,7 +204,7 @@ describe('CommandPalette', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Open command palette' }));
         fireEvent.change(getInput(), { target: { value: 'Issue token' } });
-        fireEvent.click(screen.getByRole('option', { name: /Issue token/ }));
+        fireEvent.click(screen.getByRole('option', { name: /Issue Token/ }));
 
         expect(screen.queryByRole('heading', { name: 'Token template selected' })).toBeNull();
         expect(screen.getByRole('button', { name: 'Meme token' })).toBeTruthy();

@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BetFeedsList } from '../../../packages/core/src/shared/routes/BetFeedsList.jsx';
 import betStyles from '../../../packages/core/src/shared/routes/BetFeedsList.module.css';
@@ -38,18 +38,19 @@ describe('explorer toolbar control alignment', () => {
             </MessagingProvider>,
         );
 
-        const row = container.querySelector(`.${dispenserStyles.filterRow}`);
-        const select = within(row).getByRole('combobox', { name: 'Network' });
-        const search = within(row).getByRole('searchbox', { name: 'Token ticker' });
-        const action = within(row).getByRole('button', { name: 'Search' });
-
-        expect(fieldFor(select)).toHaveClass(inputStyles.md);
+        // The body is one search field; Network sits behind the title-bar filter icon.
+        const form = container.querySelector(`.${dispenserStyles.searchForm}`);
+        const search = within(form).getByRole('searchbox', { name: 'Search a token or seller address' });
+        expect(within(form).getByRole('button', { name: 'Search' })).toBeTruthy();
         expect(fieldFor(search)).toHaveClass(inputStyles.md);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Filter dispensers' }));
+        const select = screen.getByRole('combobox', { name: 'Network' });
+        expect(fieldFor(select)).toHaveClass(inputStyles.md);
         // Chain options name the chain without the network word.
         for (const option of within(select).getAllByRole('option')) {
             expect(option.textContent).not.toMatch(/mainnet|testnet|regtest/i);
         }
-        expect(action).toHaveClass(buttonStyles.md);
     });
 
     it('gives the shared-list search the medium toolbar size', async () => {
@@ -91,10 +92,10 @@ describe('explorer toolbar control alignment', () => {
 
         await waitFor(() => expect(container.querySelector(`.${betStyles.toolbarRow}`)).toBeTruthy());
         const row = container.querySelector(`.${betStyles.toolbarRow}`);
-        const network = within(row).getByRole('button', { name: /^Network:/ });
         const actions = container.querySelector(`.${betStyles.toolbarActions}`);
 
-        expect(network.closest(`.${chainPickerStyles.wrap}`)).toHaveClass(chainPickerStyles.md);
+        // The network is a Settings choice, so the row holds only the view tabs.
+        expect(within(row).queryByRole('button', { name: /^Network:/ })).toBeNull();
         expect(within(actions).getByRole('tablist')).toHaveClass(tabsStyles.tabs);
         for (const action of within(actions).getAllByRole('tab')) {
             expect(action).toHaveClass(tabsStyles.tab);

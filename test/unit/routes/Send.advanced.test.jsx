@@ -11,6 +11,18 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
 import { MAX_MEMO_LENGTH } from '../../../packages/core/src/shared/utils/memoLimit.js';
 
+// The Asset field opens the token picker page; a stub with one button for the
+// token under test keeps these cases about the advanced choices.
+vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
+    TokenPicker: ({ title, onSelect, onBack }) => (
+        <section aria-label={title}>
+            <h2>{title}</h2>
+            <button type="button" onClick={() => onSelect({ chainId: 'bitcoin-mainnet', tick: 'PEPE' })}>Pick PEPE</button>
+            <button type="button" onClick={onBack}>Back</button>
+        </section>
+    ),
+}));
+
 const CHAIN = 'bitcoin-mainnet';
 const FROM = 'bc1qsendersendersendersendersendersendersa';
 const CHANGE = 'bc1qzyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3w7nf4f';
@@ -74,8 +86,9 @@ function mount() {
 
 async function fillSend() {
     fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: TO } });
-    fireEvent.change(screen.getByLabelText(/^Token$/), { target: { value: 'PEPE' } });
-    fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '1' } });
+    fireEvent.click(await screen.findByRole('button', { name: /^Asset/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Pick PEPE' }));
+    fireEvent.change(await screen.findByLabelText(/^Amount \(/), { target: { value: '1' } });
     fireEvent.click(screen.getByText('Advanced'));
 }
 
@@ -94,7 +107,7 @@ describe('Send advanced choices', () => {
             'title',
             'Below the 546 sat dust threshold',
         );
-        fireEvent.click(screen.getByRole('button', { name: 'Select all' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Select All' }));
         expect(screen.getByText('0.003005 BTC')).toBeInTheDocument();
         expect(screen.getByText('0.00199 BTC')).toBeInTheDocument();
         expect(screen.getAllByRole('checkbox', { checked: true })).toHaveLength(3);

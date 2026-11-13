@@ -24,8 +24,8 @@ vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
         <button
             type="button"
             onClick={() => onSelect({
-                chainId: title.includes('give') ? 'dogecoin-mainnet' : 'bitcoin-mainnet',
-                tick: title.includes('give') ? 'ALPHA' : 'BETA',
+                chainId: title.toLowerCase().includes('give') ? 'dogecoin-mainnet' : 'bitcoin-mainnet',
+                tick: title.toLowerCase().includes('give') ? 'ALPHA' : 'BETA',
             })}
         >
             Choose {title}
@@ -34,6 +34,7 @@ vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
 }));
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { CrossChainSwapForm } from '../../../packages/core/src/shared/routes/CrossChainSwapForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 import listPageStyles from '../../../packages/core/src/ui/ListPage.module.css';
@@ -48,6 +49,8 @@ const ONE_NETWORK = { [BTC]: [address('btc-a', 'bc1qdevmock02ab')] };
 const REQUIREMENT = /needs addresses on two different networks/;
 
 function messaging({ byChain = TWO_NETWORKS, buildActionPsbtRequest = vi.fn().mockResolvedValue(null) } = {}) {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode: 'watcher' }], activeWalletId: 'w' });
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue(byChain),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
@@ -62,7 +65,8 @@ function messaging({ byChain = TWO_NETWORKS, buildActionPsbtRequest = vi.fn().mo
                 },
             }))]),
         )),
-        getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+        getSettings: vi.fn().mockResolvedValue({}),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'w', name: 'W', walletMode: 'watcher' }]),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'watcher' }),
         composeForConfirm: vi.fn().mockResolvedValue({ psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 0 }),
@@ -92,13 +96,13 @@ async function buildWith(buildResult) {
     mount({ buildActionPsbtRequest: vi.fn().mockResolvedValue(buildResult) });
     await waitFor(() => expect(screen.getByRole('button', { name: /Give token:/ })).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: /Give token:/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Choose Select give token' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Choose Select Give Token' }));
     fireEvent.click(screen.getByRole('button', { name: /Get token:/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Choose Select Get Token' }));
     fireEvent.change(screen.getByLabelText('Give amount (ALPHA)'), { target: { value: '1' } });
     fireEvent.change(screen.getByLabelText('Get amount (BETA)'), { target: { value: '2' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create cross-chain swap' }));
-    const submit = await screen.findByRole('button', { name: 'Create unsigned cross-chain swap transaction' });
+    fireEvent.click(screen.getByRole('button', { name: 'Create Cross-Chain Swap' }));
+    const submit = await screen.findByRole('button', { name: 'Create Unsigned Cross-Chain Swap Transaction' });
     await act(async () => {
         submit.closest('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     });
@@ -116,6 +120,7 @@ beforeAll(() => {
 afterAll(() => { globalThis.ResizeObserver = savedObserver; });
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     __clearTokenInfoCache();
     reachability.overall = 'normal';
     delete navigator.onLine;

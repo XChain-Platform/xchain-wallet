@@ -67,9 +67,11 @@ describe('Advanced action operator rulings', () => {
 
         const picker = await screen.findByLabelText('Action', { selector: 'select' });
         await screen.findByRole('option', { name: /BROADCAST/ });
-        await screen.findByRole('button', { name: 'About From' });
+        // From is a closed section; open it to reach the From address field and its help.
+        fireEvent.click(screen.getByRole('button', { name: /^From\b/, expanded: false }));
+        await screen.findByRole('button', { name: 'About From address' });
         expectHelp(
-            'From',
+            'From address',
             'The address that signs and pays for this action. Tap the icon to pick another of your addresses.',
         );
         expectHelp(
@@ -92,11 +94,11 @@ describe('Advanced action operator rulings', () => {
         expect(screen.queryByText(/one per line or comma-separated/)).toBeNull();
     });
 
-    it('uses an icon-bearing green Sign action control', async () => {
+    it('uses an icon-bearing green Sign Action control', async () => {
         mount();
 
         await screen.findByLabelText('Action', { selector: 'select' });
-        const submit = screen.getByRole('button', { name: 'Sign action' });
+        const submit = screen.getByRole('button', { name: 'Sign Action' });
         expect(submit).toHaveClass(buttonStyles.success);
         expect(submit.querySelector('svg')).toBeTruthy();
     });
@@ -108,6 +110,8 @@ describe('Advanced action operator rulings', () => {
         await screen.findByRole('option', { name: /BROADCAST/ });
         fireEvent.change(picker, { target: { value: 'BROADCAST' } });
         await screen.findByLabelText('MESSAGE');
+        // The fee controls live in the closed Network fee section.
+        fireEvent.click(screen.getByRole('button', { name: /^Network fee/, expanded: false }));
         expect(screen.getByRole('slider', { name: 'Network fee' })).toBeInTheDocument();
         expect(document.querySelector('[data-fees-card]')).toBeNull();
         expect(screen.queryByText('Protocol fee')).toBeNull();
@@ -125,7 +129,8 @@ describe('Advanced action operator rulings', () => {
         ), 'utf8');
 
         expect(source).toMatch(/variant="success" icon=\{<Icon\.CheckIcon \/>\} onClick=\{onBack\}>Done/);
-        expect(source).toMatch(/variant="success"\s+icon=\{isWatcherMode \? <Icon\.DownloadIcon \/> : <Icon\.KeyIcon \/>\}/);
-        expect(source).toMatch(/variant="success"\s+icon=\{singleEncode \? <Icon\.KeyIcon \/> : <Icon\.ForwardIcon \/>\}/);
+        expect(source).toMatch(/variant="success"\s+icon=\{isWatcherMode \? <Icon\.DownloadIcon \/> : isHwSource \? <Icon\.SignIcon \/> : <Icon\.KeyIcon \/>\}/);
+        // The form's own Sign Action button is the standard FormAction, which renders the success variant.
+        expect(source).toMatch(/<FormAction\s+icon=\{singleEncode \? <Icon\.KeyIcon \/> : <Icon\.ForwardIcon \/>\}/);
     });
 });

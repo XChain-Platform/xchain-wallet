@@ -138,7 +138,7 @@ describe('Receive QR copy and share toasts', () => {
 
         expect(await screen.findByRole('textbox', { name: 'Amount (BTC)' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Share QR payment link' }))
-            .toHaveTextContent(/^Share QR$/);
+            .toHaveTextContent(/^Share$/);
         expect(screen.queryByRole('slider', { name: /fee/i })).toBeNull();
         expect(screen.queryByText(/network fee|sat\/vB|fee estimate/i)).toBeNull();
         expect(screen.queryByText('0.000015 BTC')).toBeNull();
@@ -165,8 +165,8 @@ describe('Receive QR copy and share toasts', () => {
                 getNewestAddress: async () => ({ ...ADDRESS, address: MOBILE_ADDRESS }),
             });
 
-            expect(await screen.findByText(MOBILE_ADDRESS)).toBeInTheDocument();
-            expect(screen.getByRole('button', { name: /^Change asset/ })).toBeInTheDocument();
+            expect(await screen.findByDisplayValue(MOBILE_ADDRESS)).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /^Asset: / })).toBeInTheDocument();
             expect(screen.getByRole('textbox', { name: /^Amount/ })).toBeInTheDocument();
             expect(screen.getByRole('button', { name: 'Copy payment link' })).toBeInTheDocument();
             expect(screen.getByRole('button', { name: 'Share QR payment link' })).toBeInTheDocument();
@@ -186,7 +186,7 @@ describe('Receive QR copy and share toasts', () => {
         }
     });
 
-    it('puts the compact receive hero above the request fields at 360x800', async () => {
+    it('puts the QR above the address, asset and amount fields and the actions at 360x800', async () => {
         const widthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth');
         const heightDescriptor = Object.getOwnPropertyDescriptor(window, 'innerHeight');
         Object.defineProperties(window, {
@@ -203,17 +203,19 @@ describe('Receive QR copy and share toasts', () => {
             });
 
             const qr = await screen.findByAltText(`QR code for ${MOBILE_ADDRESS}`);
-            const address = screen.getByText(MOBILE_ADDRESS);
+            const address = screen.getByDisplayValue(MOBILE_ADDRESS);
+            const token = screen.getByRole('button', { name: /^Asset: / });
+            const amount = screen.getByRole('textbox', { name: /^Amount/ });
             const copy = screen.getByRole('button', { name: 'Copy payment link' });
             const share = screen.getByRole('button', { name: 'Share QR payment link' });
             const generate = screen.getByRole('button', { name: 'Generate new address' });
-            const token = screen.getByRole('button', { name: /^Change asset/ });
 
             expect(precedes(qr, address)).toBe(true);
-            expect(precedes(address, copy)).toBe(true);
+            expect(precedes(address, token)).toBe(true);
+            expect(precedes(token, amount)).toBe(true);
+            expect(precedes(amount, copy)).toBe(true);
             expect(precedes(copy, share)).toBe(true);
             expect(precedes(share, generate)).toBe(true);
-            expect(precedes(generate, token)).toBe(true);
 
             // The shared QR frame fills the column up to the receive frame size,
             // so it shrinks with a phone column instead of needing a phone rule.
@@ -234,7 +236,7 @@ describe('Receive QR copy and share toasts', () => {
         const user = userEvent.setup();
         renderReceive();
         const amount = await screen.findByRole('textbox', { name: 'Amount (BTC)' });
-        const token = await screen.findByRole('button', { name: /^Change asset/ });
+        const token = await screen.findByRole('button', { name: /^Asset: / });
         token.focus();
 
         await user.tab();
@@ -251,7 +253,9 @@ describe('Receive QR copy and share toasts', () => {
         expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Switch input to USD' }));
     });
 
-    it('adds and edits the label of the receive address shown', async () => {
+    it('names the address field Address and offers no label editor on Receive', async () => {
+        // Labels are not edited or shown on Receive; the address field is
+        // always named "Address".
         const unlabeled = { ...ADDRESS, label: '' };
         const setAddressLabel = vi.fn().mockResolvedValue({ ok: true });
         renderReceive({
@@ -260,18 +264,11 @@ describe('Receive QR copy and share toasts', () => {
             setAddressLabel,
         });
 
-        const label = await screen.findByRole('textbox', { name: 'Address label' });
-        expect(label).toHaveValue('');
-        fireEvent.change(label, { target: { value: '  Client invoices  ' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save label' }));
-
-        await waitFor(() => expect(setAddressLabel).toHaveBeenCalledWith('a1', 'Client invoices'));
-        expect(label).toHaveValue('Client invoices');
-
-        fireEvent.change(label, { target: { value: 'Invoice 204' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save label' }));
-        await waitFor(() => expect(setAddressLabel).toHaveBeenLastCalledWith('a1', 'Invoice 204'));
-        expect(setAddressLabel).toHaveBeenCalledTimes(2);
+        const field = await screen.findByRole('textbox', { name: 'Address' });
+        expect(field).toHaveValue(unlabeled.address);
+        expect(screen.queryByRole('textbox', { name: 'Address label' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Save Label' })).toBeNull();
+        expect(setAddressLabel).not.toHaveBeenCalled();
     });
 
     it('offers the newest unused address and marks used addresses in the picker', async () => {
@@ -333,7 +330,7 @@ describe('Receive QR copy and share toasts', () => {
                     color: { dark: '#0F172A', light: '#FFFFFF' },
                 }),
             ));
-            const address = await screen.findByRole('textbox', { name: 'Daily deposits' });
+            const address = await screen.findByRole('textbox', { name: 'Address' });
             expect(address.readOnly).toBe(true);
             expect(address.style.userSelect).toBe('text');
         } finally {
@@ -360,7 +357,7 @@ describe('Receive QR copy and share toasts', () => {
         renderReceive();
 
         expect(await screen.findByRole('textbox', {
-            name: 'Daily deposits',
+            name: 'Address',
         })).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Copy payment link' })).toBeTruthy();
         const amount = await screen.findByRole('textbox', { name: /^Amount/ });
@@ -605,48 +602,39 @@ describe('Receive address handling', () => {
             </MessagingProvider>,
         );
 
-        expect(await screen.findByRole('button', { name: /Change asset \(currently PEPE on /i })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: /^Asset: PEPE on / })).toBeInTheDocument();
         await waitFor(() => expect(qrToDataURL.mock.calls.some(
             ([value]) => value.includes('tick=PEPE'),
         )).toBe(true));
         expect(qrToDataURL.mock.calls.at(-1)[0]).toContain('tick=PEPE');
     });
 
-    it('keeps concurrent label saves bound to the address that launched them', async () => {
-        let resolveFirstSave;
-        const firstSave = new Promise((resolve) => { resolveFirstSave = resolve; });
+    it('labels the address field plain Address and never writes a label from Receive', async () => {
+        // The label editor and its concurrent saves are retired with it:
+        // generating a new address swaps the field to that address, the field
+        // keeps the plain Address label (never the address's own name), and
+        // nothing on the page saves a label.
         const generated = {
             ...ADDRESS,
             id: 'a2',
             address: 'bcrt1qgenerated',
-            label: '',
+            label: 'Second address',
             derivationPath: "m/84'/0'/0'/0/1",
         };
-        const setAddressLabel = vi.fn()
-            .mockImplementationOnce(() => firstSave)
-            .mockResolvedValue({ ok: true });
+        const setAddressLabel = vi.fn().mockResolvedValue({ ok: true });
         renderReceive({
             setAddressLabel,
             generateReceiveAddress: vi.fn(async () => generated),
         });
 
-        const label = await screen.findByRole('textbox', { name: 'Address label' });
-        fireEvent.change(label, { target: { value: 'First address' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save label' }));
-        await waitFor(() => expect(setAddressLabel).toHaveBeenCalledWith('a1', 'First address'));
-
+        expect(await screen.findByRole('textbox', { name: 'Address' })).toHaveValue(ADDRESS.address);
+        expect(screen.queryByRole('textbox', { name: 'Daily deposits' })).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: /Generate new address/ }));
         expect(await screen.findByDisplayValue(generated.address)).toBeInTheDocument();
-        const generatedLabel = screen.getByRole('textbox', { name: 'Address label' });
-        fireEvent.change(generatedLabel, { target: { value: 'Second address' } });
-        const saveGenerated = screen.getByRole('button', { name: 'Save label' });
-        expect(saveGenerated).not.toBeDisabled();
-        fireEvent.click(saveGenerated);
-
-        await waitFor(() => expect(setAddressLabel).toHaveBeenCalledWith('a2', 'Second address'));
-        await act(async () => { resolveFirstSave({ ok: true }); });
-        expect(screen.getByDisplayValue(generated.address)).toBeInTheDocument();
-        expect(generatedLabel).toHaveValue('Second address');
+        expect(screen.getByRole('textbox', { name: 'Address' })).toHaveValue(generated.address);
+        expect(screen.queryByRole('textbox', { name: 'Second address' })).toBeNull();
+        expect(screen.queryByRole('textbox', { name: 'Address label' })).toBeNull();
+        expect(setAddressLabel).not.toHaveBeenCalled();
     });
 
     it('handles an invalid multisig address without an unhandled rejection', async () => {
@@ -689,16 +677,16 @@ describe('Receive address handling', () => {
             generateReceiveAddress: vi.fn(async () => nextHardwareAddress),
         });
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Verify on your Ledger' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Verify on Your Ledger' }));
         fireEvent.click(screen.getByRole('button', { name: /Generate new address/ }));
         expect(await screen.findByDisplayValue(nextHardwareAddress.address)).toBeInTheDocument();
 
         await act(async () => { resolveVerification({ confirmed: true }); });
         expect(screen.queryByText(/Confirmed on your Ledger/)).toBeNull();
-        expect(screen.getByRole('button', { name: 'Verify on your Ledger' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Verify on Your Ledger' })).toBeInTheDocument();
     });
 
-    it('switches supported address types, generates that type, shows its label, and copies its address', async () => {
+    it('generates the wallet default address type (no type select) and copies its address', async () => {
         const legacy = {
             id: 'a2',
             address: 'mlegacyexample',
@@ -723,12 +711,13 @@ describe('Receive address handling', () => {
         });
         renderReceive({
             getAddressesByChain: async () => ({ 'bitcoin-regtest': [ADDRESS, legacy] }),
+            // Receive has no Address type select; it uses the newest address's type.
+            getNewestAddress: async () => legacy,
             generateReceiveAddress,
         });
 
-        expect(await screen.findByLabelText('Daily deposits')).toHaveValue(ADDRESS.address);
-        fireEvent.change(screen.getByLabelText('Address type'), { target: { value: 'p2pkh' } });
-        expect(await screen.findByLabelText('Legacy deposits')).toHaveValue(legacy.address);
+        expect(await screen.findByLabelText('Address')).toHaveValue(legacy.address);
+        expect(screen.queryByLabelText('Address type')).toBeNull();
 
         fireEvent.click(screen.getByRole('button', { name: /Generate new address/ }));
         await waitFor(() => expect(generateReceiveAddress).toHaveBeenCalledWith({
@@ -737,7 +726,8 @@ describe('Receive address handling', () => {
             chainId: 'bitcoin-regtest',
             addressType: 'p2pkh',
         }));
-        const generatedField = await screen.findByLabelText('BTC Address #4');
+        await screen.findByDisplayValue(generated.address);
+        const generatedField = screen.getByLabelText('Address');
         expect(generatedField).toHaveValue(generated.address);
 
         fireEvent.click(generatedField);

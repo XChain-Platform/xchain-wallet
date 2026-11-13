@@ -73,23 +73,26 @@ describe('BatchComposerForm own-address picker', () => {
             </MessagingProvider>,
         );
 
-        const field = await screen.findByLabelText('From');
+        // The standard From section (closed on load) labels the field
+        // "From address"; open it to reach the picker icon.
+        const field = await screen.findByLabelText('From address');
         expect(field).toHaveValue(ADDRESS_A.address);
         expect(field).toHaveAttribute('readonly');
-        expect(screen.queryByRole('combobox', { name: 'From' })).toBeNull();
+        expect(screen.queryByRole('combobox', { name: 'From address' })).toBeNull();
 
+        fireEvent.click(screen.getByRole('button', { name: /^From\b/, expanded: false }));
         fireEvent.click(screen.getByRole('button', { name: 'Choose from address' }));
         expect(screen.getByTestId('own-address-picker')).toHaveAttribute('data-chain-id', CHAIN_A);
         expect(screen.getByRole('button', { name: 'Switch picker network' })).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Pick Litecoin source' }));
 
-        expect(await screen.findByLabelText('From')).toHaveValue(ADDRESS_B.address);
+        expect(await screen.findByLabelText('From address')).toHaveValue(ADDRESS_B.address);
         expect(screen.getByRole('button', { name: /^Network:/ })).toHaveTextContent('Litecoin');
-        expect(screen.queryByRole('switch', { name: /Pay protocol fee in/ })).toBeNull();
+        expect(screen.queryByRole('switch', { name: /Pay protocol fee in/, hidden: true })).toBeNull();
         fireEvent.change(screen.getByRole('combobox', { name: 'Action' }), {
             target: { value: 'BROADCAST' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Batch' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review 1 Transaction' }));
 
         await waitFor(() => expect(messaging.validateAction).toHaveBeenCalledWith({
             chainId: CHAIN_B,

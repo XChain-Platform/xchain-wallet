@@ -117,7 +117,7 @@ describe('Send empty state and the balance check', () => {
         expect(uncheckedState.closest('form')).toBeNull();
 
         const checksBefore = messaging.getWalletBalances.mock.calls.length;
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         expect(reachability.refresh).toHaveBeenCalledTimes(1);
         await waitFor(() => expect(messaging.getWalletBalances.mock.calls.length).toBeGreaterThan(checksBefore));
 

@@ -6,6 +6,7 @@
 import React from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { BALANCE_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
@@ -32,7 +33,10 @@ function provider(messaging, child) {
     );
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+});
 
 describe('mobile refresh', () => {
     it('keeps Home balances visible and blocks a second refresh while an error is pending', async () => {
@@ -56,24 +60,29 @@ describe('mobile refresh', () => {
             getActiveAddresses: vi.fn().mockResolvedValue({}),
             getSettings: vi.fn().mockResolvedValue({}),
         };
+        // The poll interval is created at mount, so the clock is faked first.
+        vi.useFakeTimers({ shouldAdvanceTime: true });
         render(provider(
             messaging,
             <Home activeWalletId={WALLET.id} activeAccountId={ACCOUNT.id} />,
         ));
 
         expect(await screen.findByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Balance actions' }));
-        fireEvent.click(screen.getByRole('menuitem', { name: 'Refresh portfolio' }));
+        // The hero has no manual refresh (its card keeps only the unit swap
+        // and the eye), so the reload is the poll beat: one beat starts the
+        // read and the next beat, while it is pending, does not double it.
+        try {
+            await act(async () => { await vi.advanceTimersByTimeAsync(BALANCE_POLL_INTERVAL_MS); });
+            expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2);
+            await act(async () => { await vi.advanceTimersByTimeAsync(BALANCE_POLL_INTERVAL_MS); });
+            expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Balance actions' }));
-        const refreshing = screen.getByRole('menuitem', { name: 'Refreshing portfolio' });
-        expect(refreshing).toBeDisabled();
-        fireEvent.click(refreshing);
-        expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2);
+            await act(async () => { held.reject(new Error('Failed to fetch')); });
+        } finally {
+            vi.useRealTimers();
+        }
 
-        await act(async () => { held.reject(new Error('Failed to fetch')); });
-
-        expect(await screen.findByText(/Couldn't refresh balances/)).toBeInTheDocument();
+        expect(await screen.findByText(/Couldn't load balances/)).toBeInTheDocument();
         expect(screen.getByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeInTheDocument();
         expect(screen.queryByLabelText('Loading balances')).toBeNull();
     });
@@ -103,18 +112,12 @@ describe('mobile refresh', () => {
 
         expect(await screen.findByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Refresh(ing)? balances/ })).toBeNull();
-        const hero = screen.getByRole('region', { name: 'Active address balance' });
-        const trigger = within(hero).getByRole('button', { name: 'Balance actions' });
-        fireEvent.click(trigger);
-        const refresh = screen.getByRole('menuitem', { name: 'Refresh portfolio' });
-        expect(hero.contains(refresh)).toBe(true);
-        expect(screen.getAllByRole('menuitem', { name: /Refresh(ing)? portfolio/ })).toHaveLength(1);
+        // Ruling G11: the card is captioned with the wallet name and carries only the unit swap and
+        // the eye, so the hero menu with its Refresh portfolio row is retired.
+        const hero = screen.getByRole('region', { name: WALLET.name });
+        expect(within(hero).queryByRole('button', { name: 'Balance actions' })).toBeNull();
+        expect(screen.queryByRole('menuitem', { name: /Refresh(ing)? portfolio/ })).toBeNull();
         expect(screen.queryByRole('button', { name: /Refresh(ing)? portfolio/ })).toBeNull();
-
-        fireEvent.click(refresh);
-        await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2));
-        fireEvent.click(trigger);
-        await waitFor(() => expect(screen.getByRole('menuitem', { name: 'Refresh portfolio' })).not.toBeDisabled());
     });
 
     it('treats a resolved per-address balance error as a failed refresh', async () => {
@@ -146,16 +149,21 @@ describe('mobile refresh', () => {
             getActiveAddresses: vi.fn().mockResolvedValue({}),
             getSettings: vi.fn().mockResolvedValue({}),
         };
+        // No manual refresh on the hero: the poll beat is the reload.
+        vi.useFakeTimers({ shouldAdvanceTime: true });
         render(provider(
             messaging,
             <Home activeWalletId={WALLET.id} activeAccountId={ACCOUNT.id} />,
         ));
 
         expect(await screen.findByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Balance actions' }));
-        fireEvent.click(screen.getByRole('menuitem', { name: 'Refresh portfolio' }));
+        try {
+            await act(async () => { await vi.advanceTimersByTimeAsync(BALANCE_POLL_INTERVAL_MS); });
+        } finally {
+            vi.useRealTimers();
+        }
 
-        expect(await screen.findByText(/Couldn't refresh balances/)).toBeInTheDocument();
+        expect(await screen.findByText(/Couldn't load balances/)).toBeInTheDocument();
         expect(screen.getByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeInTheDocument();
         expect(screen.getByText(/Showing saved balances from the last successful sync/))
             .toBeInTheDocument();

@@ -203,6 +203,8 @@ describe('BetFeedDetail: a settled market reports what happened', () => {
         expect(settlement.textContent).toContain('Winning outcome: "Yes" (outcome 0)');
         expect(settlement.textContent).toContain('Winning bets settled as won');
         expect(settlement.textContent).toContain('nothing to claim');
+        // The timeline on the Activity tab names the winner too.
+        await domAct(async () => { fireEvent.click(utils.getByRole('tab', { name: 'Activity' })); await drain(); });
         expect(utils.container.textContent).toContain('winner "Yes" (outcome 0)');
     });
 
@@ -217,7 +219,7 @@ describe('BetFeedDetail: a settled market reports what happened', () => {
 
         expect(utils.getByTestId('bet-settlement').textContent).toContain('Pending resolution');
         expect(utils.getByTestId('bet-settlement').textContent).toContain('do not submit a claim');
-        fireEvent.click(utils.getByRole('button', { name: 'Settle this market' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Settle This Market' }));
         expect(onSettleMarket).toHaveBeenCalledOnce();
         utils.unmount();
 
@@ -225,7 +227,7 @@ describe('BetFeedDetail: a settled market reports what happened', () => {
             betFeed: () => Promise.resolve({ data: [feed('closed', { source: ORACLE })] }),
         });
         const otherUtils = await openMarket(other.messaging, { onSettleMarket });
-        expect(otherUtils.queryByRole('button', { name: 'Settle this market' })).toBeNull();
+        expect(otherUtils.queryByRole('button', { name: 'Settle This Market' })).toBeNull();
     });
 
     it('rebuilds the split from the bets when the market is terminal', async () => {
@@ -264,7 +266,11 @@ describe('BetFeedDetail: a settled market reports what happened', () => {
 
         expect(text).toContain('900 (90.0%, 9 bets)');
         expect(text).toContain('100 (10.0%, 1 bet)');
-        expect(calls.some((call) => call.method === 'bets')).toBe(false);
+        // The market's bet rows are now read for every market (the card's chart, Activity
+        // and My Bets draw from them); the harness bets total 400, so the explorer's
+        // 900 / 100 aggregate staying on screen is what proves it was not replaced.
+        expect(text).not.toContain('(75.0%');
+        expect(calls.some((call) => call.method === 'bets' && call.args?.type === 'feed')).toBe(true);
     });
 
     it('leaves a live market on the explorer aggregate and asks for no bet rows', async () => {
@@ -279,7 +285,10 @@ describe('BetFeedDetail: a settled market reports what happened', () => {
         expect(text).toContain('Current split');
         expect(text).not.toContain('Final split');
         expect(text).toContain('300');
-        expect(calls.some((c) => c.method === 'bets')).toBe(false);
+        // The feed read now serves the card's chart on a live market too, but it
+        // never replaces the split: the explorer's 300 pool is the one on screen.
+        expect(text).not.toContain('(75.0%');
+        expect(calls.some((c) => c.method === 'bets' && c.args?.type === 'feed')).toBe(true);
     });
 
     it('says "no bets" rather than "no bets yet" on a market that really took none', async () => {

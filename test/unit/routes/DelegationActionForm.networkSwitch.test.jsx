@@ -41,6 +41,8 @@ describe('DelegationActionForm revoke prefill across networks', () => {
         const input = await screen.findByLabelText('Signing pubkey to revoke');
         await waitFor(() => expect(input).toHaveValue(KEY));
 
+        // Network lives in the standard's From section, closed on load.
+        fireEvent.click(screen.getByRole('button', { name: /^From/, expanded: false }));
         fireEvent.click(screen.getByRole('button', { name: /^Network:/ }));
         fireEvent.click((await screen.findAllByRole('button', { name: /^Select / }))[1]);
 
@@ -71,6 +73,8 @@ describe('DelegationActionForm revoke prefill across networks', () => {
         const input = await screen.findByLabelText('Signing pubkey to revoke');
         fireEvent.change(input, { target: { value: KEY } });
 
+        // Network lives in the standard's From section, closed on load.
+        fireEvent.click(screen.getByRole('button', { name: /^From/, expanded: false }));
         fireEvent.click(screen.getByRole('button', { name: /^Network:/ }));
         fireEvent.click((await screen.findAllByRole('button', { name: /^Select / }))[1]);
 

@@ -133,8 +133,9 @@ describe('BetFeedDetail: a failed market load', () => {
         const utils = await openMarket(harness(() => Promise.resolve({ data: [FEED] })));
         const shown = utils.container.textContent || '';
 
-        expect(shown).toContain(`Betting closes: ${formatLocalDateTime(FEED.deadline)}`);
-        expect(shown).toContain(`Refunds if unresolved by: ${formatLocalDateTime(FEED.expire_at)}`);
+        // Details rows render the label and its value as two cells, so the text has no colon.
+        expect(shown).toContain(`Betting closes${formatLocalDateTime(FEED.deadline)}`);
+        expect(shown).toContain(`Refunds if unresolved by${formatLocalDateTime(FEED.expire_at)}`);
     });
 
     // The mount effect and `reload` are two separate catches on the same read,

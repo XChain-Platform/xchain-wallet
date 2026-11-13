@@ -13,12 +13,12 @@ const source = readFileSync(resolve(
 ), 'utf8');
 
 describe('PollDetail vote-form rulings', () => {
-    it('starts the ballot form with a locked Network and picker-backed From', () => {
-        const form = source.slice(source.indexOf('<FormPage\n                    demoGuard={ballotFormGuard}'));
-        expect(form.indexOf('<NetworkField')).toBeGreaterThanOrEqual(0);
-        expect(form.indexOf('<AddressField')).toBeGreaterThan(form.indexOf('<NetworkField'));
-        expect(form).toMatch(/<NetworkField[\s\S]*?chainIds=\{\[chainId\]\}[\s\S]*?disabled/);
-        expect(form).toMatch(/<AddressField[\s\S]*?label="From"[\s\S]*?help="The address casting this ballot\./);
+    it('starts the ballot form with the standard From section: a locked Network and picker-backed address', () => {
+        const form = source.slice(source.indexOf('<FormFrame\n                    demoGuard={ballotFormGuard}'));
+        expect(form).toMatch(/<FromSection[\s\S]*?lockNetwork[\s\S]*?onOpenPicker=\{\(\) => setSourcePickerOpen\(true\)\}/);
+        expect(form).toMatch(/<FromSection[\s\S]*?addressHelp="The address casting this ballot\./);
+        expect(form).toMatch(/<FeeSection/);
+        expect(form).not.toMatch(/<FeeSelector/);
         expect(source).toMatch(/<OwnAddressPickerScreen[\s\S]*?chainId=\{chainId\}[\s\S]*?lockNetwork/);
     });
 

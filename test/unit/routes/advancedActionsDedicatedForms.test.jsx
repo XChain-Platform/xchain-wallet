@@ -17,6 +17,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import {
     AdvancedActionsForm,
     dedicatedFormActions,
@@ -44,7 +45,7 @@ function deferred() {
     return { promise, resolve };
 }
 
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); resetWalletModes(); });
 
 describe('dedicatedFormActions', () => {
     const real = dedicatedFormActions({
@@ -132,6 +133,8 @@ describe('AdvancedActionsForm action picker label', () => {
             action: 'COLLECT',
         }));
 
+        // Network sits in the closed From section; open it to reach the network picker.
+        fireEvent.click(screen.getByRole('button', { name: /^From\b/, expanded: false }));
         fireEvent.click(screen.getByRole('button', { name: /Network: Bitcoin/i }));
         fireEvent.click(await screen.findByRole('button', { name: /Select Litecoin/i }));
 
@@ -145,8 +148,11 @@ describe('AdvancedActionsForm action picker label', () => {
     });
 
     it('refuses the advanced broadcast surface in signer mode with a reason', async () => {
+        // The wallet's mode is read from the wallet list, not from settings.
+        publishWalletModes({ wallets: [{ id: 'w', walletMode: 'signer' }], activeWalletId: 'w' });
         const target = {
-            getSettings: vi.fn().mockResolvedValue({ walletMode: 'signer' }),
+            getSettings: vi.fn().mockResolvedValue({}),
+            listWallets: vi.fn().mockResolvedValue([{ id: 'w', name: 'W', walletMode: 'signer' }]),
             getAddressesByChain: vi.fn().mockResolvedValue({ [BTC]: [FROM] }),
             getActiveAddresses: vi.fn().mockResolvedValue({ [BTC]: FROM }),
             signerReady: vi.fn().mockResolvedValue({ ready: false }),
@@ -193,14 +199,14 @@ describe('AdvancedActionsForm action picker label', () => {
         await screen.findByRole('option', { name: /SDKONLY/ });
         fireEvent.change(actionPicker, { target: { value: 'SDKONLY' } });
 
-        expect(screen.getByRole('button', { name: 'Sign action' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Sign Action' })).toBeDisabled();
         expect(screen.queryByText('This action takes no user-provided fields.')).toBeNull();
         expect(target.composeForConfirm).not.toHaveBeenCalled();
 
         formats.resolve({ 0: 'VERSION|VALUE' });
         fields.resolve(['VERSION', 'VALUE']);
         expect(await screen.findByLabelText('VALUE')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Sign action' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Sign Action' })).toBeEnabled();
     });
 
     it('keeps submit disabled when an action schema fails to load', async () => {
@@ -229,7 +235,7 @@ describe('AdvancedActionsForm action picker label', () => {
         fireEvent.change(actionPicker, { target: { value: 'SDKONLY' } });
 
         expect(await screen.findByText('schema unavailable')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Sign action' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Sign Action' })).toBeDisabled();
         expect(target.composeForConfirm).not.toHaveBeenCalled();
     });
 

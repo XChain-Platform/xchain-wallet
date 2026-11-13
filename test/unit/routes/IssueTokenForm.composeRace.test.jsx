@@ -65,7 +65,7 @@ describe('Issue token while the host composes', () => {
         const messaging = mount(composeForConfirm);
         fireEvent.change(await screen.findByLabelText('Ticker'), { target: { value: 'HOLD' } });
         fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '100' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
         await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
 
         for (const label of [
@@ -95,7 +95,7 @@ describe('Issue token while the host composes', () => {
         mount(composeForConfirm);
         fireEvent.change(await screen.findByLabelText('Ticker'), { target: { value: 'BACK' } });
         fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '5' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
         fireEvent.click(await screen.findByTestId('confirm-reject'));
         expect(await screen.findByRole('textbox', { name: 'Max supply' })).toBeEnabled();
         expect(screen.getByRole('textbox', { name: 'Max supply' }).value).toBe('5.00000000');

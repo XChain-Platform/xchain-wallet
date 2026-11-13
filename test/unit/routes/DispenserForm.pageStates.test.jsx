@@ -53,7 +53,8 @@ describe('DispenserForm: every wrap() call passes a page template', () => {
         const roots = wrapRoots();
         expect(roots.length).toBeGreaterThanOrEqual(7);
         const faults = roots
-            .filter(({ name }) => !['ListPage', 'FormPage', 'ResultScreen'].includes(name))
+            // FormFrame is the Form Standard's frame and renders FormPage.
+            .filter(({ name }) => !['ListPage', 'FormPage', 'FormFrame', 'ResultScreen'].includes(name))
             .map(({ line, name }) => `DispenserForm.jsx:${line} wrap(${name})`);
         expect(faults).toEqual([]);
     });

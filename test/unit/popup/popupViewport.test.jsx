@@ -91,7 +91,7 @@ describe('extension popup main screens at 360x600', () => {
         localStorage.clear();
         renderPopup(<Onboarding onCreate={() => {}} onImport={() => {}} />);
 
-        expect(screen.getByRole('button', { name: 'Accept and continue' })).toBeVisible();
+        expect(screen.getByRole('button', { name: 'Accept and Continue' })).toBeVisible();
         expect(css.formPage).toMatch(
             /\.fill\s*\{[^}]*height:\s*100%;[^}]*max-height:\s*100%;[^}]*overflow:\s*hidden;/s,
         );
@@ -110,7 +110,7 @@ describe('extension popup main screens at 360x600', () => {
         for (let step = 0; step < 3; step += 1) {
             fireEvent.click(screen.getByRole('button', { name: 'Next' }));
         }
-        expect(screen.getByRole('button', { name: 'Get started' })).toBeVisible();
+        expect(screen.getByRole('button', { name: 'Get Started' })).toBeVisible();
         expect(css.onboardingCarousel).toMatch(
             /\.rootPopup\s*\{[^}]*height:\s*100%;[^}]*max-height:\s*100%;[^}]*overflow:\s*hidden;/s,
         );
@@ -154,11 +154,11 @@ describe('extension popup main screens at 360x600', () => {
         );
 
         for (const label of [
-            'Create new wallet',
-            'Import wallet',
+            'Create New Wallet',
+            'Import Wallet',
             'From FreeWallet',
-            'Pair an offline signer',
-            'Try in demo mode',
+            'Pair an Offline Signer',
+            'Try in Demo Mode',
         ]) {
             expectCompleteButtonLabel(label);
         }

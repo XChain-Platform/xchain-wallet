@@ -36,8 +36,8 @@ async function runWith(rejection) {
     fireEvent.change(screen.getByLabelText('Recovery phrase to test'), {
         target: { value: 'abandon abandon abandon' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Run test' }));
-    await screen.findByRole('button', { name: 'Run test' });
+    fireEvent.click(screen.getByRole('button', { name: 'Run Test' }));
+    await screen.findByRole('button', { name: 'Run Test' });
     return messaging;
 }
 
@@ -56,7 +56,7 @@ describe('BackupSection dry-run error copy', () => {
         fireEvent.change(screen.getByLabelText('Addresses to check'), { target: { value: '2.5' } });
 
         expect(screen.getByText(/whole number from 1 to 100/)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Run test' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Run Test' })).toBeDisabled();
         expect(messaging.dryRunRestoreRequest).not.toHaveBeenCalled();
     });
 

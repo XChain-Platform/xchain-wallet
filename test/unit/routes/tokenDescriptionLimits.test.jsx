@@ -19,6 +19,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { IssueTokenForm } from '../../../packages/core/src/shared/routes/IssueTokenForm.jsx';
 import { TokenAdminForm } from '../../../packages/core/src/shared/routes/TokenAdminForm.jsx';
+// The Create a token route: TokenWizard renders the one Issue Token form.
 import { TokenWizard } from '../../../packages/core/src/shared/routes/TokenWizard.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 import {
@@ -101,7 +102,7 @@ describe('IssueTokenForm description rules', () => {
         fireEvent.change(await screen.findByLabelText('Ticker'), { target: { value: 'OWNED' } });
         fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '10' } });
         fireEvent.change(screen.getByLabelText('Token description'), { target: { value: description } });
-        fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
         return composeForConfirm;
     }
 
@@ -142,7 +143,7 @@ describe('TokenAdminForm description rules', () => {
             </MessagingProvider>,
         );
         fireEvent.change(await screen.findByLabelText('Description'), { target: { value: 'one;two' } });
-        const button = screen.getByRole('button', { name: 'Update description' });
+        const button = screen.getByRole('button', { name: 'Update Description' });
         await waitFor(() => expect(button).toBeEnabled());
         fireEvent.click(button);
 
@@ -172,24 +173,26 @@ describe('collectible image URL', () => {
                 <TokenWizard walletId="w" onBack={() => {}} />
             </MessagingProvider>,
         );
-        fireEvent.click(await screen.findByText('Collectible'));
-        fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-        fireEvent.change(await screen.findByLabelText('Token name (ticker)'), { target: { value: 'ART' } });
+        // The Collectible template on the one Issue Token form.
+        fireEvent.click(await screen.findByRole('button', { name: /^Select template/ }));
+        fireEvent.click(screen.getByRole('option', { name: /Collectible/ }));
+        fireEvent.change(screen.getByLabelText('Ticker'), { target: { value: 'ART' } });
         fireEvent.change(screen.getByLabelText('Image URL'), { target: { value: url } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
         return composeForConfirm;
     }
 
-    it('keeps a javascript: link out of the collectible wizard', async () => {
+    it('keeps a javascript: link out of the collectible template', async () => {
         const composeForConfirm = await submitCollectible('javascript:alert(1)');
         expect(await screen.findByRole('alert')).toHaveTextContent('Image URL must use http, https, ipfs, or ar.');
-        expect(screen.queryByRole('button', { name: 'Issue token' })).toBeNull();
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
-    it('lets an https image through to the review step', async () => {
-        await submitCollectible('https://example.com/art.png');
-        expect(await screen.findByRole('button', { name: 'Issue token' })).toBeTruthy();
+    it('composes an https image as the collectible description', async () => {
+        const composeForConfirm = await submitCollectible('https://example.com/art.png');
+        await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
+        expect(composeForConfirm.mock.calls[0][0].actionData.params.DESCRIPTION)
+            .toBe('https://example.com/art.png');
     });
 });
 
@@ -211,27 +214,24 @@ describe('supply ceiling', () => {
         );
         fireEvent.change(await screen.findByLabelText('Ticker'), { target: { value: 'BIGGER' } });
         fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '1000000000000000000001' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent('Max supply cannot be more than 1,000,000,000,000,000,000,000.');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
-    it('is named on the wizard details step', async () => {
+    it('is named on the Create a token route', async () => {
         const { messaging, composeForConfirm } = messagingFor();
         render(
             <MessagingProvider shell="web" messaging={messaging}>
                 <TokenWizard walletId="w" onBack={() => {}} />
             </MessagingProvider>,
         );
-        fireEvent.click(await screen.findByText('Custom'));
-        fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-        fireEvent.change(await screen.findByLabelText('Token name (ticker)'), { target: { value: 'BIGGER' } });
-        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1000000000000000000001' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
+        fireEvent.change(await screen.findByLabelText('Ticker'), { target: { value: 'BIGGER' } });
+        fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '1000000000000000000001' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('Supply cannot be more than');
-        expect(screen.queryByRole('button', { name: 'Issue token' })).toBeNull();
+        expect(await screen.findByRole('alert')).toHaveTextContent('Max supply cannot be more than');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 });

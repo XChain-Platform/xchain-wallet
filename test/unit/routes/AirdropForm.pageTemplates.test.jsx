@@ -26,6 +26,7 @@ vi.mock('@xchain-wallet/core/ui', async (importOriginal) => {
 });
 
 const { MessagingProvider } = await import('../../../packages/core/src/shared/MessagingProvider.jsx');
+const { publishWalletModes, resetWalletModes } = await import('../../../packages/core/src/shared/hooks/useWalletMode.js');
 const { AirdropForm } = await import('../../../packages/core/src/shared/routes/AirdropForm.jsx');
 const { existingListRowText } = await import('../../../packages/core/src/shared/utils/existingListRowText.js');
 const { __clearTokenInfoCache } = await import('../../../packages/core/src/shared/hooks/useTokenInfo.js');
@@ -64,11 +65,16 @@ function pendingRecord(stage) {
     };
 }
 
-function mountAirdrop({ overrides = {}, resumeId = null, lockedToken = true } = {}) {
+function mountAirdrop({
+    overrides = {}, resumeId = null, lockedToken = true, walletMode = 'full',
+} = {}) {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
-        getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+        getSettings: vi.fn().mockResolvedValue({}),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'w', name: 'W', walletMode }]),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
         getTokenInfo: vi.fn().mockResolvedValue({ chainId: CHAIN, tick: 'XCHAIN', divisibility: 8, locks: {} }),
@@ -106,15 +112,17 @@ function expectInsideTemplate(node) {
 }
 
 beforeEach(() => { vi.useFakeTimers(); });
-afterEach(() => { cleanup(); __clearTokenInfoCache(); vi.useRealTimers(); });
+afterEach(() => { cleanup(); resetWalletModes(); __clearTokenInfoCache(); vi.useRealTimers(); });
 
 describe('AirdropForm page templates', () => {
     it('starts with Network and From, then orders the U90 fields and keeps Addresses functional', async () => {
         mountAirdrop({ lockedToken: false });
         await flushTimers();
 
-        const network = screen.getByRole('button', { name: /^Network:/ });
-        const from = screen.getByLabelText('From');
+        // Network and From sit in the standard From section (first,
+        // closed on load); the field is labelled "From address".
+        const network = screen.getByRole('button', { name: /^Network:/, hidden: true });
+        const from = screen.getByLabelText('From address');
         const token = screen.getByText('Token to drop').parentElement;
         const amount = screen.getByLabelText(/^Per-recipient amount/);
         const destination = screen.getByLabelText(/^Airdrop to/);
@@ -129,7 +137,9 @@ describe('AirdropForm page templates', () => {
         ]);
         expect(destination).toHaveValue('paste');
         expect(screen.getByRole('textbox', { name: 'Recipients' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Upload a CSV or text file' })).toBeInTheDocument();
+        // The recipients file loads through the standard file field.
+        expect(screen.getByRole('textbox', { name: /^Recipients file \(CSV or TXT\)/ })).toHaveAttribute('readonly');
+        expect(screen.getByRole('button', { name: 'Choose a file' })).toBeInTheDocument();
 
         fireEvent.change(destination, { target: { value: 'existing' } });
         expect(screen.queryByText('Existing list', { selector: 'label' })).toBeNull();
@@ -147,6 +157,10 @@ describe('AirdropForm page templates', () => {
         expect(fees).not.toBeNull();
         expect(fees.querySelector('[data-fees-row="network"]')).not.toBeNull();
         expect(fees.querySelector('[data-fees-row="protocol"]')).not.toBeNull();
+        // The Fees card sits in the standard Network fee section;
+        // its pay-in-native switch must still be there (closed section, so hidden).
+        expect(fees.closest('[data-form-section="fee"]')).not.toBeNull();
+        expect(screen.getByRole('switch', { name: /Pay protocol fee in/, hidden: true })).toBeInTheDocument();
         expect(fees.querySelector('[data-fees-row="total"]')).not.toBeNull();
     });
 
@@ -154,11 +168,11 @@ describe('AirdropForm page templates', () => {
         mountAirdrop();
         await flushTimers();
 
-        const review = screen.getByRole('button', { name: 'Review recipients' });
+        const review = screen.getByRole('button', { name: /^Review recipients$/i });
         expect(review.className).toMatch(/success/);
         expect(review.querySelector('svg')).not.toBeNull();
 
-        const fromTip = screen.getByRole('button', { name: 'About From' });
+        const fromTip = screen.getByRole('button', { name: 'About From address', hidden: true });
         expect(document.getElementById(fromTip.getAttribute('aria-describedby')).textContent)
             .toBe('The address that sends the airdrop. It must hold the token and pays the fees.');
         const recipientsTip = screen.getByRole('button', { name: 'About Recipients' });
@@ -210,7 +224,7 @@ describe('AirdropForm page templates', () => {
         expectInsideTemplate(screen.getByText('Loading…'));
         cleanup();
 
-        mountAirdrop({ overrides: { getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }) } });
+        mountAirdrop({ walletMode: 'watcher' });
         await flushTimers();
         expectInsideTemplate(screen.getByRole('heading', { name: 'Not available in watcher mode' }));
         expectInsideTemplate(screen.getByText(/Switch this wallet to/));

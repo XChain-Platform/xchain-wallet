@@ -46,8 +46,8 @@ const { FeesSection } = await import(
 const { ToggleRow } = await import(
     '../../../packages/core/src/shared/components/settings/_settingsPrimitives.jsx'
 );
-const { WalletModeSection } = await import(
-    '../../../packages/core/src/shared/components/settings/WalletModeSection.jsx'
+const { WalletModeField } = await import(
+    '../../../packages/core/src/shared/components/WalletModeField.jsx'
 );
 
 beforeAll(() => {
@@ -214,22 +214,24 @@ describe('settings form validation', () => {
         expect(document.documentElement.dir).toBe('rtl');
     });
 
-    it('presents equal secondary contact actions in one wrapping row', async () => {
+    it('presents equal export actions in one wrapping row and imports through the file field', async () => {
         render(<ContactsSection />);
         await screen.findByText('0 contacts stored');
 
         const exportButton = screen.getByRole('button', { name: 'Export…' });
         const csvButton = screen.getByRole('button', { name: 'Export CSV…' });
-        const importButton = screen.getByRole('button', { name: 'Import…' });
-        const actions = importButton.parentElement;
+        const actions = exportButton.parentElement;
 
         expect(actions.style.flexWrap).toBe('wrap');
         expect(actions.children).toEqual(expect.objectContaining({
             0: exportButton,
             1: csvButton,
-            2: importButton,
         }));
-        for (const button of [exportButton, csvButton, importButton]) {
+        // Import is the standard file field, not a third button.
+        expect(screen.queryByRole('button', { name: 'Import…' })).toBeNull();
+        expect(screen.getByLabelText(/^Import contacts \(JSON or CSV/)).toHaveAttribute('readonly');
+        expect(screen.getByRole('button', { name: 'Choose a file' })).toBeInTheDocument();
+        for (const button of [exportButton, csvButton]) {
             expect(button.className).toMatch(/secondary/);
             expect(button.className).toMatch(/sm/);
             expect(button.style.width).toBe('');
@@ -252,6 +254,22 @@ describe('settings form validation', () => {
         await waitFor(() => expect(messaging.saveContact).toHaveBeenCalledWith({
             record: { id: 'contact-1', name: 'Alice' },
         }));
+    });
+
+    it('refuses a dropped file that is not JSON or CSV before reading it', async () => {
+        render(<ContactsSection />);
+        await screen.findByText('0 contacts stored');
+        const field = screen.getByLabelText(/^Import contacts \(JSON or CSV/).closest('[data-file-field]');
+        const text = vi.fn(async () => 'not contacts');
+
+        fireEvent.drop(field, {
+            dataTransfer: { files: [{ name: 'photo.png', type: 'image/png', size: 12, text }] },
+        });
+
+        expect(await screen.findByText('Imported 0 contacts; 1 skipped.')).toBeTruthy();
+        expect(document.body.textContent).toContain('File type not accepted');
+        expect(text).not.toHaveBeenCalled();
+        expect(screen.queryByRole('dialog', { name: 'Import contacts?' })).toBeNull();
     });
 
     it('imports every contact in one batch save when the shell offers one', async () => {
@@ -507,45 +525,14 @@ describe('settings form validation', () => {
         expect(container.firstElementChild.style.flexWrap).toBe('wrap');
     });
 
-    it('explains and confirms a wallet mode change before persisting it', async () => {
-        const { container } = render(<WalletModeSection />);
-
-        fireEvent.click(screen.getByRole('radio', { name: /Watcher/ }));
-
-        expect(update).not.toHaveBeenCalled();
-        expect(screen.getByRole('dialog').textContent).toContain(
-            'Transactions you build here stay unsigned',
-        );
-        expect(container.querySelector('input[type="password"]')).toBeNull();
-
-        fireEvent.click(screen.getByRole('button', { name: 'Confirm mode change' }));
-
-        expect(update).toHaveBeenCalledWith({ walletMode: 'watcher' });
-    });
-
-    it('cancels a pending wallet mode change without persisting it', () => {
-        render(<WalletModeSection />);
-        fireEvent.click(screen.getByRole('radio', { name: /Signer/ }));
-        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-
+    // §20: wallet mode is no longer a setting. The create and import field
+    // reports the pick to its form and writes nothing to settings.
+    it('the wallet mode field reports a pick and never writes settings', () => {
+        const onChange = vi.fn();
+        render(<WalletModeField value="full" onChange={onChange} />);
+        fireEvent.click(screen.getByRole('radio', { name: /Watch-only/ }));
+        expect(onChange).toHaveBeenCalledWith('watcher');
         expect(update).not.toHaveBeenCalled();
         expect(screen.queryByRole('dialog')).toBeNull();
-        expect(screen.getByRole('radio', { name: /Normal/ }).checked).toBe(true);
-    });
-
-    it('closes wallet-mode confirmation on Escape and returns focus to its radio', async () => {
-        const user = userEvent.setup();
-        render(<WalletModeSection />);
-        const signer = screen.getByRole('radio', { name: /Signer/ });
-        signer.focus();
-        fireEvent.click(signer);
-
-        expect(screen.getByRole('dialog')).toBeInTheDocument();
-        await user.keyboard('{Escape}');
-
-        expect(update).not.toHaveBeenCalled();
-        expect(screen.queryByRole('dialog')).toBeNull();
-        await waitFor(() => expect(document.activeElement).toBe(signer));
-        expect(screen.getByRole('radio', { name: /Normal/ })).toBeChecked();
     });
 });

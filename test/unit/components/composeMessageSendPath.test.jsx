@@ -142,6 +142,11 @@ function sendButton(utils) {
     return utils.getByRole('button', { name: /Send message/i });
 }
 
+// Opens a closed standard section (From, Network fee) by its title.
+function openSection(utils, title) {
+    fireEvent.click(utils.getByRole('button', { name: new RegExp(`^${title}\\b`), expanded: false }));
+}
+
 async function pressSend(utils) {
     // A disabled button would make every assertion below vacuous: nothing
     // pressed, nothing composed, no error to show or not show.
@@ -206,6 +211,7 @@ describe('message validation is visible from the primary action', () => {
         const messaging = stubMessaging();
         const utils = await openFilledForm(messaging);
 
+        openSection(utils, 'Network fee');
         fireEvent.change(utils.getByRole('slider', { name: 'Network fee' }), {
             target: { value: '3' },
         });
@@ -374,8 +380,13 @@ describe('the message is funded from the active address (issue #11)', () => {
         });
         const utils = await openFilledForm(messaging);
 
-        // Network is the standard field (U59): it opens the network picker
+        // Network is the standard field: it opens the network picker
         // screen, whose rows are buttons named "Select <network>".
+        // Network sits in the standard From section, closed on load.
+        await domAct(async () => {
+            openSection(utils, 'From');
+            await drainMicrotasks();
+        });
         await domAct(async () => {
             fireEvent.click(utils.getByRole('button', { name: /^Network:/ }));
             await drainMicrotasks();
@@ -417,8 +428,10 @@ describe('the compose form starts with Network, then From (U59, U60)', () => {
     it('shows the network field, then the funding address, then the recipient, each with a help tip', async () => {
         const utils = await openFilledForm(stubMessaging());
         const form = utils.container.querySelector('form');
-        const network = utils.getByRole('button', { name: /^Network:/ });
-        const from = utils.getByLabelText('From');
+        // Network and From sit in the standard From section (first,
+        // closed on load); the field is labelled "From address".
+        const network = utils.getByRole('button', { name: /^Network:/, hidden: true });
+        const from = utils.getByLabelText('From address');
         const recipient = utils.getByLabelText('Address');
         expect(from).toHaveValue(ACTIVE_ADDRESS.address);
         expect(network.compareDocumentPosition(from) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -435,10 +448,15 @@ describe('the compose form starts with Network, then From (U59, U60)', () => {
     it('opens the own-address picker from the From field', async () => {
         const utils = await openFilledForm(stubMessaging());
         await domAct(async () => {
+            openSection(utils, 'From');
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
             fireEvent.click(utils.getByRole('button', { name: 'Choose source address' }));
             await drainMicrotasks();
         });
-        expect(utils.getByText('From address')).toBeTruthy();
+        // The picker page title is Title Case.
+        expect(utils.getByText('From Address')).toBeTruthy();
         expect(utils.queryByLabelText('Message')).toBeNull();
     });
 });

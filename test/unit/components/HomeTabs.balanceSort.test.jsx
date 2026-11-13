@@ -122,6 +122,23 @@ function mountTokens() {
     );
 }
 
+// The sort choice is a single-select button inside the Filter and sort panel
+// that shows the current choice as its text; its listbox offers Name and Value.
+function sortTrigger() {
+    const panel = screen.getByRole('dialog', { name: 'Filter and sort' });
+    return Array.from(panel.querySelectorAll('button[aria-haspopup="listbox"]'))
+        .find((button) => /^Sort by (name|value)$/.test(button.textContent.trim()));
+}
+
+function currentSort() {
+    return sortTrigger().textContent.trim().replace('Sort by ', '').replace(/^./, (c) => c.toUpperCase());
+}
+
+function pickSort(label) {
+    fireEvent.click(sortTrigger());
+    fireEvent.click(screen.getByRole('option', { name: new RegExp(`Sort by ${label}`, 'i') }));
+}
+
 function renderedKeys() {
     return screen.queryAllByRole('listitem')
         .map((element) => element.dataset.balanceKey);
@@ -190,13 +207,12 @@ describe('balance row sorting', () => {
         expect(filter).toBeVisible();
         expect(filter.parentElement?.parentElement).toBe(tablist.parentElement);
         expect(screen.getAllByRole('tab').map((tab) => tab.textContent))
-            .toEqual(['Coins', 'Tokens', 'NFTs', 'DeFi', 'Activity']);
+            .toEqual(['Coins', 'Tokens', 'NFTs', 'DeFi']);
         expect(screen.queryByRole('combobox', { name: 'Sort balances' })).toBeNull();
         expect(tablist.compareDocumentPosition(filter)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
 
         fireEvent.click(filter);
-        expect(screen.getByRole('radio', { name: 'Name' })).toBeChecked();
-        expect(screen.getByRole('radio', { name: 'Value' })).not.toBeChecked();
+        expect(currentSort()).toBe('Name');
 
         const narrowRules = tabsCss.slice(
             tabsCss.indexOf('@media not all and (min-width: 600px)'),
@@ -211,7 +227,7 @@ describe('balance row sorting', () => {
             'bitcoin-mainnet:BTC',
         ]);
 
-        fireEvent.click(screen.getByRole('radio', { name: 'Value' }));
+        pickSort('Value');
         expect(renderedKeys()).toEqual([
             'litecoin-mainnet:LTC',
             'dogecoin-mainnet:DOGE',
@@ -241,18 +257,18 @@ describe('balance row sorting', () => {
     it('restores the choice only for the wallet that saved it', () => {
         const first = mount('wallet-a');
         fireEvent.click(screen.getByRole('button', { name: 'Filter and sort' }));
-        fireEvent.click(screen.getByRole('radio', { name: 'Value' }));
+        pickSort('Value');
         expect(localStorage.getItem('xc:balances:sort:wallet-a')).toBe('value');
         first.unmount();
 
         mount('wallet-a');
         fireEvent.click(screen.getByRole('button', { name: 'Filter and sort' }));
-        expect(screen.getByRole('radio', { name: 'Value' })).toBeChecked();
+        expect(currentSort()).toBe('Value');
         cleanup();
 
         mount('wallet-b');
         fireEvent.click(screen.getByRole('button', { name: 'Filter and sort' }));
-        expect(screen.getByRole('radio', { name: 'Name' })).toBeChecked();
+        expect(currentSort()).toBe('Name');
     });
 
     it('sorts tokens by name by default and renders an unpriced token as zero fiat', () => {

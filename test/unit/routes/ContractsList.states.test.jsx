@@ -84,7 +84,7 @@ describe('ContractsList states', () => {
         // The raw error stays out of the UI; the screen shows fixed recovery copy.
         expect(await screen.findByText('Could not load addresses. Try again.')).toBeInTheDocument();
         expect(screen.queryByText('Wallet unavailable')).toBeNull();
-        expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Try Again' })).toBeInTheDocument();
         expect(screen.queryByText('No supported address')).toBeNull();
     });
 
@@ -101,6 +101,8 @@ describe('ContractsList states', () => {
             }),
         });
 
+        // The user's own published contracts sit under the Mine tab.
+        fireEvent.click(await screen.findByRole('tab', { name: /Mine/ }));
         const rows = await screen.findAllByRole('button', { name: /Escrow/ });
         fireEvent.click(rows[0]);
         expect(onOpenContract).toHaveBeenCalledWith(CHAIN, '7');

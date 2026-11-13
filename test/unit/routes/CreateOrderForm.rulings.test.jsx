@@ -90,6 +90,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useNativeFee.js', () => ({
 import { CreateOrderForm } from '../../../packages/core/src/shared/routes/CreateOrderForm.jsx';
 
 import buttonStyles from "../../../packages/core/src/ui/Button.module.css";
+import { openOrderSection, pickOrderAsset, showFullOrderView } from "../../helpers/orderAssetPicker.js";
 
 // Create order follows the shared field and button rulings: the From field
 // is named From and carries the settle-on-one-network note in its help tip,
@@ -130,48 +131,56 @@ afterEach(() => cleanup());
 
 describe("CreateOrderForm shared rulings", () => {
     it("names the source field From and moves the network note into its tip", async () => {
+        showFullOrderView();
         await renderForm();
         expect(screen.queryByText(/Both sides of this order settle on the same chain/)).toBeNull();
-        expect(screen.getByDisplayValue("mSourceAddress").labels[0].textContent).toBe("From");
-        fireEvent.click(screen.getByRole("button", { name: "About From" }));
+        expect(screen.getByDisplayValue("mSourceAddress").labels[0].textContent).toBe("From address");
+        openOrderSection("From");
+        fireEvent.click(screen.getByRole("button", { name: "About From address" }));
         expect(screen.getByRole("tooltip")).toHaveTextContent("use Cross-chain order");
     });
 
     it("gives every field label a help tip", async () => {
+        showFullOrderView();
         await renderForm();
-        for (const name of ["About From", "About Ticker", "About Receive at"]) {
+        openOrderSection("From");
+        openOrderSection("Order Terms");
+        for (const name of ["About From address", "About Network", "About Receive at", "About Expiration", "About Memo"]) {
             expect(screen.getByRole("button", { name })).toBeTruthy();
         }
-        const tips = screen.getAllByRole("button").filter((b) => /^About /.test(b.getAttribute("aria-label") || ""));
-        // From, both asset-type groups, Ticker, both amounts, Receive at, Expiration.
-        expect(tips.length).toBeGreaterThanOrEqual(8);
+        // Each side's Asset and Amount carry their own tip.
+        expect(screen.getAllByRole("button", { name: "About Asset" })).toHaveLength(2);
+        // The coin side's label carries the unit, "Amount (BTC)".
+        expect(screen.getAllByRole("button", { name: /^About Amount/ })).toHaveLength(2);
     });
 
     it("keeps Max inside both amount fields, live on the give side once a held token is named", async () => {
+        showFullOrderView();
         await renderForm();
         const maxes = screen.getAllByRole("button", { name: /max/i });
         expect(maxes.length).toBe(2);
-        fireEvent.change(screen.getByLabelText("Ticker"), { target: { value: "XCP" } });
+        await pickOrderAsset("give", "XCP", { full: true });
         await waitFor(() => expect(screen.getAllByRole("button", { name: /max/i })[0].disabled).toBe(false));
     });
 
-    it("makes Place order the only green action, with an icon, also in watcher mode", async () => {
+    it("makes Place Order the only green action, with an icon, also in watcher mode", async () => {
         state.watcher = true;
         await renderForm();
         expect(screen.queryByRole("button", { name: "Preview" })).toBeNull();
-        const place = screen.getByRole("button", { name: "Place order" });
+        const place = screen.getByRole("button", { name: "Place Order" });
         expect(place.className).toContain(buttonStyles.success);
         expect(hasIcon(place)).toBe(true);
         const greens = screen.getAllByRole("button").filter((b) => b.className.includes(buttonStyles.success));
         expect(greens).toEqual([place]);
-        expect(hasIcon(screen.getByRole("button", { name: "My orders" }))).toBe(true);
+        // My Orders has its own page and nav entry; the form carries no second action.
+        expect(screen.queryByRole("button", { name: "My Orders" })).toBeNull();
     });
 
     it("puts icons on the access-list buttons and a tip on the restrict group", async () => {
         await renderForm();
-        fireEvent.click(screen.getByRole("button", { name: /Advanced options/ }));
-        expect(hasIcon(screen.getByRole("button", { name: "Set allow-list" }))).toBe(true);
-        expect(hasIcon(screen.getByRole("button", { name: "Set block-list" }))).toBe(true);
+        openOrderSection("Order Terms");
+        expect(hasIcon(screen.getByRole("button", { name: "Set Allow-List" }))).toBe(true);
+        expect(hasIcon(screen.getByRole("button", { name: "Set Block-List" }))).toBe(true);
         expect(screen.queryByText(/Allow\/block lists are address lists you published/)).toBeNull();
     });
 });

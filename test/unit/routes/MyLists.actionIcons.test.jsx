@@ -36,7 +36,7 @@ describe('MyLists page actions', () => {
             </MessagingProvider>,
         );
         await waitFor(() => expect(screen.getByRole('button', { name: /Road trip/ })).toBeTruthy());
-        for (const name of ['Shared lists', 'Create union list', 'Create list']) {
+        for (const name of ['Shared Lists', 'Create Union List', 'Create List']) {
             const button = screen.getByRole('button', { name });
             expect(button.querySelector('svg'), name).not.toBeNull();
         }

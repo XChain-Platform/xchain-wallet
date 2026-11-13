@@ -8,16 +8,18 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The subtoken wizard looks the parent up before review. The chain refuses a
-// child whose parent is missing or owned by another address, and it does so
-// after the fee is spent, so the wallet refuses first. An explorer that cannot
-// answer is a refusal, never a pass.
+// The Issue Token form's Subtoken template looks the parent up before every
+// compose. The chain refuses a child whose parent is missing or owned by
+// another address, and it does so after the fee is spent, so the wallet
+// refuses first. An explorer that cannot answer is a refusal, never a pass.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+// The Create a token route: TokenWizard renders the one Issue Token form.
 import { TokenWizard } from '../../../packages/core/src/shared/routes/TokenWizard.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 
 const OWNER = 'bc1qownerownerownerownerownerownerownerow';
 const STRANGER = 'bc1qstrangerstrangerstrangerstrangerstrang';
@@ -32,7 +34,7 @@ const ADDRESSES = {
     }],
 };
 
-async function review(parentLookup) {
+async function review(parentLookup, overrides = {}) {
     // The availability lookup for PARENT.CHILD answers 'not issued'; only
     // the parent lookup takes the case's answer.
     const getTokenInfo = vi.fn((req) => (req.tick === 'PARENT' ? parentLookup(req) : Promise.resolve({})));
@@ -41,48 +43,74 @@ async function review(parentLookup) {
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         getTokenInfo,
+        composeForConfirm: vi.fn().mockResolvedValue({
+            psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 0,
+        }),
         preflight: vi.fn().mockResolvedValue({ verdict: 'pass', findings: [] }),
+        ...overrides,
     };
     render(
         <MessagingProvider shell="web" messaging={messaging}>
             <TokenWizard walletId="w" onBack={() => {}} />
         </MessagingProvider>,
     );
-    fireEvent.click(await screen.findByText('Subtoken'));
-    await screen.findByLabelText('Fee paid by');
-    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Select template/ }));
+    fireEvent.click(screen.getByRole('option', { name: /Subtoken/ }));
     fireEvent.change(await screen.findByLabelText('Parent ticker'), { target: { value: 'PARENT' } });
     fireEvent.change(screen.getByLabelText('Subtoken name'), { target: { value: 'CHILD' } });
-    fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '100' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '100' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
     return messaging;
 }
 
-describe('TokenWizard subtoken parent lookup', () => {
-    afterEach(cleanup);
+describe('Issue Token subtoken parent lookup', () => {
+    afterEach(() => {
+        cleanup();
+        resetWalletModes();
+    });
 
-    it('reaches review when this wallet owns the existing parent', async () => {
+    it('composes PARENT.CHILD when this wallet owns the existing parent', async () => {
         const getTokenInfo = vi.fn().mockResolvedValue({ creator: OWNER });
-        await review(getTokenInfo);
-        expect(await screen.findByRole('button', { name: /Issue token/ })).toBeTruthy();
+        const messaging = await review(getTokenInfo);
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
         expect(getTokenInfo).toHaveBeenCalledWith(expect.objectContaining({ tick: 'PARENT' }));
+        const { actionData, from } = messaging.composeForConfirm.mock.calls[0][0];
+        expect(actionData.params.TICK).toBe('PARENT.CHILD');
+        expect(actionData.params.MAX_SUPPLY).toBe('100');
+        // Signed by the parent's owner, the only source the chain accepts.
+        expect(from.address).toBe(OWNER);
     });
 
     it('refuses a parent that the explorer does not know', async () => {
-        await review(vi.fn().mockResolvedValue({ creator: null }));
-        expect(await screen.findByText(/PARENT could not be confirmed as a token this wallet owns/)).toBeTruthy();
-        expect(screen.queryByRole('button', { name: /Issue token/ })).toBeNull();
+        const messaging = await review(vi.fn().mockResolvedValue({ creator: null }));
+        expect(await screen.findByRole('alert')).toHaveTextContent(/PARENT could not be confirmed as a token this wallet owns/);
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('refuses a parent owned by another address', async () => {
-        await review(vi.fn().mockResolvedValue({ creator: STRANGER }));
+        const messaging = await review(vi.fn().mockResolvedValue({ creator: STRANGER }));
+        expect(await screen.findByRole('alert')).toHaveTextContent(/This wallet does not own PARENT/);
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('looks the parent up again before a watcher build', async () => {
+        // Watcher mode reviews before it builds; the parent can change hands
+        // while that review sits open.
+        publishWalletModes({ wallets: [{ id: 'w', walletMode: 'watcher' }], activeWalletId: 'w' });
+        let owner = OWNER;
+        const messaging = await review(vi.fn(() => Promise.resolve({ creator: owner })), {
+            buildActionPsbtRequest: vi.fn().mockResolvedValue({ psbtHex: '70736274ff00' }),
+        });
+        const reviewForm = await screen.findByRole('form', { name: 'Review token issue' });
+        owner = STRANGER;
+        fireEvent.submit(reviewForm);
         expect(await screen.findByText(/This wallet does not own PARENT/)).toBeTruthy();
-        expect(screen.queryByRole('button', { name: /Issue token/ })).toBeNull();
+        expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
     it('refuses when the explorer cannot answer', async () => {
-        await review(vi.fn().mockRejectedValue(new Error('explorer 500')));
-        expect(await screen.findByText(/PARENT could not be confirmed as a token this wallet owns/)).toBeTruthy();
-        expect(screen.queryByRole('button', { name: /Issue token/ })).toBeNull();
+        const messaging = await review(vi.fn().mockRejectedValue(new Error('explorer 500')));
+        expect(await screen.findByRole('alert')).toHaveTextContent(/PARENT could not be confirmed as a token this wallet owns/);
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 });

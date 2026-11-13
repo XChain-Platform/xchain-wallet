@@ -65,9 +65,9 @@ describe('ListDetail rename action', () => {
             onRename,
         });
 
-        expect(await screen.findByRole('button', { name: 'Share list' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Transfer list' })).toBeTruthy();
-        fireEvent.click(await screen.findByRole('button', { name: 'Rename list' }));
+        expect(await screen.findByRole('button', { name: 'Share List' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Transfer List' })).toBeTruthy();
+        fireEvent.click(await screen.findByRole('button', { name: 'Rename List' }));
 
         expect(onRename).toHaveBeenCalledTimes(1);
         expect(onRename).toHaveBeenCalledWith({ chainId: CHAIN_ID, actionIndex: ACTION_INDEX });
@@ -87,10 +87,10 @@ describe('ListDetail rename action', () => {
             onRename: vi.fn(),
         });
 
-        await screen.findByRole('button', { name: 'Share list' });
+        await screen.findByRole('button', { name: 'Share List' });
         await waitFor(() => expect(getActionFormats).toHaveBeenCalledTimes(1));
         await act(async () => formatsRead.resolve(formats));
-        expect(screen.queryByRole('button', { name: 'Rename list' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Rename List' })).toBeNull();
     });
 
     it('hides rename when the format read rejects', async () => {
@@ -98,10 +98,10 @@ describe('ListDetail rename action', () => {
         const getActionFormats = vi.fn(() => formatsRead.promise);
         renderList({ getActionFormats, onRename: vi.fn() });
 
-        await screen.findByRole('button', { name: 'Share list' });
+        await screen.findByRole('button', { name: 'Share List' });
         await waitFor(() => expect(getActionFormats).toHaveBeenCalledTimes(1));
         await act(async () => formatsRead.reject(new Error('offline')));
-        expect(screen.queryByRole('button', { name: 'Rename list' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Rename List' })).toBeNull();
     });
 
     it('hides rename when the callback is absent', async () => {
@@ -109,9 +109,9 @@ describe('ListDetail rename action', () => {
         const getActionFormats = vi.fn(() => formatsRead.promise);
         renderList({ getActionFormats });
 
-        await screen.findByRole('button', { name: 'Share list' });
+        await screen.findByRole('button', { name: 'Share List' });
         await waitFor(() => expect(getActionFormats).toHaveBeenCalledTimes(1));
         await act(async () => formatsRead.resolve({ 4: {}, 5: {} }));
-        expect(screen.queryByRole('button', { name: 'Rename list' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Rename List' })).toBeNull();
     });
 });

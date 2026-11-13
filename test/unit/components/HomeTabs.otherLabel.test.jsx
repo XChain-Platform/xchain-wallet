@@ -45,7 +45,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useFiatRate.js', () => ({
     priceTokenRows: (rows) => rows,
 }));
 
-import { HomeTabs } from '../../../packages/core/src/shared/components/HomeTabs.jsx';
+import { ActivityEntryRow } from '../../../packages/core/src/shared/components/HomeTabs.jsx';
 import { clearDemoWalletId, markDemoWallet } from '../../../packages/core/src/flows/demoMode.js';
 import { synthesizeDemoHistory } from '../../../packages/core/src/flows/demoFixtures.js';
 import { classifyEntryAction } from '../../../packages/core/src/shared/utils/historyFilter.js';
@@ -84,8 +84,22 @@ function rowLabels() {
     });
 }
 
-async function openActivity() {
-    fireEvent.click(await screen.findByRole('tab', { name: 'Activity' }));
+// Home's Activity tab is retired (History holds the list), but its row, the
+// shared ActivityEntryRow, still names each action. The rows render directly.
+function renderRows(entries, address) {
+    render(
+        <ul>
+            {entries.map((entry) => (
+                <ActivityEntryRow
+                    key={entry.key}
+                    entry={entry}
+                    walletAddresses={new Set([address])}
+                    assetLookup={new Map()}
+                    chainTip={null}
+                />
+            ))}
+        </ul>,
+    );
 }
 
 afterEach(() => {
@@ -110,16 +124,7 @@ describe('Home Activity labels for unbucketed actions', () => {
         const recentActivity = CHAINS.flatMap((chain) => synthesizeDemoHistory(chain.id, 'demo-address')
             .map((row) => normalizeHistoryRow(row, { chainId: chain.id, address: 'demo-address' }))
             .filter(Boolean));
-        render(
-            <HomeTabs
-                chainRegistry={chainRegistry}
-                balances={balancesFor('demo-address')}
-                walletId="demo-wallet"
-                networkFilter="all"
-                recentActivity={recentActivity}
-            />,
-        );
-        await openActivity();
+        renderRows(recentActivity, 'demo-address');
         const labels = rowLabels();
         expect(labels.length).toBeGreaterThan(0);
         expect(labels.every((label) => label.length > 0)).toBe(true);
@@ -146,17 +151,7 @@ describe('Home Activity labels for unbucketed actions', () => {
         for (const e of entries) {
             expect(classifyEntryAction(e, new Set([address]))).toBe('other');
         }
-        render(
-            <HomeTabs
-                chainRegistry={chainRegistry}
-                balances={balancesFor(address)}
-                walletId="real-wallet"
-                networkFilter="all"
-                recentActivity={entries}
-                onActivityOpen={() => {}}
-            />,
-        );
-        await openActivity();
+        renderRows(entries, address);
         const labels = rowLabels();
         expect(labels).toHaveLength(3);
         expect(labels).not.toContain('Other');

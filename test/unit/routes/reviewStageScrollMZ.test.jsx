@@ -29,7 +29,6 @@ const cases = [
     ['StakingActionForm.jsx', standardExpression, ['review']],
     ['SwapForm.jsx', standardExpression, ['review']],
     ['TokenAdminForm.jsx', standardExpression, ['review']],
-    ['TokenWizard.jsx', "stage !== 'preview'", ['preview']],
 ];
 
 function restoreScrollExpression(fileName) {

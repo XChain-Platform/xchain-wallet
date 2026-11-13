@@ -90,8 +90,13 @@ describe('shared route dark-mode colors', () => {
         expect(css).not.toMatch(/rgba\(255,\s*255,\s*255/);
         const heroCss = readFileSync('packages/core/src/shared/components/TotalBalanceHero.module.css', 'utf8');
         expect(heroCss).toMatch(/\.eye\s*\{[^}]*var\(--xc-on-accent\) 15%/);
-        for (const selector of ['balanceHeroAmountCode', 'balanceHeroNoteCode', 'balanceHeroHidden']) {
+        // The balance hero's code, note and hidden classes were retired with
+        // the old hero; the card's icon fallback and secondary figures carry
+        // the on-accent token now.
+        for (const selector of ['cardCaptionIconFallback']) {
             expect(css).toMatch(new RegExp(`\\.${selector}\\s*\\{[^}]*color:\\s*var\\(--xc-on-accent\\)`, 's'));
         }
+        expect(css).toMatch(/\.cardSecondary\s*\{[^}]*color:\s*color-mix\(in srgb, var\(--xc-on-accent\) 80%, transparent\)/s);
+        expect(css).not.toMatch(/\.balanceHero/);
     });
 });

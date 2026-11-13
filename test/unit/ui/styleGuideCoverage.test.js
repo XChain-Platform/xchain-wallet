@@ -45,7 +45,8 @@ function namedComponentExports(source) {
 describe('style guide primitive coverage', () => {
     it('keeps the audited routes on shared field and action primitives', () => {
         const routes = {
-            'RenameWalletForm.jsx': ['Button', 'Input'],
+            // A Form Standard form submits through FormAction, which renders the shared Button.
+            'RenameWalletForm.jsx': ['FormAction', 'Input'],
             'ScanRoute.jsx': ['Button', 'Textarea'],
             'SharedListDirectory.jsx': ['Button', 'Input'],
             'VaultUnavailable.jsx': ['Button', 'Input'],

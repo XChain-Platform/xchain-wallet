@@ -74,14 +74,17 @@ afterEach(() => {
 describe('message signing inputs', () => {
     it('shows the complete selected address and updates it with the signing network', async () => {
         renderForm(SignMessageForm, messagingFor());
-        await waitFor(() => expect(screen.getByLabelText('Address')).toHaveValue('bc1qexample'));
+        await waitFor(() => expect(screen.getByLabelText('Signing address')).toHaveValue('bc1qexample'));
+        // Network and the signing address sit in the closed "Signing with"
+        // section; open it first.
+        fireEvent.click(screen.getByRole('button', { name: /^Signing with/, expanded: false }));
         expect(screen.getByRole('button', { name: 'About Network' })).toBeInTheDocument();
-        expect(screen.getByLabelText('Address')).toHaveAttribute('readonly');
+        expect(screen.getByLabelText('Signing address')).toHaveAttribute('readonly');
         const picker = await screen.findByRole('button', { name: /Network: Bitcoin/ });
         fireEvent.click(picker);
         pickLitecoinMainnet();
 
-        await waitFor(() => expect(screen.getByLabelText('Address')).toHaveValue('ltc1qexample'));
+        await waitFor(() => expect(screen.getByLabelText('Signing address')).toHaveValue('ltc1qexample'));
         expect(screen.getByRole('button', { name: /Network: Litecoin/ })).toBeTruthy();
     });
 
@@ -92,31 +95,44 @@ describe('message signing inputs', () => {
             }),
         }));
 
-        await screen.findByRole('button', { name: 'Network: Bitcoin' });
+        // The field sits in the closed "Signing with" section.
+        await screen.findByRole('button', { name: 'Network: Bitcoin', hidden: true });
         expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 });
 
 describe('signature verification inputs and results', () => {
-    it('names each required input beside the disabled verify action', async () => {
-        renderForm(VerifySignatureForm, messagingFor());
+    it('names each required input on a Verify press and never sends while one is empty', async () => {
+        // The redesigned form has no disabled Verify button: a press marks each
+        // empty field with its own message and sends nothing.
+        const verifyMessageRequest = vi.fn().mockResolvedValue({ valid: true });
+        renderForm(VerifySignatureForm, messagingFor({ verifyMessageRequest }));
         await screen.findByRole('button', { name: /Network: Bitcoin/ });
         expect(screen.getByRole('button', { name: 'About Network' })).toBeInTheDocument();
-        const action = screen.getByRole('button', { name: 'Verify signature' });
+        const action = screen.getByRole('button', { name: /^Verify signature$/i });
 
-        expect(action).toBeDisabled();
-        expect(action).toHaveAttribute('aria-describedby', 'verify-signature-disabled-reason');
-        expect(screen.getByRole('status')).toHaveTextContent('Enter the signer address to continue.');
+        expect(action).toBeEnabled();
+        fireEvent.click(action);
+        expect(await screen.findByText('Enter the signer address.')).toBeInTheDocument();
+        expect(screen.getByText('Enter the original message.')).toBeInTheDocument();
+        expect(screen.getByText('Enter the signature.')).toBeInTheDocument();
 
         fireEvent.change(screen.getByLabelText('Address'), { target: { value: 'bc1qcounterparty' } });
-        expect(screen.getByRole('status')).toHaveTextContent('Enter the original message to continue.');
+        expect(screen.queryByText('Enter the signer address.')).not.toBeInTheDocument();
+        expect(screen.getByText('Enter the original message.')).toBeInTheDocument();
 
         fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'message' } });
-        expect(screen.getByRole('status')).toHaveTextContent('Enter the signature to continue.');
+        expect(screen.queryByText('Enter the original message.')).not.toBeInTheDocument();
+        expect(screen.getByText('Enter the signature.')).toBeInTheDocument();
+
+        fireEvent.click(action);
+        expect(screen.getByText('Enter the signature.')).toBeInTheDocument();
+        expect(verifyMessageRequest).not.toHaveBeenCalled();
 
         fireEvent.change(screen.getByLabelText('Signature'), { target: { value: 'c2lnbmF0dXJl' } });
-        expect(action).toBeEnabled();
-        expect(action).not.toHaveAttribute('aria-describedby');
+        expect(screen.queryByText('Enter the signature.')).not.toBeInTheDocument();
+        fireEvent.click(action);
+        await waitFor(() => expect(verifyMessageRequest).toHaveBeenCalledTimes(1));
     });
 
     it('accepts wrapped base64 and verifies against the selected network', async () => {
@@ -128,7 +144,7 @@ describe('signature verification inputs and results', () => {
         fireEvent.change(screen.getByLabelText('Address'), { target: { value: 'ltc1qcounterparty' } });
         fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'exact message\nsecond line' } });
         fireEvent.change(screen.getByLabelText('Signature'), { target: { value: 'c2ln\nbmF0dXJl' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Verify signature' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Verify signature$/i }));
 
         await waitFor(() => expect(verifyMessageRequest).toHaveBeenCalledWith({
             chainId: LTC,
@@ -153,7 +169,7 @@ describe('signature verification inputs and results', () => {
         fireEvent.change(screen.getByLabelText('Address'), { target: { value: 'bcrt1qcounterparty' } });
         fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'message' } });
         fireEvent.change(screen.getByLabelText('Signature'), { target: { value: 'c2lnbmF0dXJl' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Verify signature' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Verify signature$/i }));
 
         await waitFor(() => expect(verifyMessageRequest).toHaveBeenCalledWith(
             expect.objectContaining({ chainId: 'bitcoin-regtest', address: 'bcrt1qcounterparty' }),
@@ -167,7 +183,7 @@ describe('signature verification inputs and results', () => {
         fireEvent.change(screen.getByLabelText('Address'), { target: { value: 'bc1qcounterparty' } });
         fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'message' } });
         fireEvent.change(screen.getByLabelText('Signature'), { target: { value: 'not base64!' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Verify signature' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Verify signature$/i }));
 
         expect(screen.getByRole('status'))
             .toHaveTextContent('Malformed signature. Enter a base64-encoded signature.');
@@ -182,7 +198,7 @@ describe('signature verification inputs and results', () => {
         fireEvent.change(screen.getByLabelText('Address'), { target: { value: 'bc1qcounterparty' } });
         fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'message' } });
         fireEvent.change(screen.getByLabelText('Signature'), { target: { value: 'c2lnbmF0dXJl' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Verify signature' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Verify signature$/i }));
 
         await waitFor(() => expect(screen.getByRole('status'))
             .toHaveTextContent("Invalid signature. Signature doesn't match this message and address."));
@@ -201,15 +217,15 @@ describe('signature verification inputs and results', () => {
         fireEvent.change(screen.getByLabelText('Address'), { target: { value: 'bc1qcounterparty' } });
         fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'older message' } });
         fireEvent.change(screen.getByLabelText('Signature'), { target: { value: 'c2lnbmF0dXJl' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Verify signature' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Verify signature$/i }));
 
         fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'newer message' } });
         pending.resolve({ valid: true });
 
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Verify signature' })).not.toBeDisabled());
+        await waitFor(() => expect(screen.getByRole('button', { name: /^Verify signature$/i })).not.toBeDisabled());
         expect(screen.queryByText(/Valid signature/)).toBeNull();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Verify signature' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Verify signature$/i }));
         await waitFor(() => expect(screen.getByRole('status'))
             .toHaveTextContent("Invalid signature. Signature doesn't match this message and address."));
         expect(verifyMessageRequest).toHaveBeenLastCalledWith(expect.objectContaining({

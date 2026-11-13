@@ -12,8 +12,8 @@ vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
         <button
             type="button"
             onClick={() => onSelect({
-                chainId: title.includes('give') ? DOGE : BTC,
-                tick: title.includes('give') ? 'ALPHA' : 'BETA',
+                chainId: title.toLowerCase().includes('give') ? DOGE : BTC,
+                tick: title.toLowerCase().includes('give') ? 'ALPHA' : 'BETA',
             })}
         >
             Choose {title}
@@ -38,6 +38,7 @@ vi.mock('../../../packages/core/src/shared/components/OwnAddressPickerScreen.jsx
 }));
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { CrossChainSwapForm } from '../../../packages/core/src/shared/routes/CrossChainSwapForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
@@ -57,6 +58,8 @@ const DOGE_ADDRESS = address('doge-1', 'D7Y55J3zQWnE6vKFHFXY4Kt7KXJ2RzHgC7');
 const OWN_BTC_ADDRESS = address('btc-1', BTC_ADDRESS);
 
 function messaging() {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode: 'watcher' }], activeWalletId: 'wallet-1' });
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({
             [DOGE]: [DOGE_ADDRESS],
@@ -65,7 +68,8 @@ function messaging() {
         getActiveAddresses: vi.fn().mockResolvedValue({}),
         getNewestAddress: vi.fn().mockResolvedValue(OWN_BTC_ADDRESS),
         getWalletBalances: vi.fn().mockResolvedValue({}),
-        getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+        getSettings: vi.fn().mockResolvedValue({}),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'W', walletMode: 'watcher' }]),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'watcher' }),
         getTokenInfo: vi.fn().mockResolvedValue({ divisibility: 8 }),
@@ -102,26 +106,40 @@ function openTip(name, copy) {
 async function chooseTokensAndAmounts() {
     await screen.findByRole('button', { name: /Give token:/ });
     fireEvent.click(screen.getByRole('button', { name: /Give token:/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Choose Select give token' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Choose Select Give Token' }));
     fireEvent.click(screen.getByRole('button', { name: /Get token:/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
-    fireEvent.change(screen.getByLabelText('Give amount (ALPHA)'), { target: { value: '2' } });
-    fireEvent.change(screen.getByLabelText('Get amount (BETA)'), { target: { value: '3' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Choose Select Get Token' }));
+    fireEvent.change(screen.getByLabelText(/^Give amount/), { target: { value: '2' } });
+    fireEvent.change(screen.getByLabelText(/^Get amount/), { target: { value: '3' } });
+}
+
+// The Full view, which the form remembers per browser, shows every field of
+// the swap in one section.
+function showFullView() {
+    localStorage.setItem('xc.giveGet.view.crossChainSwap', 'full');
+}
+
+// Opens a closed standard section (From, Swap Terms) by its title.
+function openSection(title) {
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${title}\\b`), expanded: false }));
 }
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     __clearTokenInfoCache();
     vi.restoreAllMocks();
 });
 
 describe('CrossChainSwapForm UI rulings', () => {
     it('uses a named success action and field-specific help without static escrow hints', async () => {
+        showFullView();
         mount();
 
-        const create = await screen.findByRole('button', { name: 'Create cross-chain swap' });
+        const create = await screen.findByRole('button', { name: 'Create Cross-Chain Swap' });
         expect(create).toHaveClass(buttonStyles.success);
         expectIcon(create);
+        openSection('From');
         await screen.findByRole('button', { name: 'Choose source address' });
 
         expect(screen.queryByText(
@@ -132,30 +150,33 @@ describe('CrossChainSwapForm UI rulings', () => {
             { selector: 'p' },
         )).toBeNull();
 
-        openTip('From', 'address on the give network whose tokens are escrowed');
+        openTip('From address', 'address on the give network whose tokens are escrowed');
         openTip('Give amount', 'give side stays escrowed until a match');
         openTip(
-            "Give this token's ownership (not a balance)",
+            "Give this token's ownership instead of an amount",
             "give token name's ownership record",
         );
         openTip('Receive at', 'address on the get network');
         openTip('Get amount', 'matcher must provide on the get network');
         openTip(
-            "Require the matcher to give that token's ownership",
+            "Require the matcher to give that token's ownership instead of an amount",
             "get token name's ownership record across chains",
         );
+        openSection('Swap Terms');
         openTip('Expiration', 'Cancel from My swaps or let the offer expire');
         openTip('Memo', 'public note stored with this cross-chain swap');
 
         fireEvent.click(screen.getByLabelText('Expire at a specific time'));
         openTip('Expires', 'local date and time');
-        expect(screen.getByRole('button', { name: 'About Give network' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'About Get network' })).toBeInTheDocument();
+        // One Network picker, in From; the get network follows the get token.
+        expect(screen.getByRole('button', { name: 'About Network' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'About Get network' })).toBeNull();
         expect(screen.getByRole('button', { name: 'About Give token' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'About Get token' })).toBeInTheDocument();
     });
 
     it('opens a get-network own-address picker and keeps the selected address editable', async () => {
+        showFullView();
         mount();
         const receive = await screen.findByRole('textbox', { name: 'Receive at' });
         await waitFor(() => expect(receive).toHaveValue(BTC_ADDRESS));
@@ -171,19 +192,20 @@ describe('CrossChainSwapForm UI rulings', () => {
             target: { value: BTC_ADDRESS },
         });
         expect(screen.getByRole('textbox', { name: 'Receive at' })).toHaveValue(BTC_ADDRESS);
-        expect(screen.getByRole('button', { name: 'Get network: Bitcoin' })).toBeInTheDocument();
+        // The get network follows the get token, so no control names it.
+        expect(screen.queryByRole('button', { name: /^Get network/ })).toBeNull();
     });
 
     it('keeps explicit icons and one success action through review and completion', async () => {
         mount();
         await chooseTokensAndAmounts();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Create cross-chain swap' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Cross-Chain Swap' }));
 
         const edit = await screen.findByRole('button', { name: 'Edit' });
         const back = screen.getByRole('button', { name: 'Back to previous screen' });
         const submit = screen.getByRole('button', {
-            name: 'Create unsigned cross-chain swap transaction',
+            name: 'Create Unsigned Cross-Chain Swap Transaction',
         });
         expectIcon(edit);
         expectIcon(back);

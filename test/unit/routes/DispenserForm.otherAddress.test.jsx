@@ -152,6 +152,11 @@ async function mountWithOutsideAddress(chainState, address) {
         ));
         await drainMicrotasks();
     });
+    // The dispenser address lives in the closed Dispenser Terms section.
+    await domAct(async () => {
+        fireEvent.click(utils.getByRole('button', { name: /^Dispenser Terms/ }));
+        await drainMicrotasks();
+    });
     await domAct(async () => {
         fireEvent.click(utils.getByRole('button', { name: 'Change dispenser address' }));
         await drainMicrotasks();
@@ -176,7 +181,7 @@ async function settle() {
 }
 
 const verdictOf = (utils) => utils.queryByTestId('outside-address-verdict');
-const createButton = (utils) => utils.getByRole('button', { name: 'Create dispenser' });
+const createButton = (utils) => utils.getByRole('button', { name: 'Create Dispenser' });
 
 describe('DispenserForm "Another address": format', () => {
     it('refuses a mistyped address with the Send wording and reads nothing', async () => {
@@ -210,6 +215,10 @@ describe('DispenserForm "Another address": format', () => {
         expect(utils.getByLabelText('Dispenser address').getAttribute('placeholder')).toBe('New address, made at preview');
         // The address shortener never runs on the placeholder sentence.
         expect(utils.container.textContent).not.toMatch(/New di…/);
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: /^Dispenser Terms/ }));
+            await drainMicrotasks();
+        });
         await domAct(async () => {
             fireEvent.click(utils.getByRole('button', { name: 'Change dispenser address' }));
             await drainMicrotasks();

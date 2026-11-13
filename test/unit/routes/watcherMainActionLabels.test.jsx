@@ -28,6 +28,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useOwnerActionLane.js', () => (
 }));
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { ListCreateForm } from '../../../packages/core/src/shared/routes/ListCreateForm.jsx';
 import { ListRenameForm } from '../../../packages/core/src/shared/routes/ListRenameForm.jsx';
 import { ListShareForm } from '../../../packages/core/src/shared/routes/ListShareForm.jsx';
@@ -40,10 +41,13 @@ const ADDRESS = Object.freeze({
 });
 
 function watcherMessaging() {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode: 'watcher' }], activeWalletId: 'w' });
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: ADDRESS.id } }),
-        getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+        getSettings: vi.fn().mockResolvedValue({}),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'w', name: 'W', walletMode: 'watcher' }]),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'watcher' }),
         getActionFormats: vi.fn().mockResolvedValue({
@@ -70,27 +74,27 @@ function mount(node) {
 }
 
 beforeEach(() => { __clearTokenInfoCache(); });
-afterEach(() => { cleanup(); });
+afterEach(() => { cleanup(); resetWalletModes(); });
 
 describe('watcher-mode main action labels', () => {
     // The screen slices name the watcher-mode action for what it makes, an
     // unsigned transaction for the offline signer, never a bare Review.
-    it('ListCreateForm names Create unsigned transaction in watcher mode', async () => {
+    it('ListCreateForm names Create Unsigned Transaction in watcher mode', async () => {
         mount(<ListCreateForm walletId="w" chainId={CHAIN} initialType="2" onBack={() => {}} />);
         await screen.findByLabelText('From');
-        expect(screen.getByRole('button', { name: 'Create unsigned transaction' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: /^Create Unsigned Transaction$/ })).toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Review' })).toBeNull();
     });
 
     it('ListRenameForm names Create unsigned transaction in watcher mode', async () => {
         mount(<ListRenameForm walletId="w" listRef={{ chainId: CHAIN, actionIndex: '2700' }} onBack={() => {}} />);
-        expect(await screen.findByRole('button', { name: 'Create unsigned transaction' })).toBeTruthy();
+        expect(await screen.findByRole('button', { name: /^Create unsigned transaction$/i })).toBeTruthy();
         expect(screen.queryByRole('button', { name: /^Review/ })).toBeNull();
     });
 
     it('ListShareForm names Create unsigned transaction in watcher mode', async () => {
         mount(<ListShareForm walletId="w" listRef={{ chainId: CHAIN, actionIndex: '2700' }} onBack={() => {}} />);
-        expect(await screen.findByRole('button', { name: 'Create unsigned transaction' })).toBeTruthy();
+        expect(await screen.findByRole('button', { name: /^Create unsigned transaction$/i })).toBeTruthy();
         expect(screen.queryByRole('button', { name: /^Review/ })).toBeNull();
     });
 });
@@ -112,24 +116,31 @@ describe('watcher-mode hint and button source contract', () => {
     it('GatedPublishForm and PublishFileForm name the offline signer in their own hint', () => {
         expect(read('GatedPublishForm')).toContain("t('gatedPublish.watcherHint')");
         expect(read('BatchComposerForm')).toContain("t('common.watcherBuildsUnsigned')");
-        expect(read('PublishFileForm')).toMatch(/prepares the transaction for your offline signer/);
+        // PublishFileForm uses the shared hint, whose copy names the offline signer.
+        expect(read('PublishFileForm')).toContain("t('common.watcherBuildsUnsigned')");
+        const common = fs.readFileSync(
+            path.resolve(__dirname, '../../../packages/core/src/i18n/locales/en/common.js'),
+            'utf8',
+        );
+        expect(common).toMatch(/'common\.watcherBuildsUnsigned':\s*'Watcher mode: this prepares the transaction for your offline signer/);
         expect(read('PublishFileForm')).not.toMatch(/Watcher mode: this (wallet will build|builds)/);
     });
 
     const LABELS = {
-        AddressPreferencesForm: 'Update preferences',
-        CreateBetFeedForm: 'Open market',
-        CrossChainSwapForm: 'Create cross-chain swap',
+        // The Form Standard's Title Case action labels.
+        AddressPreferencesForm: 'Update Preferences',
+        CreateBetFeedForm: 'Open Market',
+        CrossChainSwapForm: 'Create Cross-Chain Swap',
         GatedPublishForm: "t('palette.createPublishFile.title')",
-        ListCreateForm: 'Publish list',
-        ListForkForm: 'Publish edit',
-        ListRenameForm: 'Rename list',
-        ListShareForm: 'Share list',
-        ListTransferForm: 'Transfer list',
-        PublishFileForm: 'Publish file',
-        SellOwnershipForm: 'List name for sale',
-        SwapForm: 'Create swap',
-        UnionListForm: 'Create union list',
+        ListCreateForm: 'Publish List',
+        ListForkForm: 'Publish Edit',
+        ListRenameForm: 'Rename List',
+        ListShareForm: 'Share List',
+        ListTransferForm: 'Transfer List',
+        PublishFileForm: 'Publish File',
+        SellOwnershipForm: 'List Name for Sale',
+        SwapForm: 'Create Swap',
+        UnionListForm: 'Create Union List',
     };
 
     it.each(Object.entries(LABELS))('%s compose button reads %s outside watcher mode', (name, label) => {

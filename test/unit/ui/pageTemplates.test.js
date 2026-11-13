@@ -129,7 +129,7 @@ describe('ExecuteContractForm: the load error, loading line and broadcast panel 
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Call contract' }));
+            fireEvent.click(utils.getByRole('button', { name: 'Call Contract' }));
             await drain();
         });
         await domAct(async () => {

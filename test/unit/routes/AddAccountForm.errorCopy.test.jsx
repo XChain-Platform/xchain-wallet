@@ -48,7 +48,7 @@ afterEach(() => {
 async function submitAndReadError(text) {
     render(<AddAccountForm walletId="wallet-1" onBack={() => {}} onCreated={() => {}} />);
     fireEvent.change(screen.getByLabelText('Account name'), { target: { value: 'Savings' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Account' }));
     return screen.findByText(text);
 }
 

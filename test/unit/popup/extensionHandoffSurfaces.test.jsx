@@ -29,7 +29,7 @@ describe('extension full-tab handoff surfaces', () => {
             </MessagingProvider>,
         );
 
-        expect(screen.getByRole('heading', { name: 'Restore backup' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Restore Backup' })).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Open in tab' }));
         expect(onOpenInTab).toHaveBeenCalledWith({ lane: 'backup' });
     });

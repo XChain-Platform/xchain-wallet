@@ -150,6 +150,11 @@ function button(utils, re) {
 
 // Drive a stake all the way through the confirm page's Approve.
 async function placeBet(utils) {
+    // Details is the default tab; the bet form shows only on the Bet tab.
+    await domAct(async () => {
+        fireEvent.click(utils.getByRole('tab', { name: /^Bet$/ }));
+        await drain();
+    });
     await domAct(async () => {
         fireEvent.click(button(utils, /^Yes$/));
         await drain();
@@ -270,7 +275,7 @@ describe('OracleConsole confirms the two actions that settle a market', () => {
 
         await domAct(async () => { fireEvent.click(button(utils, /^Resolve$/)); await drain(); });
         await domAct(async () => { fireEvent.click(button(utils, /^Yes$/)); await drain(); });
-        await domAct(async () => { fireEvent.click(button(utils, /Publish result/i)); await drain(); });
+        await domAct(async () => { fireEvent.click(button(utils, /Publish Result/)); await drain(); });
         await domAct(async () => { fireEvent.click(utils.getByTestId('confirm-approve')); await drain(); });
 
         const receipt = utils.getByTestId('oracle-result');
@@ -289,7 +294,7 @@ describe('OracleConsole confirms the two actions that settle a market', () => {
 
         await domAct(async () => { fireEvent.click(button(utils, /^Resolve$/)); await drain(); });
         await domAct(async () => { fireEvent.click(button(utils, /^Yes$/)); await drain(); });
-        await domAct(async () => { fireEvent.click(button(utils, /Publish result/i)); await drain(); });
+        await domAct(async () => { fireEvent.click(button(utils, /Publish Result/)); await drain(); });
         await domAct(async () => { fireEvent.click(utils.getByTestId('confirm-approve')); await drain(); });
 
         const receipt = utils.getByTestId('oracle-result');
@@ -303,8 +308,8 @@ describe('OracleConsole confirms the two actions that settle a market', () => {
         const { messaging } = harness();
         const utils = await openConsole(messaging);
 
-        await domAct(async () => { fireEvent.click(button(utils, /Cancel and refund/i)); await drain(); });
-        await domAct(async () => { fireEvent.click(button(utils, /Cancel market/i)); await drain(); });
+        await domAct(async () => { fireEvent.click(button(utils, /Cancel and Refund/)); await drain(); });
+        await domAct(async () => { fireEvent.click(button(utils, /Cancel Market/)); await drain(); });
         await domAct(async () => { fireEvent.click(utils.getByTestId('confirm-approve')); await drain(); });
 
         const receipt = utils.getByTestId('oracle-result');

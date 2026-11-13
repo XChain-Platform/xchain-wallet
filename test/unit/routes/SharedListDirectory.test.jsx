@@ -112,7 +112,7 @@ describe('SharedListDirectory', () => {
 
         const row = await screen.findByRole('listitem', { name: 'Address list 8' });
         expect(screen.queryByRole('listitem', { name: 'Token list 12' })).toBeNull();
-        fireEvent.click(within(row).getByRole('button', { name: 'Choose list' }));
+        fireEvent.click(within(row).getByRole('button', { name: 'Choose List' }));
 
         expect(state.messaging.getSharedLists).toHaveBeenCalledWith({ chainId: CHAIN });
         expect(onSelect).toHaveBeenCalledWith({
@@ -128,7 +128,7 @@ describe('SharedListDirectory', () => {
 
         expect(await screen.findByRole('listitem', { name: 'Token list 12' })).toBeTruthy();
         expect(screen.queryByRole('listitem', { name: 'Token list 4' })).toBeNull();
-        expect(screen.getAllByRole('button', { name: 'Choose list' })).toHaveLength(1);
+        expect(screen.getAllByRole('button', { name: 'Choose List' })).toHaveLength(1);
     });
 
     it('renders one unavailable line for each failed chain', async () => {
@@ -219,11 +219,11 @@ describe('SharedListDirectory', () => {
             target: { value: '' },
         });
         expect(screen.getAllByRole('listitem')).toHaveLength(20);
-        fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Load More' }));
         expect(screen.getAllByRole('listitem')).toHaveLength(23);
 
         const row = screen.getByRole('listitem', { name: 'Token list 23' });
-        fireEvent.click(within(row).getByRole('button', { name: 'Open list' }));
+        fireEvent.click(within(row).getByRole('button', { name: 'Open List' }));
         expect(onOpenList).toHaveBeenCalledWith('bitcoin-mainnet', '23');
     });
 
@@ -247,7 +247,7 @@ describe('SharedListDirectory', () => {
 
         expect(await screen.findByText('Directory unavailable')).toBeTruthy();
         expect(screen.queryByText('No shared lists are available.')).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
 
         expect(await screen.findByText('No shared lists yet')).toBeTruthy();
         expect(messaging.getSharedLists).toHaveBeenCalledTimes(2);

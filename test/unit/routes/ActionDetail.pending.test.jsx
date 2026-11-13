@@ -173,7 +173,7 @@ describe('ActionDetail on a pending entry', () => {
         expect(within(details).queryByRole('rowheader', { name: 'block_index' })).toBeNull();
         expect(screen.getByText('Confirmed')).toBeTruthy();
 
-        expect(screen.getByRole('button', { name: 'Copy transaction ID' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Copy Transaction ID' })).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Copy from address' })).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Copy to address' })).toBeTruthy();
         expect(screen.getByRole('link', { name: 'XChain' }).getAttribute('href'))

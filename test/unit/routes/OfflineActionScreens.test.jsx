@@ -11,7 +11,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 
 const reachability = vi.hoisted(() => ({ overall: 'offline' }));
 
@@ -159,6 +159,8 @@ describe('ActionDetail', () => {
 describe.each([
     ['SwapForm', () => <SwapForm walletId={WALLET_ID} onBack={() => {}} />, 'Swapping needs a network connection.'],
     ['CrossChainSwapForm', () => <CrossChainSwapForm walletId={WALLET_ID} onBack={() => {}} />, 'Swapping needs a network connection.'],
+    // The Create a token route: the one Issue Token form states its own
+    // offline note and keeps Issue Token off.
     ['TokenWizard', () => <TokenWizard walletId={WALLET_ID} onBack={() => {}} />, 'Creating a token needs a network connection.'],
 ])('%s', (_name, route, message) => {
     it('shows one offline message and hides the shell notice when only the probe is offline', async () => {
@@ -174,6 +176,20 @@ describe.each([
         renderScreen(messagingWith({}), route());
         await screen.findByRole('heading', {}, { timeout: 3000 }).catch(() => {});
         expect(screen.queryByText(message)).toBeNull();
+    });
+});
+
+describe('TokenWizard offline submit', () => {
+    it('keeps Issue Token off and composes nothing while offline', async () => {
+        const composeForConfirm = vi.fn();
+        renderScreen(messagingWith({ composeForConfirm }), <TokenWizard walletId={WALLET_ID} onBack={() => {}} />);
+        await screen.findByText('Creating a token needs a network connection.');
+        fireEvent.change(screen.getByLabelText('Ticker'), { target: { value: 'OFFLINE' } });
+        const issue = screen.getByRole('button', { name: 'Issue Token' });
+        expect(issue).toBeDisabled();
+        fireEvent.submit(screen.getByRole('form', { name: 'Issue Token' }));
+        expect(screen.getAllByText('Creating a token needs a network connection.')).toHaveLength(1);
+        expect(composeForConfirm).not.toHaveBeenCalled();
     });
 });
 
@@ -214,16 +230,17 @@ describe('TokenDetail', () => {
 
     it('disables Send and Exchange with reasons when only the probe is offline', async () => {
         renderScreen(detailMessaging(), detail());
-        const actions = within(await screen.findByRole('group', { name: 'Quick actions' }));
+        // The Actions tab (open by default) holds the action tiles.
+        const actions = within(await screen.findByRole('group', { name: 'Actions for CACHE' }));
         expect(actions.getByRole('button', { name: 'Exchange' })).toBeDisabled();
-        expect(actions.getByText('Exchange needs a network connection.')).toBeInTheDocument();
+        expect(screen.getByText('Exchange needs a network connection.')).toBeInTheDocument();
     });
 
     it('keeps Exchange enabled when the probe is healthy', async () => {
         reachability.overall = 'normal';
         renderScreen(detailMessaging(), detail());
-        const actions = within(await screen.findByRole('group', { name: 'Quick actions' }));
+        const actions = within(await screen.findByRole('group', { name: 'Actions for CACHE' }));
         expect(actions.getByRole('button', { name: 'Exchange' })).toBeEnabled();
-        expect(actions.queryByText('Exchange needs a network connection.')).toBeNull();
+        expect(screen.queryByText('Exchange needs a network connection.')).toBeNull();
     });
 });

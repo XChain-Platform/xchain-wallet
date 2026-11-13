@@ -20,6 +20,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { ContractFundsForm } from '../../../packages/core/src/shared/routes/ContractFundsForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
@@ -41,7 +42,10 @@ const ADDRESSES = {
 const WALLET_BALANCE = '635000';
 const CONTRACT_HELD = '5000';
 
-function mountForm(mode, extra = {}, props = {}) {
+// `walletMode` among `extra` is the mode of wallet `w`, published the way the
+// shell does from the wallet list; every other entry is a messaging method.
+function mountForm(mode, { walletMode = 'full', ...extra } = {}, props = {}) {
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
@@ -98,6 +102,7 @@ async function pickToken(messaging) {
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     __clearTokenInfoCache();
 });
 
@@ -207,14 +212,15 @@ describe('ContractFundsForm withdraw sizes off contract custody (D-23)', () => {
 
     it('labels the withdrawal recipient and keeps values when Back returns to the form', async () => {
         const messaging = mountForm('withdraw', {
-            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            walletMode: 'watcher',
             signerReady: vi.fn().mockResolvedValue({ ready: false }),
         });
         await pickToken(messaging);
         fireEvent.change(screen.getByLabelText(/Quantity/i, { selector: 'input' }), { target: { value: '12.5' } });
         fireEvent.click(screen.getByRole('button', { name: 'Withdraw' }));
 
-        expect(await screen.findByRole('heading', { name: 'Review withdraw' })).toBeInTheDocument();
+        // Page titles are Title Case.
+        expect(await screen.findByRole('heading', { name: 'Review Withdraw' })).toBeInTheDocument();
         expect(screen.getByText('Watcher mode: this prepares the transaction for your offline signer. Sign it there, then bring the signed transaction to a wallet that can broadcast it.')).toBeInTheDocument();
         expect(screen.getByText('Recipient')).toBeInTheDocument();
         expect(screen.getByText('12.5')).toBeInTheDocument();

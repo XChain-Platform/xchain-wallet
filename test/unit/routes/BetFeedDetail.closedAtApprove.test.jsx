@@ -99,9 +99,11 @@ function mount(messaging) {
 }
 
 async function openReview() {
+    // The market page opens on Details; the bet form is on the Bet tab.
+    fireEvent.click(await screen.findByRole('tab', { name: 'Bet' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Yes' }));
     fireEvent.change(screen.getByLabelText(/^Stake/), { target: { value: '30' } });
-    const review = screen.getByRole('button', { name: /Place bet/ });
+    const review = screen.getByRole('button', { name: /Place Bet/ });
     await waitFor(() => expect(review).not.toBeDisabled());
     fireEvent.click(review);
     return waitFor(() => {

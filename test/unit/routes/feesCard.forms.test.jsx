@@ -28,11 +28,21 @@ vi.mock('../../../packages/core/src/shared/hooks/useFeeFiat.js', () => ({
 }));
 
 const ROOT = join(import.meta.dirname, '../../..');
+// Surfaces that still mount the shared FeesCard directly.
 const FORMS = [
-    'routes/AdvancedActionsForm.jsx',
-    'routes/AirdropForm.jsx',
     'routes/BatchComposerForm.jsx',
     'routes/BetFeedDetail.jsx',
+    'routes/DispenserDetail.jsx',
+    'routes/ListCreateForm.jsx',
+    'routes/ListForkForm.jsx',
+    'routes/ListShareForm.jsx',
+    'components/PlaceOrderPanel.jsx',
+];
+
+// Forms that show their fees through the Form Standard's Network fee section.
+const FEE_SECTION_FORMS = [
+    'routes/AdvancedActionsForm.jsx',
+    'routes/AirdropForm.jsx',
     'routes/BridgeMoveForm.jsx',
     'routes/CallbackForm.jsx',
     'routes/CreateBetFeedForm.jsx',
@@ -40,20 +50,14 @@ const FORMS = [
     'routes/CrossChainOrderForm.jsx',
     'routes/CrossChainSwapForm.jsx',
     'routes/DeployContractForm.jsx',
-    'routes/DispenserDetail.jsx',
     'routes/DispenserForm.jsx',
     'routes/DividendForm.jsx',
     'routes/ExecuteContractForm.jsx',
     'routes/IssueTokenForm.jsx',
-    'routes/ListCreateForm.jsx',
-    'routes/ListForkForm.jsx',
     'routes/ListRenameForm.jsx',
-    'routes/ListShareForm.jsx',
     'routes/SellOwnershipForm.jsx',
     'routes/SwapForm.jsx',
     'routes/SweepForm.jsx',
-    'routes/TokenWizard.jsx',
-    'components/PlaceOrderPanel.jsx',
 ];
 
 const TIERS = {
@@ -93,6 +97,16 @@ describe('Fees card route adoption', () => {
         expect(source).toMatch(/<FeesCard\b(?:(?!>).)*\bchainId=/s);
     });
 
+    // A Form Standard form shows its fees in one Network fee section, which
+    // mounts the shared FeesCard itself when the form passes `fees`.
+    it.each(FEE_SECTION_FORMS)('%s mounts exactly one Network fee section', (relative) => {
+        const source = readFileSync(join(ROOT, 'packages/core/src/shared', relative), 'utf8');
+        expect(source.match(/<FeeSection\b/g) || []).toHaveLength(1);
+        expect(source).toMatch(/import \{[^}]*\bFeeSection\b[^}]*\} from/);
+        expect(source).toMatch(/<FeeSection\b(?:(?!>).)*\bchainId=/s);
+        expect(source).not.toMatch(/<FeesCard\b/);
+    });
+
     it('keeps the advanced form conditional on the selected fee-bearing action', () => {
         const source = readFileSync(
             join(ROOT, 'packages/core/src/shared/routes/AdvancedActionsForm.jsx'),
@@ -107,8 +121,8 @@ describe('Fees card route adoption', () => {
             'utf8',
         );
         expect(source).toContain('useProtocolFeeQuote({');
-        expect(source).toContain('quote={protocolFeeQuote}');
-        expect(source).toContain('fee={protocolFeeQuote}');
+        // The Network fee section hands the raw quote to the shared card.
+        expect(source).toMatch(/fees=\{\{\s*quote: protocolFeeQuote,/);
     });
 });
 

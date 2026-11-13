@@ -125,7 +125,7 @@ describe('AirdropForm existing-list name', () => {
         expect(screen.queryByText(/address list/)).toBeNull();
 
         fireEvent.change(screen.getByLabelText(/^Per-recipient amount/), { target: { value: '5' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review airdrop' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review Airdrop' }));
 
         expect(screen.getByRole('alert')).toHaveTextContent(UNION_COPY);
         expect(screen.getByRole('form', { name: 'Token airdrop' })).toBeTruthy();
@@ -162,7 +162,7 @@ describe('AirdropForm existing-list name', () => {
         await chooseExistingList(listRow({ name: 'Treasury wallets' }));
         const amount = screen.getByLabelText(/^Per-recipient amount/);
         fireEvent.change(amount, { target: { value: '5' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review airdrop' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review Airdrop' }));
 
         expect(await screen.findByText('5 DROP')).toBeTruthy();
         expect(screen.getByText('#2700')).toBeTruthy();
@@ -176,7 +176,7 @@ describe('AirdropForm existing-list name', () => {
         const row = listRow({ actionIndex: 'bad-id' });
         await chooseExistingList(row);
         fireEvent.change(screen.getByLabelText(/^Per-recipient amount/), { target: { value: '5' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review airdrop' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review Airdrop' }));
 
         expect(screen.getByRole('alert')).toHaveTextContent(
             'The selected list has an invalid action index. Choose the list again.',

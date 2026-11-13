@@ -26,9 +26,8 @@ describe('route style tokens', () => {
         expect(input).toContain('min-inline-size: var(--xc-tap-min);');
         expect(input).toContain('min-block-size: var(--xc-tap-min);');
 
-        expect(manageToken).toContain('width: var(--xc-icon-md);');
+        // The token page's own tiles and rows are retired; its lock and edit marks keep the small icon token.
         expect(manageToken).toContain('width: var(--xc-icon-sm);');
-        expect(manageToken).toContain('min-height: calc(var(--xc-control-h-lg) + var(--xc-space-6) + var(--xc-space-3));');
         expect(manageToken).not.toMatch(/var\(--xc-radius-[^)]+,\s*\d+px\)/);
 
         expect(messagingInbox).toContain('width: var(--xc-icon-sm);');
@@ -62,7 +61,7 @@ describe('route style tokens', () => {
     });
 });
 
-describe('route styles use the shared geometry tokens (staking, settings, wizard)', () => {
+describe('route styles use the shared geometry tokens (staking, settings)', () => {
     it('keeps Settings free of route-owned page gutters', () => {
         const css = readRouteCss('Settings');
 
@@ -88,14 +87,8 @@ describe('route styles use the shared geometry tokens (staking, settings, wizard
     });
 
     it('documents untokenized route-specific measurements', () => {
-        const wizard = readRouteCss('TokenWizard');
         const unavailable = readRouteCss('VaultUnavailable');
 
-        // The step caption runs the whole content row, so it carries no fixed measure.
-        expect(wizard).toMatch(/\.progress\s*\{[^}]*max-width:\s*none;/s);
-        expect(wizard).not.toMatch(/max-width:\s*560px/);
-        // The wizard's checkboxes are kit Checkbox controls, so no native-box offset remains.
-        expect(wizard).not.toMatch(/\.checkRow/);
         // The escape link is a kit Button now, so the route keeps no underline or focus offsets.
         expect(unavailable).not.toMatch(/text-underline-offset|outline-offset/);
     });

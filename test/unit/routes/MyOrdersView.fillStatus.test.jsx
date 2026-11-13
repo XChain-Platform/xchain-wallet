@@ -185,7 +185,7 @@ describe('MyOrdersView: cancel rows', () => {
         const row = rowFor(section(utils, 'Open orders'), 'bad-id');
 
         fireEvent.click(within(row).getByRole('button', { name: 'Cancel' }));
-        fireEvent.click(utils.getByRole('button', { name: 'Cancel order' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Cancel Order' }));
 
         expect(await utils.findByRole('alert')).toHaveTextContent('Order ID must be a positive whole number.');
         expect(calls.some((call) => call.method === 'composeForConfirm')).toBe(false);
@@ -200,7 +200,7 @@ describe('MyOrdersView: cancel rows', () => {
         const row = rowFor(section(utils, 'Open orders'), 700);
 
         fireEvent.click(within(row).getByRole('button', { name: 'Edit' }));
-        const submit = utils.getByRole('button', { name: 'Update order' });
+        const submit = utils.getByRole('button', { name: 'Update Order' });
         expect(submit).toBeEnabled();
         fireEvent.click(submit);
 
@@ -221,7 +221,7 @@ describe('MyOrdersView: cancel rows', () => {
         const row = rowFor(section(utils, 'Open orders'), 700);
 
         fireEvent.click(within(row).getByRole('button', { name: 'Cancel' }));
-        fireEvent.click(utils.getByRole('button', { name: 'Cancel order' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Cancel Order' }));
 
         await waitFor(() => expect(utils.getByRole('alert')).toHaveTextContent(
             'Could not cancel the order. Try again.',
@@ -246,7 +246,7 @@ describe('MyOrdersView: cancel rows', () => {
         const row = rowFor(section(utils, 'Open orders'), 740);
 
         fireEvent.click(within(row).getByRole('button', { name: 'Cancel' }));
-        fireEvent.click(utils.getByRole('button', { name: 'Cancel order' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Cancel Order' }));
 
         expect(await utils.findByRole('alert')).toHaveTextContent(
             'This order is not open. Refresh My orders and try again.',
@@ -269,7 +269,7 @@ describe('MyOrdersView: cancel rows', () => {
         const row = rowFor(section(utils, 'Open orders'), 741);
 
         fireEvent.click(within(row).getByRole('button', { name: 'Cancel' }));
-        fireEvent.click(utils.getByRole('button', { name: 'Cancel order' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Cancel Order' }));
 
         expect(await utils.findByRole('alert')).toHaveTextContent(
             'This order is not open. Refresh My orders and try again.',

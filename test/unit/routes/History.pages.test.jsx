@@ -86,8 +86,8 @@ describe('History follows every page of an address', () => {
         expect(screen.getByText('250 history items will be exported.')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
-        fireEvent.click(screen.getByRole('button', { name: 'Show more history' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Show more history' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Show More History' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Show More History' }));
         await waitFor(() => {
             expect(view.container.querySelectorAll('[data-history-key]')).toHaveLength(250);
         });

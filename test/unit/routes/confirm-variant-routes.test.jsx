@@ -16,6 +16,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, act as domAct, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { PsbtSignForm } from '../../../packages/core/src/shared/routes/PsbtSignForm.jsx';
 import { SignMessageForm } from '../../../packages/core/src/shared/routes/SignMessageForm.jsx';
 
@@ -44,6 +45,7 @@ const DECOMPOSED = Object.freeze({
 });
 
 beforeEach(() => {
+    resetWalletModes();
     vi.useFakeTimers({
         toFake: [
             'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval',
@@ -53,13 +55,17 @@ beforeEach(() => {
     });
 });
 
-function recordingMessaging(overrides = {}) {
+// `walletMode` among the overrides is the mode of wallet `w`, published the way
+// the shell does from the wallet list; every other override is a messaging method.
+function recordingMessaging({ walletMode = 'full', ...overrides } = {}) {
     const calls = [];
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const target = {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [HD_ADDRESS] }),
         getActiveAddresses: () => Promise.resolve({}),
         signerReady: () => Promise.resolve({ ready: false }),
-        getSettings: () => Promise.resolve({ walletMode: 'full' }),
+        getSettings: () => Promise.resolve({}),
+        listWallets: () => Promise.resolve([{ id: 'w', name: 'W', walletMode }]),
         getSignerStatus: () => Promise.resolve({ status: 'locked' }),
         preflight: (args) => {
             calls.push({ method: 'preflight', args });
@@ -105,7 +111,7 @@ function findButton(utils, re) {
 describe('§5.5 PsbtSignForm routes through the PSBT confirm variant', () => {
     it('watcher mode never offers a password or a signing action', async () => {
         const { messaging, calls } = recordingMessaging({
-            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+            walletMode: 'watcher',
         });
         let utils;
         await domAct(async () => {
@@ -305,7 +311,7 @@ describe('§5.5 PsbtSignForm routes through the PSBT confirm variant', () => {
 describe('SignMessageForm signs directly from the wallet form', () => {
     it('watcher mode never offers a password or a signing action', async () => {
         const { messaging, calls } = recordingMessaging({
-            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+            walletMode: 'watcher',
         });
         let utils;
         await domAct(async () => {
@@ -365,7 +371,7 @@ describe('SignMessageForm signs directly from the wallet form', () => {
         expect(utils.getByLabelText('Message')).toHaveValue('proof of control');
         expect(utils.container.textContent).toContain('sig-abc');
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Copy signature' }));
+            fireEvent.click(utils.getByRole('button', { name: 'Copy Signature' }));
             await drainMicrotasks();
         });
         expect(writeText).toHaveBeenCalledWith('sig-abc');

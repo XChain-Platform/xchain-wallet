@@ -88,7 +88,7 @@ function enterPasswordStep({ passphrase = false } = {}) {
 
 function startQuiz() {
     fireEvent.click(screen.getByRole('checkbox', { name: /saved my recovery phrase/i }));
-    fireEvent.click(screen.getByRole('button', { name: 'Verify recovery phrase' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Verify Recovery Phrase' }));
 }
 
 function answerQuiz() {
@@ -124,7 +124,7 @@ describe('CreateWallet lifecycle guards', () => {
         expect(backButtons[0].closest('header')).not.toBeNull();
         expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
 
-        const createButton = screen.getByRole('button', { name: 'Create wallet' });
+        const createButton = screen.getByRole('button', { name: 'Create Wallet' });
         expect(createButton).toHaveClass(buttonStyles.success);
         expect(document.querySelectorAll(`.${buttonStyles.success}`)).toHaveLength(1);
     });
@@ -139,13 +139,13 @@ describe('CreateWallet lifecycle guards', () => {
         startQuiz();
         answerQuiz();
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous step' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Reveal recovery phrase' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal Recovery Phrase' }));
 
         expect(mocks.generateBip39Mnemonic).toHaveBeenCalledTimes(1);
         expect(screen.getByText('abandon')).toBeInTheDocument();
         expect(screen.queryByText('account')).toBeNull();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Verify recovery phrase' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Verify Recovery Phrase' }));
         const quizInputs = screen.getAllByLabelText(/^Word \d+$/);
         expect(quizInputs).toHaveLength(3);
         for (const input of quizInputs) expect(input).toHaveValue('');
@@ -167,7 +167,7 @@ describe('CreateWallet lifecycle guards', () => {
             const answer = position === 6 ? 'absorb' : expectedAnswers.get(position);
             fireEvent.change(input, { target: { value: answer } });
         }
-        fireEvent.click(screen.getByRole('button', { name: 'Create wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Wallet' }));
 
         const error = await screen.findByRole('alert');
         expect(error).toHaveTextContent('Word 6 does not match your written copy.');
@@ -175,7 +175,7 @@ describe('CreateWallet lifecycle guards', () => {
         expect(importMnemonic).not.toHaveBeenCalled();
 
         fireEvent.change(screen.getByLabelText('Word 6'), { target: { value: 'absent' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Create wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Wallet' }));
 
         await screen.findByRole('heading', { name: 'Automatic Donation System' });
         expect(importMnemonic).toHaveBeenCalledWith(expect.objectContaining({ mnemonic: PHRASE }));
@@ -200,7 +200,7 @@ describe('CreateWallet lifecycle guards', () => {
         enterPasswordStep();
         startQuiz();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Create wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Wallet' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'Recovery phrase verification could not start. Go back and try again.',
@@ -217,10 +217,10 @@ describe('CreateWallet lifecycle guards', () => {
         startQuiz();
         answerQuiz();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Create wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Wallet' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent('Could not prepare wallet creation');
-        expect(screen.getByRole('button', { name: 'Create wallet' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Create Wallet' })).toBeEnabled();
         expect(importMnemonic).not.toHaveBeenCalled();
     });
 
@@ -232,7 +232,7 @@ describe('CreateWallet lifecycle guards', () => {
         enterPasswordStep();
         startQuiz();
         answerQuiz();
-        const form = screen.getByRole('button', { name: 'Create wallet' }).closest('form');
+        const form = screen.getByRole('button', { name: 'Create Wallet' }).closest('form');
 
         act(() => {
             fireEvent.submit(form);
@@ -252,7 +252,7 @@ describe('CreateWallet lifecycle guards', () => {
         startQuiz();
         answerQuiz();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Create wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Wallet' }));
         await screen.findByRole('heading', { name: 'Automatic Donation System' });
         await waitFor(() => {
             const stateValues = [...hookValues.values()];

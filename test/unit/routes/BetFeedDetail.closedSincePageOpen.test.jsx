@@ -82,10 +82,13 @@ async function reviewBet(messaging) {
         );
         await drain();
     });
+    // Details is the default tab; the bet form shows only on the Bet tab.
+    const betTab = utils.getByRole('tab', { name: /^Bet$/ });
+    await domAct(async () => { fireEvent.click(betTab); await drain(); });
     const yes = utils.getByRole('button', { name: 'Yes' });
     await domAct(async () => { yes.click(); await drain(); });
     fireEvent.change(utils.getByLabelText(/^Stake/), { target: { value: '30' } });
-    const review = utils.getByRole('button', { name: /Place bet/ });
+    const review = utils.getByRole('button', { name: /Place Bet/ });
     await domAct(async () => { review.click(); await drain(); });
     return utils;
 }
@@ -97,7 +100,7 @@ describe('Market page: a market that closed since the page opened', () => {
         expect(calls.compose).toBe(0);
         const alert = utils.container.querySelector('[role="alert"]');
         expect(alert?.textContent).toMatch(/no longer takes bets.*Nothing was sent/);
-        expect(utils.queryByRole('button', { name: /Place bet/ })).toBeNull();
+        expect(utils.queryByRole('button', { name: /Place Bet/ })).toBeNull();
     });
 
     it('refuses a cancelled market too', async () => {

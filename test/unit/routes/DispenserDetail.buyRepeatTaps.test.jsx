@@ -89,11 +89,13 @@ async function mount({ destinationRows = [TOKEN_PAID] } = {}) {
         });
     }
     vi.useRealTimers();
+    // Details is the default tab; the buy panel shows only on the Buy tab.
+    fireEvent.click(await screen.findByRole('tab', { name: /^Buy$/ }));
     await screen.findByText(/250 MEMEVALID available/);
     return messaging;
 }
 
-const buyButton = () => screen.findByRole('button', { name: /^Buy \d+ fills?$/ });
+const buyButton = () => screen.findByRole('button', { name: /^Buy \d+ Dispenses?$/ });
 
 async function openReview() {
     const buy = await buyButton();

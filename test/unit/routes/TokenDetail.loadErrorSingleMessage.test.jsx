@@ -12,7 +12,7 @@
 // level: the "No price history yet" empty state belongs to a loaded token.
 
 import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from 'vitest';
-import { render, screen, cleanup, waitFor } from '@testing-library/react';
+import { render, screen, cleanup, waitFor, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { TokenDetail } from '../../../packages/core/src/shared/routes/TokenDetail.jsx';
@@ -47,6 +47,7 @@ afterAll(() => { globalThis.ResizeObserver = savedResizeObserver; });
 const CHAIN = 'bitcoin-mainnet';
 const NOTICE = /Token details could not be loaded from the explorer/;
 const NO_HISTORY = /No price history yet/;
+const NO_MARKET_ROW = /No market data for this network|No DEX trades yet/;
 
 function pageMessages(container) {
     const nodes = [...container.querySelectorAll('[data-variant], [data-empty-state]')]
@@ -98,7 +99,10 @@ describe('TokenDetail load-error state', () => {
         renderDetail(vi.fn().mockResolvedValue({
             chainId: CHAIN, tick: 'LOADERR', creator: 'bc1qowner', divisibility: 8,
         }));
-        expect(await screen.findByText(NO_HISTORY)).toBeTruthy();
+        // The market rows sit at the top of the Details tab; a token with no price or
+        // trades says so there in place of the old chart note.
+        fireEvent.click(await screen.findByRole('tab', { name: 'Details' }));
+        expect((await screen.findAllByText(NO_MARKET_ROW)).length).toBeGreaterThan(0);
         expect(screen.queryByText(NOTICE)).toBeNull();
     });
 });

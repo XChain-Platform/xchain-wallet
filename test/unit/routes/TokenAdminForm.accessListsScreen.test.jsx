@@ -68,17 +68,17 @@ describe('TokenAdminForm access-lists screen', () => {
 
         expect(screen.queryByText(/^Restrict who can interact/)).toBeNull();
         expect(screen.queryByText(/^A list can be replaced here/)).toBeNull();
-        expect(screen.queryByText(/^Choose Remove list to detach/)).toBeNull();
+        expect(screen.queryByText(/^Choose Remove List to detach/)).toBeNull();
         const allowTip = within(allowSection).getByRole('button', { name: 'About the allow-list' });
         const blockTip = within(blockSection).getByRole('button', { name: 'About the block-list' });
         expect(allowTip).toHaveAccessibleDescription(/Only members of this allow-list/);
         expect(blockTip).toHaveAccessibleDescription(/Members of this block-list are denied/);
 
         const actionButtons = [
-            within(allowSection).getByRole('button', { name: 'Change allow-list' }),
+            within(allowSection).getByRole('button', { name: 'Change Allow-List' }),
             within(allowSection).getByRole('button', { name: 'Remove allow-list' }),
-            within(blockSection).getByRole('button', { name: 'Change block-list' }),
-            within(blockSection).getByRole('button', { name: 'Use a shared block list' }),
+            within(blockSection).getByRole('button', { name: 'Change Block-List' }),
+            within(blockSection).getByRole('button', { name: 'Use a Shared Block List' }),
             within(blockSection).getByRole('button', { name: 'Remove block-list' }),
         ];
         for (const button of actionButtons) {

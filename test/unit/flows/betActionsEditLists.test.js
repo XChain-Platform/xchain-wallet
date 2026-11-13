@@ -9,10 +9,13 @@
 // contact legal@dankest.llc.
 
 import { readFileSync } from 'node:fs';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, act as domAct, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
+
+afterEach(() => { resetWalletModes(); });
 import { OracleConsole } from '../../../packages/core/src/shared/routes/OracleConsole.jsx';
 import { decodeAction } from '../../../packages/core/src/decoder/actionDecoder.js';
 
@@ -106,11 +109,14 @@ async function drain(rounds = 16) {
     for (let i = 0; i < rounds; i += 1) await Promise.resolve();
 }
 
-function routeHarness(feeds, settings = { walletMode: 'full' }) {
+function routeHarness(feeds, { walletMode = 'full' } = {}) {
     const calls = [];
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode }], activeWalletId: 'wallet-1' });
     const target = {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [ADDRESS] }),
-        getSettings: () => Promise.resolve(settings),
+        getSettings: () => Promise.resolve({}),
+        listWallets: () => Promise.resolve([{ id: 'wallet-1', name: 'W', walletMode }]),
         signerReady: () => Promise.resolve({ ready: false }),
         getSignerStatus: () => Promise.resolve({ status: 'locked' }),
         betFeeds: () => Promise.resolve({ data: feeds }),
@@ -180,9 +186,9 @@ describe('OracleConsole owner-only open-feed editor', () => {
             await drain();
         });
 
-        expect(buttonsNamed(utils, 'Edit lists')).toHaveLength(1);
+        expect(buttonsNamed(utils, 'Edit Lists')).toHaveLength(1);
         await domAct(async () => {
-            fireEvent.click(buttonsNamed(utils, 'Edit lists')[0]);
+            fireEvent.click(buttonsNamed(utils, 'Edit Lists')[0]);
             await drain();
         });
         expect(utils.getByLabelText('New allow-list index')).toBeTruthy();
@@ -191,7 +197,7 @@ describe('OracleConsole owner-only open-feed editor', () => {
 
         await domAct(async () => {
             fireEvent.change(utils.getByLabelText('New allow-list index'), { target: { value: '81' } });
-            fireEvent.click(buttonsNamed(utils, 'Update lists')[0]);
+            fireEvent.click(buttonsNamed(utils, 'Update Lists')[0]);
             await drain();
         });
         const compose = calls.find((call) => call.method === 'composeBetForConfirm');
@@ -221,11 +227,11 @@ describe('OracleConsole owner-only open-feed editor', () => {
             utils = mountConsole(messaging);
             await drain();
         });
-        fireEvent.click(buttonsNamed(utils, 'Edit lists')[0]);
+        fireEvent.click(buttonsNamed(utils, 'Edit Lists')[0]);
         fireEvent.change(utils.getByLabelText('New allow-list index'), { target: { value: '81' } });
         expect(utils.queryByLabelText('Password')).toBeNull();
         await domAct(async () => {
-            fireEvent.click(buttonsNamed(utils, 'Create unsigned transaction')[0]);
+            fireEvent.click(buttonsNamed(utils, 'Create Unsigned Transaction')[0]);
             await drain();
         });
         expect(calls.find((call) => call.method === 'buildBetActionPsbtRequest')?.args).toMatchObject({

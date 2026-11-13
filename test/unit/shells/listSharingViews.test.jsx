@@ -35,7 +35,10 @@ describe.each(SHELLS)('%s list sharing routes', (_name, source) => {
         expect(source).toContain('onOpenSharedLists={()');
         expect(source).toContain('mode="browse"');
         expect(source).toContain('onOpenList={(chainId, actionIndex)');
-        expect(source).toContain("listRef.origin === 'shared' ? 'shared-lists' : 'lists'");
+        // Back pops the shell's history, so a list opened from the shared
+        // directory returns there and one opened from My lists returns there.
+        expect(source).not.toContain("listRef.origin === 'shared' ? 'shared-lists' : 'lists'");
+        expect(source).toMatch(/unlockedView === 'list-detail'[\s\S]*?onBack=\{goBack\}/);
     });
 
     it('opens the access-list form at the shared block picker', () => {
@@ -83,32 +86,32 @@ function mountMyLists(props = {}) {
 describe('list page sharing entries', () => {
     it('shows detail entries only when their handlers are passed', async () => {
         mountDetail();
-        await screen.findByText('Fork & edit');
-        expect(screen.queryByText('Share list')).toBeNull();
-        expect(screen.queryByText('Transfer list')).toBeNull();
+        await screen.findByText('Fork & Edit');
+        expect(screen.queryByText('Share List')).toBeNull();
+        expect(screen.queryByText('Transfer List')).toBeNull();
         cleanup();
 
         const onShare = vi.fn();
         const onTransfer = vi.fn();
         mountDetail({ onShare, onTransfer });
-        await screen.findByText('Fork & edit');
-        fireEvent.click(screen.getByText('Share list'));
-        fireEvent.click(screen.getByText('Transfer list'));
+        await screen.findByText('Fork & Edit');
+        fireEvent.click(screen.getByText('Share List'));
+        fireEvent.click(screen.getByText('Transfer List'));
         expect(onShare).toHaveBeenCalledWith({ chainId: 'bitcoin-mainnet', actionIndex: '7' });
         expect(onTransfer).toHaveBeenCalledWith({ chainId: 'bitcoin-mainnet', actionIndex: '7' });
     });
 
     it('shows list directory entries only when their handlers are passed', () => {
         mountMyLists();
-        expect(screen.queryByText('Create union list')).toBeNull();
-        expect(screen.queryByText('Shared lists')).toBeNull();
+        expect(screen.queryByText('Create Union List')).toBeNull();
+        expect(screen.queryByText('Shared Lists')).toBeNull();
         cleanup();
 
         const onCreateUnionList = vi.fn();
         const onOpenSharedLists = vi.fn();
         mountMyLists({ onCreateUnionList, onOpenSharedLists });
-        fireEvent.click(screen.getByText('Create union list'));
-        fireEvent.click(screen.getByText('Shared lists'));
+        fireEvent.click(screen.getByText('Create Union List'));
+        fireEvent.click(screen.getByText('Shared Lists'));
         expect(onCreateUnionList).toHaveBeenCalledOnce();
         expect(onOpenSharedLists).toHaveBeenCalledOnce();
     });

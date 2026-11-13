@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act as domAct, fireEvent, render } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { ComposeMessage } from '../../../packages/core/src/shared/routes/ComposeMessage.jsx';
 import { MessagingInbox } from '../../../packages/core/src/shared/routes/MessagingInbox.jsx';
 
@@ -34,6 +35,7 @@ const COMPOSED = Object.freeze({
 });
 
 beforeEach(() => {
+    resetWalletModes();
     vi.useFakeTimers({
         toFake: [
             'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval',
@@ -47,13 +49,17 @@ async function drainMicrotasks(rounds = 16) {
     for (let i = 0; i < rounds; i += 1) await Promise.resolve();
 }
 
-function recordingMessaging(overrides = {}) {
+// `walletMode` among the overrides is the mode of wallet-1, published the way
+// the shell does from the wallet list; every other override is a messaging method.
+function recordingMessaging({ walletMode = 'full', ...overrides } = {}) {
     const calls = [];
+    publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode }], activeWalletId: 'wallet-1' });
     const target = {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [OWNER] }),
         getActiveAddresses: () => Promise.resolve({ [CHAIN]: OWNER }),
         signerReady: () => Promise.resolve({ ready: true }),
-        getSettings: () => Promise.resolve({ walletMode: 'full' }),
+        getSettings: () => Promise.resolve({}),
+        listWallets: () => Promise.resolve([{ id: 'wallet-1', name: 'W', walletMode }]),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
         listContacts: () => Promise.resolve([]),
         getRecipientPubkey: () => Promise.resolve(null),
@@ -130,7 +136,7 @@ describe('MESSAGE handshakes use shared confirmation', () => {
         });
 
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: /Request encrypted session/i }));
+            fireEvent.click(utils.getByRole('button', { name: 'Request Encrypted Session (Publish Your Key)' }));
             await drainMicrotasks();
         });
 
@@ -155,7 +161,7 @@ describe('MESSAGE handshakes use shared confirmation', () => {
         });
 
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Share my key' }));
+            fireEvent.click(utils.getByRole('button', { name: 'Share My Key' }));
             await drainMicrotasks();
         });
 
@@ -181,7 +187,7 @@ describe('MESSAGE handshakes use shared confirmation', () => {
         expect(utils.getByLabelText('Search conversations')).toBeTruthy();
 
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Share my key' }));
+            fireEvent.click(utils.getByRole('button', { name: 'Share My Key' }));
             await drainMicrotasks();
         });
 
@@ -203,7 +209,7 @@ describe('MESSAGE handshakes use shared confirmation', () => {
         const buildActionPsbtRequest = vi.fn(() =>
             Promise.resolve({ psbtHex: 'aa00', encoding: 'psbt' }));
         const { messaging, calls } = recordingMessaging({
-            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+            walletMode: 'watcher',
             buildActionPsbtRequest,
         });
         let utils;
@@ -213,7 +219,7 @@ describe('MESSAGE handshakes use shared confirmation', () => {
         });
 
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Share my key' }));
+            fireEvent.click(utils.getByRole('button', { name: 'Share My Key' }));
             await drainMicrotasks();
         });
 

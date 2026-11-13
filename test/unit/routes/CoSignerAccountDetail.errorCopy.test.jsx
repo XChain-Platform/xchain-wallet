@@ -131,8 +131,10 @@ describe('CoSignerAccountDetail clipboard control', () => {
     it('names the funding address copied by the button', async () => {
         mountAccount();
 
-        expect(await screen.findByRole('button', { name: 'Copy funding address' })).toBeTruthy();
-        expect(document.body.textContent).not.toMatch(/regtest|testnet|not mainnet/i);
+        // The Fund tile shows the address to fund with its copy button.
+        fireEvent.click(await screen.findByRole('button', { name: 'Fund' }));
+        expect(screen.getByRole('button', { name: 'Copy funding address' })).toBeTruthy();
+        expect(document.body.textContent).not.toMatch(/not mainnet/i);
     });
 });
 
@@ -152,7 +154,7 @@ describe('CoSignerAccountDetail async state', () => {
         );
 
         await screen.findByText('Treasury agent');
-        fireEvent.click(screen.getByRole('button', { name: 'Edit policy' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Edit Rules' }));
         fireEvent.click(screen.getByRole('button', { name: 'Update policy' }));
 
         expect(await screen.findByText('Allowed recipient 1: This is not a valid address.')).toBeTruthy();
@@ -195,7 +197,7 @@ describe('CoSignerAccountDetail async state', () => {
         );
 
         await screen.findByText('Treasury agent');
-        fireEvent.click(screen.getByRole('button', { name: 'Edit policy' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Edit Rules' }));
         fireEvent.click(screen.getByRole('button', { name: 'Update policy' }));
 
         expect(await screen.findByText(/changed after you opened the editor/i)).toBeTruthy();
@@ -216,7 +218,7 @@ describe('CoSignerAccountDetail async state', () => {
         );
 
         await screen.findByText('Treasury agent');
-        fireEvent.click(screen.getByRole('button', { name: 'Edit policy' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Edit Rules' }));
         fireEvent.change(screen.getByLabelText('Account name'), { target: { value: 'Renamed agent' } });
         fireEvent.click(screen.getByRole('button', { name: 'Update policy' }));
 
@@ -258,7 +260,7 @@ describe('CoSignerAccountDetail async state', () => {
         );
 
         await screen.findByText('First account');
-        fireEvent.click(screen.getByRole('button', { name: 'Enable' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Turn On' }));
         await waitFor(() => expect(updateCoSignerAccount).toHaveBeenCalledTimes(1));
 
         view.rerender(
@@ -271,7 +273,7 @@ describe('CoSignerAccountDetail async state', () => {
 
         await act(async () => secondLoad.resolve(second));
         expect(await screen.findByText('Second account')).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Disable' })).not.toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Turn Off' })).not.toBeDisabled();
 
         await act(async () => oldUpdate.resolve({ ...first, enabled: true }));
         expect(screen.getByText('Second account')).toBeTruthy();
@@ -291,7 +293,7 @@ describe('CoSignerAccountDetail update failure', () => {
         );
 
         await screen.findByText('Treasury agent');
-        fireEvent.click(screen.getByRole('button', { name: 'Enable' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Turn On' }));
 
         const notice = await screen.findByText('The vault is locked.');
         const title = screen.getByText('Treasury agent');

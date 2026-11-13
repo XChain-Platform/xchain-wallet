@@ -10,8 +10,9 @@ import { ActionDetail } from '../../../packages/core/src/shared/routes/ActionDet
 import { ActionsMenu } from '../../../packages/core/src/shared/routes/ActionsMenu.jsx';
 import { AlertsRoute } from '../../../packages/core/src/shared/routes/AlertsRoute.jsx';
 import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
+import { resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { Locked } from '../../../packages/core/src/shared/routes/Locked.jsx';
-import { MyBets } from '../../../packages/core/src/shared/routes/MyBets.jsx';
+import { BetFeedsList } from '../../../packages/core/src/shared/routes/BetFeedsList.jsx';
 import { OnboardingCarousel } from '../../../packages/core/src/shared/routes/OnboardingCarousel.jsx';
 import {
     clearActiveWallet,
@@ -65,6 +66,7 @@ function actionEntry(overrides = {}) {
 }
 
 afterEach(() => {
+    resetWalletModes();
     cleanup();
     clearActiveWallet();
 });
@@ -89,8 +91,9 @@ describe('main route heading order', () => {
 
     it('keeps the Home h1 when signer mode replaces the standard body', async () => {
         const messaging = {
-            getSettings: vi.fn().mockResolvedValue({ walletMode: 'signer' }),
-            listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'Wallet' }]),
+            // Wallet mode is a property of the wallet record.
+            getSettings: vi.fn().mockResolvedValue({}),
+            listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'Wallet', walletMode: 'signer' }]),
             listAccounts: vi.fn().mockResolvedValue([]),
             getWalletBalances: vi.fn().mockResolvedValue({}),
             getAddressesByChain: vi.fn().mockResolvedValue({}),
@@ -103,7 +106,7 @@ describe('main route heading order', () => {
         expectOrderedHeadings(view.container);
     });
 
-    it('restores the active wallet name from safe metadata on a cold launch', async () => {
+    it('keeps the product name as the lock h1 and never shows the wallet name on a cold launch', async () => {
         writeActiveWallet('wallet-2');
         const locked = renderRoute(<Locked onUnlocked={vi.fn()} />, {
             unlockWallet: vi.fn(),
@@ -112,16 +115,18 @@ describe('main route heading order', () => {
                 { id: 'wallet-2', name: 'Treasury' },
             ]),
         });
-        expect(await screen.findByRole('heading', { level: 1, name: 'Treasury' })).toBeVisible();
+        // The lock screen shows the product name only (operator ruling 2026-11-12).
+        expect(await screen.findByRole('heading', { level: 1, name: 'XChain Wallet' })).toBeVisible();
+        expect(screen.queryByText('Treasury')).toBeNull();
         expectOrderedHeadings(locked.container);
     });
 
-    it('falls back to the unlock heading when there is no active wallet', () => {
+    it('shows the product name heading when there is no active wallet', () => {
         const locked = renderRoute(<Locked onUnlocked={vi.fn()} />, {
             unlockWallet: vi.fn(),
             listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'Personal' }]),
         });
-        expect(screen.getByRole('heading', { level: 1, name: 'Unlock wallet' })).toBeVisible();
+        expect(screen.getByRole('heading', { level: 1, name: 'XChain Wallet' })).toBeVisible();
         expectOrderedHeadings(locked.container);
         locked.unmount();
 
@@ -148,9 +153,11 @@ describe('main route heading order', () => {
                 ],
             }),
             betFeed: vi.fn().mockResolvedValue({ outcomes: 'Yes,No' }),
+            betFeeds: vi.fn().mockResolvedValue({ data: [] }),
         };
+        // My bets is the Bet Markets tab; its sections sit under the page title.
         const view = renderRoute(
-            <MyBets walletId="wallet-1" onBack={vi.fn()} />,
+            <BetFeedsList walletId="wallet-1" view="bets" onViewChange={vi.fn()} onOpenMarket={vi.fn()} onBack={vi.fn()} />,
             messaging,
         );
 

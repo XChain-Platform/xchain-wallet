@@ -37,6 +37,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useOwnerActionLane.js', () => (
 }));
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { ListCreateForm } from '../../../packages/core/src/shared/routes/ListCreateForm.jsx';
 import { ListDetail } from '../../../packages/core/src/shared/routes/ListDetail.jsx';
 import { ListForkForm } from '../../../packages/core/src/shared/routes/ListForkForm.jsx';
@@ -82,11 +83,15 @@ function detail(overrides = {}) {
     };
 }
 
-function makeMessaging(overrides = {}) {
+// `walletMode` among the overrides is the mode of wallet-1, published the way
+// the shell does from the wallet list; every other override is a messaging method.
+function makeMessaging({ walletMode = 'full', ...overrides } = {}) {
+    publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode }], activeWalletId: 'wallet-1' });
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: ADDRESS.id } }),
-        getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+        getSettings: vi.fn().mockResolvedValue({}),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'W', walletMode }]),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
         isListTickCoinActive: vi.fn().mockResolvedValue(false),
@@ -127,6 +132,7 @@ beforeEach(() => {
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     vi.clearAllMocks();
 });
 
@@ -147,7 +153,7 @@ describe('wallet list metadata forms', () => {
 
         expect(screen.getByText('64 / 64 bytes')).toBeTruthy();
         expect(screen.getByText('512 / 512 bytes')).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Publish list' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish List' }));
 
         await waitFor(() => expect(confirmRun).toHaveBeenCalledTimes(1));
         expect(confirmRun.mock.calls[0][0].actionData.params).toEqual({
@@ -179,7 +185,7 @@ describe('wallet list metadata forms', () => {
         fireEvent.change(screen.getByLabelText('Addresses'), { target: { value: MEMBER } });
         expect(screen.queryByLabelText('Name')).toBeNull();
         expect(screen.queryByLabelText('Description')).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Publish list' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish List' }));
 
         await waitFor(() => expect(confirmRun).toHaveBeenCalledTimes(1));
         expect(confirmRun.mock.calls[0][0].actionData.params).toEqual({
@@ -207,7 +213,7 @@ describe('wallet list metadata forms', () => {
 
         expect(await screen.findByText('Treasury')).toBeTruthy();
         expect(screen.getByText('Quarterly payout addresses')).toBeTruthy();
-        fireEvent.click(await screen.findByRole('button', { name: 'Rename list' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Rename List' }));
         expect(onRename).toHaveBeenCalledWith({ chainId: CHAIN, actionIndex: '2700' });
     });
 
@@ -228,7 +234,7 @@ describe('wallet list metadata forms', () => {
 
         await screen.findByText('#2700');
         await waitFor(() => expect(messaging.getActionFormats).toHaveBeenCalled());
-        expect(screen.queryByRole('button', { name: 'Rename list' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Rename List' })).toBeNull();
     });
 
     it('submits the clear sentinel as format 5 and shows the shared-list fee note', async () => {
@@ -255,7 +261,7 @@ describe('wallet list metadata forms', () => {
         fireEvent.change(screen.getByLabelText('Description'), {
             target: { value: 'New description' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Rename list' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Rename List' }));
 
         await waitFor(() => expect(ownerRun).toHaveBeenCalledTimes(1));
         expect(ownerRun.mock.calls[0][0].actionData.params).toEqual({
@@ -284,7 +290,7 @@ describe('wallet list metadata forms', () => {
                 onBack={() => {}}
             />,
             makeMessaging({
-                getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+                walletMode: 'watcher',
                 getListByActionIndex: vi.fn().mockResolvedValue(namedDetail),
             }),
         );
@@ -292,7 +298,7 @@ describe('wallet list metadata forms', () => {
         fireEvent.change(await screen.findByLabelText('Add addresses'), {
             target: { value: '1BoatSLRHtKNngkdXEeobR76b53LETtpyT' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish Edit' }));
         expect(await screen.findByText('Treasury (List #2700)')).toBeTruthy();
 
         cleanup();

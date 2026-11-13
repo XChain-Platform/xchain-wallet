@@ -50,15 +50,29 @@ describe('PollDetail rendering', () => {
 
         expect(await screen.findByRole('heading', { name: 'Poll #7' })).toBeInTheDocument();
         expect(screen.getByText('Choose a release channel')).toBeInTheDocument();
+        // Results first: the question, its token, network and time left, the
+        // result card, then one-line sections Cast Your Vote, Rules to Pass
+        // and Details.
+        expect(screen.getByText('VOTE on Bitcoin · Closes in 3 h')).toBeInTheDocument();
         expect(screen.getByText('20 blocks remaining')).toBeInTheDocument();
-        const network = screen.getByRole('button', { name: 'Network: Bitcoin' });
-        const from = screen.getByLabelText('From');
-        const ballot = screen.getByRole('group', { name: 'Choose up to 1 option' });
+        const card = screen.getByRole('region', { name: 'Poll results' });
+        expect(card).toHaveTextContent('Voting is open. Results are counted when voting closes.');
+        const titles = [...document.querySelectorAll('[data-form-section-title]')].map((el) => el.textContent);
+        expect(titles).toEqual(['Cast Your Vote', 'From', 'Memo', 'Network fee', 'Rules to Pass', 'Details']);
         const follows = Node.DOCUMENT_POSITION_FOLLOWING;
+        const cast = screen.getByRole('button', { name: /^Cast Your Vote/ });
+        expect(cast).toHaveAttribute('aria-expanded', 'true');
+        expect(card.compareDocumentPosition(cast) & follows).toBeTruthy();
+        // From is the standard closed section: a locked Network and the
+        // picker-backed address, above the ballot.
+        fireEvent.click(screen.getByRole('button', { name: /^From\b/ }));
+        const network = screen.getByRole('button', { name: 'Network: Bitcoin' });
+        const from = screen.getByDisplayValue(ADDRESS.address);
+        const ballot = screen.getByRole('group', { name: 'Choose up to 1 option' });
         expect(network).toBeDisabled();
         expect(network.compareDocumentPosition(from) & follows).toBeTruthy();
         expect(from.compareDocumentPosition(ballot) & follows).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'About From' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Choose voting address' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'About ballot choices' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Vote' }).querySelector('svg')).not.toBeNull();
         const stable = await screen.findByRole('checkbox', { name: '0: Stable' });
@@ -124,7 +138,12 @@ describe('PollDetail rendering', () => {
         expect(screen.getByText('Voting is closed for this poll.').tagName).toBe('P');
         expect(screen.queryByRole('button', { name: /^(Vote|Change vote)$/ })).toBeNull();
         expect(await screen.findByText('1: Beta', { selector: 'dd' })).toBeInTheDocument();
-        expect(screen.getAllByRole('progressbar').map((bar) => bar.getAttribute('aria-valuenow')))
+        // The result card states the outcome, the winner and its share, and
+        // one stacked bar with each option's share.
+        expect(document.querySelector('[data-poll-outcome]')?.textContent).toBe('Decided');
+        expect(screen.getByText('Winner: 0: Alpha, 34%')).toBeInTheDocument();
+        const bar = screen.getByRole('img', { name: '0: Alpha 34%, 1: Beta 33%, 2: Gamma 33%' });
+        expect([...bar.querySelectorAll('[data-percent]')].map((segment) => segment.getAttribute('data-percent')))
             .toEqual(['34', '33', '33']);
         expect(screen.getByText('34%')).toBeInTheDocument();
         expect(screen.getAllByText('33%')).toHaveLength(2);

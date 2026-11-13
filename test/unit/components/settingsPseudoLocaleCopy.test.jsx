@@ -25,8 +25,10 @@ vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
     useMessaging: () => ({ messaging }),
 }));
 
-const { WalletModeSection } = await import(
-    '../../../packages/core/src/shared/components/settings/WalletModeSection.jsx'
+// §20: the mode is chosen per wallet at create, import or pair; its field
+// replaced the Settings section and carries the same dictionary rule.
+const { WalletModeField } = await import(
+    '../../../packages/core/src/shared/components/WalletModeField.jsx'
 );
 const { NetworkEndpointsSection } = await import(
     '../../../packages/core/src/shared/components/settings/NetworkEndpointsSection.jsx'
@@ -46,11 +48,11 @@ afterEach(async () => {
 
 describe('settings copy goes through the dictionary', () => {
     it('wallet mode labels and hints are translated', () => {
-        render(<WalletModeSection />);
-        for (const text of ['Normal', 'Watcher (watch-only)', 'Signer (air-gapped)']) {
-            expect(screen.getByText(new RegExp(`⟦${text.replace(/[()]/g, '\\$&')}⟧`))).toBeTruthy();
+        render(<WalletModeField value="full" onChange={() => {}} />);
+        for (const text of ['Normal', 'Watch-only', 'Air-gapped signer']) {
+            expect(screen.getByText(new RegExp(`⟦${text}⟧`))).toBeTruthy();
         }
-        expect(screen.getByText(/⟦Sign and broadcast transactions on this device/)).toBeTruthy();
+        expect(screen.getByText(/⟦Sign and send transactions on this device/)).toBeTruthy();
     });
 
     it('the registry refresh status line is translated', async () => {

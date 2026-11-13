@@ -56,7 +56,11 @@ describe('CreateWallet review items', () => {
         }
         // The tip keeps its text in a hidden description; no hint line is drawn.
         expect(document.getElementById('create-password-hint')).toBeNull();
-        expect([...document.querySelectorAll('[id$="-hint"]')]).toEqual([]);
+        // The one hint left on the step is the wallet mode field's note that the
+        // mode is chosen once; no field label carries a static hint.
+        expect([...document.querySelectorAll('[id$="-hint"]')].map((node) => node.textContent)).toEqual([
+            'Chosen once for this wallet. To use another mode, set the wallet up again with that mode.',
+        ]);
 
         fireEvent.click(screen.getByRole('button', { name: 'About Password' }));
         expect(screen.getByRole('tooltip')).toHaveTextContent('At least 8 characters');
@@ -70,7 +74,7 @@ describe('CreateWallet review items', () => {
 
     it('draws the recovery phrase step without the wide form card and with a green Verify action', () => {
         toPhraseStep();
-        const verify = screen.getByRole('button', { name: 'Verify recovery phrase' });
+        const verify = screen.getByRole('button', { name: 'Verify Recovery Phrase' });
         expect(verify).toBeDisabled();
         expect(verify.className.split(' ')).toContain(buttonStyles.success);
         expect(verify.closest('form').className.split(' ')).toContain(formStyles.cardlessForm);
@@ -80,7 +84,7 @@ describe('CreateWallet review items', () => {
     it('gives each verify word field its own help tip', () => {
         toPhraseStep();
         fireEvent.click(screen.getByRole('checkbox', { name: /saved my recovery phrase/ }));
-        fireEvent.click(screen.getByRole('button', { name: 'Verify recovery phrase' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Verify Recovery Phrase' }));
         const words = screen.getAllByLabelText(/^Word \d+$/);
         expect(words.length).toBeGreaterThan(0);
         for (const input of words) {

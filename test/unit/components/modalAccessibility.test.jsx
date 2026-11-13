@@ -5,7 +5,6 @@ import { afterEach, describe, it, vi } from 'vitest';
 import { cleanup, render } from '@testing-library/react';
 import { expectNoSeriousAxeViolations } from '../../a11y/helpers/axe.js';
 import { CommandPalette } from '../../../packages/core/src/shared/commandPalette/CommandPalette.jsx';
-import { AlertsOverlay } from '../../../packages/core/src/shared/components/AlertsOverlay.jsx';
 import { ConfirmModal } from '../../../packages/core/src/shared/components/ConfirmModal.jsx';
 import { GatedFileViewer } from '../../../packages/core/src/shared/components/GatedFileViewer.jsx';
 import { NoticeModal } from '../../../packages/core/src/shared/components/NoticeModal.jsx';
@@ -28,23 +27,6 @@ describe('open modal accessibility', () => {
                     { id: 'home', category: 'Navigate', title: 'Home', run: noop },
                     { id: 'send', category: 'Navigate', title: 'Send', run: noop },
                 ]}
-            />,
-        );
-
-        await expectNoSeriousAxeViolations(container);
-    });
-
-    it('renders the alerts modal without serious axe violations', async () => {
-        const { container } = render(
-            <AlertsOverlay
-                alerts={[{
-                    id: 'upgrade',
-                    severity: 'critical',
-                    title: 'Recovery phrase update required',
-                    message: 'Upgrade the recovery phrase before continuing.',
-                    action: { label: 'Upgrade', onSelect: noop },
-                }]}
-                onClose={noop}
             />,
         );
 

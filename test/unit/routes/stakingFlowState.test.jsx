@@ -15,6 +15,7 @@ import { StakeNew } from '../../../packages/core/src/shared/routes/StakeNew.jsx'
 import { StakingActionForm } from '../../../packages/core/src/shared/routes/StakingActionForm.jsx';
 import { DelegationActionForm } from '../../../packages/core/src/shared/routes/DelegationActionForm.jsx';
 import { StakingList } from '../../../packages/core/src/shared/routes/StakingList.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import listRowStyles from '../../../packages/core/src/ui/ListRow.module.css';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -81,7 +82,15 @@ function messaging(overrides = {}) {
     });
 }
 
+// A wallet's mode is published by the shell from the wallet list, not read
+// from settings; the harness publishes the mode the settings mock names.
 function withMessaging(child, methods = messaging()) {
+    Promise.resolve(methods.getSettings?.()).then((settings) => {
+        publishWalletModes({
+            wallets: [{ id: 'w', walletMode: settings?.walletMode || 'full' }],
+            activeWalletId: 'w',
+        });
+    });
     return render(
         <MessagingProvider shell="web" messaging={methods}>
             {child}
@@ -89,7 +98,10 @@ function withMessaging(child, methods = messaging()) {
     );
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    resetWalletModes();
+});
 
 describe('staking chooser and list read states', () => {
     it('does not repeat a staking row network kind beside its chain overlay', async () => {
@@ -109,8 +121,10 @@ describe('staking chooser and list read states', () => {
 
         await screen.findByRole('listitem');
         expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
-        // The chain filter stays (operator ruling); it names chains, never network kinds.
+        // The chain filter stays (operator ruling) inside the title-bar filter panel; it names chains, never network kinds.
+        fireEvent.click(screen.getByRole('button', { name: 'Filter staking' }));
         expect(screen.getByRole('button', { name: /^Filter by network/ })).toBeInTheDocument();
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 
     it('surfaces an address read failure instead of presenting an empty chooser', async () => {
@@ -260,6 +274,8 @@ describe('stake amount and review state', () => {
         );
         fireEvent.change(await screen.findByLabelText(/^Amount/), { target: { value: '1' } });
         fireEvent.change(screen.getByLabelText('Signing public key'), { target: { value: PUBKEY } });
+        // The fee selector sits in the Network fee section, closed on load.
+        fireEvent.click(screen.getByRole('button', { name: /^Network fee/ }));
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), { target: { value: '3' } });
         fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '' } });
         fireEvent.click(screen.getByRole('button', { name: 'Stake' }));
@@ -302,7 +318,7 @@ describe('stake amount and review state', () => {
         );
         fireEvent.change(await screen.findByLabelText(/^Amount/), { target: { value: '1.23000000' } });
         fireEvent.change(screen.getByLabelText('Signing public key'), { target: { value: PUBKEY } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review stake' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Review stake$/i }));
         expect(await screen.findByText(/Stake 1.23000000 XCHAIN for signing public key/)).toBeInTheDocument();
         expect(screen.getByText('After 6 BTC blocks')).toBeInTheDocument();
         expect(screen.getByText('Network fee')).toBeInTheDocument();
@@ -326,7 +342,7 @@ describe('staking action load and review state', () => {
         );
         await screen.findByText('10 XCHAIN available');
         const amount = screen.getByLabelText(/^Amount/);
-        const submit = screen.getByRole('button', { name: 'Claim rewards' });
+        const submit = screen.getByRole('button', { name: /^Claim Rewards$/ });
 
         fireEvent.change(amount, { target: { value: '' } });
         fireEvent.click(submit);
@@ -347,7 +363,7 @@ describe('staking action load and review state', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(/available staking balance/i);
         expect(screen.getByText('Unavailable')).toBeInTheDocument();
         expect(screen.queryByText('Loading…')).toBeNull();
-        expect(screen.getByRole('button', { name: 'Claim rewards' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /^Claim Rewards$/ })).toBeDisabled();
     });
 
     it('does not treat a failed claim-ledger read as no prior claims', async () => {
@@ -364,7 +380,7 @@ describe('staking action load and review state', () => {
         expect(alert).toHaveTextContent("Couldn't load the available staking balance. Something went wrong. Try again.");
         expect(screen.getByText('Unavailable')).toBeInTheDocument();
         expect(alert).not.toHaveTextContent('indexer.invalid');
-        expect(screen.getByRole('button', { name: 'Claim rewards' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /^Claim Rewards$/ })).toBeDisabled();
     });
 
     it('blocks review when an invalid custom fee would be omitted from the COLLECT build', async () => {
@@ -376,9 +392,11 @@ describe('staking action load and review state', () => {
             methods,
         );
         await screen.findByText('10 XCHAIN available');
+        // The fee selector sits in the Network fee section, closed on load.
+        fireEvent.click(screen.getByRole('button', { name: /^Network fee/ }));
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), { target: { value: '3' } });
         fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Claim rewards' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Claim Rewards$/ }));
 
         expect(await screen.findAllByText('Enter a custom fee rate.')).toHaveLength(1);
         expect(methods.composeForConfirm).not.toHaveBeenCalled();
@@ -401,8 +419,8 @@ describe('staking action load and review state', () => {
         expect(claimTip).toBeTruthy();
         expect(Array.from(document.querySelectorAll('form p')).some((p) => /Claimed rewards land/.test(p.textContent))).toBe(false);
         // U63: the named action carries an icon.
-        expect(screen.getByRole('button', { name: 'Review claim rewards' }).querySelector('svg')).not.toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Review claim rewards' }));
+        expect(screen.getByRole('button', { name: /^Review claim rewards$/i }).querySelector('svg')).not.toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: /^Review claim rewards$/i }));
         expect(await screen.findByText(/Claim 4.50000000 XCHAIN/)).toBeInTheDocument();
         expect(screen.getByText('Network fee')).toBeInTheDocument();
         expect(screen.getByText(WATCHER_HINT)).toBeInTheDocument();
@@ -419,7 +437,7 @@ describe('staking action load and review state', () => {
         );
         await screen.findByText('10 XCHAIN available');
         fireEvent.change(screen.getByLabelText(/^Amount/), { target: { value: '11' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Claim rewards' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Claim Rewards$/ }));
         expect(await screen.findByText('Amount exceeds the 10 XCHAIN available.')).toBeInTheDocument();
 
         fireEvent.change(screen.getByLabelText(/^Amount/), { target: { value: '5' } });
@@ -444,7 +462,7 @@ describe('delegation validation and review state', () => {
             methods,
         );
 
-        const submit = await screen.findByRole('button', { name: 'Delegate signing key' });
+        const submit = await screen.findByRole('button', { name: 'Delegate Signing Key' });
         expect(submit).toBeEnabled();
         fireEvent.click(submit);
         expect(await screen.findByText('Enter the new signing public key.')).toBeInTheDocument();
@@ -477,24 +495,26 @@ describe('delegation validation and review state', () => {
             methods,
         );
         fireEvent.change(await screen.findByLabelText('New signing pubkey'), { target: { value: PUBKEY } });
+        // The fee selector sits in the Network fee section, closed on load.
+        fireEvent.click(screen.getByRole('button', { name: /^Network fee/ }));
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), { target: { value: '3' } });
         fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Delegate signing key' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate Signing Key' }));
 
         expect(await screen.findAllByText('Enter a custom fee rate.')).toHaveLength(1);
 
         for (const rate of ['0', '-1']) {
             fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: rate } });
-            fireEvent.click(screen.getByRole('button', { name: 'Delegate signing key' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Delegate Signing Key' }));
             expect(await screen.findAllByText('Custom fee rate must be greater than zero.')).toHaveLength(1);
         }
 
         fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '1.123456789' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Delegate signing key' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate Signing Key' }));
         expect(await screen.findAllByText('Custom fee rate can have at most 8 decimal places.')).toHaveLength(1);
 
         fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '1001' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Delegate signing key' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate Signing Key' }));
         expect(await screen.findAllByText('Enter a rate no higher than 1,000 sat/vB.')).toHaveLength(1);
         expect(methods.composeForConfirm).not.toHaveBeenCalled();
     });
@@ -509,7 +529,7 @@ describe('delegation validation and review state', () => {
         );
         const key = 'B'.repeat(64);
         fireEvent.change(await screen.findByLabelText('New signing pubkey'), { target: { value: key } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review delegate signing key' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Review delegate signing key$/i }));
 
         expect(await screen.findByText(key.toLowerCase())).toBeInTheDocument();
         expect(screen.getByText('Network fee')).toBeInTheDocument();
@@ -593,9 +613,9 @@ describe.each([320, 360])('staking layout at %ipx', (width) => {
             );
             fireEvent.change(await screen.findByLabelText(/^Amount/), { target: { value: '1' } });
             fireEvent.change(screen.getByLabelText('Signing public key'), { target: { value: PUBKEY } });
-            fireEvent.click(screen.getByRole('button', { name: 'Review stake' }));
-            expect(await screen.findByRole('form', { name: 'Review stake' })).toBeInTheDocument();
-            expect(screen.getByRole('button', { name: 'Create unsigned transaction' })).toBeEnabled();
+            fireEvent.click(screen.getByRole('button', { name: /^Review stake$/i }));
+            expect(await screen.findByRole('form', { name: /^Review stake$/i })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /^Create Unsigned Transaction$/ })).toBeEnabled();
 
             cleanup();
             withMessaging(
@@ -610,9 +630,9 @@ describe.each([320, 360])('staking layout at %ipx', (width) => {
                 }),
             );
             await screen.findByText('10 XCHAIN available');
-            fireEvent.click(screen.getByRole('button', { name: 'Review unstake' }));
-            expect(await screen.findByRole('form', { name: 'Review unstake' })).toBeInTheDocument();
-            expect(screen.getByRole('button', { name: 'Create unsigned transaction' })).toBeEnabled();
+            fireEvent.click(screen.getByRole('button', { name: /^Review unstake$/i }));
+            expect(await screen.findByRole('form', { name: /^Review unstake$/i })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /^Create Unsigned Transaction$/ })).toBeEnabled();
 
             const listNarrow = mediaBlock(readCss(
                 'packages/core/src/shared/routes/StakingList.module.css',

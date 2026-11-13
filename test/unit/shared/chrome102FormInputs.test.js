@@ -92,8 +92,11 @@ describe('Chrome 102 shared form inputs', () => {
             .toEqual(['numeric']);
         expect(inputModes('packages/core/src/ui/FeeSelector.jsx'))
             .toEqual(['decimal', 'decimal']);
+        // The Dispenser detail's dispense-count stepper is a bare native input.
+        expect(inputModes('packages/core/src/shared/routes/DispenserDetail.jsx'))
+            .toEqual(['numeric']);
 
-        expect(classified).toHaveLength(7);
+        expect(classified).toHaveLength(8);
         for (const { file, attributes } of classified) {
             expect(attributes.autoComplete, `${file}: autocomplete`).toBe('off');
             expect(['done', 'go'], `${file}: enterKeyHint`).toContain(attributes.enterKeyHint);

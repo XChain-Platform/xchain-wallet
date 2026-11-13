@@ -70,7 +70,7 @@ function mount(messaging) {
 
 async function openConfirm() {
     fireEvent.change(await screen.findByLabelText(/^Price/), { target: { value: '5' } });
-    const list = screen.getByRole('button', { name: 'List name for sale' });
+    const list = screen.getByRole('button', { name: 'List Name for Sale' });
     await waitFor(() => expect(list).not.toBeDisabled());
     fireEvent.click(list);
     return waitFor(() => {

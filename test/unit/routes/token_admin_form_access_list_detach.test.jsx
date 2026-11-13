@@ -88,6 +88,6 @@ describe('token policy list detach', () => {
 
         await waitFor(() => expect(container.textContent).toContain('List #412'));
         expect(container.querySelector('[aria-label="Remove allow-list"]')).toBeNull();
-        expect(container.textContent).not.toContain('Remove list');
+        expect(container.textContent).not.toContain('Remove List');
     });
 });

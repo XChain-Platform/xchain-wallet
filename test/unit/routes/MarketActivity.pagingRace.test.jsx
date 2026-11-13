@@ -69,7 +69,7 @@ describe('Marketplace paging', () => {
                     if (screen.getByTestId('wallet-scope').textContent !== 'w2') return;
                     observer.disconnect();
                     try {
-                        fireEvent.click(screen.getByRole('button', { name: 'Load more open dispensers' }));
+                        fireEvent.click(screen.getByRole('button', { name: 'Load More Offers' }));
                         resolve();
                     } catch (error) {
                         reject(error);

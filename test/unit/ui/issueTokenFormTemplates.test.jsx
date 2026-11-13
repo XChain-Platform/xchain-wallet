@@ -28,7 +28,8 @@ function routePath() {
     return join(dir, 'packages', 'core', 'src', 'shared', 'routes', 'IssueTokenForm.jsx');
 }
 
-const TEMPLATES = ['FormPage', 'ListPage'];
+// FormFrame (the Wallet Form Standard's frame) renders a FormPage.
+const TEMPLATES = ['FormPage', 'FormFrame', 'ListPage'];
 
 function walk(node, visit, ancestors = []) {
     if (!node || typeof node !== 'object') return;

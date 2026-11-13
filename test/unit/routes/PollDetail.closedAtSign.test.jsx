@@ -20,6 +20,7 @@ import { act as domAct, cleanup, fireEvent, render } from '@testing-library/reac
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { PollDetail } from '../../../packages/core/src/shared/routes/PollDetail.jsx';
+import { resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = Object.freeze({
@@ -43,7 +44,11 @@ const POLL = Object.freeze({
 });
 const COMPOSED = Object.freeze({ psbt: 'bb00', encoding: 'psbt', actionString: 'VOTE|0|7|0', version: 1 });
 
-afterEach(cleanup);
+afterEach(() => {
+    cleanup();
+    // Each test publishes its own wallet mode; forget it.
+    resetWalletModes();
+});
 
 async function drain(rounds = 30) {
     for (let i = 0; i < rounds; i += 1) {
@@ -68,6 +73,8 @@ function harness({ later, walletMode = 'full' }) {
         getActiveAddresses: () => Promise.resolve({ [CHAIN]: { id: ADDRESS.id } }),
         governanceVotes: () => Promise.resolve([]),
         getSettings: () => Promise.resolve({ walletMode, preflightPrivacy: 'off' }),
+        // The wallet's mode comes from its wallet-list record.
+        listWallets: () => Promise.resolve([{ id: 'wallet-1', walletMode }]),
         signerReady: () => Promise.resolve({ ready: true }),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
         composeVoteForConfirm: () => Promise.resolve(COMPOSED),
@@ -181,7 +188,7 @@ async function buildWatcherVote(messaging) {
         await drain();
     });
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('button', { name: 'Create unsigned transaction' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Create Unsigned Transaction' }));
         await drain(60);
     });
     return utils;

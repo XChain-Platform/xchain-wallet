@@ -80,9 +80,9 @@ describe('MultisigCreate own-address picker', () => {
         fireEvent.change(publicKeys[1], { target: { value: EXTERNAL.pubkey } });
         fireEvent.change(fingerprints[1], { target: { value: EXTERNAL.fingerprint } });
         fireEvent.change(paths[1], { target: { value: EXTERNAL.path } });
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Create multisig' })).toBeEnabled());
-        fireEvent.click(screen.getByRole('button', { name: 'Create multisig' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Confirm multisig' }));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Create Multisig' })).toBeEnabled());
+        fireEvent.click(screen.getByRole('button', { name: 'Create Multisig' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Confirm Multisig' }));
 
         await waitFor(() => expect(createMultisigConfig).toHaveBeenCalled());
         expect(createMultisigConfig.mock.calls[0][0]).toMatchObject({

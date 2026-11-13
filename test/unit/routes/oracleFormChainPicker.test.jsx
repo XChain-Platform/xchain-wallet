@@ -123,8 +123,15 @@ async function mountForm() {
 }
 
 async function pickChain(utils, label) {
+    // The publishing network is the standard From section's Network
+    // field; open the section (closed on load) to reach it.
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('button', { name: /^Publishing network:/ }));
+        const fromHeader = utils.queryByRole('button', { name: /^From/, expanded: false });
+        if (fromHeader) fireEvent.click(fromHeader);
+        await drainMicrotasks();
+    });
+    await domAct(async () => {
+        fireEvent.click(utils.getByRole('button', { name: /^Network:/ }));
         await drainMicrotasks();
     });
     await domAct(async () => {
@@ -143,7 +150,7 @@ async function publish(utils, { tick, value }) {
         await drainMicrotasks();
     });
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('button', { name: 'Publish price' }));
+        fireEvent.click(utils.getByRole('button', { name: /^Publish price$/i }));
         await drainMicrotasks();
     });
     await domAct(async () => {
@@ -156,7 +163,12 @@ async function publish(utils, { tick, value }) {
 describe('D-145: OracleForm chain picker', () => {
     it('renders a Network field listing every chain the wallet holds addresses on', async () => {
         const { utils } = await mountForm();
-        const field = utils.getByRole('button', { name: /^Publishing network:/ });
+        // The publishing network lives in the standard From section.
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: /^From/, expanded: false }));
+            await drainMicrotasks();
+        });
+        const field = utils.getByRole('button', { name: /^Network:/ });
         expect(field, 'the oracle form mounts no chain picker at all, so the publishing '
             + 'chain is whichever one the wallet lists first').toBeTruthy();
         expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);

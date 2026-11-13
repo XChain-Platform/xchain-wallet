@@ -96,6 +96,9 @@ function screenTargets(sources) {
                     && callee.property.type === 'Identifier'
                     && callee.property.name === 'navigate';
                 if (direct || palette) stringTargets(path.node.arguments[0], targets);
+                // The wallet picker opens through its own helper, which also
+                // tells Settings which page Back should reopen.
+                if (callee.type === 'Identifier' && callee.name === 'openWalletPicker') targets.add('wallet-picker');
             },
         });
     }

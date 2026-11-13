@@ -19,6 +19,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { DispenserDetail } from '../../../packages/core/src/shared/routes/DispenserDetail.jsx';
 
 const CHAIN = 'dogecoin-testnet';
@@ -55,7 +56,11 @@ const DUST_PRICED_SPARSE = { ...DUST_PRICED, action_index: '3049', escrow_remain
 // Priced comfortably above the floor: the check must stay silent here.
 const NORMAL_PRICED = { ...DUST_PRICED, action_index: '3050', get_amount: '2.00000000' };
 
-function mount(dispenser, { addresses = [buyerAddress], dogeSats = '1000000000', settings = {} } = {}) {
+function mount(dispenser, {
+    addresses = [buyerAddress], dogeSats = '1000000000', settings = {}, walletMode = 'full',
+} = {}) {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const messaging = {
         getSettings: vi.fn().mockResolvedValue(settings),
         buildSendPsbtRequest: vi.fn().mockResolvedValue({
@@ -87,10 +92,16 @@ function mount(dispenser, { addresses = [buyerAddress], dogeSats = '1000000000',
     return messaging;
 }
 
-const buyButton = () => screen.findByRole('button', { name: /^Buy \d+ fills?$/ });
-const fillsInput = () => screen.findByLabelText(/^Fills/i);
+const buyButton = () => screen.findByRole('button', { name: /^Buy \d+ Dispenses?$/ });
+// The buy panel shows only on the Buy tab (Details is the default), and its
+// count field is the stepper's "How Many Dispenses".
+const fillsInput = async () => {
+    const buyTab = await screen.findByRole('tab', { name: /^Buy$/ });
+    if (buyTab.getAttribute('aria-selected') !== 'true') fireEvent.click(buyTab);
+    return screen.findByLabelText(/^How Many Dispenses/i);
+};
 
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); resetWalletModes(); });
 
 describe('coin-paid dispenser priced below the dust floor', () => {
     it('defaults Fills to the smallest whole purchase and states it in plain language', async () => {
@@ -147,11 +158,11 @@ describe('coin-paid dispenser priced below the dust floor', () => {
     });
 
     it('holds the watch-only unsigned build to the same floor', async () => {
-        const messaging = mount(DUST_PRICED, { settings: { walletMode: 'watcher' } });
+        const messaging = mount(DUST_PRICED, { walletMode: 'watcher' });
         await fillsInput();
         fireEvent.change(await fillsInput(), { target: { value: '10' } });
         await screen.findByTestId('buy-dust-block');
-        const build = await screen.findByRole('button', { name: 'Create unsigned transaction' });
+        const build = await screen.findByRole('button', { name: 'Create Unsigned Transaction' });
         expect(build).toBeDisabled();
         fireEvent.click(build);
         expect(messaging.buildSendPsbtRequest).not.toHaveBeenCalled();

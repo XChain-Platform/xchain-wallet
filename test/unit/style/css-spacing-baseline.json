@@ -25,34 +25,6 @@
     ]
   },
   {
-    "file": "packages/core/src/shared/components/AlertsOverlay.module.css",
-    "property": "padding-bottom",
-    "value": "0px",
-    "lines": [
-      105
-    ]
-  },
-  {
-    "file": "packages/core/src/shared/components/AlertsOverlay.module.css",
-    "property": "padding",
-    "value": "0px",
-    "lines": [
-      8,
-      9,
-      10,
-      11,
-      46
-    ]
-  },
-  {
-    "file": "packages/core/src/shared/components/AlertsOverlay.module.css",
-    "property": "padding",
-    "value": "1px",
-    "lines": [
-      67
-    ]
-  },
-  {
     "file": "packages/core/src/shared/components/BalanceList.module.css",
     "property": "gap",
     "value": "2px",
@@ -298,23 +270,6 @@
       17,
       18,
       19
-    ]
-  },
-  {
-    "file": "packages/core/src/shared/components/PlatformSwitcher.module.css",
-    "property": "gap",
-    "value": "2px",
-    "lines": [
-      50
-    ]
-  },
-  {
-    "file": "packages/core/src/shared/components/PlatformSwitcher.module.css",
-    "property": "padding",
-    "value": "10px",
-    "lines": [
-      65,
-      106
     ]
   },
   {
@@ -650,7 +605,8 @@
     "property": "gap",
     "value": "2px",
     "lines": [
-      37
+      68,
+      266
     ]
   },
   {
@@ -867,14 +823,6 @@
     ]
   },
   {
-    "file": "packages/core/src/shared/routes/TokenWizard.module.css",
-    "property": "margin-top",
-    "value": "3px",
-    "lines": [
-      101
-    ]
-  },
-  {
     "file": "packages/core/src/shared/routes/ViewPrivateKey.module.css",
     "property": "padding",
     "value": "2px",
@@ -1007,5 +955,38 @@
     "lines": [
       66
     ]
-  }
+  },
+  {"file": "packages/core/src/shared/components/AppHeader.module.css", "property": "padding-block", "value": "2px", "lines": [20]},
+  {"file": "packages/core/src/shared/components/AppHeader.module.css", "property": "padding-inline-end", "value": "2px", "lines": [21]},
+  {"file": "packages/core/src/shared/components/DispenserExplorerCard.module.css", "property": "gap", "value": "2px", "lines": [44]},
+  {"file": "packages/core/src/shared/components/DispenserExplorerCard.module.css", "property": "margin-block", "value": "2px", "lines": [79]},
+  {"file": "packages/core/src/shared/components/giveGet/GiveGet.module.css", "property": "gap", "value": "2px", "lines": [108]},
+  {"file": "packages/core/src/shared/components/giveGet/GiveGet.module.css", "property": "margin-top", "value": "-22px", "lines": [429]},
+  {"file": "packages/core/src/shared/components/giveGet/GiveGet.module.css", "property": "padding-inline", "value": "28px", "lines": [279]},
+  {"file": "packages/core/src/shared/components/MarketTrading.module.css", "property": "padding", "value": "1px", "lines": [248]},
+  {"file": "packages/core/src/shared/components/TotalBalanceHero.module.css", "property": "padding", "value": "2px", "lines": [319, 339]},
+  {"file": "packages/core/src/shared/components/TotalBalanceHero.module.css", "property": "row-gap", "value": "2px", "lines": [358]},
+  {"file": "packages/core/src/shared/routes/BetFeedDetail.module.css", "property": "gap", "value": "2px", "lines": [115, 199, 356, 413]},
+  {"file": "packages/core/src/shared/routes/BetFeedDetail.module.css", "property": "padding-inline", "value": "2px", "lines": [176]},
+  {"file": "packages/core/src/shared/routes/BetFeedDetail.module.css", "property": "padding", "value": "2px", "lines": [45]},
+  {"file": "packages/core/src/shared/routes/BetFeedDetail.module.css", "property": "row-gap", "value": "2px", "lines": [79]},
+  {"file": "packages/core/src/shared/routes/ContractDetail.module.css", "property": "gap", "value": "1px", "lines": [267]},
+  {"file": "packages/core/src/shared/routes/ContractDetail.module.css", "property": "gap", "value": "2px", "lines": [39, 163]},
+  {"file": "packages/core/src/shared/routes/ContractDetail.module.css", "property": "padding", "value": "1px", "lines": [287]},
+  {"file": "packages/core/src/shared/routes/CreateBetFeedForm.module.css", "property": "padding", "value": "2px", "lines": [114]},
+  {"file": "packages/core/src/shared/routes/DispenserDetail.module.css", "property": "padding-inline", "value": "2px", "lines": [296]},
+  {"file": "packages/core/src/shared/routes/DispenserExplorer.module.css", "property": "padding-inline", "value": "44px", "lines": [38, 38]},
+  {"file": "packages/core/src/shared/routes/DispenserHero.module.css", "property": "padding", "value": "2px", "lines": [57]},
+  {"file": "packages/core/src/shared/routes/IssueTokenForm.module.css", "property": "padding", "value": "2px", "lines": [831]},
+  {"file": "packages/core/src/shared/routes/MarketActivity.module.css", "property": "gap", "value": "3px", "lines": [272]},
+  {"file": "packages/core/src/shared/routes/MarketTrade.module.css", "property": "gap", "value": "2px", "lines": [17]},
+  {"file": "packages/core/src/shared/routes/MultisigSigningSession.module.css", "property": "padding", "value": "2px", "lines": [45]},
+  {"file": "packages/core/src/shared/routes/OracleRecord.module.css", "property": "gap", "value": "2px", "lines": [104]},
+  {"file": "packages/core/src/shared/routes/OracleRecord.module.css", "property": "margin", "value": "2px", "lines": [38]},
+  {"file": "packages/core/src/shared/routes/OracleRecord.module.css", "property": "padding", "value": "1px", "lines": [113]},
+  {"file": "packages/core/src/ui/Screen.module.css", "property": "padding-block", "value": "2px", "lines": [40]},
+  {"file": "packages/core/src/ui/Screen.module.css", "property": "padding-inline-end", "value": "0px", "lines": [92, 92]},
+  {"file": "packages/core/src/ui/Screen.module.css", "property": "padding-inline-end", "value": "2px", "lines": [47, 92]},
+  {"file": "packages/core/src/ui/Tabs.module.css", "property": "gap", "value": "3px", "lines": [118, 154]},
+  {"file": "packages/core/src/ui/Tabs.module.css", "property": "padding", "value": "3px", "lines": [117]}
 ]

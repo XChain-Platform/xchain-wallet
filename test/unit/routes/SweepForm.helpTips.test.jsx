@@ -67,14 +67,15 @@ afterEach(() => {
 describe('SweepForm field help tips', () => {
     it('gives From, Destination address and Memo a help button on the label', async () => {
         const container = mountSweep();
-        await waitFor(() => expect(container.querySelector('button[aria-label="About From"]')).not.toBeNull());
+        // The standard From section labels the field "From address".
+        await waitFor(() => expect(container.querySelector('button[aria-label="About From address"]')).not.toBeNull());
         expect(container.querySelector('button[aria-label="About Destination address"]')).not.toBeNull();
         expect(container.querySelector('button[aria-label="About Memo"]')).not.toBeNull();
     });
 
     it('shows no Addresses heading above the Network field', async () => {
         const container = mountSweep();
-        await waitFor(() => expect(container.querySelector('button[aria-label="About From"]')).not.toBeNull());
+        await waitFor(() => expect(container.querySelector('button[aria-label="About From address"]')).not.toBeNull());
         const headings = Array.from(container.querySelectorAll('h2, h3, legend'))
             .filter((node) => node.textContent.trim() === 'Addresses');
         for (const heading of headings) {

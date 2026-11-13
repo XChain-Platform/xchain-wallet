@@ -34,10 +34,13 @@ describe.each(Object.entries(SHELLS))('%s shell returns from a migration sweep t
     it('routes Back or Done of a migration sweep to the wizard, flagged to reopen its list', () => {
         const sweep = block(source, "if (unlockedView === 'sweep'", '/>');
         const onBack = block(sweep, 'onBack={() => {', 'initialChainId=');
-        const migrateBranch = block(onBack, 'if (fromMigrate)', 'else formBack()');
-        expect(migrateBranch).toContain('setMigrateResume(true)');
-        expect(migrateBranch).toContain("setUnlockedView('migrate-bip39')");
-        expect(migrateBranch).not.toContain("setUnlockedView('home')");
+        // The wizard opened the sweep, so Back through the history returns
+        // to it; the flag makes it reopen on its list.
+        expect(onBack).toContain('if (fromMigrate) setMigrateResume(true);');
+        expect(onBack).toContain('formBack();');
+        expect(onBack).not.toContain("setUnlockedView('home')");
+        const onSweepChain = block(source, 'onSweepChain={(s) => {', '}}');
+        expect(onSweepChain).toContain("setUnlockedView('sweep')");
     });
 
     it('hands the flag to the wizard and drops it when the wizard closes', () => {

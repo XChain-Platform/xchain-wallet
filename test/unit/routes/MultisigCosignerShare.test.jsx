@@ -182,7 +182,7 @@ describe('MultisigCosignerShare key details', () => {
             fingerprint: INFO.fingerprint,
             derivationPath: INFO.derivationPath,
         });
-        expect(screen.getByRole('button', { name: 'Copy cosigner share details' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Copy Cosigner Share Details' })).toBeTruthy();
         const qr = await screen.findByRole('img', {
             name: 'QR code for multisig cosigner share details',
         });

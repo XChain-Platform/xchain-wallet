@@ -1,5 +1,37 @@
 {
     "rawElements": {
+        "packages/core/src/shared/components/BetMarketCard.jsx": {
+            "count": 1,
+            "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
+        },
+        "packages/core/src/shared/components/DispenserExplorerCard.jsx": {
+            "count": 2,
+            "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
+        },
+        "packages/core/src/shared/components/FileField.jsx": {
+            "count": 2,
+            "reason": "The hidden native file inputs behind the standard file field's Upload action; the kit has no file-input primitive."
+        },
+        "packages/core/src/shared/components/TileLookFields.jsx": {
+            "count": 1,
+            "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
+        },
+        "packages/core/src/shared/components/giveGet/GiveGetQuick.jsx": {
+            "count": 6,
+            "reason": "The Give and Get cards are whole-card pick targets and one large amount entry inside them; the kit Button and Input cannot wrap that card shape yet."
+        },
+        "packages/core/src/shared/components/giveGet/OwnershipToggle.jsx": {
+            "count": 1,
+            "reason": "The native switch input of the ownership toggle, drawn with the shared Switch styles beside a label row the kit Switch cannot lay out."
+        },
+        "packages/core/src/shared/routes/DispenserHero.jsx": {
+            "count": 1,
+            "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
+        },
+        "packages/core/src/shared/routes/MultisigSigningSession.jsx": {
+            "count": 2,
+            "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
+        },
         "packages/core/src/shared/commandPalette/CommandPalette.jsx": {
             "count": 3,
             "reason": "The palette search is a combobox inside an overlay with its own listbox; the kit Input has no combobox mode, and the menu rows are whole-row click targets."
@@ -40,16 +72,8 @@
             "count": 2,
             "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
         },
-        "packages/core/src/shared/components/OperatorPublisherMode.jsx": {
-            "count": 1,
-            "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
-        },
         "packages/core/src/shared/components/OrderbookPanel.jsx": {
-            "count": 1,
-            "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
-        },
-        "packages/core/src/shared/components/PlatformSwitcher.jsx": {
-            "count": 1,
+            "count": 2,
             "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
         },
         "packages/core/src/shared/components/PortfolioChart.jsx": {
@@ -84,28 +108,20 @@
             "count": 1,
             "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
         },
-        "packages/core/src/shared/components/settings/ContactsSection.jsx": {
-            "count": 1,
-            "reason": "A hidden native file input behind the Import button; the kit has no file-input primitive."
-        },
         "packages/core/src/shared/components/settings/LanguageRegionSection.jsx": {
             "count": 1,
             "reason": "Currency option rows of a listbox opened from the search field; each row is the whole target."
-        },
-        "packages/core/src/shared/routes/AttachContentForm.jsx": {
-            "count": 1,
-            "reason": "A hidden native file input behind a kit Button; the kit has no file-input primitive."
         },
         "packages/core/src/shared/routes/CoinpayForm.jsx": {
             "count": 1,
             "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
         },
         "packages/core/src/shared/routes/DispenserDetail.jsx": {
-            "count": 2,
+            "count": 4,
             "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
         },
         "packages/core/src/shared/routes/History.jsx": {
-            "count": 4,
+            "count": 1,
             "reason": "A native date input in the range filter, the chain picker rows and the filter chips; the kit has no date-range primitive."
         },
         "packages/core/src/shared/routes/HistoryDetailCard.jsx": {
@@ -141,7 +157,7 @@
             "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
         },
         "packages/core/src/shared/routes/TokenDetail.jsx": {
-            "count": 3,
+            "count": 1,
             "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
         },
         "packages/web/src/DevVariantBadge.jsx": {
@@ -150,6 +166,30 @@
         }
     },
     "handSetStyles": {
+        "packages/core/src/shared/components/giveGet/GiveGet.module.css": {
+            "count": 3,
+            "reason": "Row, tab, tile, toast or icon-button surface painted by its own screen stylesheet; no kit primitive draws this shape yet."
+        },
+        "packages/core/src/shared/routes/BetFeedDetail.module.css": {
+            "count": 9,
+            "reason": "Row, tab, tile, toast or icon-button surface painted by its own screen stylesheet; no kit primitive draws this shape yet."
+        },
+        "packages/core/src/shared/routes/ContractDetail.module.css": {
+            "count": 1,
+            "reason": "Row, tab, tile, toast or icon-button surface painted by its own screen stylesheet; no kit primitive draws this shape yet."
+        },
+        "packages/core/src/shared/routes/DispenserDetail.module.css": {
+            "count": 5,
+            "reason": "Row, tab, tile, toast or icon-button surface painted by its own screen stylesheet; no kit primitive draws this shape yet."
+        },
+        "packages/core/src/shared/routes/DispenserExplorer.module.css": {
+            "count": 1,
+            "reason": "Row, tab, tile, toast or icon-button surface painted by its own screen stylesheet; no kit primitive draws this shape yet."
+        },
+        "packages/core/src/shared/routes/OracleRecord.module.css": {
+            "count": 2,
+            "reason": "Row, tab, tile, toast or icon-button surface painted by its own screen stylesheet; no kit primitive draws this shape yet."
+        },
         "packages/core/src/shared/commandPalette/CommandPalette.module.css": {
             "count": 2,
             "reason": "Row, tab, tile, toast or icon-button surface painted by its own screen stylesheet; no kit primitive draws this shape yet."
@@ -191,7 +231,7 @@
             "reason": "Row, tab, tile, toast or icon-button surface painted by its own screen stylesheet; no kit primitive draws this shape yet."
         },
         "packages/core/src/shared/routes/History.module.css": {
-            "count": 11,
+            "count": 6,
             "reason": "Row, tab, tile, toast or icon-button surface painted by its own screen stylesheet; no kit primitive draws this shape yet."
         },
         "packages/core/src/shared/routes/IssueTokenForm.module.css": {
@@ -199,7 +239,7 @@
             "reason": "Row, tab, tile, toast or icon-button surface painted by its own screen stylesheet; no kit primitive draws this shape yet."
         },
         "packages/core/src/shared/routes/MarketActivity.module.css": {
-            "count": 1,
+            "count": 3,
             "reason": "Row, tab, tile, toast or icon-button surface painted by its own screen stylesheet; no kit primitive draws this shape yet."
         },
         "packages/core/src/shared/routes/MarketsList.module.css": {
@@ -216,10 +256,6 @@
         },
         "packages/core/src/shared/routes/TokenPicker.module.css": {
             "count": 5,
-            "reason": "Row, tab, tile, toast or icon-button surface painted by its own screen stylesheet; no kit primitive draws this shape yet."
-        },
-        "packages/core/src/shared/routes/WalletPicker.module.css": {
-            "count": 3,
             "reason": "Row, tab, tile, toast or icon-button surface painted by its own screen stylesheet; no kit primitive draws this shape yet."
         },
         "packages/web/src/DevVariantBadge.module.css": {

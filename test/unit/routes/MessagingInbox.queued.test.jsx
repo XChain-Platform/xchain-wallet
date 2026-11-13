@@ -125,7 +125,7 @@ describe('inbox key share with a signed-but-queued result', () => {
             await drainMicrotasks(24);
         });
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Share my key' }));
+            fireEvent.click(utils.getByRole('button', { name: 'Share My Key' }));
             await drainMicrotasks();
         });
         await approve(utils);
@@ -133,13 +133,13 @@ describe('inbox key share with a signed-but-queued result', () => {
         expect(sendHandshake).toHaveBeenCalledTimes(1);
         expect(utils.queryByText(/Key shared/)).toBeNull();
         expect(utils.getByText('Signed. Not broadcast yet.')).toBeTruthy();
-        expect(utils.queryByRole('button', { name: 'Share my key' })).toBeNull();
+        expect(utils.queryByRole('button', { name: 'Share My Key' })).toBeNull();
 
         await domAct(async () => {
             fireEvent.click(utils.getByRole('button', { name: 'Done' }));
             await drainMicrotasks();
         });
-        expect(utils.queryByRole('button', { name: 'Share my key' })).toBeNull();
+        expect(utils.queryByRole('button', { name: 'Share My Key' })).toBeNull();
         expect(utils.queryByText(/Key shared/)).toBeNull();
         expect(utils.getByText(/Do not submit this again/)).toBeTruthy();
     });

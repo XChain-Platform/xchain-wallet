@@ -11,9 +11,13 @@ const css = readFileSync(
 );
 
 describe('ManageToken phone action grid', () => {
-    it('keeps the action tiles three across at every width', () => {
-        expect(css).toMatch(/\.approvedActionGrid\s*\{[^}]*grid-template-columns:\s*repeat\(3,/s);
-        expect(css.match(/\.approvedActionGrid\s*\{/g)).toHaveLength(1);
+    it('draws its action tiles on the coin page grid, with no grid of its own', () => {
+        const source = readFileSync(
+            join(process.cwd(), 'packages/core/src/shared/routes/ManageToken.jsx'),
+            'utf8',
+        );
+        expect(source).toMatch(/className=\{tokenDetailStyles\.assetActionGrid\}/);
+        expect(css).not.toMatch(/\.approvedActionGrid\b|\.approvedActionTile\b/);
         expect(css).not.toContain('.statsStrip');
     });
 });

@@ -80,14 +80,14 @@ describe('DeveloperModeSection unavailable actions', () => {
 
     it('hides the mint handoff when the route callback is unavailable', () => {
         render(<DeveloperModeSection />);
-        expect(screen.queryByRole('button', { name: 'Mint test XCHAIN' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Mint Test XCHAIN' })).toBeNull();
     });
 
     it('rejects an empty faucet amount before requesting an address', () => {
         render(<DeveloperModeSection />);
         const input = screen.getByRole('textbox', { name: 'Amount (BTC)' });
         fireEvent.change(input, { target: { value: '' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Get test BTC' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Get Test BTC' }));
 
         expect(screen.getByText('Enter an amount of BTC greater than 0.')).toBeTruthy();
         expect(messaging.getNewestAddress).not.toHaveBeenCalled();
@@ -101,7 +101,7 @@ describe('DeveloperModeSection unavailable actions', () => {
             />,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: 'Get test BTC' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Get Test BTC' }));
 
         await waitFor(() => expect(fundActiveWalletFromMiner).toHaveBeenCalledWith(expect.objectContaining({
             messaging,
@@ -141,23 +141,23 @@ describe('DeveloperModeSection unavailable actions', () => {
         })).toBeTruthy();
         expect(screen.getByRole('textbox', { name: 'Miner URL' })).toBeTruthy();
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Add custom network…' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Add Custom Network…' }));
 
         expect(screen.getByRole('textbox', {
             name: 'Custom network descriptor JSON',
         })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Add network' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Add Network' })).toBeDisabled();
     });
 
     it('refuses an oversized custom network paste without calling the host', async () => {
         messaging.addCustomChain = vi.fn(async () => ({}));
         render(<DeveloperModeSection />);
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Add custom network…' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Add Custom Network…' }));
         fireEvent.change(screen.getByRole('textbox', { name: 'Custom network descriptor JSON' }), {
             target: { value: `{"note":"${'x'.repeat(1024 * 1024)}"}` },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Add network' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add Network' }));
 
         expect(await screen.findByText('That text is too large to be a chain descriptor.')).toBeTruthy();
         expect(messaging.addCustomChain).not.toHaveBeenCalled();

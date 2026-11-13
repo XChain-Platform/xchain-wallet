@@ -141,7 +141,7 @@ describe('Receive hardware verify reply', () => {
             path: HW_ADDRESS.derivationPath,
         });
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Verify on your Trezor' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Verify on Your Trezor' }));
 
         await waitFor(() => expect(verifyReceiveAddress).toHaveBeenCalledTimes(1));
         expect(await screen.findByText(/showed a different address/)).toBeInTheDocument();
@@ -151,7 +151,7 @@ describe('Receive hardware verify reply', () => {
     it('reads a confirmed reply with no device address as a mismatch', async () => {
         renderHw({ confirmed: true });
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Verify on your Trezor' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Verify on Your Trezor' }));
 
         expect(await screen.findByText(/showed a different address/)).toBeInTheDocument();
         expect(screen.queryByText(/Address verified on your/)).toBeNull();
@@ -165,7 +165,7 @@ describe('Receive hardware verify reply', () => {
             path: HW_ADDRESS.derivationPath,
         });
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Verify on your Trezor' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Verify on Your Trezor' }));
 
         expect(await screen.findByText(/Address verified on your/)).toBeInTheDocument();
         expect(screen.queryByText(/showed a different address/)).toBeNull();

@@ -586,7 +586,9 @@ describe('ConfirmActionModal', () => {
     // Reject, in place of the old overlay modal.
     it('renders as a page titled Confirm (no overlay dialog)', () => {
         render(<ConfirmActionModal {...base()} />);
-        expect(screen.getByText('Confirm')).toBeTruthy();
+        // The page is titled Confirm; its footer button reads Approve (ruling G24).
+        expect(screen.getByRole('heading', { level: 1, name: 'Confirm' })).toBeTruthy();
+        expect(screen.getByTestId('confirm-approve')).toHaveTextContent(/^Approve$/);
         expect(document.querySelector('[role="dialog"]')).toBeNull();
     });
 

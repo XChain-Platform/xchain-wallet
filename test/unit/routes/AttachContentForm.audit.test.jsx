@@ -68,6 +68,8 @@ function mount(client = messagingFor(), issuerAddress = SOURCE.address) {
 }
 
 async function chooseFile(name = 'art.txt', type = 'text/plain') {
+    // The artwork file is the standard file field; its hidden picker input
+    // carries its own name beside the visible label with the ceiling.
     const input = await screen.findByLabelText('Choose file to attach');
     fireEvent.change(input, {
         target: { files: [new File(['abc'], name, { type })] },
@@ -78,7 +80,13 @@ async function chooseFile(name = 'art.txt', type = 'text/plain') {
 }
 
 async function review() {
-    fireEvent.click(screen.getByRole('button', { name: 'Attach artwork' }));
+    // The standard action label is Title Case.
+    fireEvent.click(screen.getByRole('button', { name: 'Attach Artwork' }));
+}
+
+// Opens a closed standard section by its title.
+function openSection(title) {
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${title}\\b`), expanded: false }));
 }
 
 beforeEach(() => {
@@ -99,7 +107,7 @@ describe('AttachContentForm validation and review', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
         );
-        expect(screen.getByRole('button', { name: 'Attach artwork' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Attach Artwork' })).toBeDisabled();
         expect(client.composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -143,6 +151,8 @@ describe('AttachContentForm validation and review', () => {
             'Memo is 252 characters; the network accepts at most 250 characters.',
         );
         expect(screen.queryByRole('form', { name: 'Review artwork upload' })).toBeNull();
+        // The refusal reopens the closed Memo section holding the field.
+        expect(screen.getByRole('button', { name: /^Memo\b/ })).toHaveAttribute('aria-expanded', 'true');
     });
 
     it('refuses a title beyond its field limit before review', async () => {
@@ -184,6 +194,7 @@ describe('AttachContentForm validation and review', () => {
     ])('refuses custom fee %j before review', async (rate, message) => {
         mount();
         await chooseFile();
+        openSection('Network fee');
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
             target: { value: '3' },
         });
@@ -274,7 +285,7 @@ describe('AttachContentForm validation and review', () => {
         await review();
         await screen.findByRole('form', { name: 'Review artwork upload' });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Upload file' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Upload File' }));
         const approve = await screen.findByTestId('confirm-approve');
         await waitFor(() => expect(approve).toBeEnabled());
         fireEvent.click(approve);
@@ -311,11 +322,12 @@ describe('AttachContentForm validation and review', () => {
         fireEvent.change(screen.getByLabelText('Title'), {
             target: { value: ' Gallery ' },
         });
+        openSection('Token Picture');
         fireEvent.click(screen.getByRole('checkbox'));
         await review();
         await screen.findByRole('form', { name: 'Review artwork upload' });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Upload file' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Upload File' }));
         let approve = await screen.findByTestId('confirm-approve');
         await waitFor(() => expect(approve).toBeEnabled());
         fireEvent.click(approve);
@@ -323,7 +335,7 @@ describe('AttachContentForm validation and review', () => {
         await screen.findByRole('form', { name: 'Review artwork link' });
         expect(screen.getByText('Artwork file record').nextElementSibling).toHaveTextContent('BTC#12');
         expect(screen.getByText('Token creation record').nextElementSibling).toHaveTextContent('BTC#7');
-        fireEvent.click(screen.getByRole('button', { name: 'Link artwork to ART' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Link Artwork to ART' }));
         approve = await screen.findByTestId('confirm-approve');
         await waitFor(() => expect(approve).toBeEnabled());
         fireEvent.click(approve);
@@ -340,7 +352,7 @@ describe('AttachContentForm validation and review', () => {
         expect(screen.getByText('Title').nextElementSibling).toHaveTextContent('Token information');
         expect(screen.getByText('Contents').nextElementSibling.textContent).toBe(expectedJson);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Upload token info' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Upload Token Info' }));
         await waitFor(() => expect(client.composeForConfirm).toHaveBeenCalledTimes(3));
         expect(client.composeForConfirm.mock.calls[1][0].actionData.params).toEqual({
             VERSION: '0',

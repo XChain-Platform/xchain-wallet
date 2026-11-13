@@ -146,7 +146,7 @@ describe('ContactsList audited behavior', () => {
         expect(screen.getByRole('dialog')).toHaveTextContent('Discard changes?');
 
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-        expect(screen.getByRole('heading', { name: 'New contact' })).toBeTruthy();
+        expect(screen.getByRole('heading', { name: 'New Contact' })).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         fireEvent.click(screen.getByRole('button', { name: 'Discard and leave' }));
         await waitFor(() => expect(screen.getByRole('heading', { name: 'Contacts' })).toBeTruthy());

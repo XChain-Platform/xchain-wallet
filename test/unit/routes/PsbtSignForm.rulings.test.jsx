@@ -74,8 +74,9 @@ afterEach(() => {
 describe('PSBT sign form UI rulings', () => {
     it('adds form-specific help and uses an upload icon for the file picker', async () => {
         setup();
-        await screen.findByRole('button', { name: /Network: Bitcoin/ });
+        await screen.findByRole('button', { name: /Network: Bitcoin/, hidden: true }); // The network field lives in the closed "Signing with" section.
 
+        fireEvent.click(screen.getByRole('button', { name: /^Signing with/, expanded: false }));
         const signingHelp = screen.getByRole('button', { name: 'About Signing address' });
         fireEvent.click(signingHelp);
         expect(screen.getByRole('tooltip')).toHaveTextContent(
@@ -88,22 +89,22 @@ describe('PSBT sign form UI rulings', () => {
             'A PSBT is a partially signed Bitcoin transaction. Paste PSBT hex starting with 70736274ff, base64 starting with cHNid, scan the code, or drop a .psbt file.'
         ))).toBe(true);
 
-        const browse = screen.getByRole('button', { name: 'Browse for .psbt file' });
+        const browse = screen.getByRole('button', { name: 'Choose a transaction file' });
         expect(browse.querySelector('svg path[d="m17 8-5-5-5 5"]')).toBeTruthy();
     });
 
     it('keeps exactly one green main action through entry, review, and result stages', async () => {
         setup();
-        await screen.findByRole('button', { name: /Network: Bitcoin/ });
+        await screen.findByRole('button', { name: /Network: Bitcoin/, hidden: true }); // The network field lives in the closed "Signing with" section.
 
-        expect(greenButtons()).toEqual([screen.getByRole('button', { name: 'Sign transaction' })]);
-        expect(screen.getByRole('button', { name: 'Sign transaction' }).querySelector('svg')).toBeTruthy();
+        expect(greenButtons()).toEqual([screen.getByRole('button', { name: /^Sign transaction$/i })]);
+        expect(screen.getByRole('button', { name: /^Sign transaction$/i }).querySelector('svg')).toBeTruthy();
         fireEvent.change(screen.getByLabelText('Unsigned transaction code'), {
             target: { value: PSBT },
         });
         await screen.findByTestId('psbt-sign-output');
 
-        fireEvent.click(screen.getByRole('button', { name: 'Sign transaction' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Sign transaction$/i }));
         const approve = await screen.findByTestId('confirm-approve');
         expect(greenButtons()).toEqual([approve]);
         await waitFor(() => expect(approve).toBeEnabled());
@@ -119,7 +120,7 @@ describe('PSBT sign form UI rulings', () => {
         fireEvent.click(broadcast);
         await screen.findByText('Broadcast (pending)');
         expect(greenButtons()).toEqual([
-            screen.getByRole('button', { name: 'Sign another transaction' }),
+            screen.getByRole('button', { name: 'Sign Another Transaction' }),
         ]);
     });
 });

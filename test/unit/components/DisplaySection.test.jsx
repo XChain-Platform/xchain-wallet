@@ -74,7 +74,7 @@ describe('DisplaySection', () => {
 
         const chain = await screen.findByRole('button', { name: /^Network:/ });
         const ticker = screen.getByRole('textbox', { name: 'Token ticker' });
-        const action = screen.getByRole('button', { name: 'Watch token' });
+        const action = screen.getByRole('button', { name: 'Watch Token' });
         expect(screen.getByRole('group', { name: 'Display settings' })).toHaveClass(formStyles.fullWidth);
         expect(chain.parentElement.className).toMatch(/(?:^|\s)_?md_/);
         expect(ticker.parentElement.parentElement).toHaveClass(inputStyles.md);
@@ -109,10 +109,10 @@ describe('DisplaySection', () => {
         const ticker = screen.getByRole('textbox', { name: 'Token ticker' });
         expect(ticker.closest('form')).toHaveTextContent('Ticker');
         expect(screen.getByRole('button', { name: /^About Ticker$/i })).toBeTruthy();
-        const watch = screen.getByRole('button', { name: 'Watch token' });
+        const watch = screen.getByRole('button', { name: 'Watch Token' });
         expect(watch).toHaveClass(buttonStyles.success);
         expect(watch.querySelector('svg')).not.toBeNull();
-        for (const name of ['Move up bitcoin-mainnet:XCP', 'Reset list preferences', 'Reset to defaults', 'Unhide all']) {
+        for (const name of ['Move up bitcoin-mainnet:XCP', 'Reset List Preferences', 'Reset to Defaults', 'Unhide All']) {
             const button = screen.queryByRole('button', { name: new RegExp(name.replace('bitcoin-mainnet:XCP', 'XCP'), 'i') });
             expect(button?.querySelector('svg')).not.toBeNull();
         }
@@ -134,7 +134,7 @@ describe('DisplaySection', () => {
         expect(watchLabel.style.flex).toBe('');
         expect(watchLabel.parentElement.style.flex).toBe('');
         expect(tickerField.parentElement).toHaveClass(layoutStyles.watchControls);
-        expect(screen.getByRole('button', { name: 'Watch token' }).className).toMatch(/(?:^|\s)_?md_/);
+        expect(screen.getByRole('button', { name: 'Watch Token' }).className).toMatch(/(?:^|\s)_?md_/);
         const thresholdRow = screen.getByRole('combobox', { name: 'Small-balance threshold' }).parentElement.parentElement.parentElement;
         expect(thresholdRow).toHaveClass(layoutStyles.fieldRow);
         expect(thresholdRow.style.background).toBe('var(--xc-settings-row-bg, var(--xc-card-bg))');
@@ -195,7 +195,7 @@ describe('DisplaySection', () => {
             numberFormat: 'plain',
         });
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Reset to defaults' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Reset to Defaults' }));
         expect(messaging.updateSettings).not.toHaveBeenCalled();
         const dialog = screen.getByRole('dialog', { name: 'Reset display settings?' });
         expect(dialog).toHaveTextContent('This restores all balance display options and clears pinned tokens, hidden tokens, and saved list preferences. This cannot be undone.');
@@ -310,7 +310,7 @@ describe('DisplaySection', () => {
         fireEvent.click(screen.getByRole('button', { name: /^Network:/ }));
         fireEvent.click(await screen.findByRole('button', { name: /^Select Dogecoin testnet/i }));
         fireEvent.change(screen.getByRole('textbox', { name: 'Token ticker' }), { target: { value: 'MISSING' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Watch token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Watch Token' }));
 
         expect(await screen.findByText('Token "MISSING" was not found on Dogecoin.')).toBeTruthy();
         expect(getTokenInfo).toHaveBeenLastCalledWith({
@@ -320,7 +320,7 @@ describe('DisplaySection', () => {
         });
 
         fireEvent.change(screen.getByRole('textbox', { name: 'Token ticker' }), { target: { value: 'WOW' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Watch token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Watch Token' }));
 
         await waitFor(() => expect(messaging.updateSettings).toHaveBeenCalledWith({
             watchedTokens: ['dogecoin-testnet:WOW'],
@@ -329,7 +329,7 @@ describe('DisplaySection', () => {
         expect(await screen.findByText('Dogecoin:WOW')).toBeTruthy();
 
         fireEvent.change(screen.getByRole('textbox', { name: 'Token ticker' }), { target: { value: 'WOW' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Watch token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Watch Token' }));
         expect(await screen.findByText('WOW is already watched on Dogecoin.')).toBeTruthy();
         expect(getTokenInfo).toHaveBeenCalledTimes(2);
 
@@ -346,7 +346,7 @@ describe('DisplaySection', () => {
 
         const ticker = screen.getByLabelText('Token ticker');
         fireEvent.change(ticker, { target: { value: 'OLD' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Watch token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Watch Token' }));
         fireEvent.change(ticker, { target: { value: 'NEW' } });
         resolveLookup({ canonicalTick: 'OLD' });
         await Promise.resolve();
@@ -355,7 +355,7 @@ describe('DisplaySection', () => {
         expect(messaging.updateSettings).not.toHaveBeenCalled();
         expect(ticker).toHaveValue('NEW');
         expect(screen.queryByText(/OLD is now shown/)).toBeNull();
-        expect(screen.getByRole('button', { name: 'Watch token' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Watch Token' })).toBeEnabled();
     });
 
     it('debounces token-list search across ticker and network name with clear and keyboard controls', async () => {

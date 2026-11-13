@@ -83,7 +83,7 @@ describe('AddAccountForm navigation', () => {
         fireEvent.change(screen.getByLabelText('Account name'), {
             target: { value: '  SAVINGS  ' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add Account' }));
 
         expect(screen.getByText('An account named "SAVINGS" already exists.')).toBeTruthy();
         expect(messaging.createAccount).not.toHaveBeenCalled();
@@ -100,7 +100,7 @@ describe('AddAccountForm navigation', () => {
             target: { value: '  Spending  ' },
         });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add Account' }));
 
         await waitFor(() => expect(onCreated).toHaveBeenCalledWith(account));
         expect(messaging.createAccount).toHaveBeenCalledWith({
@@ -117,11 +117,11 @@ describe('AddAccountForm navigation', () => {
             <AddAccountForm walletId="wallet-1" onBack={() => {}} onCreated={() => {}} />,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add Account' }));
 
         await waitFor(() => expect(screen.getByLabelText('Account name').disabled).toBe(true));
         expect(screen.getByRole('button', { name: 'Back to previous screen' }).disabled).toBe(true);
-        expect(screen.getByRole('button', { name: 'Add account' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Add Account' }).disabled).toBe(true);
         resolveCreate({ account: { id: 'account-2' } });
     });
 
@@ -131,7 +131,7 @@ describe('AddAccountForm navigation', () => {
             <AddAccountForm walletId="wallet-1" onBack={() => {}} onCreated={() => {}} />,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add Account' }));
 
         expect(await screen.findByText('Signer unavailable')).toBeTruthy();
         expect(screen.getByLabelText('Account name').disabled).toBe(false);

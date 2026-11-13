@@ -249,7 +249,7 @@ describe('Send review: destination matches an open dispenser', () => {
         await flushTimers();
         fireEvent.change(screen.getByLabelText(/^To$/), { target: { value: OTHER } });
         fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '1' } });
-        fireEvent.click(screen.getByRole('button', { name: /Add recipient/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Add Recipient/ }));
         fireEvent.change(screen.getByLabelText('Recipient 2 address'), { target: { value: DISPENSER_ADDR } });
         fireEvent.change(screen.getByLabelText(/^Recipient 2 amount/), { target: { value: '9' } });
         await flushTimers();
@@ -277,7 +277,7 @@ describe('Send review: destination matches an open dispenser', () => {
         await flushTimers();
         fireEvent.change(screen.getByLabelText(/^To$/), { target: { value: OTHER } });
         fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '1' } });
-        fireEvent.click(screen.getByRole('button', { name: /Add recipient/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Add Recipient/ }));
         fireEvent.change(screen.getByLabelText('Recipient 2 address'), { target: { value: DISPENSER_ADDR } });
         fireEvent.change(screen.getByLabelText(/^Recipient 2 amount/), { target: { value: '9' } });
         await flushTimers();

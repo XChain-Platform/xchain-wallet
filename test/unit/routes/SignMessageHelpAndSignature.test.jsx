@@ -59,21 +59,24 @@ afterEach(() => {
 describe('Sign message help tips and signed state', () => {
     it('puts a help tip on the Address, Message, Signature and inline Password labels', async () => {
         mountWith(<SignMessageForm walletId="wallet-1" onBack={() => {}} />, messagingFor({ ready: false }));
-        await waitFor(() => expect(screen.getByLabelText('Address')).toHaveValue(FIRST.address));
-        for (const name of ['Address', 'Message', 'Signature', 'Password']) {
+        await waitFor(() => expect(screen.getByLabelText('Signing address')).toHaveValue(FIRST.address));
+        // The signing address sits in the closed "Signing with"
+        // section (Wallet Form Standard); open it so its help tip shows.
+        fireEvent.click(screen.getByRole('button', { name: /^Signing with/, expanded: false }));
+        for (const name of ['Signing address', 'Message', 'Signature', 'Password']) {
             expect(screen.getByRole('button', { name: `About ${name}` }), name).toBeInTheDocument();
         }
     });
 
     it('shows the signed text in the Message font size with a copy control, and empties on edit or address switch', async () => {
         mountWith(<SignMessageForm walletId="wallet-1" onBack={() => {}} />, messagingFor());
-        await waitFor(() => expect(screen.getByLabelText('Address')).toHaveValue(FIRST.address));
+        await waitFor(() => expect(screen.getByLabelText('Signing address')).toHaveValue(FIRST.address));
         fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Proof' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Sign message' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Sign message$/i }));
 
         const box = await screen.findByRole('textbox', { name: 'Signature' });
         await waitFor(() => expect(box).toHaveTextContent('signed-value'));
-        expect(screen.getByRole('button', { name: 'Copy signature' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Copy Signature' })).toBeInTheDocument();
 
         const signatureCss = read('packages/core/src/shared/routes/SignMessageForm.module.css');
         const inputCss = read('packages/core/src/ui/Input.module.css');
@@ -83,13 +86,15 @@ describe('Sign message help tips and signed state', () => {
 
         fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Proof 2' } });
         expect(box).toHaveTextContent('The signature appears here after you sign.');
-        expect(screen.queryByRole('button', { name: 'Copy signature' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Copy Signature' })).toBeNull();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Sign message' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Sign message$/i }));
         await waitFor(() => expect(box).toHaveTextContent('signed-value'));
+        // Open the closed "Signing with" section to reach the picker icon.
+        fireEvent.click(screen.getByRole('button', { name: /^Signing with/, expanded: false }));
         fireEvent.click(screen.getByRole('button', { name: 'Choose address' }));
         fireEvent.click(screen.getByRole('button', { name: 'Pick second address' }));
-        await waitFor(() => expect(screen.getByLabelText('Address')).toHaveValue(SECOND.address));
+        await waitFor(() => expect(screen.getByLabelText('Signing address')).toHaveValue(SECOND.address));
         expect(screen.getByRole('textbox', { name: 'Signature' }))
             .toHaveTextContent('The signature appears here after you sign.');
     });
@@ -112,7 +117,7 @@ describe('Verify signature help tips', () => {
         for (const name of ['Address', 'Message', 'Signature']) {
             expect(await screen.findByRole('button', { name: `About ${name}` }), name).toBeInTheDocument();
         }
-        const button = screen.getByRole('button', { name: 'Verify signature' });
+        const button = screen.getByRole('button', { name: /^Verify signature$/i });
         expect(button.className).toMatch(/success/);
         expect(button.querySelector('svg')).not.toBeNull();
     });

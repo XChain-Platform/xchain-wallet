@@ -96,6 +96,8 @@ describe('ListTransferForm screen rules', () => {
             </MessagingProvider>,
         );
 
+        // From is a closed standard section; open it to reach its fields.
+        fireEvent.click(await screen.findByRole('button', { name: /^From\b/, expanded: false }));
         const network = await screen.findByRole('button', { name: /^Network:/ });
         const from = screen.getByLabelText('From');
         const list = screen.getByText('#2700');
@@ -103,7 +105,7 @@ describe('ListTransferForm screen rules', () => {
         expectBefore(from, list);
         expect(from).toHaveValue(OWNER);
 
-        const submit = screen.getByRole('button', { name: 'Transfer list' });
+        const submit = screen.getByRole('button', { name: /^Transfer list$/i });
         expect(submit).toHaveClass(buttonStyles.success);
         expect(submit.querySelector('svg')).not.toBeNull();
         expect(screen.queryByRole('button', { name: 'Review' })).toBeNull();
@@ -115,17 +117,18 @@ describe('ListTransferForm screen rules', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'About New owner' }));
         expect(screen.getByText(/address that becomes this list's owner/)).toBeTruthy();
+        // Memo is an optional closed section.
+        fireEvent.click(screen.getByRole('button', { name: /^Memo\b/, expanded: false }));
         fireEvent.click(screen.getByRole('button', { name: 'About Memo' }));
         expect(screen.getByText('A note recorded with this list ownership transfer.')).toBeTruthy();
 
         fireEvent.click(screen.getByRole('button', { name: 'Choose source address' }));
-        const picker = screen.getByRole('region', { name: 'From address' });
-        expect(picker).toHaveAttribute('data-chain-id', CHAIN);
+        const picker = screen.getByRole('region', { name: 'From Address' });        expect(picker).toHaveAttribute('data-chain-id', CHAIN);
         expect(picker).toHaveAttribute('data-lock-network', 'true');
         fireEvent.click(screen.getByRole('button', { name: 'Pick non-owner' }));
 
         expect(await screen.findByText(/A transfer signed by another address will be refused by the network/)).toBeTruthy();
         expect(screen.getByLabelText('From')).toHaveValue(OTHER_RECORD.address);
-        expect(screen.getByRole('button', { name: 'Transfer list' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /^Transfer list$/i })).toBeDisabled();
     });
 });

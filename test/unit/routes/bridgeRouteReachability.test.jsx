@@ -72,7 +72,7 @@ function routedViews(code) {
 function actionsCatalogue(code) {
     const start = code.indexOf('buildActionEntries({');
     if (start < 0) return null;
-    const end = code.indexOf("onBack={() => setUnlockedView('home')}", start);
+    const end = code.indexOf('onBack={goBack}', start);
     return end < 0 ? null : code.slice(start, end);
 }
 
@@ -138,8 +138,8 @@ describe('P11: the bridge routes exist in every shell', () => {
             it('opens the bridge-settings form from the token page, with the token in hand', () => {
                 const mount = code.slice(code.indexOf('<ManageToken'));
                 // The opener is taken from a neighbouring issuer-only row
-                // rather than named: it is the one that sets formReturnView,
-                // and formReturnView is what turns tokenDetailRef into the
+                // rather than named: it is the one that sets formSource,
+                // and formSource is what turns tokenDetailRef into the
                 // form's chainId/tick prefill. A bare setUnlockedView would
                 // open the bridge form on no token at all.
                 const neighbour = mount.match(/onAccessLists=\{\(\) => (\w+)\('access-lists'\)\}/);
@@ -269,12 +269,12 @@ describe('P19: Manage Token offers the bridge row', () => {
         await screen.findByText(MARKER);
     }
 
-    // The row sits past the three primaries, so it lives behind More; open it
-    // when there is one, then hand back whichever Bridge control is on screen.
+    // The Bridge tile sits in the closed "Rules and automation" group on the Actions tab; open
+    // that group (once), then hand back the Bridge tile.
     function bridgeRow() {
-        const more = screen.queryByRole('button', { name: /More/ });
-        if (more) fireEvent.click(more);
-        return screen.queryByRole(more ? 'menuitem' : 'button', { name: /^Bridge$/ });
+        const group = screen.queryByRole('button', { name: /^Rules and automation/ });
+        if (group && group.getAttribute('aria-expanded') !== 'true') fireEvent.click(group);
+        return screen.queryByRole('button', { name: /^Bridge$/ });
     }
 
     it('opens the bridge-settings form for the token in hand', async () => {

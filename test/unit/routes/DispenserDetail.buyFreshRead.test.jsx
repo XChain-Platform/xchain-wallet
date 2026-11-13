@@ -97,12 +97,14 @@ async function mount() {
         });
     }
     vi.useRealTimers();
+    // Details is the default tab; the buy panel shows only on the Buy tab.
+    fireEvent.click(await screen.findByRole('tab', { name: /^Buy$/ }));
     await screen.findByText(/250 MEMEVALID available/);
     return messaging;
 }
 
 async function openReview() {
-    const buy = await screen.findByRole('button', { name: /^Buy \d+ fills?$/ });
+    const buy = await screen.findByRole('button', { name: /^Buy \d+ Dispenses?$/ });
     await waitFor(() => expect(buy).toBeEnabled());
     fireEvent.click(buy);
     return screen.findByTestId('confirm-approve');

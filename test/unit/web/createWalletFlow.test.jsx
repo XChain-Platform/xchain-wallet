@@ -76,7 +76,7 @@ describe('web create-wallet flow', () => {
 
         render(<App />);
 
-        expect(await screen.findByRole('heading', { name: 'Create a new wallet' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Create a New Wallet' })).toBeInTheDocument();
         expect(screen.queryByRole('heading', { name: 'XChain Wallet' })).not.toBeInTheDocument();
     });
 
@@ -84,9 +84,9 @@ describe('web create-wallet flow', () => {
         render(<App />);
 
         expect(await screen.findByRole('heading', { name: 'XChain Wallet' })).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Create new wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create New Wallet' }));
 
-        expect(await screen.findByRole('heading', { name: 'Create a new wallet' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Create a New Wallet' })).toBeInTheDocument();
         const password = screen.getByLabelText(/^Password/);
         const confirm = screen.getByLabelText('Confirm password');
         await waitFor(() => expect(password).toHaveFocus());
@@ -96,38 +96,38 @@ describe('web create-wallet flow', () => {
         fireEvent.change(confirm, { target: { value: 'short' } });
         fireEvent.click(screen.getByRole('button', { name: 'Next' }));
         expect(await screen.findByText('Password must be at least 8 characters.')).toBeInTheDocument();
-        expect(screen.queryByRole('heading', { name: 'Write down your recovery phrase' })).toBeNull();
+        expect(screen.queryByRole('heading', { name: 'Write Down Your Recovery Phrase' })).toBeNull();
 
         fireEvent.change(password, { target: { value: 'correct horse battery staple' } });
         fireEvent.change(confirm, { target: { value: 'correct horse battery staple' } });
         fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
-        const recoveryHeading = await screen.findByRole('heading', { name: 'Write down your recovery phrase' });
+        const recoveryHeading = await screen.findByRole('heading', { name: 'Write Down Your Recovery Phrase' });
         await waitFor(() => expect(recoveryHeading).toHaveFocus());
         expect(screen.queryByRole('list', { name: 'Recovery phrase' })).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Reveal recovery phrase' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal Recovery Phrase' }));
         expect(within(await screen.findByRole('list', { name: 'Recovery phrase' })).getAllByRole('listitem')).toHaveLength(12);
-        const verifyButton = screen.getByRole('button', { name: 'Verify recovery phrase' });
+        const verifyButton = screen.getByRole('button', { name: 'Verify Recovery Phrase' });
         expect(verifyButton).toBeDisabled();
 
         fireEvent.click(screen.getByRole('checkbox', { name: /saved my recovery phrase/ }));
         fireEvent.click(verifyButton);
 
-        expect(await screen.findByRole('heading', { name: 'Verify your recovery phrase' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Verify Your Recovery Phrase' })).toBeInTheDocument();
         const quizInputs = screen.getAllByLabelText(/^Word \d+$/);
         await waitFor(() => expect(quizInputs[0]).toHaveFocus());
-        fireEvent.click(screen.getByRole('button', { name: 'Create wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Wallet' }));
         expect(await screen.findByText('Fill in every word.')).toBeInTheDocument();
         expect(background.importMnemonic).not.toHaveBeenCalled();
 
         answerQuiz(() => 'wrong');
-        fireEvent.click(screen.getByRole('button', { name: 'Create wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Wallet' }));
         expect(await screen.findByText(/does not match/)).toBeInTheDocument();
         expect(background.importMnemonic).not.toHaveBeenCalled();
 
         const words = PHRASE.split(' ');
         answerQuiz((position) => words[position - 1]);
-        fireEvent.click(screen.getByRole('button', { name: 'Create wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Wallet' }));
 
         const donationHeading = await screen.findByRole('heading', { name: 'Automatic Donation System' });
         await waitFor(() => expect(donationHeading).toHaveFocus());

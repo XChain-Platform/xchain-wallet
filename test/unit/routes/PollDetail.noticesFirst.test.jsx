@@ -62,7 +62,9 @@ afterEach(() => {
 });
 
 describe('Poll page notices', () => {
-    it('shows the ballot error before the poll terms', async () => {
+    // The Form Standard puts a form's errors in one slot just above its
+    // action, so the ballot error sits right above the Vote button.
+    it('shows the ballot error in the status slot just above Vote', async () => {
         render(
             <MessagingProvider shell="web" messaging={messagingFor()}>
                 <PollDetail walletId="wallet-1" chainId={CHAIN} pollIndex={7} onBack={vi.fn()} />
@@ -74,7 +76,9 @@ describe('Poll page notices', () => {
         });
         const alert = await screen.findByRole('alert');
         expect(alert.textContent).toContain('Choose at least one option');
-        expect(precedes(alert, screen.getByText('Choose a release channel'))).toBe(true);
+        expect(alert.closest('[data-form-status]')).not.toBeNull();
+        expect(precedes(alert, screen.getByRole('button', { name: 'Vote' }))).toBe(true);
+        expect(precedes(screen.getByText('Choose a release channel'), alert)).toBe(true);
     });
 
     it('shows the demo note once, before the poll terms, and keeps Vote disabled', async () => {

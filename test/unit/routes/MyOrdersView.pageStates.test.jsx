@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act as domAct, cleanup, fireEvent, render, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { MyOrdersView } from '../../../packages/core/src/shared/routes/MyOrdersView.jsx';
 
 const SOURCE_PATH = 'packages/core/src/shared/routes/MyOrdersView.jsx';
@@ -46,7 +47,7 @@ beforeEach(() => {
         ],
     });
 });
-afterEach(() => { cleanup(); vi.useRealTimers(); });
+afterEach(() => { cleanup(); resetWalletModes(); vi.useRealTimers(); });
 
 async function drain(rounds = 24) {
     for (let i = 0; i < rounds; i += 1) {
@@ -56,10 +57,13 @@ async function drain(rounds = 24) {
 }
 
 /** Mounts My orders with one open order; `signed` is what the cancel signer returns. */
-async function mount({ signed = { txid: 'cancel-txid' }, settings = { walletMode: 'full' } } = {}) {
+async function mount({ signed = { txid: 'cancel-txid' }, walletMode = 'full' } = {}) {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const target = {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [HD_ADDRESS] }),
-        getSettings: () => Promise.resolve(settings),
+        getSettings: () => Promise.resolve({}),
+        listWallets: () => Promise.resolve([{ id: 'w', name: 'W', walletMode }]),
         signerReady: () => Promise.resolve({ ready: true }),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
         getListsForSource: () => Promise.resolve({ data: [] }),
@@ -110,7 +114,7 @@ async function step(fn) {
 async function cancelOrder(utils) {
     const row = within(utils.getByRole('list', { name: /^Open / })).getByText('#700', { exact: false }).closest('li');
     await step(() => fireEvent.click(within(row).getByRole('button', { name: 'Cancel' })));
-    await step(() => fireEvent.click(utils.getByRole('button', { name: 'Cancel order' })));
+    await step(() => fireEvent.click(utils.getByRole('button', { name: 'Cancel Order' })));
     const approve = utils.container.querySelector('[data-testid="confirm-approve"]');
     expect(approve, 'the confirm page offers Approve').not.toBeNull();
     await step(() => fireEvent.click(approve));
@@ -141,10 +145,10 @@ describe('My orders lays out every cancel and edit result through FormPage', () 
     });
 
     it('renders the unsigned result screen inside a FormPage form', async () => {
-        const utils = await mount({ settings: { walletMode: 'watcher' }, signed: { psbtHex: '70736274ff' } });
+        const utils = await mount({ walletMode: 'watcher', signed: { psbtHex: '70736274ff' } });
         const row = within(utils.getByRole('list', { name: /^Open / })).getByText('#700', { exact: false }).closest('li');
         await step(() => fireEvent.click(within(row).getByRole('button', { name: 'Cancel' })));
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Create unsigned transaction' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Create Unsigned Transaction' })));
         const notice = utils.container.querySelector('[data-testid="result-screen-notice"]');
         expect(notice).not.toBeNull();
         expect(notice.closest('form')).not.toBeNull();

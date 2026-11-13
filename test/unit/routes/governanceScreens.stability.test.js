@@ -11,9 +11,12 @@ const route = (name) => readFileSync(resolve(here, '../../../packages/core/src/s
 
 describe('governance and staking screen theme colors', () => {
     it.each([
-        ['GovernancePolls.jsx', 'var(--xc-warning-bg)'],
-        ['BetFeedsList.jsx', 'var(--xc-accent-primary)'],
-        ['MyBets.jsx', 'var(--xc-danger-bg)'],
+        // The poll status pill's colours live in pollDisplay, shared by the list and the poll page.
+        ['pollDisplay.js', 'var(--xc-warning-bg)'],
+        // The market status chip lives on the shared Bet Markets card.
+        ['../components/BetMarketCard.module.css', 'var(--xc-accent-primary)'],
+        // My bets is the Bet Markets tab drawn by BetMyBetsPanel.
+        ['../components/BetMyBetsPanel.jsx', 'var(--xc-danger-bg)'],
         ['ContractStakeForm.jsx', 'var(--xc-danger-text)'],
         ['CoinpayForm.module.css', 'var(--xc-accent-primary)'],
         ['OperatorDashboard.jsx', 'var(--xc-border)'],
@@ -34,8 +37,9 @@ describe('governance and staking screen theme colors', () => {
 
     it.each([
         ['GovernancePolls.jsx', ["'#1b5e20'", "'#8e1c1c'", "'#8a6d00'", "'#fff'"]],
+        ['pollDisplay.js', ["'#1b5e20'", "'#8e1c1c'", "'#8a6d00'", "'#fff'"]],
         ['BetFeedsList.jsx', ["'#1b5e20'", "'#8e1c1c'", "'#4a4a4a'", "'#0d47a1'", "'#fff'"]],
-        ['MyBets.jsx', ["'#1b5e20'", "'#8e1c1c'", "'#4a4a4a'", "'#0d47a1'", "'#fff'"]],
+        ['../components/BetMyBetsPanel.jsx', ["'#1b5e20'", "'#8e1c1c'", "'#4a4a4a'", "'#0d47a1'", "'#fff'"]],
         ['StakeForm.jsx', ['var(--border,', 'var(--muted,']],
         // Its muted explanation paragraphs moved into the Amount help tip (U57);
         // no hard-coded color may come back in their place.
@@ -49,8 +53,8 @@ describe('governance and staking screen theme colors', () => {
 });
 
 describe('governance screen narrow layout', () => {
-    it('MyBets.jsx lays bet rows out through the shared ListRow', () => {
-        const source = route('MyBets.jsx');
+    it('the My bets tab lays bet rows out through the shared ListRow', () => {
+        const source = route('../components/BetMyBetsPanel.jsx');
         expect(source).toContain('<ListRow');
         const rows = source.split('\n').filter((line) => (
             line.includes("display: 'flex'") && line.includes("justifyContent: 'space-between'")
@@ -58,22 +62,27 @@ describe('governance screen narrow layout', () => {
         expect(rows.every((line) => line.includes("flexWrap: 'wrap'"))).toBe(true);
     });
 
+    // OracleRecord lays its rows out with classes now, so it may hold none of
+    // these inline rows; any it does hold must wrap.
     it.each([
-        'BetFeedDetail.jsx',
-        'OracleRecord.jsx',
-    ])('%s wraps every space-between user-data row', (file) => {
+        ['BetFeedDetail.jsx', true],
+        ['OracleRecord.jsx', false],
+    ])('%s wraps every space-between user-data row', (file, mustHaveRows) => {
         const rows = route(file).split('\n').filter((line) => (
             line.includes("display: 'flex'") && line.includes("justifyContent: 'space-between'")
         ));
-        expect(rows.length).toBeGreaterThan(0);
+        if (mustHaveRows) expect(rows.length).toBeGreaterThan(0);
         expect(rows.every((line) => line.includes("flexWrap: 'wrap'"))).toBe(true);
     });
 
-    it('wraps betting market headers through the shared list row class', () => {
+    it('keeps betting market card text shrinkable and its footer wrapping', () => {
         const source = route('BetFeedsList.jsx');
-        const css = route('BetFeedsList.module.css');
-        expect(source).toContain('className={local.marketHeader}');
-        expect(css).toMatch(/\.marketHeader\s*\{[\s\S]*?flex-wrap:\s*wrap/);
+        const card = readFileSync(resolve(here, '../../../packages/core/src/shared/components/BetMarketCard.module.css'), 'utf8');
+        expect(source).toContain('<BetMarketCard');
+        expect(card).toMatch(/\.topText\s*\{[\s\S]*?min-width:\s*0/);
+        expect(card).toMatch(/\.ref\s*\{[\s\S]*?overflow-wrap:\s*anywhere/);
+        expect(card).toMatch(/\.question\s*\{[\s\S]*?overflow-wrap:\s*anywhere/);
+        expect(card).toMatch(/\.foot\s*\{[\s\S]*?flex-wrap:\s*wrap/);
     });
 
     it('wraps Oracle Console market headers through its phone layout styles', () => {
@@ -104,7 +113,9 @@ describe('governance screen narrow layout', () => {
         // Poll cards are ListRows, whose content column shrinks beside the status pill.
         expect(route('GovernancePolls.jsx')).toContain('<ListRow');
         expect(polls).toMatch(/\.pollText\s*\{[\s\S]*?overflow-wrap:\s*anywhere/);
-        expect(detail).toMatch(/\.resultHeader\s*\{[\s\S]*?flex-wrap:\s*wrap/);
+        // Each result row (swatch, option, values) wraps at narrow widths.
+        expect(detail).toMatch(/\.resultItem\s*\{[\s\S]*?flex-wrap:\s*wrap/);
+        expect(detail).toMatch(/\.question\s*\{[\s\S]*?overflow-wrap:\s*anywhere/);
         expect(detail).toMatch(/\.resultOption\s*\{[\s\S]*?overflow-wrap:\s*anywhere/);
         expect(detail).toMatch(/\.resultValues > span\s*\{[\s\S]*?overflow-wrap:\s*anywhere/);
         expect(detail).toMatch(/\.splitOptionInput :global\(label\)\s*\{[\s\S]*?overflow-wrap:\s*anywhere/);

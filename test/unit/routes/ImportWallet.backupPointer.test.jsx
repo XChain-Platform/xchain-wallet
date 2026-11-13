@@ -194,7 +194,7 @@ describe('ImportWallet backup-pointer restore', () => {
         fireEvent.click(rescan);
         expect(document.getElementById('xc-backup-scanner')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Cancel scan' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Use a file instead' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Use a File Instead' }));
 
         expect(screen.getByRole('textbox', { name: 'Backup file contents' }).value).toBe('');
         expect(screen.queryByText(/Backup contents pasted/)).toBeNull();

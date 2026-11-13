@@ -264,10 +264,22 @@ describe('messaging barrels: the shells agree on the wire', () => {
         expect(drift).toEqual([]);
     });
 
+    // Fields only the extension popup adds, by design: its background host
+    // uses the surface id to tell the originating popup from every other open
+    // surface when it broadcasts the change, and the web and desktop hosts
+    // have a single surface so they send nothing.
+    const EXTENSION_ONLY_FIELDS = { removeWallet: ['surfaceId'] };
+    const withoutSurfaceFields = (fnName, shellName, payload) => {
+        const extra = EXTENSION_ONLY_FIELDS[fnName];
+        if (!extra || shellName !== 'extension popup' || !payload || typeof payload !== 'object') return payload;
+        return Object.fromEntries(Object.entries(payload).filter(([key]) => !extra.includes(key)));
+    };
+
     it('builds the same payload from the same arguments in every shell', () => {
         const drift = [];
         for (const [fnName, byShell] of shared) {
-            const payloads = Object.entries(byShell).map(([s, [, payload]]) => [s, payload]);
+            const payloads = Object.entries(byShell)
+                .map(([s, [, payload]]) => [s, withoutSurfaceFields(fnName, s, payload)]);
             const first = JSON.stringify(payloads[0][1] ?? null);
             if (payloads.some(([, p]) => JSON.stringify(p ?? null) !== first)) {
                 drift.push(`${fnName}: ${payloads.map(([s, p]) => `${s}=${JSON.stringify(p ?? null)}`).join(', ')}`);

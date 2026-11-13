@@ -11,6 +11,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { seedSettingsForChains } from '../../../packages/core/src/flows/seedSettings.js';
 import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
+import { ContactsSection } from '../../../packages/core/src/shared/components/settings/ContactsSection.jsx';
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
 import { readLastView, writeLastView } from '../../../packages/core/src/shared/utils/lastViewMemory.js';
 
@@ -37,8 +38,9 @@ const radioGroupCss = readFileSync(
     join(process.cwd(), 'packages/core/src/ui/RadioGroup.module.css'),
     'utf8',
 );
-const onboardingCss = readFileSync(
-    join(process.cwd(), 'packages/core/src/shared/routes/Onboarding.module.css'),
+// The license lines are the shared warning lines (WarningCard).
+const warningCardCss = readFileSync(
+    join(process.cwd(), 'packages/core/src/shared/components/WarningCard.module.css'),
     'utf8',
 );
 
@@ -62,27 +64,38 @@ const CUSTOM_CHAIN = {
     networkKind: 'regtest',
 };
 
-const INLINE_SECTIONS = [
+const LANDING_GROUPS = [
+    'Wallets',
+    'Security',
+    'Backup and Recovery',
+    'Privacy',
     'Appearance',
-    'Language & region',
-    'Network',
     'Notifications',
-    'Contacts',
+    'Network and Fees',
+    'Connected Sites',
+    'Donations',
+    'Advanced',
+];
+
+const INLINE_GROUP_PAGES = [
+    ['g-appearance', ['Appearance', 'Language & region']],
+    ['g-network', ['Network']],
+    ['g-notifications', ['Notifications']],
 ];
 
 const DRILLDOWN_SECTIONS = [
-    ['this-wallet', 'This wallet', () => screen.getByRole('button', { name: 'Remove…' })],
-    ['display', 'Display', () => screen.getByRole('button', { name: 'Reset to defaults' })],
+    // The This wallet page is no longer listed; its password part is the Security page's first row.
+    ['security-password', 'Wallet Password', () => screen.getByRole('button', { name: /Change/ })],
+    ['display', 'Display', () => screen.getByRole('button', { name: 'Reset to Defaults' })],
     ['privacy', 'Privacy', () => screen.getByRole('spinbutton', { name: 'Clipboard auto-clear seconds' })],
     ['safety', 'Safety', () => screen.getByRole('button', { name: 'Activate' })],
-    ['wallet-mode', 'Wallet mode', () => screen.getByRole('radio', { name: /Normal/ })],
     ['backup', 'Backup', () => screen.getByRole('button', { name: 'Export…' })],
     ['fees', 'Fees', () => screen.getByRole('combobox', { name: 'Bitcoin fee strategy' })],
-    ['network-endpoints', 'Network & endpoints', () => screen.getAllByRole('textbox', { name: 'Explorer URL' })[0]],
-    ['connected-sites', 'Connected sites', () => screen.findByRole('button', { name: 'Disconnect' })],
-    ['ads', 'Automatic donation system', () => screen.getByRole('switch', { name: 'Turn on Automatic Donation System' })],
-    ['developer', 'Developer mode', () => screen.getByRole('switch', { name: 'Turn on developer mode' })],
-    ['about', 'About', () => screen.getByRole('button', { name: 'Copy diagnostics' })],
+    ['network-endpoints', 'Network & Endpoints', () => screen.getAllByRole('textbox', { name: 'Explorer URL' })[0]],
+    ['connected-sites', 'Connected Sites', () => screen.findByRole('button', { name: 'Disconnect' })],
+    ['ads', 'Automatic Donation System', () => screen.getByRole('switch', { name: 'Turn on Automatic Donation System' })],
+    ['developer', 'Developer Mode', () => screen.getByRole('switch', { name: 'Turn on developer mode' })],
+    ['about', 'About', () => screen.getByRole('button', { name: 'Copy Diagnostics' })],
 ];
 
 function pending() {
@@ -203,14 +216,22 @@ describe('Settings at a 320px viewport', () => {
     it('renders every inline and external section without a fixed-width overflow', async () => {
         const { container } = renderSettings();
 
-        await screen.findByText('Primary Wallet');
-        for (const section of INLINE_SECTIONS) {
-            expect(screen.getByRole('heading', { name: section })).toBeVisible();
+        // The landing is three labelled lists of group rows; each group page
+        // holds the inline sections (Appearance, Language & region, Network,
+        // Notifications) that used to sit on the landing itself.
+        for (const group of LANDING_GROUPS) {
+            expect(await screen.findByRole('button', { name: new RegExp(`^${group}`) })).toBeVisible();
         }
-        expect(screen.getByRole('button', { name: /This wallet/ })).toBeVisible();
-        expect(screen.getByRole('button', { name: /Automatic donation system/ })).toBeVisible();
         expect(screen.queryByRole('button', { name: /^Keyboard/ })).toBeNull();
         expectNoFixedWidthOverflow(container);
+        for (const [groupId, headings] of INLINE_GROUP_PAGES) {
+            cleanup();
+            const page = renderSettings(groupId);
+            for (const heading of headings) {
+                expect(screen.getAllByText(heading).length).toBeGreaterThan(0);
+            }
+            expectNoFixedWidthOverflow(page.container);
+        }
     });
 
     it('keeps the donation address and onboarding choices readable without forced word breaks', () => {
@@ -226,7 +247,7 @@ describe('Settings at a 320px viewport', () => {
         expect(radioGroupCss).toMatch(/\.option\s*\{[^}]*minmax\(0, 1fr\)/s);
         expect(radioGroupCss).toMatch(/\.label\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
         expect(createWalletCss).toMatch(/\.wordCountRow\s*\{[^}]*min-width:\s*0;/s);
-        expect(onboardingCss).toMatch(/\.licenseParagraph\s*\{[^}]*text-align:\s*start;[^}]*hyphens:\s*none;/s);
+        expect(warningCardCss).toMatch(/\.paragraph\s*\{[^}]*text-align:\s*start;[^}]*hyphens:\s*none;/s);
     });
 
     it('clears the previous route before reloading into a different network', async () => {
@@ -234,7 +255,7 @@ describe('Settings at a 320px viewport', () => {
         const reload = vi.fn();
         messaging.setActiveNetwork = vi.fn().mockResolvedValue({ settings: { activeNetwork: 'testnet' } });
         writeLastView('wallet-1', 'contacts');
-        renderSettings(null, { messaging, reload });
+        renderSettings('g-network', { messaging, reload });
 
         fireEvent.change(screen.getByRole('combobox', { name: 'Active network' }), {
             target: { value: 'testnet' },
@@ -257,8 +278,9 @@ describe('Settings at a 320px viewport', () => {
     );
 
     it('keeps destructive actions rendered in narrow sections', async () => {
-        renderSettings('this-wallet');
-        expect(screen.getByRole('button', { name: 'Remove…' })).toBeVisible();
+        // Removing a wallet moved to Wallet Details; Settings no longer carries it.
+        renderSettings('security-password');
+        expect(screen.queryByRole('button', { name: 'Remove…' })).toBeNull();
         cleanup();
 
         renderSettings('safety');
@@ -278,17 +300,26 @@ describe('Settings at a 320px viewport', () => {
         Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 });
         const messaging = buildMessaging();
         messaging.listContacts.mockResolvedValue([{ id: 'contact-1' }]);
-        renderSettings(null, { messaging });
+        // No Settings group lists the Contacts section any more, so the section
+        // is drawn directly to keep its narrow-width layout covered.
+        render(
+            <MessagingContext.Provider value={{ shell: 'popup', messaging }}>
+                <ContactsSection />
+            </MessagingContext.Provider>,
+        );
 
         await screen.findByText('1 contact stored');
         const copy = screen.getByText('Export and import', { selector: 'span' }).parentElement;
         const row = copy.parentElement;
+        // Import is the standard file field under the export actions.
         const buttons = [
             screen.getByRole('button', { name: 'Export…' }),
             screen.getByRole('button', { name: 'Export CSV…' }),
-            screen.getByRole('button', { name: 'Import…' }),
         ];
         const actions = buttons[0].parentElement;
+        const importField = screen.getByLabelText(/^Import contacts \(JSON or CSV/).closest('[data-file-field]');
+        expect(importField.parentElement.parentElement).toBe(row);
+        expect(importField.parentElement.style.flex).toBe('1 1 100%');
 
         expect(window.innerWidth).toBe(360);
         expect(row.style.flexWrap).toBe('wrap');

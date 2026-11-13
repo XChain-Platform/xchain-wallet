@@ -16,6 +16,7 @@ vi.mock('../../../packages/core/src/flows/listFormatSupport.js', () => ({
 }));
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { ListTransferForm } from '../../../packages/core/src/shared/routes/ListTransferForm.jsx';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -45,10 +46,13 @@ const COMPOSED = Object.freeze({
 });
 
 function makeMessaging({ walletMode = 'full', listError = null } = {}) {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode }], activeWalletId: 'wallet-1' });
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ACTIVE_RECORD, OWNER_RECORD] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: ACTIVE_RECORD.id } }),
-        getSettings: vi.fn().mockResolvedValue({ walletMode }),
+        getSettings: vi.fn().mockResolvedValue({}),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'W', walletMode }]),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
         getListByActionIndex: vi.fn().mockImplementation(async () => {
@@ -103,6 +107,7 @@ async function fillTransfer({ destination = DESTINATION, memo = '' } = {}) {
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     vi.clearAllMocks();
 });
 
@@ -110,7 +115,7 @@ describe('ListTransferForm queued result', () => {
     it('shows the queued panel when the transfer is signed but not broadcast', async () => {
         const messaging = mount();
         await fillTransfer();
-        fireEvent.click(screen.getByRole('button', { name: 'Transfer list' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Transfer list$/i }));
         const approve = await screen.findByTestId('confirm-approve');
         await waitFor(() => expect(approve.disabled).toBe(false));
         fireEvent.click(approve);

@@ -6,15 +6,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
-import { readFileSync } from 'node:fs';
 import { PriceAlertForm } from '../../../packages/core/src/shared/components/PriceAlertForm.jsx';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 import inputStyles from '../../../packages/core/src/ui/Input.module.css';
-
-const receiveCss = readFileSync(
-    'packages/core/src/shared/routes/Receive.module.css',
-    'utf8',
-);
 
 afterEach(() => cleanup());
 
@@ -25,7 +19,7 @@ describe('PriceAlertForm', () => {
         const coin = screen.getByRole('combobox', { name: 'Coin' });
         const direction = screen.getByRole('combobox', { name: 'Direction' });
         const target = screen.getByRole('textbox', { name: 'Target price' });
-        const action = screen.getByRole('button', { name: 'Add alert' });
+        const action = screen.getByRole('button', { name: 'Add Alert' });
         expect(coin.parentElement.parentElement).toHaveClass(inputStyles.md);
         expect(direction.parentElement.parentElement).toHaveClass(inputStyles.md);
         expect(target.parentElement.parentElement).toHaveClass(inputStyles.md);
@@ -40,21 +34,13 @@ describe('PriceAlertForm', () => {
 
         expect(targetField.className).toMatch(/(?:^|\s)_?md_/);
         expect(row.style.alignItems).toBe('center');
-        expect(screen.getByRole('button', { name: 'Add alert' }).className).toMatch(/(?:^|\s)_?md_/);
+        expect(screen.getByRole('button', { name: 'Add Alert' }).className).toMatch(/(?:^|\s)_?md_/);
         expect(screen.getByRole('button', { name: 'Cancel' }).className).toMatch(/(?:^|\s)_?md_/);
-    });
-
-    it('bottom-aligns the Receive label action with its field and removes field-wrapper spacing', () => {
-        const labelEditor = receiveCss.match(/\.labelEditor\s*\{([^}]+)\}/)?.[1] || '';
-        const labelEditorChildren = receiveCss.match(/\.labelEditor\s*>\s*\*\s*\{([^}]+)\}/)?.[1] || '';
-
-        expect(labelEditor).toMatch(/align-items:\s*end/);
-        expect(labelEditorChildren).toMatch(/margin-bottom:\s*0/);
     });
 
     it('explains why an empty target keeps the primary action disabled', () => {
         render(<PriceAlertForm lockedChainId="bitcoin-mainnet" onCreate={vi.fn()} />);
-        const action = screen.getByRole('button', { name: 'Add alert' });
+        const action = screen.getByRole('button', { name: 'Add Alert' });
         const target = screen.getByRole('textbox', { name: 'Target price' });
 
         expect(action).toBeDisabled();
@@ -73,7 +59,7 @@ describe('PriceAlertForm', () => {
         fireEvent.change(input, { target: { value: '12,345.67' } });
         expect(input.value).toBe('12345.67');
 
-        fireEvent.click(screen.getByRole('button', { name: 'Add alert' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add Alert' }));
         await waitFor(() => expect(onCreate).toHaveBeenCalledWith({
             chainId: 'bitcoin-mainnet',
             direction: 'above',
@@ -89,12 +75,12 @@ describe('PriceAlertForm', () => {
         const input = screen.getByRole('textbox', { name: 'Target price' });
 
         fireEvent.change(input, { target: { value: '10' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Add alert' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add Alert' }));
         fireEvent.change(input, { target: { value: '20' } });
         await act(async () => resolveSave());
 
         expect(input.value).toBe('20');
-        expect(screen.getByRole('button', { name: 'Add alert' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Add Alert' })).toBeEnabled();
     });
 
     it('does not show a stale save failure after the input changes', async () => {
@@ -104,13 +90,13 @@ describe('PriceAlertForm', () => {
         const input = screen.getByRole('textbox', { name: 'Target price' });
 
         fireEvent.change(input, { target: { value: '10' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Add alert' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add Alert' }));
         fireEvent.change(input, { target: { value: '20' } });
         await act(async () => rejectSave(new Error('Save failed')));
 
         expect(input.value).toBe('20');
         expect(screen.queryByRole('alert')).toBeNull();
-        expect(screen.getByRole('button', { name: 'Add alert' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Add Alert' })).toBeEnabled();
     });
 
     it('uses style-guide controls and exposes save failures as an alert', async () => {
@@ -118,7 +104,7 @@ describe('PriceAlertForm', () => {
             lockedChainId="bitcoin-mainnet"
             onCreate={vi.fn().mockRejectedValue(new Error('Save failed'))}
         />);
-        const button = screen.getByRole('button', { name: 'Add alert' });
+        const button = screen.getByRole('button', { name: 'Add Alert' });
         expect(button.className).toMatch(/success/);
         expect(button.querySelector('svg')).toBeTruthy();
         expect(screen.getByRole('textbox', { name: 'Target price' }).className).toMatch(/input/);
@@ -135,7 +121,7 @@ describe('PriceAlertForm', () => {
         />);
 
         fireEvent.change(screen.getByRole('textbox', { name: 'Target price' }), { target: { value: '10' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Add alert' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add Alert' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent('Could not save the alert. Try again.');
         expect(screen.queryByText(/vault is required/)).toBeNull();
@@ -153,7 +139,7 @@ describe('PriceAlertForm', () => {
         const target = screen.getByRole('textbox', { name: 'Target price' });
         expect(target.getAttribute('aria-describedby')).toContain(alert.id);
         expect(screen.queryByRole('status')).toBeNull();
-        expect(screen.getByRole('button', { name: 'Add alert' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Add Alert' })).toBeDisabled();
         expect(onCreate).not.toHaveBeenCalled();
     });
 
@@ -171,7 +157,7 @@ describe('PriceAlertForm', () => {
         expect(screen.getByRole('textbox', { name: 'Target price' }).value).toBe('65000');
 
         fireEvent.change(screen.getByRole('textbox', { name: 'Target price' }), { target: { value: '64000' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Add alert' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add Alert' }));
 
         await waitFor(() => expect(onCreate).toHaveBeenCalledWith({
             chainId: 'bitcoin-mainnet',
@@ -204,7 +190,7 @@ describe('PriceAlertForm', () => {
         expect(screen.getByText('XCHAIN')).toBeTruthy();
         expect(screen.getByText('Current: $1.20')).toBeTruthy();
         fireEvent.change(screen.getByRole('textbox', { name: 'Target price' }), { target: { value: '2' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Add alert' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add Alert' }));
 
         await waitFor(() => expect(onCreate).toHaveBeenCalledWith({
             chainId: 'bitcoin-mainnet',
@@ -225,13 +211,15 @@ describe('PriceAlertForm', () => {
 
         fireEvent.change(screen.getByRole('textbox', { name: 'Target price' }), { target: { value: '1' } });
         expect(screen.getByText('NOPRICE has no market price yet. A price alert needs one.')).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Add alert' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Add Alert' })).toBeDisabled();
         expect(onCreate).not.toHaveBeenCalled();
     });
 
-    it('offers the held-token picker when a wallet is available', () => {
+    it('offers the asset picker when a wallet is available', () => {
         render(<PriceAlertForm walletId="wallet-1" onCreate={vi.fn()} />);
 
-        expect(screen.getByRole('button', { name: 'Choose a held token' })).toBeEnabled();
+        // The coin can be alerted as well as a token, so the field speaks of an asset.
+        expect(screen.getByRole('button', { name: 'Select an asset' })).toBeEnabled();
+        expect(screen.queryByRole('button', { name: /token/i })).toBeNull();
     });
 });

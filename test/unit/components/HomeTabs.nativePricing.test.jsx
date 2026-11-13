@@ -478,7 +478,8 @@ describe('Home cold-load request budget', () => {
 
         fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
         await waitFor(() => expect(messaging.verifyBalance).toHaveBeenCalledTimes(10));
-        await waitFor(() => expect(messaging.getOwnedTokens).toHaveBeenCalledTimes(5));
+        // The Tokens tab lists held tokens only, so it reads no owned tokens.
+        expect(messaging.getOwnedTokens).not.toHaveBeenCalled();
     });
 });
 

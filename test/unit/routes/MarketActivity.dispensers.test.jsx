@@ -109,6 +109,8 @@ describe('Marketplace on explorer-shaped rows', () => {
 
     it('shows a real dispense with what was paid, and leaves out a refused one', async () => {
         renderMarket();
+        // Dispenses are listed on the Trades tab.
+        fireEvent.click(await screen.findByRole('tab', { name: 'Trades' }));
         expect(await screen.findByText('Sold 15 XCHAIN for 0.03 BTC')).toBeInTheDocument();
         expect(screen.queryByText(/Sold 2 XCHAIN/)).toBeNull();
     });
@@ -118,6 +120,7 @@ describe('Marketplace on explorer-shaped rows', () => {
         vi.spyOn(Date, 'now').mockReturnValue(timestamp * 1000 + 5 * 60_000);
         renderMarket();
 
+        fireEvent.click(await screen.findByRole('tab', { name: 'Trades' }));
         const sale = await screen.findByText('Sold 15 XCHAIN for 0.03 BTC');
         const time = within(sale.closest('li')).getByText('5 minutes ago');
         expect(time.tagName).toBe('TIME');
@@ -125,22 +128,28 @@ describe('Marketplace on explorer-shaped rows', () => {
     });
 
     it('shows open DEX orders using explorer amount and coin fields', async () => {
+        // The list rows carry their lifecycle `state`; the page reads no per-row detail.
         const open = {
             action_index: '40', status: 'valid',
             give_tick: 'XCHAIN', give_coin: 'BTC', give_amount: '25',
             get_tick: null, get_coin: 'BTC', get_amount: '0.01',
+            state: { status: 'open', give_remaining: '10', get_remaining: '0.004' },
         };
-        const closed = { ...open, action_index: '41', give_amount: '99', order_status: 'cancelled' };
-        renderMarket({
+        const closed = {
+            ...open, action_index: '41', give_amount: '99', order_status: 'cancelled',
+            state: { status: 'cancelled', give_remaining: '0', get_remaining: '0' },
+        };
+        const messaging = renderMarket({
             getOrdersForToken: vi.fn()
                 .mockResolvedValueOnce({ data: [open, closed] })
                 .mockResolvedValue({ data: [] }),
-            getOrderDetail: vi.fn(async ({ actionIndex }) => ({ state: actionIndex === '40'
-                ? { status: 'open', give_remaining: '10', get_remaining: '0.004' }
-                : { status: 'cancelled', give_remaining: '0', get_remaining: '0' } })),
         });
-        expect(await screen.findByText('Sell 10 XCHAIN for 0.004 BTC')).toBeInTheDocument();
-        expect(screen.queryByText(/Sell 99 XCHAIN/)).toBeNull();
+        // The open order is an Offers row priced per token (0.004 BTC for 10 XCHAIN), with
+        // its remaining stock (10, not the original 25); the cancelled one never lists.
+        expect(await screen.findByText('0.0004 BTC per XCHAIN')).toBeInTheDocument();
+        expect(screen.getByText('10 XCHAIN for sale')).toBeInTheDocument();
+        expect(messaging.getOrderDetail).not.toHaveBeenCalled();
+        expect(screen.queryByText(/99 XCHAIN/)).toBeNull();
     });
 
     it('shows DEX swaps using explorer amount and coin fields', async () => {
@@ -155,6 +164,7 @@ describe('Marketplace on explorer-shaped rows', () => {
                 .mockResolvedValueOnce({ data: [settled, cancelled] })
                 .mockResolvedValue({ data: [] }),
         });
+        fireEvent.click(await screen.findByRole('tab', { name: 'Swaps' }));
         expect(await screen.findByText('Bought 3,200 XCHAIN for 0.08 BTC')).toBeInTheDocument();
         expect(screen.queryByText(/9,999 XCHAIN/)).toBeNull();
     });
@@ -246,8 +256,10 @@ describe('Marketplace on unreadable rows', () => {
             getOrdersForToken: once([null, { ...order, action_index: '42', give_tick: 12345, get_tick: { x: 1 } }, order]),
             getSwapsForToken: once([swap, null]),
         });
-        expect(await screen.findByText('Sell 3 XCHAIN for 4 BTC')).toBeInTheDocument();
-        expect(screen.getByText('Sold 3 XCHAIN for 4 BTC')).toBeInTheDocument();
-        expect(screen.getByRole('heading', { name: 'Marketplace' })).toBeInTheDocument();
+        // The readable order is an Offers row; the readable swap is on the Swaps tab.
+        expect(await screen.findByText(/^1\.3333\d* BTC per XCHAIN$/)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('tab', { name: 'Swaps' }));
+        expect(await screen.findByText('Sold 3 XCHAIN for 4 BTC')).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'XCHAIN Marketplace' })).toBeInTheDocument();
     });
 });

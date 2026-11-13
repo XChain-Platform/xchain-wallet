@@ -95,6 +95,6 @@ describe('TokenAdminForm field help', () => {
             'Stored on-chain and replaces the current description. Up to 249 characters.',
         );
         expect(screen.queryByText('Up to 249 characters.')).toBeNull();
-        expect(screen.getByRole('button', { name: 'Update description' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Update Description' })).toBeInTheDocument();
     });
 });

@@ -33,7 +33,7 @@ describe('shared component design-token geometry', () => {
             const css = readComponentCss(name);
             const rawPixelDeclarations = css.split('\n')
                 .map((line) => line.trim())
-                .filter((line) => !line.startsWith('@media'))
+                .filter((line) => !line.startsWith('@media') && !line.startsWith('@container'))
                 .filter((line) => /:\s*[^;]*\d+(?:\.\d+)?px\b/.test(line));
 
             for (const declaration of rawPixelDeclarations) {
@@ -45,7 +45,10 @@ describe('shared component design-token geometry', () => {
                         'text-underline-offset: 2px;',
                         'outline-offset: 2px;',
                     ].includes(declaration)
-                ) || (name === 'LockedTokenContext' && declaration === 'gap: 2px;');
+                ) || (name === 'LockedTokenContext' && declaration === 'gap: 2px;')
+                // The split order book's caption is visually hidden with a one pixel clip box,
+                // and its table rows keep one 28px height so bids and asks line up.
+                || (name === 'MarketTrading' && ['width: 1px;', 'height: 1px;', 'height: 28px;', 'padding: 1px var(--xc-space-2);'].includes(declaration));
                 expect(hairline || documentedException, `${name}: ${declaration}`).toBe(true);
             }
         }

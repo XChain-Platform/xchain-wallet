@@ -119,7 +119,7 @@ describe('Receive with no addresses on any chain', () => {
 
         const address = await screen.findByDisplayValue('bcrt1qexample');
         const addressLabel = document.querySelector(`label[for="${address.id}"]`);
-        const token = screen.getByRole('button', { name: /^Change asset/ });
+        const token = screen.getByRole('button', { name: /^Asset: / });
 
         expect(addressLabel.compareDocumentPosition(address) & Node.DOCUMENT_POSITION_FOLLOWING)
             .toBeTruthy();

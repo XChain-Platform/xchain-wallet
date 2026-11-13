@@ -164,7 +164,10 @@ describe('long content layout', () => {
         );
 
         expect(screen.getByRole('heading', { name: displayName })).toBeInTheDocument();
-        expect(screen.getByTitle(displayName)).toHaveTextContent(displayName);
+        // The name is drawn in the header and as the blue card's caption, each with its full tooltip.
+        const titled = screen.getAllByTitle(displayName);
+        expect(titled.length).toBeGreaterThan(0);
+        for (const element of titled) expect(element).toHaveTextContent(displayName);
         expect(rule(tokenDetailCss, '.headerTitle')).toMatch(/text-overflow:\s*ellipsis/);
         expect(rule(pageHeaderCss, '.titleGroup')).toMatch(/overflow:\s*hidden/);
     });
@@ -187,9 +190,12 @@ describe('long content layout', () => {
             );
         });
 
-        expect(await screen.findByTitle(walletName)).toHaveTextContent(walletName);
+        // The row is a list row whose title shows the full name and wraps inside the row
+        // (min-width 0) rather than pushing the chevron off the screen.
+        expect(await screen.findByText(walletName)).toBeInTheDocument();
         expect(screen.getByRole('button', { name: new RegExp(walletName) })).toBeInTheDocument();
-        expect(rule(walletPickerCss, '.rowName')).toMatch(/text-overflow:\s*ellipsis/);
+        expect(rule(listRowCss, '.title')).toMatch(/min-width:\s*0/);
+        expect(rule(listRowCss, '.title')).not.toMatch(/white-space:\s*nowrap/);
     });
 
     it('retains a complete string title on a generic PageHeader', () => {

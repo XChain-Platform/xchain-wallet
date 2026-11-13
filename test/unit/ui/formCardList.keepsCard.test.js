@@ -30,6 +30,21 @@ describe('form card flattening', () => {
         expect(base[1]).toMatch(/background:\s*var\(--xc-card-bg\)/);
     });
 
+    it('keeps a flush list card nested in a form section or padded card inside any form', () => {
+        // Form sections compose flush, so `.flush .flush` would flatten a list
+        // inside one (Pair signer's device list) at every width.
+        const rule = css.match(/\n\.formCard \.card \.flush,\s*\n\.formCard \.flush \.flush\s*\{([^}]*)\}/);
+        expect(rule).not.toBeNull();
+        expect(rule[1]).toMatch(/padding:\s*0/);
+        expect(rule[1]).toMatch(/background:\s*var\(--xc-card-bg\)/);
+        expect(rule[1]).toMatch(/border:\s*var\(--xc-card-border\)/);
+        expect(rule[1]).toMatch(/border-radius:\s*var\(--xc-card-radius\)/);
+        // It follows the generic nested flattening rule, which it outweighs by one class.
+        expect(css.indexOf('.formCard .flush .flush')).toBeGreaterThan(css.search(/\.flush \.flush\s*\{/));
+        // Padded cards inside a form still flatten.
+        expect(rule[0]).not.toMatch(/\.card\s*\{/);
+    });
+
     it('keeps a preserved nested card inside the wide form card (Link action cards)', () => {
         const rule = media.match(/\.formCard:not\(\.cardless\) \[data-xc-preserve-nested-cards\] \.card\s*\{([^}]*)\}/);
         expect(rule).not.toBeNull();

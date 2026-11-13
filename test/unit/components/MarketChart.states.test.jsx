@@ -230,7 +230,7 @@ describe('MarketChart states and timeframes', () => {
         await act(async () => vi.advanceTimersByTimeAsync(15_000));
         expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load the price chart.");
 
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         await act(async () => { await Promise.resolve(); });
         expect(screen.getByText('No trades yet in this market.')).toBeInTheDocument();
         expect(getMarketHistory).toHaveBeenCalledTimes(2);

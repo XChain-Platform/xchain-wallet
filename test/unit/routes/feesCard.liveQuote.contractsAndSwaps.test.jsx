@@ -15,12 +15,16 @@ vi.mock('../../../packages/core/src/shared/hooks/useFeeFiat.js', () => ({
     }),
 }));
 
+// The picked token's network decides a cross-chain swap's get network, so a
+// test can ask the Get token pick to land on another chain.
+const picked = vi.hoisted(() => ({ getChainId: 'bitcoin-mainnet' }));
+
 vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
     TokenPicker: ({ title, onSelect }) => (
         <button
             type="button"
             onClick={() => onSelect({
-                chainId: 'bitcoin-mainnet',
+                chainId: /get/i.test(title) ? picked.getChainId : 'bitcoin-mainnet',
                 tick: /get/i.test(title) ? 'BETA' : 'ALPHA',
             })}
         >
@@ -61,6 +65,8 @@ const LTC_ADDRESS = {
 afterEach(() => {
     cleanup();
     __clearTokenInfoCache();
+    picked.getChainId = 'bitcoin-mainnet';
+    globalThis.localStorage?.clear();
 });
 
 function makeMessaging(overrides = {}, { quoteTransport = true } = {}) {
@@ -138,7 +144,7 @@ describe('Fees card live quotes for contracts and swaps', () => {
         const { messaging, quoteProtocolFee } = makeMessaging();
         mount(SwapForm, { initialChainId: BTC, initialGiveTick: 'ALPHA' }, messaging);
 
-        await chooseToken(/Get token:/, 'Select get token');
+        await chooseToken(/Get token:/, 'Select Get Token');
         fireEvent.change(screen.getByLabelText('Give amount (ALPHA)'), { target: { value: '2' } });
         fireEvent.change(screen.getByLabelText('Get amount (BETA)'), { target: { value: '3' } });
 
@@ -163,12 +169,16 @@ describe('Fees card live quotes for contracts and swaps', () => {
     it('quotes the cross-chain SWAP on the give chain', async () => {
         const { messaging, quoteProtocolFee } = makeMessaging();
         mount(CrossChainSwapForm, {}, messaging);
+        // The get token lives on Litecoin, which sets the get network.
+        picked.getChainId = LTC;
 
-        await chooseToken(/Give token:/, 'Select give token');
-        await chooseToken(/Get token:/, 'Select get token');
+        await chooseToken(/Give token:/, 'Select Give Token');
+        await chooseToken(/Get token:/, 'Select Get Token');
         fireEvent.change(screen.getByLabelText('Give amount (ALPHA)'), { target: { value: '4' } });
         fireEvent.change(screen.getByLabelText('Get amount (BETA)'), { target: { value: '5' } });
-        fireEvent.change(screen.getByLabelText('Receive at'), { target: { value: RECEIVE } });
+        // Receive at is typed in the Full view; Quick shows it as a read-only row.
+        fireEvent.click(screen.getByRole('radio', { name: 'Full' }));
+        fireEvent.change(await screen.findByLabelText('Receive at'), { target: { value: RECEIVE } });
 
         await expectLiveQuote(quoteProtocolFee, {
             chainId: BTC,
@@ -219,7 +229,7 @@ describe('Fees card live quotes for contracts and swaps', () => {
         fireEvent.change(await screen.findByRole('combobox', { name: 'Action' }), {
             target: { value: 'BROADCAST' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Batch' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review 1 Transaction' }));
 
         await expectLiveQuote(quoteProtocolFee, {
             chainId: BTC,
@@ -264,7 +274,13 @@ describe('Fees card live quotes for contracts and swaps', () => {
             initialMethod: 'fundLoan',
         }, messaging);
 
-        await chooseToken(/^Deposit:/, 'Token to deposit');
+        // The deposit lives in its own closed Optional section.
+        fireEvent.click(await waitFor(() => {
+            const toggle = document.querySelector('[data-form-section="deposit"] [data-form-section-toggle]');
+            expect(toggle).toBeTruthy();
+            return toggle;
+        }));
+        await chooseToken(/^Deposit:/, 'Token to Deposit');
         fireEvent.change(screen.getByLabelText(/^Deposit amount/), { target: { value: '10' } });
 
         await expectLiveQuote(quoteProtocolFee, {
@@ -309,7 +325,7 @@ describe('Fees card live quotes for contracts and swaps', () => {
         cleanup();
         const unavailable = makeMessaging({}, { quoteTransport: false });
         mount(SwapForm, { initialChainId: BTC, initialGiveTick: 'ALPHA' }, unavailable.messaging);
-        await chooseToken(/Get token:/, 'Select get token');
+        await chooseToken(/Get token:/, 'Select Get Token');
         fireEvent.change(screen.getByLabelText('Give amount (ALPHA)'), { target: { value: '2' } });
         fireEvent.change(screen.getByLabelText('Get amount (BETA)'), { target: { value: '3' } });
 

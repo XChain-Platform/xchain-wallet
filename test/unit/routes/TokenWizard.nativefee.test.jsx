@@ -8,22 +8,19 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Behavioural test for the Token Creation Wizard's native-coin fee
-// toggle. The render guard (routes-render) only proves the wizard mounts;
-// this drives the full template -> chain -> details -> confirm flow and
-// asserts the opt-in actually threads `payFeeInNativeCoin` into BOTH the
-// host-side compose (so the previewed PSBT already carries the native-fee
-// output) and the messaging.issueToken submit payload. Mirrors the
-// per-form toggle that shipped on the standalone
-// Issue/Dispenser/Swap/Order/Advanced forms.
-//
-// The wizard's own preview + sign stages were replaced by the
-// shared confirm page, so the drive ends on that page.
+// Behavioural test for the Create a token route's native-coin fee toggle
+// (the Network fee section of the one Issue Token form). The render guard
+// (routes-render) only proves the route mounts; this drives the form to the
+// shared confirm page and asserts the opt-in actually threads
+// `payFeeInNativeCoin` into BOTH the host-side compose (so the previewed PSBT
+// already carries the native-fee output) and the messaging.issueToken submit
+// payload, and that both fees are shown in the chosen fiat before approval.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+// The Create a token route: TokenWizard renders the one Issue Token form.
 import { TokenWizard } from '../../../packages/core/src/shared/routes/TokenWizard.jsx';
 import {
     configureFiatRateSource,
@@ -97,20 +94,29 @@ function mountWizard() {
     );
 }
 
-// Drive template -> chain -> details (meme: name + supply) -> review -> confirm.
-// `nativeFee` flips the toggle on the details stage when true.
+// The Network fee section, opened (it starts closed).
+function openFeeSection() {
+    const header = screen.getByRole('button', { name: /^Network fee/ });
+    if (header.getAttribute('aria-expanded') !== 'true') fireEvent.click(header);
+    return header.closest('[data-form-section]');
+}
+
+// Meme template, ticker and supply, then Issue Token -> confirm page.
+// `nativeFee` flips the Network fee section's toggle when true.
 async function driveToConfirm({ nativeFee }) {
-    fireEvent.click(await screen.findByText('Meme token'));
-    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-    fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
+    fireEvent.click(await screen.findByRole('button', { name: /^Select template/ }));
+    fireEvent.click(screen.getByRole('option', { name: /Meme token/ }));
+    fireEvent.change(screen.getByLabelText('Ticker'), {
         target: { value: 'MEMECOIN' },
     });
-    fireEvent.change(screen.getByLabelText('Supply'), {
+    fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), {
         target: { value: '1000' },
     });
-    if (nativeFee) fireEvent.click(screen.getByRole('switch'));
-    fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+    if (nativeFee) {
+        openFeeSection();
+        fireEvent.click(screen.getByRole('switch', { name: 'Pay protocol fee in BTC' }));
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
     // The confirm page opens once compose + pre-flight resolve.
     await screen.findByTestId('confirm-modal');
 }
@@ -125,22 +131,22 @@ afterEach(() => {
     _resetPriceLookupForTests();
 });
 
-describe('TokenWizard native-coin fee toggle', () => {
+describe('Issue Token native-coin fee toggle', () => {
     it('shows network and protocol costs in the selected fiat currency before approval', async () => {
         mountWizard();
 
-        fireEvent.click(await screen.findByText('Meme token'));
-        fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-        fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
+        fireEvent.change(await screen.findByLabelText('Ticker'), {
             target: { value: 'MEMECOIN' },
         });
-        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1000' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '1000' } });
 
-        const reviewFee = screen.getByText('Network fee').nextElementSibling;
-        await waitFor(() => expect(reviewFee).toHaveTextContent(/BTC.*~€/));
+        // The Network fee section prices the broadcast in the chosen fiat
+        // before anything is composed.
+        const feeSection = openFeeSection();
+        await waitFor(() => expect(within(feeSection).getAllByText(/~€/).length).toBeGreaterThan(0));
+        expect(feeSection.textContent).toMatch(/BTC/);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
         await screen.findByTestId('confirm-modal');
         await waitFor(() => {
             expect(screen.getByTestId('confirm-fee')).toHaveTextContent(/0\.00001 BTC.*~€0\.50/);

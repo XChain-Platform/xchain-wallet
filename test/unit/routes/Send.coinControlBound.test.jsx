@@ -87,10 +87,10 @@ describe('coin control over a very large input set', () => {
         fireEvent.click(screen.getByRole('switch', { name: 'Coin control enabled' }));
 
         expect(screen.getAllByRole('checkbox')).toHaveLength(COIN_CONTROL_ROW_LIMIT);
-        expect(screen.getByText(`Showing ${COIN_CONTROL_ROW_LIMIT} of ${COUNT} inputs. Select all includes every input.`)).toBeInTheDocument();
+        expect(screen.getByText(`Showing ${COIN_CONTROL_ROW_LIMIT} of ${COUNT} inputs. Select All includes every input.`)).toBeInTheDocument();
         expect(screen.getByText(`${COUNT} available`)).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Select all' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Select All' }));
         expect(within(screen.getByLabelText('Coin control summary')).getByText('0.025 BTC')).toBeInTheDocument();
     });
 });

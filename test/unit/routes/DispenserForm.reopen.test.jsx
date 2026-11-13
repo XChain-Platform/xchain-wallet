@@ -131,10 +131,21 @@ async function mountReopen(reopen) {
     return { utils, calls };
 }
 
+/** The allow-list, expiration and oracle controls sit in the closed Dispenser Terms section. */
+async function openTerms(utils) {
+    const header = utils.getByRole('button', { name: /^Dispenser Terms/ });
+    // A reopened form can already show the section (an invalid field opens it).
+    if (header.getAttribute('aria-expanded') === 'true') return;
+    await domAct(async () => {
+        fireEvent.click(header);
+        await drainMicrotasks();
+    });
+}
+
 /** Press Create untouched, then Approve; return what was composed and signed. */
 async function createAsIs(utils, calls) {
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('button', { name: 'Create dispenser' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Create Dispenser' }));
         await drainMicrotasks();
     });
     await domAct(async () => {
@@ -158,8 +169,9 @@ describe('DispenserForm opened again from a finished dispenser', () => {
         expect(utils.getByLabelText(/^Escrow amount/).value).toBe('100');
         expect(utils.getByLabelText(/^Trigger price/).value).toBe('0.001');
         expect(utils.getByLabelText('Dispenser address').value).toBe(PLAIN_HOST.address);
-        expect(utils.getByLabelText('From').value).toBe(CREATOR.address);
-        expect(utils.getByRole('button', { name: 'Allow-list #77' })).toBeTruthy();
+        expect(utils.getByLabelText('From address').value).toBe(CREATOR.address);
+        await openTerms(utils);
+        expect(utils.getByRole('button', { name: 'Allow-List #77' })).toBeTruthy();
     });
 
     it('composes the same dispenser from the creator onto the same (non-dispenser-role) address', async () => {
@@ -208,7 +220,10 @@ describe('DispenserForm opened again from a finished dispenser', () => {
             oracleAddress: '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2',
             expiration,
         });
-        expect(utils.queryByLabelText(/^Trigger price/), 'oracle pricing hides the coin trigger').toBeNull();
+        // Quick keeps the Get card but holds the native price: empty and disabled.
+        const trigger = utils.queryByLabelText(/^Trigger price/);
+        expect(trigger === null || (trigger.disabled && trigger.value === ''), 'oracle pricing holds the coin trigger').toBe(true);
+        await openTerms(utils);
         expect(utils.getByLabelText(/^Oracle address/).value).toBe('1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2');
         expect(utils.getByRole('radio', { name: /Default window/ }).checked).toBe(true);
         const { compose } = await createAsIs(utils, calls);
@@ -223,6 +238,7 @@ describe('DispenserForm opened again from a finished dispenser', () => {
     it('offers the old expiration when a specific time is chosen', async () => {
         const expiration = 4102444800;
         const { utils, calls } = await mountReopen({ ...TERMS, expiration });
+        await openTerms(utils);
         await domAct(async () => {
             fireEvent.click(utils.getByRole('radio', { name: /Expire at a specific time/ }));
             await drainMicrotasks();

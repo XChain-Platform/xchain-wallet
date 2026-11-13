@@ -29,7 +29,11 @@ describe('wallet menu catalogue', () => {
     it('holds six groups of four rows in reading order', () => {
         expect(WALLET_MENU_GROUPS.map((group) => group.id)).toEqual(['wallet', 'assets', 'trade', 'earn', 'people', 'actions']);
         // Equal boxes are the point of the layout: every group lines up with its neighbours.
+        // Trade holds four rows: the fourth is Browse dispensers (route dispenser-explorer).
         for (const group of WALLET_MENU_GROUPS) expect(group.rows, group.id).toHaveLength(4);
+        const trade = WALLET_MENU_GROUPS.find((group) => group.id === 'trade');
+        expect(trade.rows.at(-1).id).toBe('dispenser-explorer');
+        expect(trade.rows.at(-1).labelKey).toBe('walletMenu.row.browseDispensers');
         expect(WALLET_MENU_GROUPS.at(-1).rows.at(-1).id).toBe('actions');
     });
 

@@ -65,7 +65,7 @@ describe('Marketplace offline', () => {
             </MessagingProvider>,
         );
 
-        expect(await screen.findByText('No open dispensers')).toBeInTheDocument();
+        expect(await screen.findByText('No open offers')).toBeInTheDocument();
         expect(messaging.getDispensersForToken).toHaveBeenCalled();
         expect(screen.queryByText(/You're offline/i)).toBeNull();
     });

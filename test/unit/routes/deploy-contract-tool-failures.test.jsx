@@ -57,7 +57,7 @@ afterEach(() => cleanup());
 describe('publish tool failures', () => {
     it('keeps an internal error out of the gas suggestion message', async () => {
         await mount({ suggestContractGasLimit: () => Promise.reject(INTERNAL) });
-        fireEvent.click(screen.getByRole('button', { name: 'Suggest gas' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Suggest Gas' }));
         await drain();
 
         expect(screen.getByText('Gas suggestion failed.')).toBeInTheDocument();
@@ -66,7 +66,7 @@ describe('publish tool failures', () => {
 
     it('keeps an internal error out of the size check message', async () => {
         await mount({ checkContractCodeSize: () => Promise.reject(INTERNAL) });
-        fireEvent.click(screen.getByRole('button', { name: 'Estimate size' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Estimate Size' }));
         await drain();
 
         expect(screen.getByText('Size check failed.')).toBeInTheDocument();

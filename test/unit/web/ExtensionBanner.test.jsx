@@ -65,17 +65,17 @@ describe('<ExtensionBanner>', () => {
 
         try {
             render(<ExtensionBanner />);
-            expect(screen.getByRole('button', { name: 'Use extension wallet' })).toBeTruthy();
+            expect(screen.getByRole('button', { name: 'Use Extension Wallet' })).toBeTruthy();
         } finally {
             Object.defineProperty(globalThis, 'sessionStorage', descriptor);
         }
     });
 
-    it('offers "Use extension wallet" when the extension is detected', () => {
+    it('offers "Use Extension Wallet" when the extension is detected', () => {
         window.xchain = makeProvider();
         render(<ExtensionBanner />);
         expect(screen.getByText(/XChain Wallet extension detected/i)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Use extension wallet' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Use Extension Wallet' })).toBeTruthy();
     });
 
     it('detects an extension injected after mount via the init event', () => {
@@ -83,7 +83,7 @@ describe('<ExtensionBanner>', () => {
         expect(screen.queryByText(/extension detected/i)).toBeNull();
         window.xchain = makeProvider();
         fireEvent(window, new Event('xchain#initialized'));
-        expect(screen.getByRole('button', { name: 'Use extension wallet' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Use Extension Wallet' })).toBeTruthy();
     });
 
     it('connects, persists the preference, and flips to the active state on accept', async () => {
@@ -91,14 +91,14 @@ describe('<ExtensionBanner>', () => {
         window.xchain = provider;
         render(<ExtensionBanner />);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Use extension wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Use Extension Wallet' }));
 
         await waitFor(() =>
             expect(screen.getByText(/Using your extension wallet/i)).toBeTruthy(),
         );
         expect(provider.connect).toHaveBeenCalledTimes(1);
         expect(localStorage.getItem(EXT_WALLET_PREF_KEY)).toBe('1');
-        expect(screen.getByRole('button', { name: 'Switch back' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Switch Back' })).toBeTruthy();
     });
 
     it('shows an error and stays on the web app when the connect is rejected', async () => {
@@ -108,14 +108,14 @@ describe('<ExtensionBanner>', () => {
         window.xchain = provider;
         render(<ExtensionBanner />);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Use extension wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Use Extension Wallet' }));
 
         await waitFor(() =>
             expect(screen.getByRole('alert').textContent).toMatch(/User rejected/i),
         );
         expect(localStorage.getItem(EXT_WALLET_PREF_KEY)).toBeNull();
         // Still on the offer state, not active.
-        expect(screen.getByRole('button', { name: 'Use extension wallet' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Use Extension Wallet' })).toBeTruthy();
         expect(screen.queryByText(/Using your extension wallet/i)).toBeNull();
     });
 
@@ -129,17 +129,17 @@ describe('<ExtensionBanner>', () => {
         window.xchain = provider;
         render(<ExtensionBanner />);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Use extension wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Use Extension Wallet' }));
 
         await waitFor(() =>
             expect(screen.getByRole('alert').textContent).toMatch(/declined/i),
         );
         expect(localStorage.getItem(EXT_WALLET_PREF_KEY)).toBeNull();
-        expect(screen.getByRole('button', { name: 'Use extension wallet' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Use Extension Wallet' })).toBeTruthy();
         expect(screen.queryByText(/Using your extension wallet/i)).toBeNull();
     });
 
-    it('hides the offer after "Not now" and records it in sessionStorage', () => {
+    it('hides the offer after "Not Now" and records it in sessionStorage', () => {
         window.xchain = makeProvider();
         const { container } = render(<ExtensionBanner />);
         fireEvent.click(screen.getByRole('button', { name: /Dismiss extension notice/i }));
@@ -158,8 +158,8 @@ describe('<ExtensionBanner>', () => {
         window.xchain = makeProvider();
         localStorage.setItem(EXT_WALLET_PREF_KEY, '1');
         render(<ExtensionBanner />);
-        fireEvent.click(screen.getByRole('button', { name: 'Switch back' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Switch Back' }));
         expect(localStorage.getItem(EXT_WALLET_PREF_KEY)).toBeNull();
-        expect(screen.getByRole('button', { name: 'Use extension wallet' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Use Extension Wallet' })).toBeTruthy();
     });
 });

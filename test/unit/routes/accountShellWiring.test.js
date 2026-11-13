@@ -22,11 +22,12 @@ describe.each(shells)('%s account routes', (file) => {
     it('carries the account record into rename and returns canceled adds to the picker', () => {
         expect(source).toContain('setAccountRenameTarget(account);');
         expect(source).toContain('walletId={activeWalletId}');
-        expect(source).toContain('onBack={() => setUnlockedView(\'account-picker\')}');
+        expect(source).toMatch(/<AddAccountForm[\s\S]*?onBack=\{goBack\}/);
     });
 
-    it('returns a Settings-opened picker to Settings', () => {
-        expect(source).toContain("setAccountPickerBackTo('settings');");
-        expect(source).toContain('onBack={() => setUnlockedView(accountPickerBackTo)}');
+    it('returns a Settings-opened picker to Settings through the history', () => {
+        expect(source).toMatch(/onOpenAccountPicker=\{\s*activeWalletId \? \(\) => \{\s*setSettingsInitialSection\('g-wallets'\);\s*setUnlockedView\('account-picker'\);/);
+        expect(source).toMatch(/<AccountPicker[\s\S]*?onBack=\{goBack\}/);
+        expect(source).not.toContain('accountPickerBackTo');
     });
 });

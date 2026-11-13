@@ -54,9 +54,7 @@ function handlers() {
         onReceive: vi.fn(),
         onExchange: vi.fn(),
         onSwap: vi.fn(),
-        onCreateToken: vi.fn(),
         onHistory: vi.fn(),
-        onAddresses: vi.fn(),
     };
 }
 
@@ -83,7 +81,6 @@ afterEach(() => {
 describe('Home network actions while offline', () => {
     it.each([
         ['Exchange', 'onExchange', /Exchange needs a network connection\./],
-        ['Create token', 'onCreateToken', /Creating a token needs a network connection\./],
     ])('refuses %s with one message and does not navigate', async (name, prop, message) => {
         Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
         const h = handlers();
@@ -100,31 +97,31 @@ describe('Home network actions while offline', () => {
 
 describe('Home network actions across an offline and online flap', () => {
     it('decides each click by the connection at that moment', async () => {
+        // Home's network actions are its quick actions (it has no bottom
+        // action row), so the flap is read on Exchange.
         Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
         const h = handlers();
         mountHome(makeMessaging(), h);
-        const row = await screen.findByRole('group', { name: 'Quick actions' });
-        const exchange = () => within(row).getByRole('button', { name: 'Exchange' });
+        const exchange = async () => screen.findByRole('button', { name: 'Exchange' });
+        await exchange();
 
         setOnline(false);
-        await waitFor(() => expect(exchange()).toHaveAttribute('aria-disabled', 'true'));
-        fireEvent.click(exchange());
+        await waitFor(async () => expect(await exchange()).toHaveAttribute('aria-disabled', 'true'));
+        fireEvent.click(await exchange());
         expect(h.onExchange).not.toHaveBeenCalled();
 
         setOnline(true);
-        await waitFor(() => expect(exchange()).not.toHaveAttribute('aria-disabled'));
-        fireEvent.click(exchange());
+        await waitFor(async () => expect(await exchange()).not.toHaveAttribute('aria-disabled'));
+        fireEvent.click(await exchange());
         expect(h.onExchange).toHaveBeenCalledTimes(1);
 
         // A fast flap that ends offline leaves the next click refused.
         setOnline(false);
         setOnline(true);
         setOnline(false);
-        await waitFor(() => expect(exchange()).toHaveAttribute('aria-disabled', 'true'));
-        fireEvent.click(exchange());
-        fireEvent.click(within(row).getByRole('button', { name: 'Swap' }));
+        await waitFor(async () => expect(await exchange()).toHaveAttribute('aria-disabled', 'true'));
+        fireEvent.click(await exchange());
         expect(h.onExchange).toHaveBeenCalledTimes(1);
-        expect(h.onSwap).not.toHaveBeenCalled();
     });
 });
 
@@ -134,19 +131,27 @@ describe('Home actions while the indexer fails or stalls', () => {
             new Error('Explorer returned HTTP 500'), { status: 500, service: 'explorer' },
         ))],
         ['never answers', () => vi.fn(() => new Promise(() => {}))],
-    ])('routes Receive, History and Addresses when the indexer %s', async (_label, makeRead) => {
+    ])('routes Receive from the quick actions when the indexer %s', async (_label, makeRead) => {
+        // The action row shows when Home has no balances to show, so start with none saved.
+        localStorage.clear();
         Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
         const h = handlers();
         const messaging = makeMessaging(makeRead());
         mountHome(messaging, h);
 
         await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalled());
+        if (_label === 'never answers') {
+            // A first read that never answers leaves Home on its loading skeleton, which has
+            // no action row; Send, Receive and History are then reached from the nav and the menu.
+            expect(await screen.findByRole('status', { name: 'Loading balances' })).toBeTruthy();
+            expect(screen.queryByRole('group', { name: 'Quick actions' })).toBeNull();
+            return;
+        }
         fireEvent.click(await screen.findByRole('button', { name: 'Receive' }));
-        fireEvent.click(screen.getByRole('button', { name: 'History' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Addresses' }));
         expect(h.onReceive).toHaveBeenCalledTimes(1);
-        expect(h.onHistory).toHaveBeenCalledTimes(1);
-        expect(h.onAddresses).toHaveBeenCalledTimes(1);
+        // History and Addresses live in the nav and More, not in a Home row.
+        expect(screen.queryByRole('button', { name: 'History' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Addresses' })).toBeNull();
     });
     it('keeps the quick actions on a compact Home whose first balance read returns HTTP 500', async () => {
         // Earlier cases save balances for this wallet; this case starts with nothing saved.

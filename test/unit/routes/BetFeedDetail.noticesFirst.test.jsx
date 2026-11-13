@@ -87,8 +87,15 @@ afterEach(() => {
 describe('Market page notices', () => {
     it('shows the place-bet error before the market terms', async () => {
         const utils = await openMarket('w');
+        // The page opens on Details; the Bet form shows only on its own tab.
+        await domAct(async () => {
+            Array.from(utils.container.querySelectorAll('[role="tab"]'))
+                .find((tab) => /^Bet$/.test((tab.textContent || '').trim()))
+                .click();
+            await drain();
+        });
         const review = Array.from(utils.container.querySelectorAll('button'))
-            .find((b) => /Place bet/.test(b.textContent || ''));
+            .find((b) => /Place Bet/.test(b.textContent || ''));
         await domAct(async () => {
             review.click();
             await drain();

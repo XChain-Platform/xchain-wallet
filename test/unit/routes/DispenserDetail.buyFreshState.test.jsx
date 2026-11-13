@@ -78,7 +78,7 @@ function mount() {
     return messaging;
 }
 
-const buyButton = () => screen.getByRole('button', { name: /^Buy \d+ fills?$/ });
+const buyButton = () => screen.getByRole('button', { name: /^Buy \d+ Dispenses?$/ });
 
 async function settle() {
     for (let pass = 0; pass < 3; pass += 1) {
@@ -88,6 +88,13 @@ async function settle() {
     }
 }
 
+// The page opens on Details and shows only the chosen tab's content, so the
+// buy form appears once the Buy tab is chosen.
+async function openBuy() {
+    fireEvent.click(screen.getByRole('tab', { name: 'Buy' }));
+    await settle();
+}
+
 beforeEach(() => { vi.useFakeTimers(); });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
@@ -95,6 +102,7 @@ describe('dispenser buy re-reads the dispenser before composing', () => {
     it('stops when the dispenser closed after the page loaded', async () => {
         const messaging = mount();
         await settle();
+        await openBuy();
         expect(screen.getByText(/250 MEMEVALID available/)).toBeInTheDocument();
         messaging.getDispenserByActionIndex.mockResolvedValue({
             ...OPEN, current_status: 'closed', state: { status: 'closed', give_remaining: '0' },
@@ -103,14 +111,15 @@ describe('dispenser buy re-reads the dispenser before composing', () => {
         await settle();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
         expect(document.body.textContent).toMatch(/This dispenser was closed/);
-        expect(screen.queryByRole('button', { name: /^Buy \d+ fills?$/ })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^Buy \d+ Dispenses?$/ })).not.toBeInTheDocument();
         expect(screen.queryByTestId('confirm-approve')).not.toBeInTheDocument();
     });
 
     it('stops when the escrow fell below the fills asked for', async () => {
         const messaging = mount();
         await settle();
-        fireEvent.change(screen.getByLabelText(/^Fills/i), { target: { value: '3' } });
+        await openBuy();
+        fireEvent.change(screen.getByLabelText(/^How Many Dispenses/i), { target: { value: '3' } });
         messaging.getDispenserByActionIndex.mockResolvedValue({
             ...OPEN, state: { status: 'open', give_remaining: '200' },
         });
@@ -123,6 +132,7 @@ describe('dispenser buy re-reads the dispenser before composing', () => {
     it('still composes when the re-read shows the dispenser open', async () => {
         const messaging = mount();
         await settle();
+        await openBuy();
         fireEvent.click(buyButton());
         await settle();
         expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1);
@@ -132,6 +142,7 @@ describe('dispenser buy re-reads the dispenser before composing', () => {
     it('still composes when the re-read fails', async () => {
         const messaging = mount();
         await settle();
+        await openBuy();
         messaging.getDispenserByActionIndex.mockRejectedValue(new Error('explorer down'));
         fireEvent.click(buyButton());
         await settle();

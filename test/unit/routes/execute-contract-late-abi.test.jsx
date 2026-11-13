@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ExecuteContractForm } from '../../../packages/core/src/shared/routes/ExecuteContractForm.jsx';
+import * as walletModes from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = Object.freeze({
@@ -38,6 +39,8 @@ async function flush() {
 }
 
 function mount(abiReply) {
+    // A wallet's mode is published by the shell from the wallet list, not read from settings.
+    walletModes.publishWalletModes?.({ wallets: [{ id: 'wallet-1', walletMode: 'watcher' }], activeWalletId: 'wallet-1' });
     const messaging = {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [ADDRESS] }),
         getActiveAddresses: () => Promise.resolve({}),
@@ -57,7 +60,10 @@ function mount(abiReply) {
     );
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    walletModes.resetWalletModes?.();
+});
 
 describe('a contract abi that answers after the user typed a call', () => {
     it('keeps the typed method and arguments in the manual lane', async () => {
@@ -71,7 +77,7 @@ describe('a contract abi that answers after the user typed a call', () => {
 
         expect(screen.getByLabelText('Method')).toHaveValue('transfer');
         expect(screen.getByLabelText('Arguments')).toHaveValue('alice|7');
-        expect(screen.getByRole('button', { name: 'Use declared methods' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Use Declared Methods' })).toBeInTheDocument();
     });
 
     it('leaves the call under review untouched', async () => {
@@ -79,8 +85,8 @@ describe('a contract abi that answers after the user typed a call', () => {
         mount(reply);
         fireEvent.change(await screen.findByLabelText('Method'), { target: { value: 'transfer' } });
         fireEvent.change(screen.getByLabelText('Arguments'), { target: { value: 'alice|7' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
-        await screen.findByRole('heading', { name: 'Review contract call' });
+        fireEvent.click(screen.getByRole('button', { name: 'Call Contract' }));
+        await screen.findByRole('heading', { name: 'Review Contract Call' });
 
         reply.resolve({ data: { abi: ABI } });
         await flush();

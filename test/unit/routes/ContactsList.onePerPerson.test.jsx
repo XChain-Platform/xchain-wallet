@@ -110,7 +110,7 @@ describe('ContactsList for one person with many addresses', () => {
             scanPrefill: { address: 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq', chainId: 'bitcoin-mainnet' },
             onScanPrefillConsumed: () => {},
         });
-        await waitFor(() => expect(screen.getByText('New contact')).toBeTruthy());
+        await waitFor(() => expect(screen.getByText('New Contact')).toBeTruthy());
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'jdog' } });
         fireEvent.click(screen.getByRole('button', { name: 'Create contact' }));
         expect(await screen.findByText('A contact named "JDog" already exists.')).toBeTruthy();
@@ -124,7 +124,7 @@ describe('ContactsList for one person with many addresses', () => {
             scanPrefill: { address: 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq', chainId: 'bitcoin-mainnet' },
             onScanPrefillConsumed: () => {},
         });
-        await waitFor(() => expect(screen.getByText('New contact')).toBeTruthy());
+        await waitFor(() => expect(screen.getByText('New Contact')).toBeTruthy());
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Alice\u202Eevil\u2066x' } });
         expect(screen.getByLabelText('Name').value).toBe('Aliceevilx');
         fireEvent.click(screen.getByRole('button', { name: 'Create contact' }));

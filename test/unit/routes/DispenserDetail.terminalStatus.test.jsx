@@ -124,8 +124,13 @@ async function mount({ dispenser, walletAddress = OWNER_ADDRESS, onOpenAgain = v
     return { utils, onOpenAgain };
 }
 
-const ownerButtons = (utils) => ['Close', 'Refill', 'Edit']
-    .map((name) => utils.queryByRole('button', { name }));
+// Refill and Close sit under the blue card; Edit lives on the owner's Settings tab, and only the
+// chosen tab renders, so open it (when the wallet owns the dispenser) before looking for Edit.
+const ownerButtons = (utils) => {
+    const settingsTab = utils.queryByRole('tab', { name: 'Settings' });
+    if (settingsTab) fireEvent.click(settingsTab);
+    return ['Close', 'Refill', 'Edit'].map((name) => utils.queryByRole('button', { name }));
+};
 
 describe('DispenserDetail on a sold-out (empty) dispenser', () => {
     it('drops Close, Refill and Edit instead of showing them disabled', async () => {
@@ -146,12 +151,12 @@ describe('DispenserDetail on a sold-out (empty) dispenser', () => {
 
     it('offers Open again to the creator', async () => {
         const { utils } = await mount({ dispenser: SOLD_OUT });
-        expect(utils.getByRole('button', { name: 'Open again' })).toBeTruthy();
+        expect(utils.getByRole('button', { name: 'Open Again' })).toBeTruthy();
     });
 
     it('offers nothing to a wallet that does not hold the creator address, and does not promise reuse', async () => {
         const { utils } = await mount({ dispenser: SOLD_OUT, walletAddress: STRANGER_ADDRESS });
-        expect(utils.queryByRole('button', { name: 'Open again' })).toBeNull();
+        expect(utils.queryByRole('button', { name: 'Open Again' })).toBeNull();
         expect(ownerButtons(utils)).toEqual([null, null, null]);
         const notice = utils.getAllByRole('status')
             .find((el) => /sold out/.test(el.textContent || ''));
@@ -161,7 +166,7 @@ describe('DispenserDetail on a sold-out (empty) dispenser', () => {
     it('Open again hands the form the same terms, the creator as source and the same address', async () => {
         const { utils, onOpenAgain } = await mount({ dispenser: SOLD_OUT });
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Open again' }));
+            fireEvent.click(utils.getByRole('button', { name: 'Open Again' }));
             await drainMicrotasks();
         });
         expect(onOpenAgain).toHaveBeenCalledTimes(1);
@@ -194,13 +199,13 @@ describe('DispenserDetail on the other terminal statuses', () => {
             const { utils } = await mount({ dispenser });
             expect(ownerButtons(utils)).toEqual([null, null, null]);
             expect(utils.getAllByRole('status').some((el) => copy.test(el.textContent || ''))).toBe(true);
-            expect(utils.getByRole('button', { name: 'Open again' })).toBeTruthy();
+            expect(utils.getByRole('button', { name: 'Open Again' })).toBeTruthy();
         });
     }
 
     it('an ownership dispenser gets the explanation but no Open again (the form has no ownership lane)', async () => {
         const { utils } = await mount({ dispenser: { ...SOLD_OUT, give_ownership: 1 } });
-        expect(utils.queryByRole('button', { name: 'Open again' })).toBeNull();
+        expect(utils.queryByRole('button', { name: 'Open Again' })).toBeNull();
         expect(ownerButtons(utils)).toEqual([null, null, null]);
     });
 });
@@ -214,14 +219,14 @@ describe('DispenserDetail on an open dispenser is unchanged', () => {
         expect(close.getAttribute('title')).toBe('Close this dispenser');
         expect(refill.getAttribute('title')).toBe('Add escrow to this dispenser');
         expect(edit.getAttribute('title')).toBe('Change expiration or allow/block lists');
-        expect(utils.queryByRole('button', { name: 'Open again' })).toBeNull();
+        expect(utils.queryByRole('button', { name: 'Open Again' })).toBeNull();
         expect(utils.container.textContent).not.toMatch(/sold out|open a new one/);
     });
 
-    it('still renders them disabled for a non-owner, as before', async () => {
+    it('offers a non-owner no owner controls at all and no Settings tab', async () => {
         const { utils } = await mount({ dispenser: OPEN, walletAddress: STRANGER_ADDRESS });
-        const [close, refill, edit] = ownerButtons(utils);
-        expect([close.disabled, refill.disabled, edit.disabled]).toEqual([true, true, true]);
-        expect(close.getAttribute('title')).toBe('Only the owner can close');
+        expect(utils.queryByRole('tab', { name: 'Settings' })).toBeNull();
+        expect(ownerButtons(utils)).toEqual([null, null, null]);
+        expect(utils.queryByRole('group', { name: 'Dispenser actions' })).toBeNull();
     });
 });

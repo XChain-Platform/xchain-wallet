@@ -28,6 +28,18 @@ vi.mock('../../../packages/core/src/shared/routes/AddressList.jsx', () => ({
     ),
 }));
 
+// The Asset field opens the token picker page; a stub with one button for the
+// token under test keeps these cases about the change address.
+vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
+    TokenPicker: ({ title, chainIdFilter, onSelect, onBack }) => (
+        <section aria-label={title}>
+            <h2>{title}</h2>
+            <button type="button" onClick={() => onSelect({ chainId: chainIdFilter, tick: 'PEPE' })}>Pick PEPE</button>
+            <button type="button" onClick={onBack}>Back</button>
+        </section>
+    ),
+}));
+
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
 
@@ -95,8 +107,9 @@ function mount() {
 
 async function openAdvanced() {
     fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: TO } });
-    fireEvent.change(screen.getByLabelText(/^Token$/), { target: { value: 'PEPE' } });
-    fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '1' } });
+    fireEvent.click(await screen.findByRole('button', { name: /^Asset/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Pick PEPE' }));
+    fireEvent.change(await screen.findByLabelText(/^Amount \(/), { target: { value: '1' } });
     fireEvent.click(screen.getByText('Advanced'));
 }
 

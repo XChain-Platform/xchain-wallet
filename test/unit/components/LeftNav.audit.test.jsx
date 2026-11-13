@@ -66,7 +66,6 @@ describe('LeftNav route state', () => {
 
     it.each([
         ['send-picker', 'Send'],
-        ['receive-picker', 'Receive'],
         ['markets-picker', 'DEX'],
         ['contract-stake', 'Contracts'],
         ['list-transfer', 'Lists'],

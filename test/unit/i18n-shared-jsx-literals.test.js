@@ -53,7 +53,6 @@ const GUARDED_SHARED_DIRS = /\/shared\/(components|keyboard|commandPalette)\//;
 
 const localizedComponents = [
     'AdsNotice.jsx',
-    'AlertsOverlay.jsx',
     'BackupReminderCard.jsx',
     'ConfirmModal.jsx',
     'settings/NetworkSection.jsx',
@@ -77,7 +76,7 @@ const localizedComponents = [
     'settings/PrivacySection.jsx',
     'settings/SafetySection.jsx',
     'settings/ThisWalletSection.jsx',
-    'settings/WalletModeSection.jsx',
+    'WalletModeField.jsx',
     'AppHeader.jsx',
     'BalanceList.jsx',
     'HomeFilterBar.jsx',
@@ -128,6 +127,12 @@ const PARTIAL_COPY_FILES = [
     '/routes/BroadcastForm.jsx',
     '/routes/CallbackForm.jsx',
     '/routes/CoinpayForm.jsx',
+    // The agent account screens key their allowed-tokens, balance and account
+    // page copy; the older policy and wizard copy has not migrated yet.
+    '/routes/CoSignerAccountDetail.jsx',
+    '/routes/CoSignerAccountList.jsx',
+    '/routes/CoSignerPolicyEditor.jsx',
+    '/routes/CoSignerProvision.jsx',
     '/routes/ContractFundsForm.jsx',
     '/routes/ContractStakeForm.jsx',
     '/routes/ControllerBindForm.jsx',
@@ -162,6 +167,23 @@ const PARTIAL_COPY_FILES = [
     '/routes/TokenAdminForm.jsx',
     '/routes/TokenDetail.jsx',
     '/routes/TokenWizard.jsx',
+    // Screens that gained Form Standard wording through t() while their older
+    // review, result and list copy is still inline.
+    '/components/BetMyBetsPanel.jsx',
+    '/routes/AttachContentForm.jsx',
+    '/routes/BetFeedDetail.jsx',
+    '/routes/ListRenameForm.jsx',
+    '/routes/ListShareForm.jsx',
+    '/routes/ListTransferForm.jsx',
+    '/routes/MessagingInbox.jsx',
+    '/routes/MultisigSendForm.jsx',
+    '/routes/MyOrdersView.jsx',
+    '/routes/MySwapsView.jsx',
+    '/routes/OracleConsole.jsx',
+    '/routes/PollDetail.jsx',
+    '/routes/ProjectRosterForm.jsx',
+    '/routes/PsbtSignForm.jsx',
+    '/routes/UnionListForm.jsx',
 ];
 
 describe('shipping JSX localization', () => {

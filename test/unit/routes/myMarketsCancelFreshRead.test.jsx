@@ -181,7 +181,7 @@ describe.each(VIEWS)('$name re-reads the offer fresh before a cancel', (view) =>
             }
         }
         await openAction(utils, 'Cancel');
-        await step(() => fireEvent.click(utils.getByRole('button', { name: `Cancel ${view.noun}` })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: `Cancel ${view.noun[0].toUpperCase()}${view.noun.slice(1)}` })));
 
         expect(calls.find((c) => c.method === 'composeForConfirm'), 'the cancel composes').toBeTruthy();
         for (const name of RECHECKS[view.name]) {

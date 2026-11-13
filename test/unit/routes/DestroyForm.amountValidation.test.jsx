@@ -82,6 +82,8 @@ describe('DestroyForm amount validation', () => {
     it('renders form-specific help for its network and token fields', async () => {
         mountDestroy({ initialTick: null });
 
+        // Network sits in the closed standard From section.
+        fireEvent.click(await screen.findByRole('button', { name: /^From / }));
         expect(await screen.findByRole('button', { name: 'About Network' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'About Token' })).toBeInTheDocument();
     });

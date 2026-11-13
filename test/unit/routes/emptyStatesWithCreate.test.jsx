@@ -40,7 +40,8 @@ describe('empty list screens offer the create action', () => {
         );
         expect(await screen.findByText('No dispensers yet', {}, { timeout: 10_000 })).toBeTruthy();
         expect(screen.queryByText(/Use Create dispenser/)).toBeNull();
-        const buttons = screen.getAllByRole('button', { name: 'Create dispenser' });
+        // Create is the plus at the far right of the title line.
+        const buttons = screen.getAllByRole('button', { name: 'New dispenser' });
         fireEvent.click(buttons[buttons.length - 1]);
         expect(onCreateDispenser).toHaveBeenCalled();
     }, 20_000);
@@ -54,7 +55,7 @@ describe('empty list screens offer the create action', () => {
         expect(await screen.findByText('No lists yet', {}, { timeout: 10_000 })).toBeTruthy();
         expect(screen.getByText('Create an address list for airdrops or a token list for project rosters and gates.')).toBeTruthy();
         expect(screen.queryByText(/Use Create list/)).toBeNull();
-        const buttons = screen.getAllByRole('button', { name: 'Create list' });
+        const buttons = screen.getAllByRole('button', { name: 'Create List' });
         fireEvent.click(buttons[buttons.length - 1]);
         expect(onCreateList).toHaveBeenCalled();
     }, 20_000);

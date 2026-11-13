@@ -217,7 +217,7 @@ describe('primary routes at 768x1024', () => {
         expect(screenCss).toMatch(/\.body\s*\{[^}]*overflow-y:\s*auto/s);
         expect(screenCss).toMatch(/@supports \(scrollbar-gutter: stable\)\s*\{\s*\.body\s*\{[^}]*scrollbar-gutter:\s*stable/s);
         expect(navCss).toMatch(/\.layout\[data-xc-tier='rail'\] \.sidebar\s*\{[^}]*flex:\s*0 0 64px/s);
-        expect(homeCss).toMatch(/\.quickActions\s*\{[^}]*grid-auto-columns:\s*minmax\(0, 7\.5rem\)/s);
-        expect(collectibleCss).toMatch(/@media \(min-width: 48rem\)[\s\S]*?\.grid\s*\{[^}]*minmax\(10rem, 12rem\)/s);
+        expect(homeCss).toMatch(/\.quickActions\s*\{[^}]*grid-auto-columns:\s*minmax\(0, 5\.5rem\)/s);
+        expect(collectibleCss).toMatch(/@media \(min-width: 48rem\)[\s\S]*?\.grid\s*\{[^}]*minmax\(7\.5rem, 9rem\)/s);
     });
 });

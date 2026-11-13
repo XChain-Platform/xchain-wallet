@@ -61,7 +61,7 @@ describe('ReachabilityBanner', () => {
     it('runs the retry action and reports when a check is already running', () => {
         const refresh = vi.fn();
         const view = mount({ refresh });
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         expect(refresh).toHaveBeenCalledOnce();
 
         useReachability.mockReturnValue({
@@ -225,7 +225,7 @@ describe('ReachabilityBanner', () => {
             expect(notice.querySelector('[aria-hidden="true"]')).toHaveTextContent('✕');
             expect(message).toHaveTextContent("You're offline. Some information may be out of date.");
             expect(message.parentElement).toContainElement(screen.getByRole('button', { name: 'Details' }));
-            expect(notice).toContainElement(screen.getByRole('button', { name: 'Try again' }));
+            expect(notice).toContainElement(screen.getByRole('button', { name: 'Try Again' }));
             expect(css).not.toMatch(/\.degraded\b|\.offline\b/);
         } finally {
             window.innerWidth = originalWidth;

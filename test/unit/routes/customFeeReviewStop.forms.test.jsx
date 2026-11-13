@@ -22,7 +22,7 @@ vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
             type="button"
             onClick={() => onSelect({
                 chainId: 'bitcoin-mainnet',
-                tick: title.includes('give') ? pickerSelection.give : pickerSelection.get,
+                tick: /give/i.test(title) ? pickerSelection.give : pickerSelection.get,
             })}
         >
             Choose {title}
@@ -140,7 +140,7 @@ const FORMS = [
                 .toHaveBeenCalledWith(expect.objectContaining({ tick: 'OWNED' })), { timeout: 2000 });
             await drain();
         },
-        review: () => screen.getByRole('button', { name: 'Issue token' }),
+        review: () => screen.getByRole('button', { name: 'Issue Token' }),
     },
     {
         name: 'Dispenser',
@@ -151,7 +151,7 @@ const FORMS = [
             fireEvent.change(screen.getByLabelText(/^Escrow amount/), { target: { value: '100' } });
             fireEvent.change(screen.getByLabelText(/^Trigger price/), { target: { value: '0.01' } });
         },
-        review: () => screen.getByRole('button', { name: 'Create dispenser' }),
+        review: () => screen.getByRole('button', { name: 'Create Dispenser' }),
     },
     {
         name: 'Swap',
@@ -159,11 +159,11 @@ const FORMS = [
         async fill() {
             await waitFor(() => expect(screen.getByRole('button', { name: /Get token:/ })).toBeInTheDocument());
             fireEvent.click(screen.getByRole('button', { name: /Get token:/ }));
-            fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Choose Select Get Token' }));
             fireEvent.change(screen.getByLabelText('Give amount (ALPHA)'), { target: { value: '2' } });
             fireEvent.change(screen.getByLabelText('Get amount (BETA)'), { target: { value: '3' } });
         },
-        review: () => screen.getByRole('button', { name: 'Create swap' }),
+        review: () => screen.getByRole('button', { name: 'Create Swap' }),
     },
     {
         name: 'Stake',
@@ -177,6 +177,13 @@ const FORMS = [
 ];
 
 async function typeCustomRate(value) {
+    // The fee selector sits in the collapsed Network fee row; open it in place.
+    const toggle = await waitFor(() => {
+        const found = document.querySelector('[data-form-section="fee"] [data-form-section-toggle]');
+        expect(found).toBeTruthy();
+        return found;
+    });
+    if (toggle.getAttribute('aria-expanded') !== 'true') fireEvent.click(toggle);
     fireEvent.change(await screen.findByRole('slider', { name: 'Network fee' }), { target: { value: '3' } });
     fireEvent.change(screen.getByLabelText(/^Custom fee rate/), { target: { value } });
 }

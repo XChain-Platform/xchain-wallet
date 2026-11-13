@@ -33,7 +33,7 @@ describe('ScanRoute paste fallback wording', () => {
     it('labels the paste box and button in plain words', () => {
         render(<ScanRoute onClassified={vi.fn()} onBack={vi.fn()} />);
         expect(screen.getByText('Or paste it here')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Use pasted text' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Use Pasted Text' })).toBeInTheDocument();
         expect(screen.queryByText(/payload/i)).toBeNull();
         expect(screen.queryByRole('button', { name: /classify/i })).toBeNull();
     });

@@ -121,6 +121,9 @@ function mount(dispenser, {
             }),
         ),
     );
+    // The page opens on its Details tab and shows only the chosen tab, so the
+    // buyer's view is the Buy tab: open it as soon as the tabs have rendered.
+    screen.findByRole('tab', { name: 'Buy' }).then((tab) => fireEvent.click(tab), () => {});
     return messaging;
 }
 
@@ -132,7 +135,7 @@ function list(current, created = current) {
 }
 
 function buyButton() {
-    return screen.getByRole('button', { name: 'Buy 1 fill' });
+    return screen.getByRole('button', { name: 'Buy 1 Dispense' });
 }
 
 async function expectSelectedPayerRefused() {
@@ -320,6 +323,8 @@ describe('restricted dispenser, buyer view (D-148)', () => {
     it('reads zero list sentinels as none', async () => {
         mount(REMOVED_LISTS);
         await screen.findByText(/Pay to buy/);
+        // The list rows are on the Details tab.
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
         const text = document.body.textContent || '';
         expect(text).not.toMatch(/list #0/i);
         expect(text).not.toMatch(/restricted/i);

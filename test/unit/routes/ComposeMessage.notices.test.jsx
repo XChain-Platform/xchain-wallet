@@ -7,7 +7,7 @@
 // plain-text confirmation and the unknown-recipient-key warning sit above the
 // form, never between its fields.
 
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -64,14 +64,21 @@ async function settle(ms = 0) {
     });
 }
 
-/** The notice is above the form element and outside it, not a line among the fields. */
+/**
+ * The Wallet Form Standard puts every notice in one status slot just
+ * above the action. The notice sits in that slot, never among the fields
+ * (outside every section), and the slot comes before the action button.
+ */
 function expectLeadsPage(container, notice) {
     const form = container.querySelector('form');
     expect(form, 'the compose form').toBeTruthy();
-    expect(form.contains(notice), 'a notice drawn inside the form sits among the fields').toBe(false);
+    const slot = notice.closest('[data-form-status]');
+    expect(slot, 'the notice is in the standard status slot').toBeTruthy();
+    expect(notice.closest('[data-form-section]'), 'a notice drawn inside a section sits among the fields').toBeNull();
+    const action = within(form).getByRole('button', { name: /Send message/i });
     expect(
-        notice.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING,
-        'the notice comes before the form in the page',
+        slot.compareDocumentPosition(action) & Node.DOCUMENT_POSITION_FOLLOWING,
+        'the status slot comes just before the action',
     ).toBeTruthy();
 }
 
@@ -136,7 +143,7 @@ describe('ComposeMessage notices lead the page', () => {
         const notice = screen.getByRole('alert');
         expect(notice.textContent).toMatch(/don't know the recipient's public key/);
         expectLeadsPage(utils.container, notice);
-        const request = screen.getByRole('button', { name: /Request encrypted session/ });
+        const request = screen.getByRole('button', { name: 'Request Encrypted Session (Publish Your Key)' });
         expect(notice.contains(request)).toBe(true);
     });
 });

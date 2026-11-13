@@ -207,9 +207,10 @@ describe('Fees card live quotes for orders and lists', () => {
             messaging,
         );
 
-        fireEvent.change(await screen.findByLabelText('Ticker'), { target: { value: 'XCHAIN' } });
-        fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '1' } });
-        fireEvent.change(screen.getByLabelText('Amount (BTC)'), { target: { value: '2' } });
+        fireEvent.click(await screen.findByRole('button', { name: /^Give asset:/ }));
+        fireEvent.click(await screen.findByRole('button', { name: /^Select XCHAIN(?: on |$)/ }));
+        fireEvent.change(await screen.findByLabelText(/^Give amount/), { target: { value: '1' } });
+        fireEvent.change(screen.getByLabelText(/^Get amount/), { target: { value: '2' } });
 
         await expectLiveQuote(messaging, {
             action: 'ORDER',
@@ -235,8 +236,13 @@ describe('Fees card live quotes for orders and lists', () => {
         fireEvent.click(await screen.findByRole('button', { name: /^Give token:/ }));
         fireEvent.click(await screen.findByRole('button', { name: /^Select XCHAIN(?: on |$)/ }));
         fireEvent.change(screen.getByLabelText(/^Give amount/), { target: { value: '1' } });
-        fireEvent.change(screen.getByLabelText('Get token'), { target: { value: 'DOGECOIN' } });
-        fireEvent.change(screen.getByLabelText(/^Get amount/), { target: { value: '2' } });
+        // A token the list does not hold is typed into the Get token picker's
+        // search and taken with "Use typed name"; picking clears the get amount.
+        fireEvent.click(screen.getByRole('button', { name: /^Get token:/ }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Filter coins and tokens' }));
+        fireEvent.change((await screen.findAllByLabelText('Search coins or tokens'))[0], { target: { value: 'DOGECOIN' } });
+        fireEvent.click(await screen.findByRole('button', { name: 'Use Typed Name' }));
+        fireEvent.change(await screen.findByLabelText(/^Get amount/), { target: { value: '2' } });
 
         await expectLiveQuote(messaging, {
             action: 'ORDER',
@@ -331,6 +337,8 @@ describe('Fees card live quotes for orders and lists', () => {
             messaging,
         );
 
+        // The market page opens on Details; betting is the Bet tab.
+        fireEvent.click(await screen.findByRole('tab', { name: /^Bet/ }));
         fireEvent.click(await screen.findByRole('button', { name: 'Home' }));
         fireEvent.change(screen.getByLabelText('Stake (XCHAIN)'), { target: { value: '5' } });
 
@@ -369,7 +377,7 @@ describe('Fees card live quotes for orders and lists', () => {
         expect(await screen.findByText('0.064 XCHAIN')).toBeInTheDocument();
         expect(screen.getByText(/\+ 0\.064 XCHAIN/)).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Place buy order' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Place Buy Order' }));
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled());
         expect(messaging.composeForConfirm.mock.calls[0][0].actionData).toEqual(quotedActionData);
     });

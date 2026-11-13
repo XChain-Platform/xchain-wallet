@@ -115,12 +115,12 @@ describe('Home with no addresses', () => {
             emptyMessaging(),
         );
 
-        const cta = await screen.findByRole('button', { name: /Generate an address/i });
+        const cta = await screen.findByRole('button', { name: /Generate an Address/i });
         expect(cta).toBeTruthy();
         expect(screen.getAllByText('Fund your wallet')).toHaveLength(1);
         expect(screen.queryByText('No coins yet')).toBeNull();
         expect(screen.queryByText(/Use Receive to generate one/)).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Buy coins' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Buy Coins' }));
         expect(onExchange).toHaveBeenCalledTimes(1);
     });
 
@@ -148,7 +148,7 @@ describe('Home with no addresses', () => {
             emptyMessaging({ generateReceiveAddress }),
         );
 
-        fireEvent.click(await screen.findByRole('button', { name: /Generate an address/i }));
+        fireEvent.click(await screen.findByRole('button', { name: /Generate an Address/i }));
         fireEvent.click(await screen.findByRole('button', { name: /^Generate$/ }));
 
         await waitFor(() => expect(generateReceiveAddress).toHaveBeenCalledTimes(1));
@@ -168,7 +168,7 @@ describe('Home with no addresses', () => {
         await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalled());
         const before = messaging.getWalletBalances.mock.calls.length;
 
-        fireEvent.click(await screen.findByRole('button', { name: /Generate an address/i }));
+        fireEvent.click(await screen.findByRole('button', { name: /Generate an Address/i }));
         fireEvent.click(await screen.findByRole('button', { name: /^Generate$/ }));
 
         await waitFor(() => {
@@ -184,7 +184,7 @@ describe('Import WIF chain picker', () => {
             messaging,
         );
         fireEvent.click(await screen.findByRole('button', { name: /Add or import address/i }));
-        fireEvent.click(await screen.findByRole('menuitem', { name: /Import address/i }));
+        fireEvent.click(await screen.findByRole('menuitem', { name: /Import Address/i }));
         return screen.findByRole('button', { name: /Import/i });
     }
 

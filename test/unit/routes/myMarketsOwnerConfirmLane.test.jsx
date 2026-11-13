@@ -18,6 +18,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, act as domAct, fireEvent, cleanup, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { MyOrdersView } from '../../../packages/core/src/shared/routes/MyOrdersView.jsx';
 import { MySwapsView } from '../../../packages/core/src/shared/routes/MySwapsView.jsx';
 
@@ -99,7 +100,7 @@ beforeEach(() => {
         ],
     });
 });
-afterEach(() => { cleanup(); vi.useRealTimers(); });
+afterEach(() => { cleanup(); resetWalletModes(); vi.useRealTimers(); });
 
 async function drain(rounds = 24) {
     for (let i = 0; i < rounds; i += 1) {
@@ -111,16 +112,19 @@ async function drain(rounds = 24) {
 async function mount(view, {
     owner = HD_ADDRESS,
     rows = [marketRow(700)],
-    settings = { walletMode: 'full' },
+    walletMode = 'full',
     preflight = PASS,
     chainId = CHAIN,
     onCreate,
 } = {}) {
     const calls = [];
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const log = (method, value) => (args) => { calls.push({ method, args }); return Promise.resolve(value); };
     const target = {
         getAddressesByChain: () => Promise.resolve({ [chainId]: [owner] }),
-        getSettings: () => Promise.resolve(settings),
+        getSettings: () => Promise.resolve({}),
+        listWallets: () => Promise.resolve([{ id: 'w', name: 'W', walletMode }]),
         signerReady: () => Promise.resolve({ ready: true }),
         getSignerStatus: () => Promise.resolve({ status: owner.source === 'hd' ? 'unlocked' : 'available' }),
         getListsForSource: () => Promise.resolve({ data: [{ action_index: '2701', type: '2', status: 'valid' }] }),
@@ -193,7 +197,7 @@ describe.each(VIEWS)('$name owner actions sign through the confirm page', (view)
     it('cancels only after the pre-flight, signing the composed bytes', async () => {
         const { utils, calls } = await mount(view);
         await openAction(utils, 'Cancel');
-        await step(() => fireEvent.click(utils.getByRole('button', { name: `Cancel ${view.noun}` })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: `Cancel ${view.noun[0].toUpperCase()}${view.noun.slice(1)}` })));
 
         expect(signCalls(calls), 'nothing signs before Approve').toHaveLength(0);
         const compose = calls.find((c) => c.method === 'composeForConfirm');
@@ -215,7 +219,7 @@ describe.each(VIEWS)('$name owner actions sign through the confirm page', (view)
     it('blocks a cancel the pre-flight says the network would refuse', async () => {
         const { utils, calls } = await mount(view, { preflight: REFUSED });
         await openAction(utils, 'Cancel');
-        await step(() => fireEvent.click(utils.getByRole('button', { name: `Cancel ${view.noun}` })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: `Cancel ${view.noun[0].toUpperCase()}${view.noun.slice(1)}` })));
         await approve(utils);
 
         expect(calls.some((c) => c.method === 'preflight')).toBe(true);
@@ -225,7 +229,7 @@ describe.each(VIEWS)('$name owner actions sign through the confirm page', (view)
     it('keeps a broadcast cancel pending while explorer feeds are stale', async () => {
         const { utils } = await mount(view);
         await openAction(utils, 'Cancel');
-        await step(() => fireEvent.click(utils.getByRole('button', { name: `Cancel ${view.noun}` })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: `Cancel ${view.noun[0].toUpperCase()}${view.noun.slice(1)}` })));
         await approve(utils);
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Done' })));
 
@@ -238,9 +242,9 @@ describe.each(VIEWS)('$name owner actions sign through the confirm page', (view)
     it('edits a hardware owner on the device lane with the same composed bytes', async () => {
         const { utils, calls } = await mount(view, { owner: HW_ADDRESS });
         await openAction(utils, 'Edit');
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Set block-list' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Set Block-List' })));
         await step(() => fireEvent.click(utils.getByRole('button', { name: /Address list #2701/ })));
-        await step(() => fireEvent.click(utils.getByRole('button', { name: `Update ${view.noun}` })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: `Update ${view.noun[0].toUpperCase()}${view.noun.slice(1)}` })));
 
         const compose = calls.find((c) => c.method === 'composeForConfirm');
         expect(compose.args.actionData.params).toEqual({ VERSION: '2', [view.indexKey]: '700', BLOCK_LIST: '2701' });
@@ -257,8 +261,8 @@ describe.each(VIEWS)('$name owner actions sign through the confirm page', (view)
         const { utils, calls } = await mount(view, { rows, chainId: 'dogecoin-regtest' });
         expect(utils.getByText(/Allow list #2701 · Block list none/)).toBeTruthy();
         await openAction(utils, 'Edit');
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Remove allow list' })));
-        await step(() => fireEvent.click(utils.getByRole('button', { name: `Update ${view.noun}` })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Remove Allow List' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: `Update ${view.noun[0].toUpperCase()}${view.noun.slice(1)}` })));
 
         const compose = calls.find((c) => c.method === 'composeForConfirm');
         expect(compose.args.actionData.params).toEqual({
@@ -270,13 +274,13 @@ describe.each(VIEWS)('$name owner actions sign through the confirm page', (view)
         const rows = [marketRow(700, { allow_list: '2701' })];
         const { utils } = await mount(view, { rows });
         await openAction(utils, 'Edit');
-        expect(utils.queryByRole('button', { name: 'Remove allow list' })).toBeNull();
+        expect(utils.queryByRole('button', { name: 'Remove Allow List' })).toBeNull();
     });
 
     it('keeps watcher mode on its unsigned build, with no signature to pre-flight', async () => {
-        const { utils, calls } = await mount(view, { settings: { walletMode: 'watcher' } });
+        const { utils, calls } = await mount(view, { walletMode: 'watcher' });
         await openAction(utils, 'Cancel');
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Create unsigned transaction' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Create Unsigned Transaction' })));
 
         expect(calls.find((c) => c.method === 'buildActionPsbtRequest').args.actionData.action).toBe(view.action);
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);

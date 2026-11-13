@@ -218,7 +218,7 @@ function submit(input, onClassified = vi.fn()) {
     fireEvent.change(screen.getByRole('textbox', { name: 'Or paste it here' }), {
         target: { value: input },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Use pasted text' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Use Pasted Text' }));
     return onClassified;
 }
 

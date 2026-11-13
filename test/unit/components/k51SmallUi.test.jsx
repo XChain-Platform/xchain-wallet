@@ -37,17 +37,6 @@ describe('K51 small-screen UI', () => {
         expect(rule(inputCss, '.input:not(textarea)')).toMatch(/height:\s*var\(--xc-control-height\)/);
     });
 
-    it('keeps the active wallet ring inside the clipped name region', () => {
-        const pickerCss = source('packages/core/src/shared/routes/WalletPicker.module.css');
-        const rowName = rule(pickerCss, '.rowName');
-
-        expect(rowName).toMatch(/padding-block:\s*var\(--xc-space-1\)/);
-        expect(rowName).toMatch(/padding-inline:\s*var\(--xc-space-1\)/);
-        expect(rowName).toMatch(/margin-block:\s*calc\(0px - var\(--xc-space-1\)\)/);
-        expect(rowName).toMatch(/margin-inline:\s*calc\(var\(--xc-space-1\) \* -1\)/);
-        expect(rowName).toMatch(/overflow:\s*hidden/);
-    });
-
     it('gives Add wallet the shared titled page header', () => {
         localStorage.setItem('xc:licenseAcceptedAt', new Date().toISOString());
         localStorage.setItem('xc:licenseAcceptedVersion', LICENSE_VERSION);
@@ -65,7 +54,7 @@ describe('K51 small-screen UI', () => {
             </MessagingContext.Provider>,
         );
 
-        expect(screen.getByRole('heading', { level: 1, name: 'Add wallet' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { level: 1, name: 'Add Wallet' })).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Back to wallets' }));
         expect(onBack).toHaveBeenCalledOnce();
     });

@@ -41,7 +41,7 @@ it('submits typed native amount and fee rate, then opens the new session', async
 
     fireEvent.change(screen.getByLabelText('To'), { target: { value: 'bc1qdestination' } });
     fireEvent.change(screen.getByLabelText('Amount (BTC)'), { target: { value: '0.001' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Start signing' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Start signing$/i }));
 
     await waitFor(() => expect(startMultisigSend).toHaveBeenCalledWith({
         walletId: 'wallet-1',
@@ -71,6 +71,6 @@ it('shows the Taproot limitation and disables starting', () => {
     );
 
     expect(screen.getByText('Sending from a Taproot multisig is not available yet.')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Start signing' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Start signing$/i })).toBeDisabled();
 });
 

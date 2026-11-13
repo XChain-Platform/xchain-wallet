@@ -11,6 +11,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import {
     ACTION_ENTRY_DEFS,
     ACTION_GROUPS,
@@ -18,11 +19,13 @@ import {
 } from '../../../packages/core/src/shared/actionEntries.js';
 import { ActionsMenu } from '../../../packages/core/src/shared/routes/ActionsMenu.jsx';
 
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); resetWalletModes(); });
 
 function mount(entries, walletMode = 'full') {
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const messaging = {
-        getSettings: vi.fn(async () => ({ walletMode })),
+        getSettings: vi.fn(async () => ({})),
+        listWallets: vi.fn(async () => [{ id: 'w', name: 'W', walletMode }]),
     };
     return render(
         <MessagingProvider shell="web" messaging={messaging}>
@@ -38,7 +41,7 @@ describe('ActionsMenu navigation semantics', () => {
         );
         mount(buildActionEntries(handlers, { pairsTrezor: true }));
 
-        expect(screen.getByRole('heading', { level: 1, name: 'All actions' })).toBeTruthy();
+        expect(screen.getByRole('heading', { level: 1, name: 'All Actions' })).toBeTruthy();
         const buttons = [...document.querySelectorAll('button[data-xc-menu-item]')];
         expect(buttons).toHaveLength(ACTION_ENTRY_DEFS.length);
         for (const button of buttons) {

@@ -192,8 +192,9 @@ describe('extension popup keyboard flows', () => {
             messaging,
         ));
 
-        const tabs = screen.getAllByRole('tab', { name: /^(Coins|Tokens|NFTs|DeFi|Activity)$/ });
-        expect(tabs.map((tab) => tab.textContent)).toEqual(['Coins', 'Tokens', 'NFTs', 'DeFi', 'Activity']);
+        // Activity is not a Home tab; History holds that list.
+        const tabs = screen.getAllByRole('tab', { name: /^(Coins|Tokens|NFTs|DeFi)$/ });
+        expect(tabs.map((tab) => tab.textContent)).toEqual(['Coins', 'Tokens', 'NFTs', 'DeFi']);
         tabs[0].focus();
         expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
 
@@ -219,9 +220,9 @@ describe('extension popup keyboard flows', () => {
         await user.tab();
         expect(document.activeElement).toBe(contacts);
         await user.tab();
-        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'About Token' }));
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'About Asset' }));
         await user.tab();
-        expect(document.activeElement).toBe(screen.getByLabelText('Token'));
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: /^Asset: / }));
         await user.tab();
         // The Amount label's help tip comes before the field.
         expect(document.activeElement).toBe(screen.getByRole('button', { name: /^About Amount/ }));
@@ -248,7 +249,7 @@ describe('extension popup keyboard flows', () => {
             routeMessaging(),
         ));
 
-        const token = await screen.findByRole('button', { name: /^Change asset/ });
+        const token = await screen.findByRole('button', { name: /^Asset: / });
         const amount = await screen.findByRole('textbox', { name: 'Amount (BTC)' });
         token.focus();
         await user.tab();
@@ -259,8 +260,15 @@ describe('extension popup keyboard flows', () => {
         fireEvent.change(amount, { target: { value: '1.25' } });
         await user.keyboard('{Enter}');
         expect(screen.getByRole('form', { name: 'Receive payment' })).toBeInTheDocument();
-        await user.tab();
-        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Back to home' }));
+        // The explorer link now follows the amount field, so Tab passes it
+        // and any other trailing control before it wraps to the header.
+        const back = screen.getByRole('button', { name: 'Back to home' });
+        let wrapped = false;
+        for (let step = 0; step < 6 && !wrapped; step += 1) {
+            await user.tab();
+            wrapped = document.activeElement === back;
+        }
+        expect(wrapped).toBe(true);
     });
 });
 

@@ -119,7 +119,7 @@ async function reachPasteInbox() {
     const sessionList = await screen.findByRole('list', { name: 'Multisig sessions' });
     fireEvent.click(within(sessionList).getByRole('button'));
     await screen.findByLabelText('Multisig signing progress');
-    fireEvent.click(screen.getByRole('button', { name: 'Import cosigner reply' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Import Cosigner Reply' }));
 }
 
 /** Asserts the scan control is an icon-only button inside the field control. */
@@ -152,9 +152,9 @@ describe('Pair partner wallet: scan sits inside the code field', () => {
         expectInsideField(scan, textarea);
         expect(scan).toHaveAttribute('aria-pressed', 'false');
 
-        const pair = screen.getByRole('button', { name: 'Pair a signer' });
+        const pair = screen.getByRole('button', { name: 'Pair a Signer' });
         expect(pair.parentElement.contains(scan)).toBe(false);
-        expect(buttonNames(pair.parentElement)).toEqual(['Pair a signer']);
+        expect(buttonNames(pair.parentElement)).toEqual(['Pair a Signer']);
     });
 
     it('toggles the scanner, flips the accessible name and resets the frame collector', async () => {
@@ -189,12 +189,12 @@ describe('Multisig cosigner reply: scan sits inside the reply field', () => {
         expectInsideField(scan, textarea);
         expect(scan).toHaveAttribute('aria-pressed', 'false');
 
-        const submit = screen.getByRole('button', { name: 'Submit chunks' });
+        const submit = screen.getByRole('button', { name: 'Submit Chunks' });
         expect(submit.parentElement.contains(scan)).toBe(false);
         expect(buttonNames(submit.parentElement)).toEqual([
-            'Back to tracker',
-            'Clear received reply',
-            'Submit chunks',
+            'Back to Tracker',
+            'Clear Received Reply',
+            'Submit Chunks',
         ]);
     });
 

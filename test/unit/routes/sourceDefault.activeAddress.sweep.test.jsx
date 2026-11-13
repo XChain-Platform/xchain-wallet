@@ -28,7 +28,9 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import React from 'react';
+import { openSection } from '../../helpers/openFormSections.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { BroadcastForm } from '../../../packages/core/src/shared/routes/BroadcastForm.jsx';
 import { IssueTokenForm } from '../../../packages/core/src/shared/routes/IssueTokenForm.jsx';
 import { ListCreateForm } from '../../../packages/core/src/shared/routes/ListCreateForm.jsx';
@@ -38,6 +40,17 @@ import { AirdropForm } from '../../../packages/core/src/shared/routes/AirdropFor
 import { AttachContentForm } from '../../../packages/core/src/shared/routes/AttachContentForm.jsx';
 import { AdvancedActionsForm } from '../../../packages/core/src/shared/routes/AdvancedActionsForm.jsx';
 import { LinkForm } from '../../../packages/core/src/shared/routes/LinkForm.jsx';
+
+// ProjectRosterForm adds tokens only through the token picker; this stand-in
+// picks the ticker typed into it, on the chain the form locked it to.
+vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
+    TokenPicker: ({ title, chainIdFilter, onSelect }) => (
+        <section aria-label={title}>
+            <input aria-label="Token to pick" id="pick-tick" />
+            <button type="button" onClick={() => onSelect({ chainId: chainIdFilter, tick: document.getElementById('pick-tick').value })}>Pick token</button>
+        </section>
+    ),
+}));
 import { PublishFileForm } from '../../../packages/core/src/shared/routes/PublishFileForm.jsx';
 import { SignMessageForm } from '../../../packages/core/src/shared/routes/SignMessageForm.jsx';
 import { PsbtSignForm } from '../../../packages/core/src/shared/routes/PsbtSignForm.jsx';
@@ -60,10 +73,13 @@ const DELEGATED = hd(4, { role: 'dispenser' });
 const ADDRESSES = { [CHAIN]: [ACTIVE, NEWEST_PERSONAL, DELEGATED] };
 
 function mount(Form, props, activeByChain, walletMode, issuer) {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode: walletMode || 'full' }], activeWalletId: 'w' });
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getActiveAddresses: vi.fn().mockResolvedValue(activeByChain),
-        getSettings: vi.fn().mockResolvedValue({ walletMode }),
+        getSettings: vi.fn().mockResolvedValue({}),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'w', name: 'W', walletMode: walletMode || 'full' }]),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'locked' }),
         listActions: vi.fn().mockResolvedValue(['SEND', 'ISSUE']),
@@ -88,7 +104,7 @@ function mount(Form, props, activeByChain, walletMode, issuer) {
     return messaging;
 }
 
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); resetWalletModes(); });
 
 // The review stages render the address through AddressText, which carries
 // the full string on the span's title; the first such span is the From row.
@@ -111,18 +127,24 @@ async function pickFile(label) {
 
 const submitFormOf = (el) => fireEvent.submit(el.closest('form'));
 
+// The standard From section starts closed; its address field is "From address".
+async function readFromAddress() {
+    await openSection('From');
+    return (await screen.findByLabelText('From address')).value;
+}
+
 const FORMS = [
     {
         name: 'BroadcastForm',
         Form: BroadcastForm,
         props: {},
-        read: async () => (await screen.findByLabelText('From')).value,
+        read: readFromAddress,
     },
     {
         name: 'IssueTokenForm',
         Form: IssueTokenForm,
         props: {},
-        read: async () => (await screen.findByLabelText('From')).value,
+        read: readFromAddress,
     },
     {
         name: 'ListCreateForm',
@@ -134,20 +156,20 @@ const FORMS = [
         name: 'AirdropForm',
         Form: AirdropForm,
         props: {},
-        read: async () => (await screen.findByLabelText('From')).value,
+        read: readFromAddress,
     },
     {
         name: 'AdvancedActionsForm',
         Form: AdvancedActionsForm,
         props: {},
-        read: async () => (await screen.findByLabelText('From')).value,
+        read: readFromAddress,
     },
     {
         name: 'SignMessageForm',
         Form: SignMessageForm,
         props: {},
         read: async () => {
-            const field = await screen.findByLabelText('Address');
+            const field = await screen.findByLabelText('Signing address');
             await waitFor(() => { if (!field.value) throw new Error('no default yet'); });
             return field.value;
         },
@@ -179,9 +201,12 @@ const FORMS = [
         Form: ProjectRosterForm,
         props: { chainId: CHAIN, tick: 'JDOG' },
         read: async () => {
-            const members = await screen.findByLabelText('Tokens (one per line)');
-            fireEvent.change(members, { target: { value: 'AAA' } });
-            submitFormOf(members);
+            // Tokens join the roster through the token picker (mocked above).
+            await screen.findByText('No list published yet. This will be the first.');
+            fireEvent.click(screen.getByRole('button', { name: 'Add Token' }));
+            fireEvent.change(screen.getByLabelText('Token to pick'), { target: { value: 'AAA' } });
+            fireEvent.click(screen.getByRole('button', { name: 'Pick token' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Create Project Tokens' }));
             return reviewAddress();
         },
     },
@@ -208,9 +233,11 @@ const FORMS = [
         props: {},
         walletMode: 'watcher',
         read: async () => {
-            await pickFile(/^File \(up to [\d,]+ bytes\)$/);
-            fireEvent.click(screen.getByRole('checkbox'));
-            submitFormOf(screen.getByLabelText(/^File \(up to [\d,]+ bytes\)$/));
+            // The hidden file input is named by the shared FileField's input label.
+            await pickFile('File to publish');
+            // The form no longer asks for a permanence tick box before review.
+            expect(screen.queryByRole('checkbox')).toBeNull();
+            submitFormOf(screen.getByLabelText('File to publish'));
             return reviewAddress();
         },
     },

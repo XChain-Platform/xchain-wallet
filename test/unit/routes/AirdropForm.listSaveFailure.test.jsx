@@ -97,7 +97,7 @@ describe('AirdropForm after the recipient list is broadcast', () => {
         fireEvent.change(screen.getByRole('textbox', { name: 'Recipients' }), { target: { value: RECIPIENTS.join('\n') } });
         fireEvent.change(screen.getByLabelText(/^Per-recipient amount/), { target: { value: '1' } });
         await flushTimers();
-        fireEvent.click(screen.getByRole('button', { name: /^Review recipients$/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^Review recipients$/i }));
         await flushTimers();
         fireEvent.click(screen.getByRole('button', { name: /^Sign/ }));
         await flushTimers();

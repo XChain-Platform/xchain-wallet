@@ -142,7 +142,7 @@ describe('HomeTabs empty states', () => {
         expect(screen.getByText(/Receive coins from another wallet or buy coins/)).toBeTruthy();
         expect(screen.queryByText('No coins yet')).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Receive' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Buy coins' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Buy Coins' }));
         expect(onReceive).toHaveBeenCalledTimes(1);
         expect(onBuy).toHaveBeenCalledTimes(1);
     });
@@ -153,7 +153,7 @@ describe('HomeTabs empty states', () => {
 
         expect(screen.getAllByText('Fund your wallet')).toHaveLength(1);
         expect(screen.queryByText('No coins yet')).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Generate an address' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Generate an Address' }));
         expect(onAddAddress).toHaveBeenCalledTimes(1);
     });
 
@@ -215,7 +215,6 @@ describe('HomeTabs empty states', () => {
     it.each([
         ['Coins', 'Fund your wallet'],
         ['DeFi', 'No DeFi positions yet'],
-        ['Activity', 'No activity yet'],
     ])('draws the %s empty state with the shared empty state', (tab, heading) => {
         mount('real-wallet', { onHistory: vi.fn(), recentActivity: [] });
         fireEvent.click(screen.getByRole('tab', { name: tab }));
@@ -223,6 +222,11 @@ describe('HomeTabs empty states', () => {
         const state = screen.getByRole('status');
         expect(within(state).getByRole('heading', { level: 2, name: heading })).toBeTruthy();
         expect(state.closest('[role="tabpanel"]')).not.toBeNull();
+    });
+
+    it('has no Activity tab, because History holds the same list', () => {
+        mount('real-wallet', { onHistory: vi.fn(), recentActivity: [] });
+        expect(screen.queryByRole('tab', { name: 'Activity' })).toBeNull();
     });
 
     it('keeps tab empty states free of hand-made placeholder rules', () => {

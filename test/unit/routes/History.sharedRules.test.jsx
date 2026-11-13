@@ -66,18 +66,22 @@ describe('History buttons carry icons', () => {
         expect(hasIcon(within(dialog).getByRole('button', { name: 'Cancel' }))).toBe(true);
     });
 
-    it('gives Clear search an icon', async () => {
+    // The title-bar filter's search box is a native search field, so the old
+    // separate Clear search button is retired; there is no button left to carry an icon.
+    it('no longer draws a separate Clear search button', async () => {
         mountHistory([row(1)]);
         await screen.findByRole('button', { name: 'Export…' });
-        const search = screen.getByLabelText('Search history');
+        // The search box lives in the title-bar filter, so open the filter first.
+        fireEvent.click(screen.getByRole('button', { name: 'History filters' }));
+        const search = await screen.findByLabelText('Search history');
         fireEvent.change(search, { target: { value: 'tx' } });
-        const clear = await screen.findByRole('button', { name: 'Clear history search' });
-        expect(hasIcon(clear)).toBe(true);
+        expect(search.value).toBe('tx');
+        expect(screen.queryByRole('button', { name: 'Clear history search' })).toBeNull();
     });
 
     it('gives Show more an icon when the list pages', async () => {
         mountHistory(Array.from({ length: 160 }, (_, i) => row(i + 1)));
-        const more = await screen.findByRole('button', { name: 'Show more history' }, { timeout: 4000 });
+        const more = await screen.findByRole('button', { name: 'Show More History' }, { timeout: 4000 });
         expect(hasIcon(more)).toBe(true);
     });
 });

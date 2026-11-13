@@ -289,12 +289,12 @@ describe('translations', () => {
             historySearch: en['history.filters.searchPlaceholder'],
             peerError: en['history.detail.peerError'],
         }).toEqual({
-            networkSettings: 'Open network settings',
+            networkSettings: 'Open Network Settings',
             unavailable: 'Not available',
             watcher: 'Watcher mode: this prepares the transaction for your offline signer. Sign it there, then bring the signed transaction to a wallet that can broadcast it.',
             multisigAvailability: 'Only addresses from a software wallet can be shared here. A watch-only wallet has no signing key, and a hardware wallet must export this information from the device or its companion app.',
             signerRegion: 'Signer mode home',
-            signerBody: "This wallet signs transactions from a paired watcher wallet. Sending, receiving, and balances aren't available. To use them on this device, switch modes under Settings → Wallet mode.",
+            signerBody: "This wallet signs transactions from a paired watch-only wallet. Sending, receiving, and balances aren't available here. Its wallet mode is shown on Wallet Details.",
             argumentCount: '{count, plural, one { with # argument} other { with # arguments}}',
             arguments: 'Arguments',
             argumentHint: 'Separate arguments with |, for example foo|42|bc1q… Leave blank if the method takes no arguments.',
@@ -427,8 +427,8 @@ describe('translations', () => {
     });
 
     it('pluralizes audited English address, token, and confirmation copy', () => {
-        expect(t('addressList.hidden.show', { count: 1 })).toBe('Show 1 hidden address');
-        expect(t('addressList.hidden.show', { count: 2 })).toBe('Show 2 hidden addresses');
+        expect(t('addressList.hidden.show', { count: 1 })).toBe('Show 1 Hidden Address');
+        expect(t('addressList.hidden.show', { count: 2 })).toBe('Show 2 Hidden Addresses');
         expect(t('balanceList.hiddenTokens.show', { count: 1 })).toBe('Show 1 hidden token');
         expect(t('balanceList.hiddenTokens.show', { count: 2 })).toBe('Show 2 hidden tokens');
         expect(t('transactionStatus.confirmations', { count: 1 })).toBe('1 confirmation');
@@ -467,74 +467,143 @@ describe('translations', () => {
             .sort((a, b) => a[0].localeCompare(b[0]));
 
         expect(duplicateKeyGroups).toEqual([
-            // The action catalogue heading and its command-palette destination.
-            ['actionsMenu.title', 'walletMenu.row.allActions'],
-            // The wallet menu reuses the label the same destination carries elsewhere.
-            ['alerts.title', 'walletMenu.row.alerts'],
-            // The queue route title, command title, and Settings row.
-            ['commandPalette.actionQueue.title', 'parallelComposer.title', 'settings.developer.actionQueue'],
+            // The Address field on Address preferences and Verify signature, and the unbind form's Address target.
+            ['addressPreferences.address', 'unbindForm.targetAddress', 'verifySignature.address'],
+            // A closed section's empty summary (Address preferences, Issue) and the shortcut help's unset binding state.
+            ['addressPreferences.notSet', 'issue.summary.notSet', 'keyboard.shortcutHelp.notSet'],
+            // The Airdrop form's token pickers and section title reuse the wording of the Roster and Unbind pickers and the palette command.
+            ['airdrop.picker.addToken', 'projectRoster.pickerTitle'],
+            ['airdrop.picker.selectToken', 'unbindForm.pickTokenTitle'],
+            ['airdrop.section.airdrop', 'palette.createAirdrop.title'],
+            // The alerts page title, its notifications heading, the header bell label and the wallet menu row.
+            ['alerts.notificationsTitle', 'alerts.title', 'shell.header.notifications', 'walletMenu.row.alerts'],
+            // The network fee line on Batch and on Send.
+            ['batch.networkFeeFor', 'send.networkFeeValue'],
+            // Removing a Batch row, an Issue Token list entry and a Send recipient.
+            ['batch.removeRow', 'issue.removeList', 'send.recipient.remove'],
+            // The command title and Settings row for the action queue.
+            ['commandPalette.actionQueue.title', 'settings.developer.actionQueue'],
             // A shared reachability retry label and the settings backup checker.
             ['common.checking', 'settings.backup.checking'],
+            // The confirm summary's verb names the same action as the Governance form's button.
+            ['components.confirmSummary.verbCreatePoll', 'governance.action.createPoll'],
+            ['components.confirmSummary.verbDelegateVotes', 'governance.action.delegateVotes'],
             // The wallet menu reuses the label the same destination carries elsewhere.
             ['components.contactsPickerScreen.contacts', 'walletMenu.row.contacts'],
+            // The order book's size column and the Publish File review's size row.
+            ['components.orderbookPanel.size', 'publishFile.details.size'],
+            // The unsigned-transaction action on the order panel, Governance and Publish File.
+            ['components.placeOrderPanel.createUnsignedTransaction', 'governance.action.createUnsigned', 'publishFile.review.createUnsigned'],
+            // The order panel's Market label and the token page's Market section.
+            ['components.placeOrderPanel.market', 'tokenMarket.label'],
+            // The order panel's price field and the token page's price row.
+            ['components.placeOrderPanel.price', 'tokenMarket.price'],
+            // Broadcasting a queued transaction and a multisig session's send action.
+            ['components.queuedBroadcastBanner.sendNow2', 'multisig.sessions.pillSendNow'],
+            // The reachability line's details link and the token page's Details tab.
+            ['components.reachabilityLine.details', 'tokenDetail.tabs.details'],
             // The token list editor's field label and the Home Tokens tab.
             ['components.tickItemsEditor.tokens', 'home.tabs.tokens'],
+            // The token field's empty state and the unbind form's token placeholder.
+            ['components.tokenField.selectAToken', 'unbindForm.selectToken'],
+            // An address's watch-only badge and the Watch-only wallet mode (§20).
+            ['components.watchOnlyBadge.watchOnly', 'walletDetails.walletMode.watcher'],
+            // The address-load failure on Compose message and on the unbind form.
+            ['composeMessage.loadFailed', 'unbindForm.loadFailed'],
             // The noun the queued-result panel names for a held message and the noun the signing warning names.
             ['composeMessage.whatMessage', 'extension.sign.warningNoun.message'],
+            // Copying an address from a co-signer's detail page and from History.
+            ['coSigner.detail.copyAddress', 'history.copy.walletAddress'],
             // Retrying a desktop update download and retrying a balance load.
             ['desktopUpdate.retry', 'home.retryBalances'],
-            // Every action form's From field (U60): Execute contract and Send.
-            ['execute.caller', 'send.fields.from'],
-            // The governance page title and the settings notification label.
-            ['governance.title', 'settings.notifications.governancePolls'],
+            // Every action form's From field: Execute contract, Send and Unbind controller.
+            ['execute.caller', 'send.fields.from', 'unbindForm.from'],
+            // Loading addresses on Execute contract and on the unbind form.
+            ['execute.loadingAddresses', 'unbindForm.loadingAddresses'],
+            // The empty token list on Gated publish and on the unbind form.
+            ['gatedPublish.tokens.noneTitle', 'unbindForm.noTokensTitle'],
+            // The History detail More tab and the Home More tab.
+            ['history.detail.more', 'home.moreShort'],
             // The History status filter header and the parallel composer's status-pill label prefix.
             ['history.filters.statusHeader', 'parallelComposer.statusPrefix'],
-            // The wallet menu reuses the label the same destination carries elsewhere.
-            ['history.title', 'walletMenu.row.history'],
+            // Loading the History page and the token page's History tab.
+            ['history.loading', 'tokenDetail.history.loading'],
+            // The History page, its menu row and the token page's History tab.
+            ['history.title', 'tokenDetail.tabs.history', 'walletMenu.row.history'],
             // The wallet menu reuses the label the same destination carries elsewhere.
             ['home.addresses', 'walletMenu.row.addresses'],
-            // The wallet menu reuses the label the same destination carries elsewhere.
-            ['home.contracts', 'walletMenu.row.contracts'],
+            // The Exchange action on Home and on the token page.
+            ['home.exchange', 'tokenDetail.actions.exchange'],
             // The wallet menu reuses the label the same destination carries elsewhere.
             ['home.lockWallet', 'walletMenu.row.lock'],
-            // The wallet menu reuses the label the same destination carries elsewhere.
-            ['home.messaging', 'walletMenu.row.messaging'],
-            ['home.receive', 'uri.intent.receive', 'walletMenu.row.receive'],
+            // The Receive action on Home and the token page, its menu row and its intent title.
+            ['home.receive', 'tokenDetail.actions.receive', 'uri.intent.receive', 'walletMenu.row.receive'],
             // The wallet menu reuses the label the same destination carries elsewhere.
             ['home.settings', 'walletMenu.row.settings'],
-            // The wallet menu reuses the label the same destination carries elsewhere.
-            ['home.staking', 'walletMenu.row.staking'],
             // The wallet menu reuses the label the same destination carries elsewhere.
             ['home.title', 'walletMenu.row.home'],
             // Unlocking a wallet another window made, from a stale import form, and unlocking the demo.
             ['importWallet.unlockExisting', 'onboarding.demo.unlock'],
             // The Issue form's supply cap field and Manage token's supply cap lock.
             ['issue.maxSupply', 'routes.manageToken.lockMaxSupply'],
+            // The Issue form's Callback section header and Manage token's callback lock.
+            ['issue.section.callback', 'routes.manageToken.lockCallback'],
             // The Issue form's Description section header and Manage token's description action and detail row.
             ['issue.section.description', 'routes.manageToken.description'],
-            // The issue section's empty summary and the shortcut help's unset binding state.
-            ['issue.summary.notSet', 'keyboard.shortcutHelp.notSet'],
             // The issue list summary and the duress settings action.
             ['issue.summary.set', 'settings.duress.set'],
+            // The 24-hour high on the market page and on the token page.
+            ['market.stats.high24h', 'tokenMarket.high24h'],
+            // The 24-hour low on the market page and on the token page.
+            ['market.stats.low24h', 'tokenMarket.low24h'],
+            // The Send page, its menu row and intent title, the token page's Send action and the multisig start action.
+            ['multisig.start.actionSend', 'send.title', 'tokenDetail.actions.send', 'uri.intent.send', 'walletMenu.row.send'],
+            // The menu's Actions group, the token pages' actions heading and tab, and the multisig start actions.
+            ['multisig.start.actionsLabel', 'routes.manageToken.actions', 'tokenDetail.tabs.actions', 'walletMenu.group.actions'],
             // The wallet menu reuses the label the same destination carries elsewhere.
             ['palette.category.trade', 'walletMenu.group.trade'],
             // The raw action tool in the palette and Settings.
             ['palette.createAdvanced.title', 'settings.developer.advancedAction'],
-            // The wallet menu row and the palette entry it replaces in search.
-            ['palette.createPublishFile.title', 'walletMenu.row.publishFile'],
+            // The wallet menu row, the palette entry it replaces in search and the Publish File form's label.
+            ['palette.createPublishFile.title', 'publishFile.formLabel', 'walletMenu.row.publishFile'],
             ['palette.createToken.title', 'walletMenu.row.createToken'],
             ['palette.navBetting.title', 'walletMenu.row.betting'],
             // The wallet menu reuses the label the same destination carries elsewhere.
+            ['palette.navBrowseDispensers.title', 'walletMenu.row.browseDispensers'],
+            // The Publish File review's type row and the wallet details type row.
+            ['publishFile.details.type', 'walletDetails.type'],
+            // The wallet menu reuses the label the same destination carries elsewhere.
             ['routes.addressList.dispensers', 'walletMenu.row.dispensers'],
-            // The menu's Actions group and the token page's actions heading.
-            ['routes.manageToken.actions', 'walletMenu.group.actions'],
+            // Manage token's controller row and the unbind form's Controller section.
+            ['routes.manageToken.controller', 'unbindForm.section'],
+            // Manage token's dispenser action and the token page's dispenser row.
+            ['routes.manageToken.dispenser', 'tokenMarket.dispenser'],
+            // Manage token's Unbind controller action and the form it opens.
+            ['routes.manageToken.unbindController', 'unbindForm.label'],
             // The wallet menu reuses the label the same destination carries elsewhere.
             ['scan.title', 'walletMenu.row.scan'],
+            // An empty value on Send's advanced options and in the unbind form's summary.
+            ['send.advanced.none', 'unbindForm.none'],
             // The Send form's network field and the Settings network row.
             ['send.fields.chain', 'settings.network.label'],
-            ['send.title', 'uri.intent.send', 'walletMenu.row.send'],
+            // The Token field on Send and on the unbind form.
+            ['send.fields.token', 'unbindForm.token'],
+            // The From address picker title on Send and on the unbind form.
+            ['send.fromAddress', 'unbindForm.fromPickerTitle'],
+            // The Memo field on Send and on the unbind form.
+            ['send.memo', 'unbindForm.memo'],
+            // The source-address picker button on Send and on the unbind form.
+            ['send.source.choose', 'unbindForm.choosePicker'],
+            // The transaction ID row on Send's result and on the unbind form's result.
+            ['send.txid', 'unbindForm.transactionId'],
+            // The backup help names the Wallet Details action it describes.
+            ['settings.help.backup.exportBackup', 'walletDetails.exportBackupAction'],
+            // The This wallet remove button and the Wallet Details remove page title name the same action.
+            ['settings.thisWallet.removeWalletAction', 'walletDetails.remove.title'],
             // The wallet menu reuses the label the same destination carries elsewhere.
             ['settings.thisWallet.wallet', 'walletMenu.group.wallet'],
+            // The Normal fee level and the Normal wallet mode (§20).
+            ['ui.feeSelector.normal', 'walletDetails.walletMode.full'],
         ]);
     });
 

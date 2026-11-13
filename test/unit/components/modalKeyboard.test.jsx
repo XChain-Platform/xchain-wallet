@@ -10,7 +10,6 @@ import {
     render,
     screen,
 } from '@testing-library/react';
-import { AlertsOverlay } from '../../../packages/core/src/shared/components/AlertsOverlay.jsx';
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
 import { ConfirmModal } from '../../../packages/core/src/shared/components/ConfirmModal.jsx';
 import { DemoExitConfirm } from '../../../packages/core/src/shared/components/DemoExitConfirm.jsx';
@@ -109,7 +108,7 @@ describe('DemoExitConfirm keyboard contract', () => {
         );
         const opener = await openDialog();
         const cancel = screen.getByRole('button', { name: 'Cancel' });
-        const confirm = screen.getByRole('button', { name: 'Exit demo & wipe' });
+        const confirm = screen.getByRole('button', { name: 'Exit Demo & Wipe' });
 
         expect(cancel).toHaveFocus();
         confirm.focus();
@@ -153,47 +152,6 @@ describe('NoticeModal keyboard contract', () => {
 
         activateFromKeyboard(screen.getByRole('button', { name: 'OK' }));
 
-        expect(onClose).toHaveBeenCalledOnce();
-    });
-});
-
-describe('AlertsOverlay keyboard contract', () => {
-    const alerts = [{
-        id: 'upgrade',
-        severity: 'warning',
-        title: 'Upgrade recovery phrase',
-        message: 'Upgrade before continuing.',
-        action: { label: 'Upgrade', onSelect: vi.fn() },
-    }];
-
-    it('focuses Close, wraps Tab, and restores the opener after Escape', async () => {
-        render(
-            <DialogHost renderDialog={(close) => (
-                <AlertsOverlay alerts={alerts} onClose={close} />
-            )} />,
-        );
-        const opener = await openDialog();
-        const close = screen.getByRole('button', { name: 'Close alerts' });
-        const primary = screen.getByRole('button', { name: 'Upgrade' });
-
-        expect(opener).toHaveAttribute('inert');
-        expect(close).toHaveFocus();
-        primary.focus();
-        fireEvent.keyDown(primary, { key: 'Tab' });
-        expect(close).toHaveFocus();
-        fireEvent.keyDown(close, { key: 'Tab', shiftKey: true });
-        expect(primary).toHaveFocus();
-        await escapeDialog(opener);
-    });
-
-    it('runs the primary alert action once for one Enter activation', () => {
-        const onSelect = vi.fn();
-        const onClose = vi.fn();
-        render(<AlertsOverlay alerts={[{ ...alerts[0], action: { label: 'Upgrade', onSelect } }]} onClose={onClose} />);
-
-        activateFromKeyboard(screen.getByRole('button', { name: 'Upgrade' }));
-
-        expect(onSelect).toHaveBeenCalledOnce();
         expect(onClose).toHaveBeenCalledOnce();
     });
 });

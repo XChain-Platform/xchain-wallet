@@ -93,7 +93,8 @@ async function publish(utils, fields) {
         await drain();
     });
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('button', { name: 'Publish contract' }));
+        // The standard action label is Title Case.
+        fireEvent.click(utils.getByRole('button', { name: 'Publish Contract' }));
         await drain();
     });
 }

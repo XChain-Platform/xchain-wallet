@@ -33,7 +33,7 @@ function renderDetail(props) {
             <ListDetail chainId="bitcoin-mainnet" actionIndex="7" onBack={() => {}} onFork={() => {}} {...props} />
         </MessagingProvider>,
     );
-    return screen.findByText('Fork & edit');
+    return screen.findByText('Fork & Edit');
 }
 
 function renderMyLists(props) {
@@ -47,23 +47,23 @@ function renderMyLists(props) {
 describe('ListDetail entries', () => {
     it('renders neither extra entry when no handler is passed', async () => {
         await renderDetail({});
-        expect(screen.queryByText('Share list')).toBeNull();
-        expect(screen.queryByText('Transfer list')).toBeNull();
+        expect(screen.queryByText('Share List')).toBeNull();
+        expect(screen.queryByText('Transfer List')).toBeNull();
     });
 
     it('shows Share list only when onShare is passed and calls it with the list ref', async () => {
         const onShare = vi.fn();
         await renderDetail({ onShare });
-        expect(screen.queryByText('Transfer list')).toBeNull();
-        fireEvent.click(screen.getByText('Share list'));
+        expect(screen.queryByText('Transfer List')).toBeNull();
+        fireEvent.click(screen.getByText('Share List'));
         expect(onShare).toHaveBeenCalledWith({ chainId: 'bitcoin-mainnet', actionIndex: '7' });
     });
 
     it('shows Transfer list only when onTransfer is passed and calls it with the list ref', async () => {
         const onTransfer = vi.fn();
         await renderDetail({ onTransfer });
-        expect(screen.queryByText('Share list')).toBeNull();
-        fireEvent.click(screen.getByText('Transfer list'));
+        expect(screen.queryByText('Share List')).toBeNull();
+        fireEvent.click(screen.getByText('Transfer List'));
         expect(onTransfer).toHaveBeenCalledWith({ chainId: 'bitcoin-mainnet', actionIndex: '7' });
     });
 });
@@ -71,24 +71,24 @@ describe('ListDetail entries', () => {
 describe('MyLists entries', () => {
     it('renders neither extra entry when no handler is passed', async () => {
         renderMyLists({ onCreateList: () => {} });
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Create list' })).toBeTruthy());
-        expect(screen.queryByText('Create union list')).toBeNull();
-        expect(screen.queryByText('Shared lists')).toBeNull();
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Create List' })).toBeTruthy());
+        expect(screen.queryByText('Create Union List')).toBeNull();
+        expect(screen.queryByText('Shared Lists')).toBeNull();
     });
 
     it('shows Create union list only when passed and calls it on click', async () => {
         const onCreateUnionList = vi.fn();
         renderMyLists({ onCreateUnionList });
-        expect(screen.queryByText('Shared lists')).toBeNull();
-        fireEvent.click(screen.getByText('Create union list'));
+        expect(screen.queryByText('Shared Lists')).toBeNull();
+        fireEvent.click(screen.getByText('Create Union List'));
         expect(onCreateUnionList).toHaveBeenCalledTimes(1);
     });
 
     it('shows Shared lists only when passed and calls it on click', async () => {
         const onOpenSharedLists = vi.fn();
         renderMyLists({ onOpenSharedLists });
-        expect(screen.queryByText('Create union list')).toBeNull();
-        fireEvent.click(screen.getByText('Shared lists'));
+        expect(screen.queryByText('Create Union List')).toBeNull();
+        fireEvent.click(screen.getByText('Shared Lists'));
         expect(onOpenSharedLists).toHaveBeenCalledTimes(1);
     });
 });

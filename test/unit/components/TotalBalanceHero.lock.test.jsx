@@ -31,8 +31,12 @@ function renderHero(props) {
 describe('balance hero lock row', () => {
     it('is absent when the shell locks from its own header', () => {
         renderHero({});
-        fireEvent.click(screen.getByRole('button', { name: 'Balance actions' }));
+        // With no Home handlers the card carries no Balance actions menu, so
+        // there is nothing to open and no lock row anywhere.
+        const trigger = screen.queryByRole('button', { name: 'Balance actions' });
+        if (trigger) fireEvent.click(trigger);
         expect(screen.queryByRole('menuitem', { name: 'Lock wallet' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Lock wallet' })).toBeNull();
     });
 
     it('locks the wallet when a headerless shell passes onLockWallet', () => {

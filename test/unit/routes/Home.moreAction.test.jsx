@@ -15,7 +15,6 @@ import React from 'react';
 import { clearDemoWalletId, markDemoWallet } from '../../../packages/core/src/flows/demoMode.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
-import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 import homeModuleStyles from '../../../packages/core/src/shared/routes/Home.module.css';
 
 const homeStyles = readFileSync(join(
@@ -49,7 +48,8 @@ const BALANCES = {
 
 function makeMessaging(settings = {}) {
     return {
-        listWallets: vi.fn().mockResolvedValue([WALLET]),
+        // §20: the mode is the wallet's own, carried on its safe record.
+        listWallets: vi.fn().mockResolvedValue([{ ...WALLET, walletMode: settings.walletMode || 'full' }]),
         listAccounts: vi.fn().mockResolvedValue([]),
         getWalletBalances: vi.fn().mockResolvedValue(BALANCES),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
@@ -80,8 +80,10 @@ describe('Home overflow quick action', () => {
         expect(homeSource).not.toMatch(/<button\b/);
         expect(heroSource).not.toMatch(/<button\b/);
         expect(heroMenuSource).not.toMatch(/<button\b/);
-        expect(homeSource).toContain('icon={<Icon.GridIcon />}');
-        expect(homeSource).toContain("t('walletMenu.row.allActions')");
+        // The fourth round button reads More, and its full name is More actions (G52).
+        expect(homeSource).toContain('icon={<Icon.MoreIcon />}');
+        expect(homeSource).toContain("t('home.moreShort')");
+        expect(homeSource).toContain("aria-label={t('actionsMenu.more')}");
     });
 
     it('opens Swap directly instead of a one-item More menu', async () => {
@@ -96,50 +98,27 @@ describe('Home overflow quick action', () => {
 });
 
 describe('Home desktop actions', () => {
-    it('renders Send and Receive once while preserving supplementary actions', async () => {
+    it('renders Send and Receive once and no row of supplementary actions', async () => {
         mount({
             onSend: vi.fn(),
             onReceive: vi.fn(),
-            onCreateToken: vi.fn(),
+            onActions: vi.fn(),
         }, 'desktop');
 
         expect(await screen.findAllByRole('button', { name: 'Send' })).toHaveLength(1);
         expect(screen.getAllByRole('button', { name: 'Receive' })).toHaveLength(1);
-        expect(screen.getByRole('button', { name: 'Create token' })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'Create token' })).toBeNull();
     });
 
-    it.each([
-        [360, 4],
-        [833, 4],
-    ])('uses matching buttons in an even grid at %ipx (%i columns)', async (viewportWidth, expectedColumns) => {
+    it.each([360, 833])('draws no bottom action row at %ipx; every other action lives in More', async (viewportWidth) => {
         Object.defineProperty(window, 'innerWidth', { configurable: true, value: viewportWidth });
-        mount({
-            onCreateToken: vi.fn(),
-            onMarkets: vi.fn(),
-            onMessaging: vi.fn(),
-            onHistory: vi.fn(),
-            onAddresses: vi.fn(),
-            onContracts: vi.fn(),
-            onStaking: vi.fn(),
-            onActions: vi.fn(),
-        }, 'desktop');
+        mount({ onHistory: vi.fn(), onActions: vi.fn() }, 'desktop');
 
-        const createToken = await screen.findByRole('button', { name: 'Create token' });
-        const actionGrid = createToken.parentElement;
-        const actions = within(actionGrid).getAllByRole('button');
-
-        expect(actionGrid).toHaveClass(homeModuleStyles.actionsFull);
-        // All actions is a quick action above, so the grid holds the other seven.
-        expect(actions).toHaveLength(7);
-        expect(screen.getAllByRole('button', { name: 'All actions' })).toHaveLength(1);
-        actions.forEach((action) => {
-            expect(action).toHaveClass(buttonStyles.secondary, buttonStyles.md);
-        });
-        expect(expectedColumns).toBe(4);
-        expect(homeStyles).toMatch(
-            /\.actionsFull\s*\{[^}]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/,
-        );
-        expect(viewportWidth).toBeLessThan(834);
+        expect(await screen.findAllByRole('button', { name: 'More actions' })).toHaveLength(1);
+        for (const name of ['Create token', 'Markets', 'Messaging', 'History', 'Addresses', 'Contracts', 'Staking']) {
+            expect(screen.queryByRole('button', { name })).toBeNull();
+        }
+        expect(homeStyles).not.toMatch(/\.actionsFull/);
     });
 });
 
@@ -162,37 +141,37 @@ describe('Home wide-layout quick actions', () => {
         Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 });
     });
 
-    it.each([834, 1280, 1440])('shows Send, Receive, Exchange and All actions at %ipx and no bottom row', async (viewportWidth) => {
+    it.each([834, 1280, 1440])('shows Send, Receive, Exchange and More at %ipx and no bottom row', async (viewportWidth) => {
         Object.defineProperty(window, 'innerWidth', { configurable: true, value: viewportWidth });
         mount(wideHandlers, 'desktop');
 
         const row = await screen.findByRole('group', { name: 'Quick actions' });
         expect(within(row).getAllByRole('button').map((button) => button.textContent.trim()))
-            .toEqual(['Send', 'Receive', 'Exchange', 'All actions']);
+            .toEqual(['Send', 'Receive', 'Exchange', 'More']);
         expect(screen.queryByRole('button', { name: 'Swap' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Create token' })).toBeNull();
-        expect(document.querySelector(`.${homeModuleStyles.actionsFull}`)).toBeNull();
+        expect(document.querySelector('[class*="actionsFull"]')).toBeNull();
     });
 
-    it('opens the actions menu from the All actions quick action', async () => {
+    it('opens the actions menu from the More quick action', async () => {
         Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
         const onActions = vi.fn();
         mount({ ...wideHandlers, onActions }, 'desktop');
 
         const row = await screen.findByRole('group', { name: 'Quick actions' });
-        fireEvent.click(within(row).getByRole('button', { name: 'All actions' }));
+        fireEvent.click(within(row).getByRole('button', { name: 'More actions' }));
         expect(onActions).toHaveBeenCalledTimes(1);
     });
 
-    it('shows the same four quick actions at 360px above the action grid', async () => {
+    it('shows the same four quick actions at 360px and no bottom row', async () => {
         Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 });
         mount(wideHandlers, 'desktop');
 
         const row = await screen.findByRole('group', { name: 'Quick actions' });
         expect(within(row).getAllByRole('button').map((button) => button.textContent.trim()))
-            .toEqual(['Send', 'Receive', 'Exchange', 'All actions']);
+            .toEqual(['Send', 'Receive', 'Exchange', 'More']);
         expect(screen.queryByRole('button', { name: 'Swap' })).toBeNull();
-        expect(screen.getByRole('button', { name: 'Create token' })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'Create token' })).toBeNull();
     });
 
     it('keeps the Swap button when the shell passes no actions menu', async () => {
@@ -242,7 +221,7 @@ describe('Home quick-action policy', () => {
         expect(notice).toBeVisible();
         // The notice is the first item of the page content, above the controls that raised it.
         expect(notice.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Exit demo & wipe' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Exit Demo & Wipe' }));
         expect(screen.getByRole('dialog', { name: 'Exit demo and delete its data?' }))
             .toBeTruthy();
     });

@@ -120,7 +120,8 @@ describe('PageHeader', () => {
     it('wraps a long title to two lines between mirrored fixed actions at every width', () => {
         const header = rule(pageHeaderCss, '.header');
         const title = rule(pageHeaderCss, '.title');
-        const trailingButton = rule(pageHeaderCss, '.trailing button:not([role="menuitem"])');
+        // The trailing buttons are outlined, full-size controls; menu items and dialog contents are left alone.
+        const trailingButton = rule(pageHeaderCss, '.trailing button:not([role="menuitem"], [role="dialog"] *)');
 
         expect(header).toMatch(/--xc-page-header-side:\s*var\(--xc-control-h-md\)/);
         expect(header).toMatch(
@@ -130,8 +131,8 @@ describe('PageHeader', () => {
         expect(title).toMatch(/white-space:\s*normal/);
         expect(title).toMatch(/-webkit-line-clamp:\s*2/);
         expect(title).toMatch(/overflow:\s*hidden/);
-        expect(trailingButton).toMatch(/width:\s*var\(--xc-control-h-sm\)/);
-        expect(trailingButton).toMatch(/height:\s*var\(--xc-control-h-sm\)/);
+        expect(trailingButton).toMatch(/width:\s*var\(--xc-control-h-md\)/);
+        expect(trailingButton).toMatch(/height:\s*var\(--xc-control-h-md\)/);
         expect(trailingButton).toMatch(/border-radius:\s*var\(--xc-control-radius\)/);
         expect(trailingButton).toMatch(/--xc-icon-size:\s*var\(--xc-icon-md\)/);
         expect(pageHeaderCss).not.toMatch(/@media/);
@@ -183,7 +184,14 @@ describe('PageHeader', () => {
                             && attribute.value?.value === 'menuitem',
                     ));
                     if (actions.length === 0) {
-                        invalidTrailingActions.push(file);
+                        // A list page's title-line filter is the shared ListFilterMenu
+                        // (its trigger is the kit's icon Button), often held in a variable.
+                        const holdsFilterMenu = findNode(
+                            trailing.value,
+                            (node) => (node.type === 'JSXOpeningElement' && /Filter(Menu|Popover)$/.test(jsxName(node.name)))
+                                || (node.type === 'Identifier' && /filter(Menu|Popover)$/i.test(node.name)),
+                        );
+                        if (!holdsFilterMenu) invalidTrailingActions.push(file);
                         return;
                     }
                     for (const action of actions) {
@@ -260,10 +268,10 @@ describe('PageHeader', () => {
             view.unmount();
         }
 
-        const trailingButton = rule(pageHeaderCss, '.trailing button:not([role="menuitem"])');
+        const trailingButton = rule(pageHeaderCss, '.trailing button:not([role="menuitem"], [role="dialog"] *)');
         const trailingIcon = rule(
             pageHeaderCss,
-            '.trailing button:not([role="menuitem"]) svg[data-xc-icon]',
+            '.trailing button:not([role="menuitem"], [role="dialog"] *) svg[data-xc-icon]',
         );
         expect(trailingButton).toMatch(/padding:\s*0/);
         expect(trailingButton).toMatch(/gap:\s*0/);

@@ -170,7 +170,7 @@ describe('ExecuteContractForm owner withdraw', () => {
     it('warns before a call into a contract whose deployer can withdraw', async () => {
         const utils = await mount(ExecuteContractForm, messagingFor(true), {});
         const warning = utils.getByTestId('owner-withdraw-warning');
-        const confirm = buttonNamed(utils, 'Call contract');
+        const confirm = buttonNamed(utils, 'Call Contract');
         expect(warning).toHaveTextContent(OWNER_WITHDRAW_WARNING);
         expect(confirm).not.toBeNull();
         expect(warning.compareDocumentPosition(confirm) & Node.DOCUMENT_POSITION_FOLLOWING)

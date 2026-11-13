@@ -78,7 +78,7 @@ describe('ImportWallet field help', () => {
             'Password of the wallet in this backup',
             'Password for this device',
         ]);
-        expect(screen.getByRole('button', { name: 'Choose backup file' }).nextElementSibling)
+        expect(screen.getByRole('button', { name: 'Choose Backup File' }).nextElementSibling)
             .toHaveTextContent('Choose or drop a backup file');
         expect(document.getElementById('xc-backup-content-description'))
             .toHaveTextContent('Paste backup file contents here');

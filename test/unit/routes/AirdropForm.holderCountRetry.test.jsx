@@ -248,7 +248,7 @@ describe('the Airdrop holder-count preview survives one refusal and names any it
         fireEvent.change(screen.getByLabelText(/^Per-recipient amount/), {
             target: { value: '1' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Review recipients' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Review recipients$/i }));
         await flushTimers();
         expect(screen.getByRole('form', { name: 'Review recipient list' })).toBeInTheDocument();
         expect(document.body.textContent).toMatch(/~0 HDR550816/);

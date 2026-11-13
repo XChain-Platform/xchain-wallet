@@ -24,6 +24,7 @@ import {
     fingerprintSessionRef,
 } from '../../../packages/core/src/uri/index.js';
 import { signedTxFor } from '../../helpers/signedTx.js';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 
 // Real finalized bytes and the prevouts the session PSBT records: the
 // broadcast verifies every signature before it sends.
@@ -155,6 +156,7 @@ beforeEach(() => {
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     vi.clearAllMocks();
 });
 
@@ -178,15 +180,15 @@ describe('multisig jsdom flow', () => {
 
         render(<MultisigCreate walletId={WALLET_ID} onBack={() => {}} />);
         await screen.findByLabelText("Use one of this wallet's addresses");
-        fireEvent.click(screen.getByRole('button', { name: /Add cosigner/i }));
+        fireEvent.click(screen.getByRole('button', { name: /Add Cosigner/ }));
         fireEvent.click(screen.getByRole('button', { name: "Choose one of this wallet's addresses" }));
         fireEvent.click(screen.getByRole('button', { name: 'Pick local address' }));
         await waitFor(() => expect(screen.getAllByLabelText(/Master fingerprint/i)[0])
             .toHaveValue(LOCAL.fingerprint));
         await fillExternalRows();
-        fireEvent.click(screen.getByRole('button', { name: 'Create multisig' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Multisig' }));
         expect(await screen.findByText(/2-of-3 SegWit/i)).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Confirm multisig' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Confirm Multisig' }));
         expect(await screen.findByText('Multisig configured')).toBeTruthy();
 
         const wallet = await harness.vault.wallets.get(WALLET_ID);
@@ -260,7 +262,7 @@ describe('multisig jsdom flow', () => {
         const list = await screen.findByRole('list', { name: 'Multisig sessions' });
         fireEvent.click(within(list).getByRole('button'));
         await screen.findByLabelText('Multisig signing progress');
-        fireEvent.click(screen.getByRole('button', { name: 'Import cosigner reply' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Import Cosigner Reply' }));
         const sessionRef = {
             chainId: session.chainId,
             scheme: session.scheme,
@@ -278,15 +280,15 @@ describe('multisig jsdom flow', () => {
         fireEvent.change(screen.getByLabelText('Cosigner reply chunks'), {
             target: { value: chunks.join('\n') },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Submit chunks' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Submit Chunks' }));
         await screen.findByText(/Signature from .* accepted/i);
-        fireEvent.click(screen.getByRole('button', { name: 'Back to tracker' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to Tracker' }));
 
-        const finalize = await screen.findByRole('button', { name: 'Finalize transaction' });
+        const finalize = await screen.findByRole('button', { name: 'Finalize Transaction' });
         expect((await harness.vault.multisigSigningSessions.get(session.id)).signatures)
             .toHaveLength(2);
         fireEvent.click(finalize);
-        const broadcast = await screen.findByRole('button', { name: 'Broadcast transaction' });
+        const broadcast = await screen.findByRole('button', { name: 'Broadcast Transaction' });
         expect(harness.finalizeMultisigPsbt).toHaveBeenCalledWith(PSBT_HEX);
         expect((await harness.vault.multisigSigningSessions.get(session.id))).toMatchObject({
             msgHash: MSG_HASH,
@@ -329,8 +331,11 @@ describe('multisig jsdom flow', () => {
             createdAt: '2026-10-13T12:00:00.000Z',
             updatedAt: '2026-10-13T12:00:00.000Z',
         };
+        // The wallet's mode is read from the wallet list, not from settings.
+        publishWalletModes({ wallets: [{ id: WALLET_ID, walletMode: 'watcher' }], activeWalletId: WALLET_ID });
         messaging = {
-            getSettings: vi.fn(async () => ({ walletMode: 'watcher' })),
+            getSettings: vi.fn(async () => ({})),
+            listWallets: vi.fn(async () => [{ id: WALLET_ID, name: 'W', walletMode: 'watcher' }]),
             listMultisigSigningSessions: vi.fn(async () => [active]),
             getMultisigSigningSession: vi.fn(async () => active),
             signMultisigLocally: vi.fn(),
@@ -340,8 +345,8 @@ describe('multisig jsdom flow', () => {
         const list = await screen.findByRole('list', { name: 'Multisig sessions' });
         fireEvent.click(within(list).getByRole('button'));
         expect(await screen.findByText(/Watcher mode exports signing data/i)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Export signing request' })).toBeTruthy();
-        expect(screen.queryByRole('button', { name: 'Sign with my key' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'Export Signing Request' })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'Sign With My Key' })).toBeNull();
         expect(screen.queryByLabelText('Wallet password')).toBeNull();
         expect(messaging.signMultisigLocally).not.toHaveBeenCalled();
     });

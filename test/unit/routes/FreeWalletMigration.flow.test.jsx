@@ -59,10 +59,10 @@ describe('FreeWallet onboarding migration flow', () => {
         render(<FreeWalletImportFlow messaging={messaging} />);
 
         expect(screen.getAllByRole('button').map((button) => button.textContent.trim()))
-            .toEqual(['Create new wallet', 'Import wallet', 'From FreeWallet']);
+            .toEqual(['Create New Wallet', 'Import Wallet', 'From FreeWallet']);
         fireEvent.click(screen.getByRole('button', { name: 'From FreeWallet' }));
 
-        expect(screen.getByRole('heading', { name: 'Import from FreeWallet' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Import From FreeWallet' })).toBeInTheDocument();
         expect(screen.getByLabelText('Wallet name')).toHaveValue('FreeWallet');
         expect(screen.queryByRole('tab')).not.toBeInTheDocument();
         expect(screen.getByText('0 / 12 words')).toBeInTheDocument();
@@ -91,6 +91,7 @@ describe('FreeWallet onboarding migration flow', () => {
             mnemonic: FREEWALLET_PHRASE,
             name: 'FreeWallet',
             bip39Passphrase: '',
+            walletMode: 'full',
             format: 'counterwallet-legacy',
         }));
         fireEvent.click(screen.getByRole('button', { name: 'Continue' }));

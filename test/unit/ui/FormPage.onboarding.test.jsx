@@ -101,7 +101,7 @@ describe('FormPage onboarding layout', () => {
         );
         localStorage.clear();
 
-        const pair = screen.getByRole('button', { name: 'Pair an offline signer' });
+        const pair = screen.getByRole('button', { name: 'Pair an Offline Signer' });
         expect(pair).toHaveClass(buttonStyles.primary);
         expect(pair).toHaveClass(onboardingStyles.pairSignerButton);
         expect(pair).not.toHaveClass(buttonStyles.success);

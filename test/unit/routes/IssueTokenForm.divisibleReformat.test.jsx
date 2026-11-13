@@ -86,7 +86,7 @@ function maxButtons() {
 }
 
 async function submit() {
-    fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
 }
 
 async function composedParams() {
@@ -203,6 +203,8 @@ describe('IssueTokenForm amount fields follow the Divisible precision', () => {
         fireEvent.click(screen.getByLabelText(DIVISIBLE));
         // Public minting starts closed; open it so its two amount fields show.
         fireEvent.click(screen.getByRole('button', { name: /^Public minting/ }));
+        // Initial mint is its own closed standard section; open it too.
+        fireEvent.click(screen.getByRole('button', { name: /^Initial mint/ }));
         // Every amount field shows Max in the field (U61); Max supply has
         // nothing to fill from, so its Max stays disabled.
         const buttons = maxButtons();

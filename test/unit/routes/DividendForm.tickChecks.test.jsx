@@ -40,8 +40,9 @@ const ADDRESSES = {
  * @param {Record<string, 'missing' | Error>} verdictByTick   per-tick override;
  *        anything left out resolves as a real, found token, so an
  *        incidental lookup never breaks a case that isn't testing it.
+ * @param {Record<string, unknown>} [formProps]   extra DividendForm props (a prefilled tick)
  */
-function mountDividend(verdictByTick = {}) {
+function mountDividend(verdictByTick = {}, formProps = {}) {
     const getTokenInfo = vi.fn(({ tick }) => {
         const v = verdictByTick[tick];
         if (v instanceof Error) return Promise.reject(v);
@@ -88,7 +89,7 @@ function mountDividend(verdictByTick = {}) {
         React.createElement(
             MessagingProvider,
             { shell: 'web', messaging },
-            React.createElement(DividendForm, { walletId: 'w', initialChainId: CHAIN, onBack() {} }),
+            React.createElement(DividendForm, { walletId: 'w', initialChainId: CHAIN, onBack() {}, ...formProps }),
         ),
     );
     return messaging;
@@ -109,7 +110,7 @@ async function pickRow(tick) {
 }
 
 const amountField = () => screen.getByLabelText(/^Per-unit amount/);
-const submitButton = () => screen.getByRole('button', { name: 'Pay dividend' });
+const submitButton = () => screen.getByRole('button', { name: 'Pay Dividend' });
 
 async function flushTimers() {
     for (let pass = 0; pass < 3; pass += 1) {
@@ -135,10 +136,20 @@ afterEach(() => {
 });
 
 describe('DividendForm TICK / DIVIDEND_TICK existence checks', () => {
-    it('names the network\'s own coin at the holder-of field and disables submit', async () => {
-        const messaging = mountDividend();
+    it('offers no coin in either token picker', async () => {
+        mountDividend();
         await openPicker('Holder-of token');
-        await pickRow('BTC');
+        await expect(pickRow('BTC')).rejects.toThrow('no BTC row');
+        await pickRow('GOODTOK');
+        await openPicker('Dividend token');
+        await expect(pickRow('BTC')).rejects.toThrow('no BTC row');
+        // The list was loaded when BTC was looked for: its tokens are there.
+        await pickRow('GOODPAY');
+    });
+
+    it('names the network\'s own coin at the holder-of field and disables submit', async () => {
+        // The picker no longer offers the coin, so it arrives as a prefilled tick.
+        const messaging = mountDividend({}, { initialTick: 'BTC' });
         await openPicker('Dividend token');
         await pickRow('GOODPAY');
         fireEvent.change(amountField(), { target: { value: '1' } });

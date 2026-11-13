@@ -8,10 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Token detail quick actions are the same four square tiles as Home: Send,
-// Receive, Exchange and More info, each with its icon centred over its label,
-// in one horizontal row. History and Manage live in the More info menu, never
-// as top-level tiles.
+// Token detail shows its actions as tiles on the Actions tab: Send, Receive
+// and Exchange first, 80px tall, four across a phone row and 80px squares
+// from 600px. History is a tab and Manage token sits in the owner group.
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -42,47 +41,26 @@ function exactBlocks(selector) {
     return blocksFor(selector).filter((r) => r.selector.split(',').map((part) => part.trim().replace(/\s+/g, ' ')).includes(selector));
 }
 
+// The round quick actions row and its More info menu are retired: the
+// actions are tiles on the Actions tab.
 describe('TokenDetail quick actions CSS', () => {
-    it('lays the quick actions out as one horizontal row', () => {
-        const rules = exactBlocks('.quickActions');
-        expect(rules.length).toBeGreaterThan(0);
-        for (const { body } of rules) {
-            expect(body).not.toMatch(/flex-direction:\s*column/);
-            expect(body).not.toMatch(/grid-auto-flow:\s*row/);
-        }
-        const base = rules[0].body;
-        expect(base).toMatch(/display:\s*(flex|grid)/);
-        if (/display:\s*grid/.test(base)) {
-            expect(base).toMatch(/grid-auto-flow:\s*column/);
-        } else {
-            expect(base).not.toMatch(/flex-wrap:\s*wrap/);
-        }
+    it('keeps no quick actions row or More info menu styles', () => {
+        expect(blocksFor('.quickActions')).toHaveLength(0);
+        expect(blocksFor('.quickActionMoreWrap')).toHaveLength(0);
+        expect(blocksFor('.quickActionMoreMenu')).toHaveLength(0);
     });
 
-    it('never stretches the tile tracks to the row width', () => {
-        for (const { body } of blocksFor('.quickActions')) {
-            expect(body).not.toMatch(/\b\d*\.?\d+fr\b/);
-            expect(body).not.toMatch(/flex:\s*1\b|flex-grow:\s*[1-9]/);
-            expect(body).not.toMatch(/justify-content:\s*(stretch|space-between|space-around|space-evenly)/);
-        }
-        const base = exactBlocks('.quickActions')[0].body;
-        // Every track has a fixed upper bound, so a wide screen keeps compact tiles.
-        expect(base).toMatch(/grid-auto-columns:\s*minmax\(\s*0\s*,\s*[^)]*\d+px[^)]*\)/);
+    it('spans four equal tiles 8px apart across a phone row', () => {
+        const base = exactBlocks('.assetActionGrid')[0].body;
+        expect(base).toMatch(/display:\s*grid/);
+        expect(base).toMatch(/grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)/);
+        expect(base).toMatch(/gap:\s*var\(--xc-space-2\)/);
     });
 
-    it('draws each quick action as a square tile with the icon over the label', () => {
-        const buttonRules = exactBlocks('.quickActions > button');
-        expect(buttonRules.length).toBeGreaterThan(0);
-        // The More info tile sits in its menu wrapper and shares the tile rule.
-        expect(buttonRules.some((r) => /\.quickActionMoreWrap > button/.test(r.selector))).toBe(true);
-        const body = buttonRules.map((r) => r.body).join('\n');
-        expect(body).toMatch(/aspect-ratio:\s*1\s*\/\s*1/);
-        expect(body).toMatch(/flex-direction:\s*column/);
-        expect(body).toMatch(/align-items:\s*center/);
-        expect(body).toMatch(/justify-content:\s*center/);
-        // A fixed min-height taller than a phone tile would break the square.
-        expect(body).not.toMatch(/min-height:\s*\d+px/);
-        expect(body).toMatch(/min-width:\s*0/);
+    it('draws every tile 80px tall and 80px squares as many as fit from 600px', () => {
+        const tile = css.match(/(?:\.assetActionGrid)+ > \*\s*\{([^}]*)\}/)?.[1] || '';
+        expect(tile).toMatch(/block-size:\s*80px/);
+        expect(css).toMatch(/@media \(min-width: 600px\)\s*\{\s*\.assetActionGrid\s*\{\s*grid-template-columns:\s*repeat\(auto-fill,\s*80px\);/);
     });
 });
 
@@ -146,11 +124,12 @@ function tileNames(group) {
 }
 
 describe('TokenDetail quick actions render', () => {
-    it('holds Send, Receive, Exchange and More info in that order as compact tiles', async () => {
+    it('holds Send, Receive and Exchange first, in that order, as compact tiles on the Actions tab', async () => {
         renderDetail();
         await screen.findByRole('button', { name: 'Send' });
-        const group = screen.getByRole('group', { name: 'Quick actions' });
-        expect(tileNames(group)).toEqual(['Send', 'Receive', 'Exchange', 'More info']);
+        const group = screen.getByRole('group', { name: 'Actions for S18PROBE' });
+        expect(tileNames(group).slice(0, 3)).toEqual(['Send', 'Receive', 'Exchange']);
+        expect(within(group).queryByRole('button', { name: 'More info' })).toBeNull();
         expect(within(group).queryByRole('button', { name: /Market view|Trade/ })).toBeNull();
         expect(within(group).queryByRole('button', { name: 'History' })).toBeNull();
         expect(group.querySelector(`.${listRowStyles.row}`)).toBeNull();
@@ -165,71 +144,48 @@ describe('TokenDetail quick actions render', () => {
         expect(onBuy).toHaveBeenCalledTimes(1);
     });
 
-    it('keeps History in the More info menu and runs it from there', async () => {
-        const { onViewActivity } = renderDetail();
-        const more = await screen.findByRole('button', { name: 'More info' });
-        expect(more).toHaveAttribute('aria-haspopup', 'menu');
-        expect(more).toHaveAttribute('aria-expanded', 'false');
-        expect(screen.queryByRole('menu')).toBeNull();
-
-        fireEvent.click(more);
-        expect(more).toHaveAttribute('aria-expanded', 'true');
-        const menu = screen.getByRole('menu', { name: 'More info' });
-        expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent))
-            .toEqual(['History', 'Gated content', 'Holders']);
-        fireEvent.click(within(menu).getByRole('menuitem', { name: 'History' }));
-        expect(onViewActivity).toHaveBeenCalledTimes(1);
-        expect(screen.queryByRole('menu')).toBeNull();
-    });
-
-    it('focuses the menu and closes it on Escape or an outside press', async () => {
+    it('retires the More info menu: History is a tab and the other panels are Details rows', async () => {
         renderDetail();
-        const trigger = await screen.findByRole('button', { name: 'More info' });
+        await screen.findByRole('button', { name: 'Send' });
+        expect(screen.queryByRole('button', { name: 'More info' })).toBeNull();
+        expect(screen.queryByRole('menu')).toBeNull();
+        expect(within(screen.getByRole('tablist', { name: 'Coin or token view' })).getAllByRole('tab').map((tab) => tab.textContent))
+            .toEqual(['Actions', 'Details', 'History']);
 
-        fireEvent.click(trigger);
-        const history = screen.getByRole('menuitem', { name: 'History' });
-        expect(document.activeElement).toBe(history);
-        fireEvent.keyDown(window, { key: 'Escape' });
-        await waitFor(() => expect(screen.queryByRole('menu', { name: 'More info' })).toBeNull());
-        expect(document.activeElement).toBe(trigger);
-
-        fireEvent.click(trigger);
-        expect(screen.getByRole('menu', { name: 'More info' })).toBeTruthy();
-        fireEvent.mouseDown(document.body);
-        expect(screen.queryByRole('menu', { name: 'More info' })).toBeNull();
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        expect(await screen.findByRole('button', { name: 'Gated content' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Holders' })).toBeTruthy();
     });
 
     it('keeps a blocked Send visible with the reason that blocks it', async () => {
         renderDetail({ quantity: '0' });
-        const group = await screen.findByRole('group', { name: 'Quick actions' });
+        const group = await screen.findByRole('group', { name: 'Actions for S18PROBE' });
         const send = await within(group).findByRole('button', { name: 'Send' });
         await waitFor(() => expect(send).toBeDisabled());
-        const reason = within(group).getByText('No balance to send.');
-        expect(send.getAttribute('aria-describedby')).toBe(reason.id);
+        const reason = screen.getByText('No balance to send.');
+        expect(send.getAttribute('aria-describedby')).toBe(reason.closest('[id]').id);
     });
 
-    it('lists Manage in the More info menu only for the token owner', async () => {
+    it('lists Manage token in its own owner group only for the token owner', async () => {
         renderDetail({ creator: OTHER });
-        fireEvent.click(await screen.findByRole('button', { name: 'More info' }));
-        await waitFor(() => expect(screen.queryByRole('menuitem', { name: 'Manage' })).toBeNull());
+        await screen.findByRole('group', { name: 'Actions for S18PROBE' });
+        await waitFor(() => expect(screen.queryByRole('button', { name: 'Manage token' })).toBeNull());
+        expect(screen.queryByRole('group', { name: 'You issued this token' })).toBeNull();
         cleanup();
         __clearTokenInfoCache();
 
         const { onManageToken } = renderDetail({ creator: MINE });
-        const group = await screen.findByRole('group', { name: 'Quick actions' });
-        expect(within(group).queryByRole('button', { name: 'Manage' })).toBeNull();
-        fireEvent.click(within(group).getByRole('button', { name: 'More info' }));
-        const manage = await screen.findByRole('menuitem', { name: 'Manage' });
-        expect(within(screen.getByRole('menu')).getAllByRole('menuitem').map((item) => item.textContent))
-            .toEqual(['History', 'Gated content', 'Holders', 'Manage']);
-        fireEvent.click(manage);
+        const owner = await screen.findByRole('group', { name: 'You issued this token' });
+        const main = screen.getByRole('group', { name: 'Actions for S18PROBE' });
+        expect(within(main).queryByRole('button', { name: 'Manage token' })).toBeNull();
+        fireEvent.click(within(owner).getByRole('button', { name: 'Manage token' }));
         expect(onManageToken).toHaveBeenCalledTimes(1);
     });
 
-    it('keeps the same four tiles for a native coin', async () => {
+    it('keeps the Send, Receive and Exchange tiles for a native coin', async () => {
         renderDetail({ kind: 'native' });
         await screen.findByRole('button', { name: 'Send' });
-        expect(tileNames(screen.getByRole('group', { name: 'Quick actions' })))
-            .toEqual(['Send', 'Receive', 'Exchange', 'More info']);
+        expect(tileNames(screen.getByRole('group', { name: 'Actions for BTC' })).slice(0, 3))
+            .toEqual(['Send', 'Receive', 'Exchange']);
     });
 });

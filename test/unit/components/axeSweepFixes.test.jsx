@@ -9,14 +9,12 @@
 // contact legal@dankest.llc.
 
 // Guards for the fixes the axe sweep (test/e2e/layout/axe-sweep.spec.js) drove:
-// one banner per document, every menu child a menuitem, readable ticker chips.
+// one banner per document, readable ticker chips.
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, cleanup } from '@testing-library/react';
 import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
-import { PlatformSwitcher } from '../../../packages/core/src/shared/components/PlatformSwitcher.jsx';
 import { tickerColor } from '../../../packages/core/src/shared/components/BalanceList.jsx';
-import LINKS from '../../../packages/core/src/shared/platform-links.json';
 
 afterEach(() => cleanup());
 
@@ -33,15 +31,6 @@ describe('axe sweep fixes', () => {
         render(<AppHeader onMenuOpen={() => {}} onLock={() => {}} />);
         expect(screen.queryByRole('banner')).toBeNull();
         expect(screen.getByRole('region', { name: 'App header' })).not.toBeNull();
-    });
-
-    it('every child of the platform menu is a menuitem or a group', () => {
-        const current = LINKS.links[0].key;
-        render(<PlatformSwitcher current={current} />);
-        fireEvent.click(screen.getByRole('button', { name: 'XChain platform sites' }));
-        const menu = screen.getByRole('menu');
-        expect(menu.children.length).toBeGreaterThan(0);
-        for (const child of menu.children) expect(['menuitem', 'group']).toContain(child.getAttribute('role'));
     });
 
     it('every ticker chip color holds 4.5:1 against white text', () => {

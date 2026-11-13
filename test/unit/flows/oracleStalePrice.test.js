@@ -146,7 +146,7 @@ describe('Mode B oracle settlement staleness', () => {
             await drainMicrotasks();
         });
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Publish price' }));
+            fireEvent.click(utils.getByRole('button', { name: 'Publish Price' }));
             await drainMicrotasks();
         });
 

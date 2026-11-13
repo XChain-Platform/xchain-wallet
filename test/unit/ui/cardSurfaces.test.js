@@ -31,8 +31,13 @@ const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', 'release', 'test-dap
 // Any border, corner, inset or fill declaration redraws part of the card.
 const SURFACE_PROP = /^(border|padding|background)(-|$)/;
 const CARD_COMPOSES = /^(card|flush)\s+from\s+['"][^'"]*\/Card\.module\.css['"]$/;
-// The one exception to "no dashed lines": a drop zone while a file is over it.
-const DRAG_OVER = /drag-?over|dropZoneActive/i;
+// The exceptions to "no dashed lines": a drop zone while a file is over it
+// (FileField marks that state data-drop-active), a locked square action
+// tile (G12: dashed grey with a small lock), Multisig sessions' Open a signing
+// link (Layout 2 ruling, 2026-11-12: "a dashed row at the bottom"), and Create
+// bet's Add Outcome, dashed in the picked layout 3 mockup build; that last one
+// is not a stated ruling and waits on the operator.
+const DRAG_OVER = /drag-?over|dropZoneActive|data-drop-active=['"]true['"]|\.tile\.square:disabled|^\.openLinkRow$|^\.addOutcome\.addOutcome$/i;
 
 function files(directory, test) {
     return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -239,7 +244,8 @@ describe('card surfaces', () => {
         const tokens = readFileSync(join(packagesRoot, 'core/src/ui/tokens.css'), 'utf8');
         expect(tokens).toContain('--xc-card-border: 1px solid var(--xc-border);');
         expect(tokens).toContain('--xc-card-radius: var(--xc-radius-md);');
-        expect(tokens).toContain('--xc-card-pad: var(--xc-space-4);');
+        // The 8px rhythm: a card's inset is 8px everywhere.
+        expect(tokens).toContain('--xc-card-pad: var(--xc-space-2);');
         expect(tokens).toContain('--xc-card-bg: var(--xc-surface-raised);');
 
         const card = postcss.parse(readFileSync(join(packagesRoot, 'core/src/ui/Card.module.css'), 'utf8'));

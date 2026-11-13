@@ -25,9 +25,9 @@
 // uppercased it into `JDOG$` would pass the weaker assertion and still ship the
 // defect.
 //
-// Both surfaces are driven in one file on purpose. They are separate components
-// with separate state that must not drift apart on this rule, and the operator's
-// ruling moves both or neither.
+// Both entries are driven in one file on purpose: the Create-token entry now
+// renders the one Issue Token form, and the operator's ruling moves both entry
+// points or neither.
 //
 // Teeth: put `.toUpperCase()` back on either input or either params builder and
 // the lowercase cases fail. Restore `/^[A-Za-z0-9]+$/` and the symbol cases fail.
@@ -84,34 +84,23 @@ function mount(Component) {
 }
 
 /**
- * Drive the wizard's Custom template to a submitted ISSUE of `tick`.
+ * Drive one Create-token entry to a submitted ISSUE of `tick`.
  *
- * Custom because it is the template with a bare Supply field and nothing else
- * required, so the ticker is the only thing a refusal can be about.
+ * The wizard entry now renders the one Issue Token form, so both entries share
+ * one driver; the bare Ticker and Max supply fields are all a refusal can be
+ * about.
  */
 async function submitWizard(tick) {
-    mount(TokenWizard);
-    fireEvent.click(await screen.findByText('Custom'));
-    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-    const field = await screen.findByLabelText('Token name (ticker)');
-    fireEvent.change(field, { target: { value: tick } });
-    fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1000' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
-    // The wizard holds the submit until its availability lookup for a
-    // well-formed ticker settles; a refused ticker never starts one.
-    if (!tickerGrammarError(tick.trim())) {
-        await waitFor(() => expect(getTokenInfo).toHaveBeenCalledWith(expect.objectContaining({ tick })), { timeout: 3000 });
-        await act(async () => { await getTokenInfo.mock.results.at(-1).value; });
-    }
-    // A refused ticker stops at the details step, so only a valid one reaches the review.
-    const proceed = screen.queryByRole('button', { name: 'Issue token' });
-    if (proceed) fireEvent.click(proceed);
-    return field;
+    return submitForm(TokenWizard, tick);
 }
 
 /** The same, on the standalone Issue form. */
 async function submitDirect(tick) {
-    mount(IssueTokenForm);
+    return submitForm(IssueTokenForm, tick);
+}
+
+async function submitForm(Component, tick) {
+    mount(Component);
     const field = await screen.findByLabelText('Ticker');
     fireEvent.change(field, { target: { value: tick } });
     fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), {
@@ -123,7 +112,7 @@ async function submitDirect(tick) {
         await waitFor(() => expect(getTokenInfo).toHaveBeenCalledWith(expect.objectContaining({ tick })), { timeout: 3000 });
         await act(async () => { await getTokenInfo.mock.results.at(-1).value; });
     }
-    fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
     return field;
 }
 

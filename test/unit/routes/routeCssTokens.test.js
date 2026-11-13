@@ -22,7 +22,7 @@ const rawPixelExceptions = {
     'ActionsMenu.module.css': ['260px', '2px', '2px'],
     'AddAddressModal.module.css': [],
     'AddressList.wif.module.css': ['1px', '2px'],
-    'ContractScreens.module.css': ['200px'],
+    'ContractScreens.module.css': [],
     'CreateWallet.module.css': ['96px', '2px', '520px', '64px'],
 };
 
@@ -80,7 +80,7 @@ describe('route CSS design tokens (pill radii and glyphs)', () => {
     it('uses the shared pill radius for pill-shaped route elements', () => {
         expect(rule(routeCss.ParallelComposer, '.statusPill'))
             .toMatch(/border-radius:\s*var\(--xc-radius-pill\)/);
-        expect(rule(routeCss.PollDetail, '.resultTrack'))
+        expect(rule(routeCss.PollDetail, '.stackedBar'))
             .toMatch(/border-radius:\s*var\(--xc-radius-pill\)/);
         expect(rule(routeCss.Send, '.toContactName'))
             .toMatch(/border-radius:\s*var\(--xc-radius-pill\)/);

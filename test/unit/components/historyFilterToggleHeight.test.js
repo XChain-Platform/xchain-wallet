@@ -7,10 +7,13 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 describe('History toolbar', () => {
-    it('gives the Filters toggle the same control height as Export', () => {
+    // The in-page Filters toggle is retired (G04): the filter is the standard
+    // title-bar button, drawn by ListFilterMenu at the shared control size.
+    it('has no in-page Filters toggle and puts the standard filter on the title line', () => {
         const source = readFileSync('packages/core/src/shared/routes/History.jsx', 'utf8');
-        const toggle = source.slice(source.indexOf('phoneFilterToggle}>'), source.indexOf('history.filters.toggle'));
-        expect(toggle).toContain('className={styles.toolbarControl}');
-        expect(toggle).not.toContain('size="sm"');
+        expect(source).not.toContain('phoneFilterToggle}');
+        expect(source).not.toContain('history.filters.toggle');
+        expect(source).toContain('<ListFilterMenu');
+        expect(source).toContain('trailing={filterMenu}');
     });
 });

@@ -82,6 +82,13 @@ async function mountForm(Form, props = {}) {
         );
         await drainMicrotasks();
     });
+    // Every Form Standard section but the main one starts closed and its
+    // fields are hidden: open them all so the tab order covers every control.
+    await act(async () => {
+        utils.container.querySelectorAll('[data-form-section-toggle][aria-expanded="false"]')
+            .forEach((toggle) => fireEvent.click(toggle));
+        await drainMicrotasks();
+    });
     return { ...utils, composeForConfirm, composeBetForConfirm, composeVoteForConfirm };
 }
 
@@ -89,7 +96,8 @@ async function expectTabSequence(user, controls) {
     controls[0].focus();
     for (const expected of controls.slice(1)) {
         await user.tab();
-        expect(document.activeElement).toBe(expected);
+        const name = (element) => element?.getAttribute('aria-label') || element?.id || element?.textContent;
+        expect(document.activeElement, `Tab should reach ${name(expected)}, reached ${name(document.activeElement)}`).toBe(expected);
     }
 }
 
@@ -106,63 +114,75 @@ describe('protocol form keyboard operation', () => {
     it('keeps bet controls in visual order, validates Enter, and cancels review with Escape', async () => {
         const user = userEvent.setup();
         const utils = await mountForm(CreateBetFeedForm, { presetTick: 'XCHAIN' });
+        const fromSection = utils.getByRole('button', { name: 'From' });
+        const networkHelp = utils.getByRole('button', { name: 'About Network' });
         const network = await utils.findByRole('button', { name: /^Network:/ });
-        const oracle = utils.getByLabelText('Your oracle address');
+        const oracleHelp = utils.getByRole('button', { name: 'About From address' });
+        const oracle = utils.getByLabelText('From address');
         const chooseOracle = utils.getByRole('button', { name: 'Choose oracle address' });
-        const token = utils.getByRole('button', { name: /^Token bets are placed in:/ });
-        const tokenTip = utils.getByRole('button', { name: 'About Token bets are placed in' });
-        const label = utils.getByLabelText('What is being bet on');
-        const outcome0 = utils.getByLabelText('Outcome 0');
+        const marketSection = utils.getByRole('button', { name: 'Market' });
+        const questionHelp = utils.getByRole('button', { name: 'About Question' });
+        const question = utils.getByLabelText('Question');
+        const outcomesHelp = utils.getByRole('button', { name: 'About Outcomes' });
         const outcome1 = utils.getByLabelText('Outcome 1');
-        const oracleHelp = utils.getByRole('button', { name: 'About Your oracle address' });
-        const labelHelp = utils.getByRole('button', { name: 'About What is being bet on' });
-        const outcome0Help = utils.getByRole('button', { name: 'About Outcome 0' });
-        const outcome1Help = utils.getByRole('button', { name: 'About Outcome 1' });
+        const outcome2 = utils.getByLabelText('Outcome 2');
+        const addOutcome = utils.getByRole('button', { name: 'Add Outcome' });
+        const closesHelp = utils.getByRole('button', { name: 'About Closes' });
+        const closes = utils.getByLabelText('Closes');
+        const tokenHelp = utils.getByRole('button', { name: 'About Token' });
+        const token = utils.getByRole('button', { name: /^Token: XCHAIN/ });
 
+        expect(network).toBeInTheDocument();
         await expectTabSequence(user, [
-            network, oracleHelp, oracle, chooseOracle, tokenTip, token, labelHelp, label, outcome0Help, outcome0, outcome1Help, outcome1,
+            // The preset token fixes the network, so its picker is shown but not a tab stop.
+            fromSection, networkHelp, oracleHelp, oracle, chooseOracle,
+            marketSection, questionHelp, question, outcomesHelp, outcome1, outcome2, addOutcome,
+            closesHelp, closes, tokenHelp, token,
         ]);
 
-        label.focus();
+        question.focus();
         await user.keyboard('{Enter}');
         expect(utils.getByRole('alert')).toHaveTextContent('Give the market a question or title.');
         expect(utils.composeBetForConfirm).not.toHaveBeenCalled();
 
-        fireEvent.change(label, { target: { value: 'Will it rain?' } });
-        fireEvent.change(outcome0, { target: { value: 'Yes' } });
-        fireEvent.change(outcome1, { target: { value: 'No' } });
+        fireEvent.change(question, { target: { value: 'Will it rain?' } });
+        fireEvent.change(outcome1, { target: { value: 'Yes' } });
+        fireEvent.change(outcome2, { target: { value: 'No' } });
         const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 16);
-        const deadline = utils.getByLabelText('Betting closes');
-        fireEvent.change(deadline, { target: { value: tomorrow } });
-        deadline.focus();
+        fireEvent.change(closes, { target: { value: tomorrow } });
+        closes.focus();
         await user.keyboard('{Enter}');
 
-        await expectReviewThenEscape(user, utils, () => utils.getByLabelText('What is being bet on'));
+        await expectReviewThenEscape(user, utils, () => utils.getByLabelText('Question'));
         expect(utils.composeBetForConfirm).toHaveBeenCalledTimes(1);
     });
 
     it('keeps vote controls in visual order, validates Enter, and cancels review with Escape', async () => {
         const user = userEvent.setup();
         const utils = await mountForm(DelegateVoteForm, { presetTick: 'XCHAIN' });
+        // The route fixes delegate or clear, so the form has no mode switch.
+        const fromSection = utils.getByRole('button', { name: 'From' });
         const network = await utils.findByRole('button', { name: /^Network:/ });
         const networkHelp = utils.getByRole('button', { name: 'About Network' });
-        const from = utils.getByLabelText('From');
-        const fromHelp = utils.getByRole('button', { name: 'About From' });
+        const from = utils.getByLabelText('From address');
+        const fromHelp = utils.getByRole('button', { name: 'About From address' });
         const chooseSource = utils.getByRole('button', { name: 'Choose source address' });
+        const delegationSection = utils.getByRole('button', { name: 'Delegation' });
         const tokenHelp = utils.getByRole('button', { name: 'About Governance token' });
-        const actionHelp = utils.getByRole('button', { name: 'About Action' });
-        const delegateMode = utils.getByLabelText('Delegate my votes');
-        const clearMode = utils.getByLabelText('Clear my delegation');
         const token = utils.getByRole('button', { name: /^Governance token:/ });
         const delegateHelp = utils.getByRole('button', { name: 'About Delegate to address' });
         const delegateTo = utils.getByLabelText('Delegate to address');
         const contacts = utils.getByRole('button', { name: 'Open address book' });
+        const memoSection = utils.getByRole('button', { name: /^Memo/ });
         const memoHelp = utils.getByRole('button', { name: 'About Memo' });
         const memo = utils.getByLabelText('Memo');
 
+        expect(network).toBeInTheDocument();
         await expectTabSequence(user, [
-            networkHelp, network, fromHelp, from, chooseSource, actionHelp, delegateMode, clearMode, tokenHelp, token,
-            delegateHelp, delegateTo, contacts, memoHelp, memo,
+            // The preset token fixes the network, so its picker is shown but not a tab stop.
+            fromSection, networkHelp, fromHelp, from, chooseSource,
+            delegationSection, tokenHelp, token, delegateHelp, delegateTo, contacts,
+            memoSection, memoHelp, memo,
         ]);
 
         memo.focus();
@@ -181,20 +201,28 @@ describe('protocol form keyboard operation', () => {
     it('keeps stake controls in visual order, validates Enter, and cancels review with Escape', async () => {
         const user = userEvent.setup();
         const utils = await mountForm(StakeForm);
+        const fromSection = utils.getByRole('button', { name: 'From' });
         const network = await utils.findByRole('button', { name: /^Network:/ });
-        const from = utils.getByLabelText('From');
+        const networkHelp = utils.getByRole('button', { name: 'About Network' });
+        const from = utils.getByLabelText('From address');
+        const fromHelp = utils.getByRole('button', { name: 'About From address' });
         const chooseSource = utils.getByRole('button', { name: 'Choose source address' });
+        const positionSection = utils.getByRole('button', { name: 'Position' });
+        const amountHelp = utils.getByRole('button', { name: 'About Amount (XCHAIN)' });
+        const amount = utils.getByLabelText('Amount (XCHAIN)');
+        const useMax = utils.getByRole('button', { name: 'Use max available amount' });
+        const pubkeyHelp = utils.getByRole('button', { name: 'About Signing public key' });
+        const pubkey = utils.getByLabelText('Signing public key');
+        const modeSection = utils.getByRole('button', { name: /^Stake Mode/ });
+        const modeHelp = utils.getByRole('button', { name: 'About Mode' });
         const newStake = utils.getByRole('radio', { name: /New stake/ });
         const topUp = utils.getByRole('radio', { name: /Top up an existing stake/ });
-        const amount = utils.getByLabelText('Amount (XCHAIN)');
-        const pubkey = utils.getByLabelText('Signing public key');
-        const modeHelp = utils.getByRole('button', { name: 'About Mode' });
-        const amountHelp = utils.getByRole('button', { name: 'About Amount (XCHAIN)' });
-        const pubkeyHelp = utils.getByRole('button', { name: 'About Signing public key' });
 
         await expectTabSequence(user, [
-            network, from, chooseSource, modeHelp, newStake, topUp,
-            amountHelp, amount, pubkeyHelp, pubkey,
+            fromSection, networkHelp, network, fromHelp, from, chooseSource,
+            // Use max is disabled while the balance is unknown, so it is not a tab stop.
+            positionSection, amountHelp, amount, pubkeyHelp, pubkey,
+            modeSection, modeHelp, newStake, topUp,
         ]);
 
         pubkey.focus();
@@ -214,19 +242,26 @@ describe('protocol form keyboard operation', () => {
     it('keeps list controls in visual order, validates Enter, and cancels review with Escape', async () => {
         const user = userEvent.setup();
         const utils = await mountForm(ListCreateForm, { initialType: '1' });
+        const fromSection = utils.getByRole('button', { name: 'From' });
         const network = await utils.findByRole('button', { name: /^Network:/ });
+        const networkHelp = utils.getByRole('button', { name: 'About Network' });
         const from = utils.getByLabelText('From');
+        const fromHelp = utils.getByRole('button', { name: 'About From' });
         const chooseSource = utils.getByRole('button', { name: 'Choose source address' });
+        const listSection = utils.getByRole('button', { name: 'List' });
         const listTypeHelp = utils.getByRole('button', { name: 'About List type' });
         const listType = utils.getByLabelText('List type');
         const tokensHelp = utils.getByRole('button', { name: 'About Tokens' });
         const tokens = utils.getByLabelText('Tokens');
-        const picker = utils.getByRole('button', { name: 'Add from token picker' });
+        const picker = utils.getByRole('button', { name: 'Add From Token Picker' });
+        const memoSection = utils.getByRole('button', { name: /^Memo/ });
         const memoHelp = utils.getByRole('button', { name: 'About Memo' });
         const memo = utils.getByLabelText('Memo');
 
         await expectTabSequence(user, [
-            network, from, chooseSource, listTypeHelp, listType, tokensHelp, tokens, picker, memoHelp, memo,
+            fromSection, networkHelp, network, fromHelp, from, chooseSource,
+            listSection, listTypeHelp, listType, tokensHelp, tokens, picker,
+            memoSection, memoHelp, memo,
         ]);
 
         memo.focus();

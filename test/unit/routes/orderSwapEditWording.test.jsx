@@ -159,7 +159,7 @@ describe.each(VIEWS)('$noun action wording', (view) => {
         fireEvent.change(screen.getByLabelText('New expiration', { selector: 'input' }), {
             target: { value: EDIT_VALUE },
         });
-        fireEvent.click(screen.getByRole('button', { name: `Update ${view.noun}` }));
+        fireEvent.click(screen.getByRole('button', { name: `Update ${view.noun[0].toUpperCase()}${view.noun.slice(1)}` }));
 
         const intent = await screen.findByTestId('action-intent');
         const formatted = formatLocalDateTime(Number(EDIT_EXPIRATION));
@@ -183,7 +183,7 @@ describe.each(VIEWS)('$noun action wording', (view) => {
     it('shows the cancel broadcast transaction with an explorer link', async () => {
         mount(view);
         await openAction(view, 'Cancel');
-        fireEvent.click(screen.getByRole('button', { name: `Cancel ${view.noun}` }));
+        fireEvent.click(screen.getByRole('button', { name: `Cancel ${view.noun[0].toUpperCase()}${view.noun.slice(1)}` }));
         await approve();
 
         await screen.findByText('Cancel broadcast');
@@ -196,7 +196,7 @@ describe('My orders cancel refresh', () => {
         const view = VIEWS[0];
         mount(view);
         await openAction(view, 'Cancel');
-        fireEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel Order' }));
         await approve();
 
         await screen.findByText('Cancel broadcast');

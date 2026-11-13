@@ -66,7 +66,7 @@ describe('PlaceOrderPanel stress', () => {
         await settle();
         fireEvent.change(screen.getByLabelText('Price (BTC)'), { target: { value: '1' } });
         fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '1234567.90' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Place sell order' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Place Sell Order' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'Give amount exceeds your available XCHAIN balance of 1,234,567.89.',
@@ -81,7 +81,7 @@ describe('PlaceOrderPanel stress', () => {
         await settle();
         fireEvent.change(screen.getByLabelText('Price (BTC)'), { target: { value: '1' } });
         fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '1234567.89' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Place sell order' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Place Sell Order' }));
         await settle();
 
         expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1);
@@ -99,7 +99,7 @@ describe('PlaceOrderPanel stress', () => {
         fireEvent.change(screen.getByLabelText('Expiration'), { target: { value: '1d' } });
 
         vi.setSystemTime(new Date('2030-01-01T20:00:00Z'));
-        fireEvent.click(screen.getByRole('button', { name: 'Place sell order' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Place Sell Order' }));
         await settle();
 
         const params = messaging.composeForConfirm.mock.calls[0][0].actionData.params;
@@ -118,7 +118,7 @@ describe('PlaceOrderPanel stress', () => {
         fireEvent.change(screen.getByLabelText('Expiration'), { target: { value: '1d' } });
 
         vi.setSystemTime(new Date('2030-01-02T06:00:00Z'));
-        fireEvent.click(screen.getByRole('button', { name: 'Place sell order' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Place Sell Order' }));
         await settle();
 
         expect(screen.queryByRole('alert')).toBeNull();
@@ -136,7 +136,7 @@ describe('PlaceOrderPanel stress', () => {
         await settle();
         fireEvent.change(screen.getByLabelText('Price (BTC)'), { target: { value: '1' } });
         fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: typed } });
-        fireEvent.click(screen.getByRole('button', { name: 'Place sell order' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Place Sell Order' }));
         await settle();
 
         const params = messaging.composeForConfirm.mock.calls[0][0].actionData.params;
@@ -158,7 +158,7 @@ describe('PlaceOrderPanel decimal entry', () => {
         fireEvent.change(screen.getByLabelText('Price (BTC)'), { target: { value: '1' } });
         fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: typed } });
         expect(screen.getByLabelText('Size (XCHAIN)')).toHaveValue(wire);
-        fireEvent.click(screen.getByRole('button', { name: 'Place sell order' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Place Sell Order' }));
         await settle();
 
         const params = messaging.composeForConfirm.mock.calls[0][0].actionData.params;

@@ -15,7 +15,6 @@ import chainPickerStyles from '../../../packages/core/src/ui/ChainPicker.module.
 import inputStyles from '../../../packages/core/src/ui/Input.module.css';
 import tabsStyles from '../../../packages/core/src/ui/Tabs.module.css';
 import networkFilterStyles from '../../../packages/core/src/shared/components/NetworkFilter.module.css';
-import networkFilterDropdownStyles from '../../../packages/core/src/shared/components/NetworkFilterDropdown.module.css';
 import betFeedsStyles from '../../../packages/core/src/shared/routes/BetFeedsList.module.css';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -77,10 +76,14 @@ describe('route control row alignment', () => {
             }),
         );
 
-        expectSmallInput(await screen.findByLabelText('Filter contracts'));
-        expect(screen.getByRole('tab', { name: 'All' })).toHaveClass(buttonStyles.sm);
-        expect(screen.getByRole('tab', { name: 'Bitcoin' })).toHaveClass(buttonStyles.sm);
-        expect(screen.getByRole('button', { name: /Publish contract/ })).toHaveClass(buttonStyles.sm);
+        // Search now sits in the title-bar filter panel at the md size; the views are icon tabs
+        // (All, Mine, Interactions) and Publish contract is the title bar plus.
+        fireEvent.click(await screen.findByRole('button', { name: 'Filter contracts' }));
+        expectMediumInput(await screen.findByLabelText('Search contracts'));
+        for (const name of ['All', 'Mine', 'Interactions']) {
+            expect(screen.getByRole('tab', { name })).toHaveClass(tabsStyles.tab);
+        }
+        expect(screen.getByRole('button', { name: /Publish contract/ })).toHaveClass(buttonStyles.md);
     });
 
     it('keeps the betting network field and status tabs on one control contract', async () => {
@@ -95,10 +98,13 @@ describe('route control row alignment', () => {
             }),
         );
 
-        const network = await screen.findByRole('button', { name: 'Network: Bitcoin' });
-        expect(network.parentElement).toHaveClass(chainPickerStyles.md);
-        expect(network.parentElement?.parentElement).toHaveClass(betFeedsStyles.toolbarControl);
-        expect(screen.getByRole('tablist', { name: 'Filter betting markets' })).toHaveClass(tabsStyles.tabs);
+        // Network, Status and Sort are md fields in the title-bar filter panel; the views are
+        // icon tabs above the list.
+        fireEvent.click(await screen.findByRole('button', { name: 'Filter bet markets' }));
+        for (const label of ['Network', 'Status', 'Sort']) {
+            expectMediumInput(await screen.findByLabelText(label));
+        }
+        expect(screen.getByRole('tablist', { name: 'Bet market views' })).toHaveClass(tabsStyles.tabs);
     });
 
     it('keeps staking search and network filter on the md size', async () => {
@@ -113,10 +119,12 @@ describe('route control row alignment', () => {
             }),
         );
 
+        fireEvent.click(await screen.findByRole('button', { name: 'Filter staking' }));
         expectMediumInput(await screen.findByLabelText('Search staking positions'));
         const networkFilter = screen.getByRole('button', { name: /^Filter by network/ });
         expect(networkFilter.parentElement).toHaveClass(networkFilterStyles.md);
-        expect(networkFilter.parentElement?.parentElement).toHaveClass(networkFilterDropdownStyles.md);
+        // The network picker is Home's, drawn inside the title-bar filter panel under the search box.
+        expect(networkFilter.closest('[role="dialog"]')).toBe(screen.getByRole('dialog', { name: 'Filter staking' }));
     });
 
     it('keeps oracle action buttons and outcome chips on the md size', async () => {
@@ -140,8 +148,8 @@ describe('route control row alignment', () => {
             }),
         );
 
-        const view = await screen.findByRole('button', { name: 'View market' });
-        const copy = screen.getByRole('button', { name: 'Copy to a new market' });
+        const view = await screen.findByRole('button', { name: 'View Market' });
+        const copy = screen.getByRole('button', { name: 'Copy to a New Market' });
         expect(view).toHaveClass(buttonStyles.md);
         expect(copy).toHaveClass(buttonStyles.md);
 

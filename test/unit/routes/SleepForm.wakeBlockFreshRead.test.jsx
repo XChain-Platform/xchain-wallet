@@ -60,13 +60,13 @@ describe('SLEEP wake-block check reads the height fresh', () => {
 
         fireEvent.change(await screen.findByRole('slider', { name: 'Duration' }), { target: { value: '4' } });
         fireEvent.change(screen.getByLabelText('Blocks'), { target: { value: '12' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Lock address' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Lock address$/i }));
         expect(await screen.findByText(/until block 10017/)).toBeInTheDocument();
         const beforeSign = getIndexerWatermark.mock.calls.length;
         expect(getIndexerWatermark.mock.calls.every(([req]) => !req.fresh)).toBe(true);
 
         fireEvent.change(screen.getByLabelText('Type LOCK to confirm'), { target: { value: 'LOCK' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Lock address' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Lock address$/i }));
 
         expect(await screen.findByText('Wake block 10,017 has passed. Go back and choose a new duration.')).toBeInTheDocument();
         expect(getIndexerWatermark.mock.calls.slice(beforeSign).map(([req]) => req))

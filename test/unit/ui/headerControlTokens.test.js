@@ -15,7 +15,6 @@ const withoutComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 describe('header control sizing tokens', () => {
     const css = Object.fromEntries([
         'AppHeader',
-        'PlatformSwitcher',
         'NetworkStatusIndicator',
         'TotalBalanceHero',
         'HomeListFilterMenu',
@@ -24,7 +23,6 @@ describe('header control sizing tokens', () => {
     it('uses the medium control scale for header actions and select triggers', () => {
         for (const name of [
             'AppHeader',
-            'PlatformSwitcher',
             'NetworkStatusIndicator',
             // U72: the Home list's sort select became the filter-menu trigger.
             'HomeListFilterMenu',
@@ -35,7 +33,6 @@ describe('header control sizing tokens', () => {
 
         for (const name of [
             'AppHeader',
-            'PlatformSwitcher',
             'NetworkStatusIndicator',
         ]) {
             expect(css[name], name).toContain('var(--xc-control-icon-md, var(--xc-icon-md))');

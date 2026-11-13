@@ -47,7 +47,7 @@ describe('MyTokens list states and actions', () => {
         );
 
         expect(await screen.findByText('Tokens this wallet owns appear here.')).toBeInTheDocument();
-        const actions = screen.getAllByRole('button', { name: 'Create token' });
+        const actions = screen.getAllByRole('button', { name: 'Create Token' });
         fireEvent.click(actions[actions.length - 1]);
         expect(onIssue).toHaveBeenCalledTimes(1);
     });
@@ -67,7 +67,7 @@ describe('MyTokens list states and actions', () => {
         expect(screen.getByRole('status', { name: 'Loading owned tokens' })).toBeInTheDocument();
         expect(await screen.findByText('Could not load your owned tokens. Try again.')).toBeInTheDocument();
         expect(document.body.textContent).not.toContain('private transport detail');
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         await waitFor(() => expect(getOwnedTokens).toHaveBeenCalledTimes(2));
         expect(await screen.findByText('No owned tokens yet')).toBeInTheDocument();
     });
@@ -98,6 +98,8 @@ describe('ContractsList ownership and empty actions', () => {
             }),
         );
 
+        // Contracts this wallet published are on the Mine tab; All is the default.
+        fireEvent.click(await screen.findByRole('tab', { name: 'Mine' }));
         const row = await screen.findByRole('button', { name: 'Open Escrow (C:BTC:12)' });
         expect(row).toHaveTextContent('published by');
         expect(row).not.toHaveTextContent('owner');
@@ -116,9 +118,13 @@ describe('ContractsList ownership and empty actions', () => {
         );
 
         expect(await screen.findByRole('button', { name: 'Open Escrow (C:BTC:12)' })).toBeInTheDocument();
-        fireEvent.change(screen.getByLabelText('Filter contracts'), { target: { value: 'treasury' } });
+        // Search sits behind the title-line filter.
+        fireEvent.click(screen.getByRole('button', { name: 'Filter contracts' }));
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Search contracts' }), { target: { value: 'treasury' } });
         expect(await screen.findByText('No matching contracts')).toBeInTheDocument();
-        expect(screen.getByText('No published contracts')).toBeInTheDocument();
+        // Mine holds nothing at all, so it says so rather than claiming a filtered miss.
+        fireEvent.click(screen.getByRole('tab', { name: 'Mine' }));
+        expect(await screen.findByText('No published contracts')).toBeInTheDocument();
     });
 
     it('hides transport details in a retryable chain error', async () => {
@@ -132,7 +138,7 @@ describe('ContractsList ownership and empty actions', () => {
 
         expect(await screen.findByText("Couldn't load contracts. Try again.")).toBeInTheDocument();
         expect(document.body.textContent).not.toContain('private transport detail');
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         await waitFor(() => expect(getContractsForSource).toHaveBeenCalledTimes(2));
         expect(await screen.findByText('No contracts yet')).toBeInTheDocument();
     });
@@ -227,7 +233,7 @@ describe('DispensersList supported-address empty state', () => {
 
         expect(await screen.findByText(/Couldn't load some dispensers/)).toBeInTheDocument();
         expect(document.body.textContent).not.toContain('private transport detail');
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         await waitFor(() => expect(getDispensersForSource).toHaveBeenCalledTimes(2));
         expect(await screen.findByText('No dispensers yet')).toBeInTheDocument();
     });

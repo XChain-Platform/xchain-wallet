@@ -88,7 +88,7 @@ describe('ConnectedSitesSection settings controls', () => {
         expect(throttleForm.className).toMatch(/form/);
         expect(burstField.parentElement.className).toMatch(/controlRow/);
         expect(controlRowCss).toMatch(/align-items:\s*flex-end/);
-        expect(screen.getByRole('button', { name: 'Apply throttle' }).className).toMatch(/(?:^|\s)_?md_/);
+        expect(screen.getByRole('button', { name: 'Apply Throttle' }).className).toMatch(/(?:^|\s)_?md_/);
     });
 
     it('aligns the md manual block action beside its md field', async () => {
@@ -101,7 +101,7 @@ describe('ConnectedSitesSection settings controls', () => {
         expect(blockForm.className).toMatch(/form/);
         expect(originField.parentElement.className).toMatch(/controlRow/);
         expect(controlRowCss).toMatch(/align-items:\s*flex-end/);
-        expect(screen.getByRole('button', { name: 'Block origin' }).className).toMatch(/(?:^|\s)_?md_/);
+        expect(screen.getByRole('button', { name: 'Block Origin' }).className).toMatch(/(?:^|\s)_?md_/);
     });
 
     it('makes each form submit a named green action with an icon and tips every field', async () => {
@@ -112,8 +112,8 @@ describe('ConnectedSitesSection settings controls', () => {
         messaging.deleteConnectedSite = vi.fn();
         render(<ConnectedSitesSection />);
 
-        const blockOrigin = await screen.findByRole('button', { name: 'Block origin' });
-        const apply = screen.getByRole('button', { name: 'Apply throttle' });
+        const blockOrigin = await screen.findByRole('button', { name: 'Block Origin' });
+        const apply = screen.getByRole('button', { name: 'Apply Throttle' });
         for (const submit of [blockOrigin, apply]) {
             expect(submit.className).toMatch(/success/);
             expect(submit.querySelector('svg')).not.toBeNull();
@@ -438,13 +438,13 @@ describe('ConnectedSitesSection settings controls', () => {
         messaging.clearBlocklistAuditLog = vi.fn(async () => {});
         render(<ConnectedSitesSection />);
 
-        const clear = await screen.findByRole('button', { name: 'Clear history' });
+        const clear = await screen.findByRole('button', { name: 'Clear History' });
         expect(clear.className).toMatch(/danger/);
         fireEvent.click(clear);
 
         expect(messaging.clearBlocklistAuditLog).not.toHaveBeenCalled();
         expect(screen.getByRole('dialog', { name: 'Clear site block history?' })).toBeTruthy();
-        fireEvent.click(screen.getAllByRole('button', { name: 'Clear history' }).at(-1));
+        fireEvent.click(screen.getAllByRole('button', { name: 'Clear History' }).at(-1));
 
         await waitFor(() => expect(messaging.clearBlocklistAuditLog).toHaveBeenCalledTimes(1));
     });
@@ -456,7 +456,7 @@ describe('ConnectedSitesSection settings controls', () => {
         expect(burst.className).toMatch(/input/);
         fireEvent.change(burst, { target: { value: '' } });
         fireEvent.change(windowSeconds, { target: { value: '' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Apply throttle' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Apply Throttle' }));
 
         await waitFor(() => expect(update).toHaveBeenCalledWith({
             signThrottle: {

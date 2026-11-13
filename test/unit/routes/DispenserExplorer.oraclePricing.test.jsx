@@ -37,17 +37,24 @@ function ruleBody(text, selector) {
     return match?.[2] || '';
 }
 
+// Every block for one media query, joined: a stylesheet may hold the same
+// query more than once.
 function mediaBlock(text, query) {
-    const start = text.indexOf(`@media ${query}`);
-    if (start < 0) return '';
-    const open = text.indexOf('{', start);
-    let depth = 0;
-    for (let index = open; index < text.length; index += 1) {
-        if (text[index] === '{') depth += 1;
-        if (text[index] === '}') depth -= 1;
-        if (depth === 0) return text.slice(open + 1, index);
+    const blocks = [];
+    let start = text.indexOf(`@media ${query}`);
+    while (start >= 0) {
+        const open = text.indexOf('{', start);
+        let depth = 0;
+        let end = text.length;
+        for (let index = open; index < text.length; index += 1) {
+            if (text[index] === '{') depth += 1;
+            if (text[index] === '}') depth -= 1;
+            if (depth === 0) { end = index; break; }
+        }
+        blocks.push(text.slice(open + 1, end));
+        start = text.indexOf(`@media ${query}`, end);
     }
-    return '';
+    return blocks.join('\n');
 }
 
 function renderExplorer(extra = {}) {
@@ -67,7 +74,9 @@ function renderExplorer(extra = {}) {
 }
 
 async function searchFor(token) {
-    await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
+    // The search box is the page's first element; Popular, Newest and Best
+    // deals list under it until something is typed.
+    await waitFor(() => expect(screen.getByRole('searchbox')).toBeTruthy());
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: token } });
     fireEvent.click(screen.getByRole('button', { name: /search/i }));
 }
@@ -85,7 +94,8 @@ describe('DispenserExplorer result price for an oracle-priced dispenser', () => 
         await searchFor('MGRTEST');
         expect(await screen.findAllByText(/0\.05 USD \(oracle ndDEAA/))
             .not.toHaveLength(0);
-        expect(screen.getAllByText('Open')).not.toHaveLength(0);
+        // A result card lists open dispensers only, so it prints no status word
+        // (and never the raw indexer status).
         expect(screen.queryAllByText('valid')).toHaveLength(0);
         expect(document.body.textContent).not.toMatch(/per 0 DOGE/);
         expect(messaging.oracleFeeds).toHaveBeenCalledWith(expect.objectContaining({ address: ORACLE }));
@@ -136,15 +146,17 @@ describe('DispenserExplorer result price for an oracle-priced dispenser', () => 
 
         expect(await screen.findAllByText(/0\.05 USD/))
             .not.toHaveLength(0);
-        expect(screen.getAllByTestId('dispenser-result-facts').some(
-            (facts) => facts.closest('button')?.textContent?.includes('#open'),
-        )).toBe(true);
-        expect(screen.getAllByText('Open')).not.toHaveLength(0);
-        expect(screen.queryByText(/#closed/)).toBeNull();
-        expect(screen.queryByText(/#empty/)).toBeNull();
+        // Of the three rows a chain returns, only the open one gets a card, so
+        // each group (one per searched chain) holds exactly one card.
+        const cards = screen.getAllByTestId('dispenser-result-facts');
+        const groups = new Set(cards.map((facts) => facts.closest('[id^="dispenser-token-"]')));
+        expect(groups.size).toBe(cards.length);
+        cards.forEach((facts) => {
+            expect(facts.closest('button')?.getAttribute('aria-label')).toMatch(/^1 MGRTEST for 0\.05 USD/);
+        });
     });
 
-    it.each([320, 360])('renders separate give, price, and status rows at %ipx', async (width) => {
+    it.each([320, 360])('renders the give, price and chain lines of a result card at %ipx', async (width) => {
         Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
         renderExplorer({
             oracleFeeds: vi.fn().mockResolvedValue([{
@@ -155,13 +167,12 @@ describe('DispenserExplorer result price for an oracle-priced dispenser', () => 
 
         const [facts] = await screen.findAllByTestId('dispenser-result-facts');
         expect(facts).toHaveAttribute('role', 'list');
-        expect(within(facts).getByText('Give per fill')).toBeInTheDocument();
+        // One card: the give and the price share the title line, the chain and
+        // seller sit on the line under it.
         expect(within(facts).getByText('1 MGRTEST')).toBeInTheDocument();
-        expect(within(facts).getByText('Price per fill')).toBeInTheDocument();
         expect(within(facts).getByText(/0\.05 USD/)).toBeInTheDocument();
-        expect(within(facts).getByText('Status')).toBeInTheDocument();
-        expect(within(facts).getByText('Open')).toBeInTheDocument();
-        expect(facts.closest('button')?.className).toMatch(/resultRow/);
+        expect(within(facts).getAllByRole('listitem').length).toBeGreaterThanOrEqual(2);
+        expect(facts.closest('button')?.className).toMatch(/card/);
     });
 
     it('pins the no-overflow rules shared by all four dispenser screens', () => {
@@ -171,10 +182,6 @@ describe('DispenserExplorer result price for an oracle-priced dispenser', () => 
         expect(ruleBody(listNarrow, '.row')).toMatch(/grid-template-columns:\s*40px minmax\(0, 1fr\)/);
         expect(ruleBody(listNarrow, '.status')).toMatch(/overflow-wrap:\s*anywhere/);
 
-        // The kit Button's label span is what lays out a result card, so the
-        // column rule reaches it; otherwise ticker, terms and number sit side by side.
-        const explorerCss = readCss('packages/core/src/shared/routes/DispenserExplorer.module.css');
-        expect(ruleBody(explorerCss, '.resultRow > span')).toMatch(/flex-direction:\s*column/);
 
         const detailNarrow = mediaBlock(readCss(
             'packages/core/src/shared/routes/DispenserDetail.module.css',
@@ -189,9 +196,12 @@ describe('DispenserExplorer result price for an oracle-priced dispenser', () => 
         expect(ruleBody(listRow, '.content')).toMatch(/min-width:\s*0/);
         expect(ruleBody(listRow, '.trailing')).toMatch(/min-width:\s*0;[\s\S]*max-width:\s*50%/);
 
-        const explorer = readCss('packages/core/src/shared/routes/DispenserExplorer.module.css');
-        expect(ruleBody(explorer, '.resultRow')).toMatch(/flex-direction:\s*column/);
-        expect(ruleBody(explorer, '.factValue')).toMatch(/overflow-wrap:\s*anywhere/);
+        // A result card stacks its lines in a shrinkable column and wraps long text.
+        const card = readCss('packages/core/src/shared/components/DispenserExplorerCard.module.css');
+        expect(ruleBody(card, '.card')).toMatch(/min-width:\s*0/);
+        expect(ruleBody(card, '.body')).toMatch(/flex-direction:\s*column/);
+        expect(ruleBody(card, '.body')).toMatch(/min-width:\s*0/);
+        expect(ruleBody(card, '.title')).toMatch(/overflow-wrap:\s*anywhere/);
 
         const form = readCss('packages/core/src/shared/routes/IssueTokenForm.module.css');
         expect(ruleBody(form, '.picker')).toMatch(/max-width:\s*100%/);

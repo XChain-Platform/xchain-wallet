@@ -9,8 +9,9 @@ const source = readFileSync(join(import.meta.dirname, '..', '..', '..', 'package
 const css = readFileSync(join(import.meta.dirname, '..', '..', '..', 'packages', 'core', 'src', 'shared', 'routes', 'AddressList.module.css'), 'utf8');
 
 describe('address type tabs', () => {
-    it('uses the shared underline-only Tabs component', () => {
-        expect(source).toMatch(/<Tabs\s+[\s\S]*?aria-label=\{t\('routes\.addressList\.filterByAddressType'\)\}/);
+    it('picks the address type from the shared IconSelect in the title-bar filter panel', () => {
+        expect(source).toMatch(/<ListFilterMenu[\s\S]*?<IconSelect\s+[\s\S]*?aria-label=\{t\('routes\.addressList\.filterByAddressType'\)\}/);
+        expect(source).not.toMatch(/<Tabs\b/);
         expect(source).toMatch(/value=\{sourceFilter\}/);
         expect(source).toMatch(/onChange=\{setSourceFilter\}/);
     });

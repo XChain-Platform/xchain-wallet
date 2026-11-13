@@ -15,7 +15,7 @@
 // content: every element there is a ListPage or FormPage root.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import React from 'react';
 
 vi.mock('@xchain-wallet/core/ui', async (importOriginal) => {
@@ -35,8 +35,20 @@ vi.mock('@xchain-wallet/core/ui', async (importOriginal) => {
         ),
     };
 });
+// The Form Standard's FormFrame imports FormPage by path, so that import is
+// wrapped the same way.
+vi.mock('../../../packages/core/src/ui/FormPage.jsx', async (importOriginal) => {
+    const actual = await importOriginal();
+    return {
+        ...actual,
+        FormPage: (props) => (
+            <div data-xc-template="FormPage"><actual.FormPage {...props} /></div>
+        ),
+    };
+});
 
 const { MessagingProvider } = await import('../../../packages/core/src/shared/MessagingProvider.jsx');
+const { publishWalletModes, resetWalletModes } = await import('../../../packages/core/src/shared/hooks/useWalletMode.js');
 const { TokenWizard } = await import('../../../packages/core/src/shared/routes/TokenWizard.jsx');
 
 const ADDRESSES = {
@@ -50,9 +62,12 @@ const ADDRESSES = {
 };
 
 function mountWizard({ walletMode = 'full', messagingOverrides = {} } = {}) {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
-        getSettings: vi.fn().mockResolvedValue({ walletMode }),
+        getSettings: vi.fn().mockResolvedValue({}),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'w', name: 'W', walletMode }]),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         composeForConfirm: vi.fn().mockResolvedValue({
             psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 0,
@@ -83,102 +98,31 @@ function expectTemplatedStage() {
     expect(bare).toEqual([]);
 }
 
-async function reachDetails() {
-    fireEvent.click(await screen.findByText('Meme token'));
-    await screen.findByLabelText('Fee paid by');
-    expectTemplatedStage();
-    fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
-    fireEvent.change(screen.getByLabelText('Token name (ticker)'), { target: { value: 'PAGED' } });
-    fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1' } });
-}
-
-async function approveFromReview() {
-    fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
-    await screen.findByTestId('confirm-modal');
-    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'pw' } });
-    fireEvent.click(screen.getByTestId('confirm-approve'));
-}
-
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     localStorage.clear();
     delete navigator.onLine;
 });
 
-describe('TokenWizard stages sit inside a page template', () => {
-    it('draws the template stage, progress caption included, inside ListPage', async () => {
+// The Issue a token wizard is retired: TokenWizard is the one Issue token
+// form, so the template, network, details and review steps (and their "Step 1
+// of 4" captions) are no longer shown. The form itself must still sit inside a
+// page template.
+describe('TokenWizard is the one Issue token form inside a page template', () => {
+    it('opens straight on the Issue Token form, with no template step or progress caption', async () => {
         mountWizard();
-        await screen.findByText('Step 1 of 4: Template');
+        await screen.findByRole('form', { name: 'Issue Token' });
+        expect(screen.queryByText(/Step \d of 4/)).toBeNull();
+        expect(screen.queryByText('Meme token')).toBeNull();
         expectTemplatedStage();
     });
 
-    it('draws the network, details and review stages inside FormPage', async () => {
+    it('draws the form inside FormPage with the Network field first and one submit action', async () => {
         mountWizard();
-        await reachDetails();
-        expectTemplatedStage();
-        fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
-        await screen.findByText('Step 4 of 4: Review');
-        expectTemplatedStage();
-    });
-
-    it('carries the offline note in the template notice slot at every editing stage', async () => {
-        Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
-        mountWizard();
-        await screen.findByText('Step 1 of 4: Template');
-        expectTemplatedStage();
-        await reachDetails();
-        expect(screen.getAllByText('Creating a token needs a network connection.')).toHaveLength(1);
-        expectTemplatedStage();
-        fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
-        await screen.findByText('Step 4 of 4: Review');
-        expect(screen.getAllByText('Creating a token needs a network connection.')).toHaveLength(1);
-        expectTemplatedStage();
-    });
-
-    it('carries the unfinished-draft banner in the template notice slot', async () => {
-        mountWizard();
-        await reachDetails();
-        cleanup();
-        mountWizard();
-        await screen.findByText('Step 1 of 4: Template');
-        expect(await screen.findByRole('button', { name: /restore/i })).toBeTruthy();
-        expectTemplatedStage();
-    });
-
-    it('draws the unsigned watcher result inside ListPage', async () => {
-        mountWizard({
-            walletMode: 'watcher',
-            messagingOverrides: {
-                buildActionPsbtRequest: vi.fn().mockResolvedValue({
-                    psbtHex: '70736274ff00', chainId: 'bitcoin-mainnet',
-                }),
-            },
-        });
-        await reachDetails();
-        fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
-        fireEvent.submit(await screen.findByRole('form', { name: 'Review token issuance' }));
-        await screen.findByLabelText('Unsigned transaction code');
-        expectTemplatedStage();
-    });
-
-    it('draws the signed-not-broadcast result inside ListPage', async () => {
-        const messaging = mountWizard({
-            messagingOverrides: { issueToken: vi.fn().mockResolvedValue({ queued: true }) },
-        });
-        await reachDetails();
-        fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
-        await approveFromReview();
-        await waitFor(() => expect(messaging.issueToken).toHaveBeenCalledTimes(1));
-        await screen.findByTestId('result-screen-notice');
-        expectTemplatedStage();
-    });
-
-    it('draws the issued result inside ListPage', async () => {
-        mountWizard();
-        await reachDetails();
-        fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
-        await approveFromReview();
-        await screen.findByText('Token issued');
+        const form = await screen.findByRole('form', { name: 'Issue Token' });
+        expect(form.querySelector('[aria-label="Network: Bitcoin"]')).not.toBeNull();
+        expect(document.querySelector('button[type="submit"]')).not.toBeNull();
         expectTemplatedStage();
     });
 });

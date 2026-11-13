@@ -78,7 +78,7 @@ describe('DeployContractForm resuming an unfinished publish', () => {
         let utils;
         await domAct(async () => { utils = mount(records); await drain(); });
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Resume publishing' }));
+            fireEvent.click(utils.getByRole('button', { name: 'Resume Publishing' }));
             await drain();
         });
         return utils;
@@ -109,7 +109,7 @@ describe('DeployContractForm resuming an unfinished publish', () => {
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Resume publishing' }));
+            fireEvent.click(utils.getByRole('button', { name: 'Resume Publishing' }));
             await drain();
         });
 
@@ -130,7 +130,7 @@ describe('DeployContractForm resuming an unfinished publish', () => {
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Resume publishing' }));
+            fireEvent.click(utils.getByRole('button', { name: 'Resume Publishing' }));
             await drain();
         });
         expect(utils.getByLabelText('Gas limit')).toBeDisabled();
@@ -169,7 +169,7 @@ describe('DeployContractForm discarding an unfinished publish', () => {
             await drain();
         });
         expect(cleared).toEqual([]);
-        expect(utils.getByRole('button', { name: 'Resume publishing' })).toBeInTheDocument();
+        expect(utils.getByRole('button', { name: 'Resume Publishing' })).toBeInTheDocument();
 
         await domAct(async () => {
             fireEvent.click(utils.getByRole('button', { name: 'Discard' }));
@@ -180,7 +180,7 @@ describe('DeployContractForm discarding an unfinished publish', () => {
             await drain();
         });
         expect(cleared).toEqual(['run-1']);
-        expect(utils.queryByRole('button', { name: 'Resume publishing' })).toBeNull();
+        expect(utils.queryByRole('button', { name: 'Resume Publishing' })).toBeNull();
     });
 
     it('discards at once when no chunk has been sent', async () => {
@@ -216,7 +216,8 @@ describe('DeployContractForm review of a chunked publish', () => {
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Publish contract' }));
+            // The standard action label is Title Case.
+            fireEvent.click(utils.getByRole('button', { name: 'Publish Contract' }));
             await drain();
         });
         return utils;
@@ -225,7 +226,8 @@ describe('DeployContractForm review of a chunked publish', () => {
     it('says the network fee is paid for every transaction of the run', async () => {
         const utils = await review({ single: false, totalChunks: 2, codeHash: 'ab' });
 
-        expect(utils.getByRole('heading', { name: 'Review publish' })).toBeInTheDocument();
+        // The review title is Title Case.
+        expect(utils.getByRole('heading', { name: 'Review Publish' })).toBeInTheDocument();
         expect(utils.getByText('Network fee').nextSibling).toHaveTextContent(/ for each of 3 transactions$/);
     });
 });

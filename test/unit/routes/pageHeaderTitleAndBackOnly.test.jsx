@@ -140,11 +140,11 @@ describe('My lists', () => {
             onCreateUnionList: vi.fn(),
         });
         await screen.findByText('No lists yet');
-        expect(screen.getAllByRole('button', { name: 'Create list' })).toHaveLength(1);
-        expect(actionsRow()).not.toContainElement(screen.getByRole('button', { name: 'Create list' }));
-        expect(actionsRow()).toContainElement(screen.getByRole('button', { name: 'Shared lists' }));
-        expect(actionsRow()).toContainElement(screen.getByRole('button', { name: 'Create union list' }));
-        expect(headerActions('My lists')).toEqual([]);
+        expect(screen.getAllByRole('button', { name: 'Create List' })).toHaveLength(1);
+        expect(actionsRow()).not.toContainElement(screen.getByRole('button', { name: 'Create List' }));
+        expect(actionsRow()).toContainElement(screen.getByRole('button', { name: 'Shared Lists' }));
+        expect(actionsRow()).toContainElement(screen.getByRole('button', { name: 'Create Union List' }));
+        expect(headerActions('My Lists')).toEqual([]);
     });
 
     it('moves Create list into the actions row once there are lists', async () => {
@@ -153,25 +153,28 @@ describe('My lists', () => {
             onCreateList: vi.fn(),
         });
         await screen.findByRole('button', { name: /Open .*7/ });
-        const create = screen.getAllByRole('button', { name: 'Create list' });
+        const create = screen.getAllByRole('button', { name: 'Create List' });
         expect(create).toHaveLength(1);
         expect(actionsRow()).toContainElement(create[0]);
-        expect(headerActions('My lists')).toEqual([]);
+        expect(headerActions('My Lists')).toEqual([]);
     });
 });
 
+// The approved redesign (G02, G04) puts a list page's filter and its create plus in the title
+// bar, and the empty state is text only, so the plus is offered exactly once.
 describe('My dispensers', () => {
-    it('puts Create dispenser in the actions row and offers it once on an empty list', async () => {
+    it('puts the New dispenser plus in the title bar and offers it once on an empty list', async () => {
         const onCreateDispenser = vi.fn();
         mount(DispensersList, {
             getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [{ address: ADDRESS }] }),
             getDispensersForSource: vi.fn().mockResolvedValue([]),
         }, { activeAccountId: 'account-1', onCreateDispenser, onOpenDispenser: vi.fn() });
         await screen.findByText('No dispensers yet');
-        const create = screen.getAllByRole('button', { name: 'Create dispenser' });
+        const create = screen.getAllByRole('button', { name: 'New dispenser' });
         expect(create).toHaveLength(1);
+        expect(screen.queryByRole('button', { name: 'Create dispenser' })).toBeNull();
         expect(actionsRow()).toBeNull();
-        expect(headerActions('My dispensers')).toEqual([]);
+        expect(headerActions('My Dispensers')).toContain(create[0]);
         fireEvent.click(create[0]);
         expect(onCreateDispenser).toHaveBeenCalledOnce();
     });
@@ -187,8 +190,8 @@ describe('Messaging', () => {
             listContacts: vi.fn().mockResolvedValue([]),
             signerReady: vi.fn().mockResolvedValue({ ready: false }),
         }, { activeAccountId: 'account-1', onCompose });
-        await screen.findByRole('button', { name: 'Unlock inbox' });
-        const compose = screen.getByRole('button', { name: 'New conversation' });
+        await screen.findByRole('button', { name: 'Unlock Inbox' });
+        const compose = screen.getByRole('button', { name: 'New Conversation' });
         expect(actionsRow()).toContainElement(compose);
         expect(headerActions('Messaging')).toEqual([]);
         fireEvent.click(compose);
@@ -205,24 +208,24 @@ describe('Messaging', () => {
             getMessagingInboxSweep: vi.fn().mockResolvedValue({ messages: [], addresses: [], errors: [] }),
         }, { activeAccountId: 'account-1', onCompose: vi.fn() });
         await screen.findByText('No messages yet');
-        expect(screen.getByRole('button', { name: 'New message' })).toBeTruthy();
-        expect(screen.queryByRole('button', { name: 'New conversation' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'New Message' })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'New Conversation' })).toBeNull();
         expect(headerActions('Messaging')).toEqual([]);
     });
 });
 
 describe('Addresses', () => {
-    it('keeps the add and import menu in the actions row, not the page header', async () => {
+    it('keeps the add and import menu as the plus in the title bar, with no actions row', async () => {
         mount(AddressList, {
             getAddressesByChain: vi.fn().mockResolvedValue({
                 [CHAIN]: [{ id: 'address-1', address: ADDRESS, source: 'hd', role: 'receive' }],
             }),
         });
         const add = await screen.findByRole('button', { name: 'Add or import address' });
-        expect(actionsRow()).toContainElement(add);
-        expect(headerActions('Addresses')).toEqual([]);
+        expect(actionsRow()).toBeNull();
+        expect(headerActions('Addresses')).toContain(add);
         fireEvent.click(add);
-        expect(screen.getByRole('menuitem', { name: 'Add address' })).toBeTruthy();
+        expect(screen.getByRole('menuitem', { name: 'Add Address' })).toBeTruthy();
     });
 });
 
@@ -231,38 +234,47 @@ describe('Staking', () => {
         getAddressesByChain: vi.fn().mockResolvedValue({}),
     }, { activeAccountId: 'account-1', onNewStake: props.onNewStake, onOpenStake: vi.fn() });
 
-    it('keeps the page header bare on an empty list', async () => {
+    it('keeps the title bar to the filter and the New stake plus on an empty list', async () => {
         const onNewStake = vi.fn();
         staking({ onNewStake });
         await screen.findByText('No staking address');
-        expect(headerActions('Staking')).toEqual([]);
+        const names = headerActions('Staking').map((button) => button.getAttribute('aria-label'));
+        expect(names).toHaveLength(2);
+        expect(names[1]).toBe('New Stake');
+        expect(actionsRow()).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'New Stake' }));
+        expect(onNewStake).toHaveBeenCalledOnce();
     });
 });
 
 describe('My orders and My swaps', () => {
-    it('offers Create an order once on an empty list and keeps the page header bare', async () => {
+    it('offers New order once, as the title bar plus, on an empty list', async () => {
         const onCreateOrder = vi.fn();
         mount(MyOrdersView, {
             getAddressesByChain: vi.fn().mockResolvedValue({}),
             getOrdersForAddress: vi.fn().mockResolvedValue([]),
         }, { onCreateOrder });
         await screen.findByText('No orders yet');
-        expect(screen.getAllByRole('button', { name: /^(New order|Create an order)$/ })).toHaveLength(1);
+        const create = screen.getAllByRole('button', { name: /^(New order|Create an order)$/ });
+        expect(create).toHaveLength(1);
+        expect(create[0].getAttribute('aria-label')).toBe('New order');
         expect(actionsRow()).toBeNull();
-        expect(headerActions('My orders')).toEqual([]);
-        fireEvent.click(screen.getByRole('button', { name: 'Create an order' }));
+        expect(headerActions('My Orders')).toContain(create[0]);
+        fireEvent.click(create[0]);
         expect(onCreateOrder).toHaveBeenCalledOnce();
     });
 
-    it('offers Create a swap once on an empty list and keeps the page header bare', async () => {
+    it('offers New swap once, as the title bar plus, on an empty list', async () => {
         mount(MySwapsView, {
             getAddressesByChain: vi.fn().mockResolvedValue({}),
             getSwapsForAddress: vi.fn().mockResolvedValue([]),
         }, { onCreateSwap: vi.fn() });
         await screen.findByText('No swaps yet');
-        expect(screen.getAllByRole('button', { name: /^(New swap|Create a swap)$/ })).toHaveLength(1);
+        const create = screen.getAllByRole('button', { name: /^(New swap|Create a swap)$/ });
+        expect(create).toHaveLength(1);
+        expect(create[0].getAttribute('aria-label')).toBe('New swap');
         expect(actionsRow()).toBeNull();
-        expect(headerActions('My swaps')).toEqual([]);
+        expect(headerActions('My Swaps')).toContain(create[0]);
     });
 });
 
@@ -275,9 +287,11 @@ describe('My tokens', () => {
                 { chainId: CHAIN, tick: 'DANKEST', description: 'Test token', locked: false },
             ]),
         }, { onIssue, onSelectTick: vi.fn() });
-        const create = await screen.findByRole('button', { name: 'Create token' });
+        const create = await screen.findByRole('button', { name: 'Create Token' });
         expect(actionsRow()).toBeNull();
-        expect(headerActions('My tokens')).toEqual([create]);
+        // The title bar holds the filter first and the Create token plus at the far right.
+        expect(headerActions('My Tokens')).toHaveLength(2);
+        expect(headerActions('My Tokens').at(-1)).toBe(create);
         expect(screen.queryByRole('button', { name: 'Issue new token' })).toBeNull();
         fireEvent.click(create);
         expect(onIssue).toHaveBeenCalledOnce();
@@ -290,8 +304,9 @@ describe('My tokens', () => {
         }, { onIssue: vi.fn(), onSelectTick: vi.fn() });
         await screen.findByText('No owned tokens yet');
         expect(screen.queryByRole('button', { name: 'Issue new token' })).toBeNull();
-        expect(screen.getAllByRole('button', { name: 'Create token' })).toHaveLength(2);
-        expect(headerActions('My tokens')).toHaveLength(1);
+        // The header icon button and the empty-state button share the Title Case name.
+        expect(screen.getAllByRole('button', { name: 'Create Token' })).toHaveLength(2);
+        expect(headerActions('My Tokens')).toHaveLength(2);
     });
 });
 
@@ -299,11 +314,11 @@ describe('Payments due', () => {
     it('puts Refresh payments in the actions row, not the page header', async () => {
         const onBack = vi.fn();
         mount(ObligationsView, { getAutopayStatus: vi.fn().mockResolvedValue(null) }, { onPay: vi.fn(), onBack });
-        const refresh = await screen.findByRole('button', { name: 'Refresh payments' });
+        const refresh = await screen.findByRole('button', { name: 'Refresh Payments' });
         expect(actionsRow()).toContainElement(refresh);
-        expect(headerActions('Payments due')).toEqual([]);
+        expect(headerActions('Payments Due')).toEqual([]);
         const back = screen.getByRole('button', { name: 'Back to previous screen' });
-        expect(pageHeaderOf('Payments due')).toContainElement(back);
+        expect(pageHeaderOf('Payments Due')).toContainElement(back);
         fireEvent.click(back);
         expect(onBack).toHaveBeenCalledOnce();
     });
@@ -321,9 +336,9 @@ describe('Rename forms', () => {
         const onRenamed = vi.fn();
         mount(RenameWalletForm, messaging, { initialName: 'Primary', onRenamed });
         const input = await screen.findByLabelText('Wallet name');
-        expect(headerActions('Rename wallet')).toEqual([]);
+        expect(headerActions('Edit Wallet')).toEqual([]);
         fireEvent.change(input, { target: { value: 'Spending' } });
-        const save = screen.getByRole('button', { name: 'Rename wallet' });
+        const save = screen.getByRole('button', { name: 'Save Changes' });
         expect(save.closest('form')).toBeTruthy();
         fireEvent.click(save);
         await waitFor(() => expect(onRenamed).toHaveBeenCalled());
@@ -333,9 +348,9 @@ describe('Rename forms', () => {
         const onRenamed = vi.fn();
         mount(RenameAccountForm, messaging, { initialName: 'Primary', onRenamed });
         const input = await screen.findByLabelText('Account name');
-        expect(headerActions('Rename account')).toEqual([]);
+        expect(headerActions('Edit Account')).toEqual([]);
         fireEvent.change(input, { target: { value: 'Spending' } });
-        const save = screen.getByRole('button', { name: 'Rename account' });
+        const save = screen.getByRole('button', { name: 'Save Changes' });
         expect(save.closest('form')).toBeTruthy();
         fireEvent.click(save);
         await waitFor(() => expect(onRenamed).toHaveBeenCalled());

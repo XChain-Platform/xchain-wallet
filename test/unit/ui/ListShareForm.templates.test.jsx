@@ -147,7 +147,7 @@ function listPageOf(node) {
 /** Confirms SHARE, reviews and approves through the confirm screen. */
 async function share(messaging) {
     fireEvent.change(await screen.findByLabelText('Type SHARE to confirm'), { target: { value: 'SHARE' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Share list' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Share List' }));
     await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
     const approve = await screen.findByTestId('confirm-approve');
     await waitFor(() => expect(approve.disabled).toBe(false));
@@ -198,7 +198,8 @@ describe('ListShareForm lays out every page state through a template', () => {
         const body = source.slice(start);
         const calls = [...body.matchAll(/\bwrap\(\s*<\s*([A-Za-z]*)/g)].map((match) => match[1]);
         expect(calls.length).toBeGreaterThan(0);
-        const bare = calls.filter((tag) => tag !== 'ListPage' && tag !== 'FormPage');
+        // FormFrame is the Form Standard's template (it wraps FormPage).
+        const bare = calls.filter((tag) => tag !== 'ListPage' && tag !== 'FormPage' && tag !== 'FormFrame');
         expect(bare).toEqual([]);
     });
 });

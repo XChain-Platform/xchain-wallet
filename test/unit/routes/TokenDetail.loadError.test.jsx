@@ -45,10 +45,9 @@ const CHAIN = 'bitcoin-regtest';
 const MINE = 'bcrt1qmineminemineminemineminemineminemine0';
 const NOTICE = /Token details could not be loaded from the explorer/;
 
-/** Opens the More info menu and returns its Manage entry. */
+/** Returns the Manage token tile, which the Actions tab (open by default) shows to the owner. */
 async function findManage() {
-    fireEvent.click(await screen.findByRole('button', { name: 'More info' }));
-    return screen.findByRole('menuitem', { name: 'Manage' });
+    return screen.findByRole('button', { name: 'Manage token' });
 }
 
 function renderDetail(getTokenInfo) {
@@ -98,7 +97,10 @@ describe('TokenDetail on an explorer failure', () => {
         const notice = await screen.findByText(NOTICE);
         expect(screen.getAllByText(NOTICE)).toHaveLength(1);
         expect(screen.queryByText('No additional information')).toBeNull();
-        const hero = screen.getByRole('region', { name: 'LOADERR balance' });
+        // The balance card is the region named by its caption and holding the balance summary.
+        const hero = screen.getAllByRole('region')
+            .find((el) => el.querySelector('[aria-label="Balance summary"]'));
+        expect(hero).toBeTruthy();
         expect(notice.compareDocumentPosition(hero) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 

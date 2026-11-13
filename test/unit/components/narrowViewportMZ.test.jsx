@@ -26,7 +26,6 @@ vi.mock('../../../packages/core/src/shared/hooks/useHaptic.js', async () => {
 
 import { NetworkFilter } from '../../../packages/core/src/shared/components/NetworkFilter.jsx';
 import { NoticeModal } from '../../../packages/core/src/shared/components/NoticeModal.jsx';
-import { PlatformSwitcher } from '../../../packages/core/src/shared/components/PlatformSwitcher.jsx';
 import { ToastHost, preloadToastStack, useToast } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { TokenField } from '../../../packages/core/src/shared/components/TokenField.jsx';
 import { ResultScreen } from '../../../packages/core/src/shared/components/ResultScreen.jsx';
@@ -96,19 +95,6 @@ describe('shared M to Z components at a 320px viewport', () => {
         expect(source).toMatch(/\.overlay\s*\{[^}]*box-sizing:\s*border-box/s);
         expect(source).toMatch(/\.panel\s*\{[^}]*box-sizing:\s*border-box[^}]*min-width:\s*0/s);
         expect(source).toMatch(/\.title\s*\{[^}]*overflow-wrap:\s*anywhere/s);
-    });
-
-    it('bounds the open PlatformSwitcher toolbar menu to the phone viewport', () => {
-        renderAt320(<PlatformSwitcher current="wallet" />);
-        fireEvent.click(screen.getByRole('button', { name: 'XChain platform sites' }));
-
-        expect(screen.getByRole('menu')).toBeVisible();
-        expect(screen.getAllByRole('menuitem').length).toBeGreaterThan(1);
-
-        const source = css('PlatformSwitcher');
-        expect(source).toMatch(/\.menu\s*\{[^}]*box-sizing:\s*border-box[^}]*max-width:\s*calc\(100vw/s);
-        expect(source).toMatch(/\.item,\s*\n\.here\s*\{[^}]*box-sizing:\s*border-box[^}]*min-width:\s*0/s);
-        expect(source).toMatch(/\.item > span:first-child,\s*\n\.here > span:first-child\s*\{[^}]*overflow-wrap:\s*anywhere/s);
     });
 
     it('contains a TokenField row with an exceptionally long selection', () => {
@@ -186,7 +172,7 @@ describe('shared M to Z components at a 320px viewport', () => {
         expect(screen.getByTestId('result-screen-notice')).toBeVisible();
         expect(screen.getByTestId('result-screen-notice').textContent).toContain(title);
         expect(screen.getByRole('textbox', { name: 'Unsigned transaction code' })).toBeVisible();
-        expect(screen.getByRole('button', { name: 'Build another' })).toBeVisible();
+        expect(screen.getByRole('button', { name: 'Build Another' })).toBeVisible();
         expect(screen.getByRole('button', { name: 'Done' })).toBeVisible();
 
         const source = css('WatcherExport');

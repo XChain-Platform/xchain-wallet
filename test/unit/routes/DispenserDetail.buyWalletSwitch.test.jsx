@@ -93,6 +93,8 @@ async function mount() {
         });
     }
     vi.useRealTimers();
+    // The page opens on Details and shows only the chosen tab: the buy form is on Buy.
+    fireEvent.click(await screen.findByRole('tab', { name: 'Buy' }));
     await screen.findByText(/250 MEMEVALID available/);
     return { messaging, view };
 }
@@ -105,7 +107,7 @@ afterEach(() => {
 describe('dispenser buy Confirm across a wallet switch', () => {
     it('refuses Approve after the active wallet changes under an open Confirm', async () => {
         const { messaging, view } = await mount();
-        const buy = await screen.findByRole('button', { name: /^Buy \d+ fills?$/ });
+        const buy = await screen.findByRole('button', { name: /^Buy \d+ Dispenses?$/ });
         await waitFor(() => expect(buy).toBeEnabled());
         fireEvent.click(buy);
         await screen.findByTestId('confirm-approve');

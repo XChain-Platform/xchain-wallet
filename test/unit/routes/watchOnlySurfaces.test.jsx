@@ -11,6 +11,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
@@ -34,18 +35,21 @@ beforeAll(() => {
 afterAll(() => { globalThis.ResizeObserver = savedResizeObserver; });
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     localStorage.clear();
 });
 
 function modeMessaging(walletMode, extra = {}) {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode }], activeWalletId: 'wallet-1' });
     const base = {
         getSettings: vi.fn().mockResolvedValue({
-            walletMode,
             activeNetwork: 'mainnet',
             grace: { testSendThresholdSats: 0 },
             privacy: { formDraftTtlMs: 0 },
         }),
-        updateSettings: vi.fn().mockResolvedValue({ walletMode }),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'Wallet', walletMode }]),
+        updateSettings: vi.fn().mockResolvedValue({}),
         ...extra,
     };
     // Every call a surface makes that the test does not care about resolves
@@ -71,7 +75,7 @@ function mount(messaging, child) {
 
 function homeMessaging(walletMode) {
     return modeMessaging(walletMode, {
-        listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'Wallet' }]),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'Wallet', walletMode }]),
         listAccounts: vi.fn().mockResolvedValue([]),
         getWalletBalances: vi.fn().mockResolvedValue({
             [CHAIN]: [{
@@ -96,13 +100,16 @@ describe('watch-only route boundaries', () => {
             <Home activeWalletId="wallet-1" onSend={vi.fn()} />
         ));
 
-        await screen.findByRole('group', { name: 'Quick actions' });
+        // With balances on screen Home shows the balance card and no action row.
+        await screen.findByLabelText('Balance summary');
         expect(messaging.listConfirmSessions).not.toHaveBeenCalled();
         expect(screen.queryByRole('group', { name: 'Unfinished transactions' })).toBeNull();
     });
 
     it('keeps Send on Home for a watch-only wallet', async () => {
+        // The Send, Receive row shows when Home has no balances to show.
         const messaging = homeMessaging('watcher');
+        messaging.getWalletBalances = vi.fn().mockRejectedValue(new Error('offline'));
         mount(messaging, (
             <Home activeWalletId="wallet-1" onSend={vi.fn()} />
         ));
@@ -184,7 +191,7 @@ describe('watch-only route boundaries', () => {
         expect(messaging.replaceTx).not.toHaveBeenCalled();
     });
 
-    it('keeps Send on Token Detail for a watch-only wallet', async () => {
+    it('keeps Send on Token Detail for a watch-only wallet, held back with the reason', async () => {
         const onSend = vi.fn();
         mount(modeMessaging('watcher'), (
             <TokenDetail
@@ -198,10 +205,13 @@ describe('watch-only route boundaries', () => {
             />
         ));
 
-        const row = await screen.findByRole('group', { name: 'Quick actions' });
+        const row = await screen.findByRole('group', { name: 'Actions for BTC' });
         const send = await within(row).findByRole('button', { name: 'Send' });
+        // A watch-only wallet cannot sign, so the Send tile stays in place but
+        // is held back and says why; pressing it never opens the Send route.
         fireEvent.click(send);
-        expect(onSend).toHaveBeenCalledTimes(1);
+        expect(onSend).not.toHaveBeenCalled();
+        expect(await screen.findAllByText(/watch-only and can't sign/i)).not.toHaveLength(0);
     });
 
     it('opens Token Detail in full mode when the settings read fails', async () => {
@@ -221,7 +231,7 @@ describe('watch-only route boundaries', () => {
             />
         ));
 
-        const row = await screen.findByRole('group', { name: 'Quick actions' });
+        const row = await screen.findByRole('group', { name: 'Actions for BTC' });
         expect(await within(row).findByRole('button', { name: 'Send' })).toBeInTheDocument();
     });
 

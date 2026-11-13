@@ -63,7 +63,7 @@ for (const form of RENAMES) {
     describe(`${form.label} follows the shared form rules`, () => {
         it('names its green submit after the action and gives it an icon', async () => {
             render(form.node());
-            const submit = await screen.findByRole('button', { name: form.label });
+            const submit = await screen.findByRole('button', { name: 'Save Changes' });
             expect(submit.getAttribute('type')).toBe('submit');
             expect(submit.className).toMatch(/success/);
             expect(submit.querySelector('svg')).toBeTruthy();
@@ -95,7 +95,7 @@ describe('Add account follows the shared form rules', () => {
         fireEvent.change(input, { target: { value: 'Savings' } });
         expect(screen.getByText(`7 / ${NAME_MAX_LENGTH}`)).toBeTruthy();
         expect(screen.getByRole('button', { name: 'About Account name' })).toBeTruthy();
-        const submit = screen.getByRole('button', { name: 'Add account' });
+        const submit = screen.getByRole('button', { name: 'Add Account' });
         expect(submit.className).toMatch(/success/);
         expect(submit.querySelector('svg')).toBeTruthy();
     });

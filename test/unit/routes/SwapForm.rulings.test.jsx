@@ -5,6 +5,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { openSection } from '../../helpers/openFormSections.js';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 
 vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
@@ -24,6 +25,7 @@ vi.mock('../../../packages/core/src/shared/components/ListPickerScreen.jsx', () 
 }));
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { SwapForm } from '../../../packages/core/src/shared/routes/SwapForm.jsx';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -37,15 +39,21 @@ const ADDRESS = {
 };
 
 afterEach(() => {
+    // The Quick | Full choice is remembered per form; start each test on Quick.
+    globalThis.localStorage?.clear();
     cleanup();
+    resetWalletModes();
     vi.restoreAllMocks();
 });
 
 function messaging() {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode: 'watcher' }], activeWalletId: 'wallet-1' });
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: ADDRESS.id } }),
-        getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher', activeNetwork: 'mainnet' }),
+        getSettings: vi.fn().mockResolvedValue({ activeNetwork: 'mainnet' }),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'W', walletMode: 'watcher' }]),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'watcher' }),
         getWalletBalances: vi.fn().mockResolvedValue({}),
@@ -82,11 +90,15 @@ describe('SwapForm UI rulings', () => {
     it('uses a named success action and field-specific help without static escrow hints', async () => {
         mount();
 
-        const create = await screen.findByRole('button', { name: 'Create swap' });
+        const create = await screen.findByRole('button', { name: 'Create Swap' });
         expect(create).toHaveClass(buttonStyles.success);
         expectIcon(create);
 
-        await openTip('From', 'address whose tokens are escrowed for this swap');
+        // Full view draws every field of the swap with its own help tip.
+        fireEvent.click(screen.getByRole('radio', { name: 'Full' }));
+        await openSection('From');
+        await openSection('Swap Terms');
+        await openTip('From address', 'address whose tokens are escrowed for this swap');
         await openTip('Give amount (ALPHA)', 'How many of the give token to escrow for this swap');
         await openTip('Get amount', 'matcher must provide in exchange');
         await openTip(
@@ -114,14 +126,14 @@ describe('SwapForm UI rulings', () => {
 
         await screen.findByRole('button', { name: /Get token:/ });
         fireEvent.click(screen.getByRole('button', { name: /Get token:/ }));
-        fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Choose Select Get Token' }));
         fireEvent.change(screen.getByLabelText('Give amount (ALPHA)'), { target: { value: '2' } });
         fireEvent.change(screen.getByLabelText('Get amount (BETA)'), { target: { value: '3' } });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Create swap' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Swap' }));
 
         const edit = await screen.findByRole('button', { name: 'Edit' });
-        const submit = screen.getByRole('button', { name: 'Create unsigned swap transaction' });
+        const submit = screen.getByRole('button', { name: 'Create Unsigned Swap Transaction' });
         expectIcon(edit);
         expect(submit).toHaveClass(buttonStyles.success);
         expectIcon(submit);
@@ -134,21 +146,22 @@ describe('SwapForm UI rulings', () => {
 
     it('gives every advanced list action an explicit icon', async () => {
         mount();
-        fireEvent.click(await screen.findByRole('button', { name: 'Advanced options' }));
+        await screen.findByRole('button', { name: 'Create Swap' });
+        await openSection('Swap Terms');
 
-        const setAllow = screen.getByRole('button', { name: 'Set allow-list' });
-        const setBlock = screen.getByRole('button', { name: 'Set block-list' });
+        const setAllow = screen.getByRole('button', { name: 'Set Allow-List' });
+        const setBlock = screen.getByRole('button', { name: 'Set Block-List' });
         expectIcon(setAllow);
         expectIcon(setBlock);
 
         fireEvent.click(setAllow);
-        fireEvent.click(screen.getByRole('button', { name: 'Choose Choose allow-list' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Choose Choose Allow-List' }));
         const clearAllow = await screen.findByRole('button', { name: 'Clear' });
         expectIcon(clearAllow);
         fireEvent.click(clearAllow);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Set block-list' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Choose Choose block-list' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Set Block-List' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Choose Choose Block-List' }));
         const clearBlock = await screen.findByRole('button', { name: 'Clear' });
         expectIcon(clearBlock);
 

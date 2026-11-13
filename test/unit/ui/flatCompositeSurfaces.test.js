@@ -16,8 +16,6 @@ describe('flat composite surfaces', () => {
         'MarketActivity.module.css',
         'PairSignerForm.module.css',
         'StakeNew.module.css',
-        'TokenWizard.module.css',
-        'CrossChainTemplates.module.css',
     ])('%s groups repeated rows in one flush card', (name) => {
         expect(route(name)).toMatch(/composes:\s*flush from ['"]\.\.\/\.\.\/ui\/Card\.module\.css['"]/);
     });
@@ -26,7 +24,6 @@ describe('flat composite surfaces', () => {
         expect(route('LinkForm.jsx')).not.toMatch(/cardStyles\.card/);
         expect(route('MultisigCreate.jsx')).not.toMatch(/cardStyles\.card/);
         expect(route('CoSignerPolicyEditor.jsx')).not.toMatch(/cardStyles\.card/);
-        expect(route('CoSignerPolicyEditor.module.css')).toMatch(/\.fieldset\s*\{[^}]*border:\s*0/s);
         expect(route('IssueTokenForm.module.css')).toMatch(/\.flatFieldset\s*\{[^}]*border:\s*0/s);
     });
 
@@ -44,7 +41,7 @@ describe('flat composite surfaces', () => {
     });
 
     it('preserves already-flat form sections and empty states', () => {
-        expect(route('SweepForm.jsx')).toMatch(/<FormPage[\s\S]*sectioned[\s\S]*<FormSection title="What to sweep">/);
+        expect(route('SweepForm.jsx')).toMatch(/<FormFrame[\s\S]*<FormSection\s+id="sweep"\s+title="Sweep Details"/);
         expect(route('ParallelComposer.jsx')).toMatch(/function RowEditor[\s\S]*<FormSection[\s\S]*title=\{`Row \$\{index \+ 1\}`\}/);
         expect(route('UnionListForm.jsx')).toMatch(/className=\{styles\.flatFieldset\}[\s\S]*<EmptyState/);
     });

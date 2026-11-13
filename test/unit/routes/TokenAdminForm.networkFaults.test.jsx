@@ -12,6 +12,7 @@ import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { TokenAdminForm } from '../../../packages/core/src/shared/routes/TokenAdminForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
@@ -34,7 +35,8 @@ const SOURCE = {
     signerId: 'signer-1',
 };
 
-const ADMIN_ACTION_PATTERN = /^(Lock token|Update description|Transfer ownership|Update mint settings|Update callback settings|Update access lists|Update bridge settings)$/;
+// The standard's action labels are Title Case.
+const ADMIN_ACTION_PATTERN = /^(Lock Token|Update Description|Transfer Ownership|Update Mint Settings|Update Callback Settings|Update Access Lists|Update Bridge Settings)$/;
 const adminAction = () => screen.getByRole('button', { name: ADMIN_ACTION_PATTERN });
 
 function deferred() {
@@ -45,10 +47,13 @@ function deferred() {
 }
 
 function mount(mode, overrides = {}, { initialTick = 'TOKEN', lockedTokenProps = true } = {}) {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode: 'watcher' }], activeWalletId: 'w' });
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [SOURCE] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: SOURCE }),
-        getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+        getSettings: vi.fn().mockResolvedValue({}),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'w', name: 'W', walletMode: 'watcher' }]),
         getTokenInfo: vi.fn().mockResolvedValue({
             chainId: CHAIN, tick: initialTick, creator: SOURCE.address, locks: {},
         }),
@@ -79,6 +84,7 @@ function mount(mode, overrides = {}, { initialTick = 'TOKEN', lockedTokenProps =
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     __clearTokenInfoCache();
 });
 
@@ -180,7 +186,7 @@ describe('TokenAdminForm access lists across a token switch', () => {
 
         // The owner picks a block-list for the first token, which marks the
         // block-list field as edited.
-        fireEvent.click(screen.getByRole('button', { name: /(Choose|Change) block-list/ }));
+        fireEvent.click(screen.getByRole('button', { name: /(Choose|Change) Block-List/ }));
         fireEvent.click(await screen.findByText(/Address list #55/));
         expect(await screen.findByText(/List #55/)).toBeInTheDocument();
 
@@ -206,7 +212,7 @@ describe('TokenAdminForm access lists across a token switch', () => {
 
         // A new allow-list composes only that change; the block-list matches
         // the second token's record and is left out.
-        fireEvent.click(screen.getByRole('button', { name: /Choose allow-list/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Choose Allow-List/ }));
         fireEvent.click(await screen.findByText(/Address list #55/));
         const openPreview = await screen.findByRole('button', { name: ADMIN_ACTION_PATTERN });
         await waitFor(() => expect(openPreview).toBeEnabled());
@@ -254,7 +260,7 @@ describe('TokenAdminForm list detail read faults', () => {
             await act(async () => { await Promise.resolve(); await Promise.resolve(); });
             expect(screen.queryByText(/0 members/)).toBeNull();
 
-            fireEvent.click(screen.getByRole('button', { name: /Choose block-list/ }));
+            fireEvent.click(screen.getByRole('button', { name: /Choose Block-List/ }));
             fireEvent.click(await screen.findByText(/Address list #55/));
             const preview = await screen.findByRole('button', { name: ADMIN_ACTION_PATTERN });
             await waitFor(() => expect(preview).toBeEnabled());

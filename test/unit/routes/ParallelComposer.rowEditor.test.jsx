@@ -53,9 +53,9 @@ describe('ParallelComposer row editor', () => {
         mount();
         const form = await screen.findByRole('form', { name: 'Compose parallel actions' });
         const network = screen.getByRole('button', { name: /^Network:/ });
-        const add = screen.getByRole('button', { name: 'Add action' });
+        const add = screen.getByRole('button', { name: 'Add Action' });
         const remove = screen.getByRole('button', { name: 'Remove' });
-        const submit = screen.getByRole('button', { name: 'Sign and send queue' });
+        const submit = screen.getByRole('button', { name: 'Sign and Send Queue' });
         expect(screen.queryByRole('combobox', { name: 'Network' })).toBeNull();
         expect(network).toHaveAttribute('aria-haspopup', 'dialog');
         expect(form.querySelectorAll(`.${badgeStyles.badge}`)).toHaveLength(0);
@@ -81,7 +81,7 @@ describe('ParallelComposer row editor', () => {
 
     it('waits to ask for an action until the user touches the row or submits the queue', async () => {
         mount(null);
-        const review = await screen.findByRole('button', { name: 'Sign and send queue' });
+        const review = await screen.findByRole('button', { name: 'Sign and Send Queue' });
         expect(screen.queryByText(/pick an action/)).toBeNull();
         expect(review).not.toBeDisabled();
 
@@ -89,7 +89,7 @@ describe('ParallelComposer row editor', () => {
         expect(await screen.findByText('Row 1: pick an action.')).toBeTruthy();
         expect(review).toBeDisabled();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Add action' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add Action' }));
         fireEvent.change(screen.getAllByRole('combobox', { name: 'Action' })[0], { target: { value: 'SEND' } });
         expect(screen.queryByText(/pick an action/)).toBeNull();
 

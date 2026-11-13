@@ -187,7 +187,8 @@ describe('Home under a partial balance outage', () => {
         render(tree(messaging, WALLET_A.id, 'account-a'));
         await waitFor(() => expect(document.body.textContent).toMatch(/At least/));
         // Rows and headline agree: the headline is a floor, not a total.
-        const hero = screen.getByText(/balance$/i, { selector: 'section[aria-labelledby] span' }).closest('section');
+        // The card is labelled with the wallet's name now, so find it by the floor it shows.
+        const hero = screen.getAllByText(/At least/)[0].closest('section[aria-labelledby]');
         expect(hero.textContent).toMatch(/At least \$50,000\.00/);
     });
 

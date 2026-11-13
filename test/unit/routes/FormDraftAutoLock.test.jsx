@@ -22,7 +22,7 @@ const SOURCE = {
     source: 'hd',
 };
 
-function createMessaging() {
+function createMessaging(overrides = {}) {
     const target = {
         getSettings: vi.fn().mockResolvedValue({
             walletMode: 'full',
@@ -45,6 +45,7 @@ function createMessaging() {
         sendToken: vi.fn(),
         issueToken: vi.fn(),
         dispenserAction: vi.fn(),
+        ...overrides,
     };
     return new Proxy(target, {
         get(object, property) {
@@ -88,12 +89,24 @@ afterEach(() => {
 
 describe('form drafts across auto-lock', () => {
     it('restores every non-secret field of a multi-recipient Send', async () => {
-        const messaging = createMessaging();
+        // The wallet holds XCP, so the Asset picker lists it.
+        const messaging = createMessaging({
+            getWalletBalances: vi.fn().mockResolvedValue({
+                [CHAIN_ID]: [{
+                    address: SOURCE.address,
+                    balances: {
+                        native: { tick: 'BTC', quantity: '100000000', divisibility: 8 },
+                        tokens: [{ tick: 'XCP', quantity: '1000', divisibility: 8 }],
+                    },
+                }],
+            }),
+        });
         const first = mountForm('send', messaging);
         fireEvent.change(await screen.findByLabelText(/^To$/), {
             target: { value: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4' },
         });
-        fireEvent.change(screen.getByLabelText(/^Token$/), { target: { value: 'XCP' } });
+        fireEvent.click(screen.getByRole('button', { name: /^Asset:/ }));
+        fireEvent.click(await screen.findByRole('button', { name: /^Select XCP(?: on |$)/ }));
         fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '2.5' } });
         fireEvent.click(await screen.findByRole('button', { name: /Add recipient/i }));
         fireEvent.change(screen.getByLabelText(/Recipient 2 address/i), {
@@ -129,7 +142,7 @@ describe('form drafts across auto-lock', () => {
             expect(document.getElementById('send-destination')).toHaveValue(
                 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4',
             );
-            expect(screen.getByLabelText(/^Token$/)).toHaveValue('XCP');
+            expect(screen.getByRole('button', { name: /^Asset: XCP(?: on |$)/ })).toBeInTheDocument();
             expect(document.getElementById('send-amount')).toHaveValue('2.5');
             expect(screen.getByLabelText(/Recipient 2 address/i)).toHaveValue(
                 'bc1qsecondrecipient0000000000000000000000000',

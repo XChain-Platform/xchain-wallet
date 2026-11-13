@@ -89,7 +89,7 @@ async function reachConfirm() {
     fireEvent.click(await screen.findByRole('button', { name: 'Enter publisher mode' }));
     await waitFor(() => expect(screen.queryByText('Loading source address…')).toBeNull());
     fireEvent.change(screen.getByLabelText('Value'), { target: { value: '123.45' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Publish value' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Publish Value' }));
     return screen.findByTestId('confirm-modal');
 }
 

@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { ListCreateForm } from '../../../packages/core/src/shared/routes/ListCreateForm.jsx';
 import { MEMO_HINT } from '../../../packages/core/src/shared/utils/memoLimit.js';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
@@ -22,10 +23,13 @@ const ADDRESS = {
 };
 
 function mount({ walletMode = 'full', metaSupported = true, editResolutionActive = true, contacts = [] } = {}) {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode }], activeWalletId: 'wallet-1' });
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
-        getSettings: vi.fn().mockResolvedValue({ walletMode }),
+        getSettings: vi.fn().mockResolvedValue({}),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'W', walletMode }]),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
         isListTickCoinActive: vi.fn().mockResolvedValue(false),
@@ -58,6 +62,7 @@ function mount({ walletMode = 'full', metaSupported = true, editResolutionActive
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     vi.clearAllMocks();
 });
 
@@ -92,8 +97,14 @@ describe('ListCreateForm screen rules', () => {
 
         const name = await screen.findByLabelText('Name');
         const description = screen.getByLabelText('Description');
-        expect(within(name.closest('div').parentElement).getByText('Optional')).toBeInTheDocument();
-        expect(within(description.closest('div').parentElement).getByText('Optional')).toBeInTheDocument();
+        // Name and Description sit in one optional Details section;
+        // its header carries the Optional tag, not the fields.
+        const details = screen.getByRole('button', { name: /^Details\b/, expanded: false });
+        expect(within(details).getByText('Optional')).toBeInTheDocument();
+        const section = details.closest('section');
+        expect(section).toContainElement(name);
+        expect(section).toContainElement(description);
+        fireEvent.click(details);
         expect(screen.getByRole('button', { name: 'About Name' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'About Description' })).toBeInTheDocument();
 
@@ -110,6 +121,8 @@ describe('ListCreateForm screen rules', () => {
         mount();
         await screen.findByLabelText('Memo');
 
+        // Memo is an optional closed section.
+        fireEvent.click(screen.getByRole('button', { name: /^Memo\b/, expanded: false }));
         fireEvent.click(screen.getByRole('button', { name: 'About Memo' }));
         const tip = screen.getByRole('tooltip');
         expect(tip).toHaveTextContent('stored on-chain with this list creation action');
@@ -117,9 +130,9 @@ describe('ListCreateForm screen rules', () => {
         expect(tip).not.toHaveTextContent(MEMO_HINT);
     });
 
-    it('renders Publish list as an explicit green action with an icon', async () => {
+    it('renders Publish List as an explicit green action with an icon', async () => {
         mount();
-        const submit = await screen.findByRole('button', { name: 'Publish list' });
+        const submit = await screen.findByRole('button', { name: /^Publish List$/ });
 
         expect(submit).toHaveClass(buttonStyles.success);
         expect(submit.querySelector('svg')).toBeInTheDocument();
@@ -128,19 +141,36 @@ describe('ListCreateForm screen rules', () => {
     it('names the watcher form action and never renders a generic Review button', async () => {
         mount({ walletMode: 'watcher' });
 
-        const formSubmit = await screen.findByRole('button', { name: 'Create unsigned transaction' });
+        const formSubmit = await screen.findByRole('button', { name: /^Create Unsigned Transaction$/ });
         expect(formSubmit).toHaveClass(buttonStyles.success);
         expect(formSubmit.querySelector('svg')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Review' })).not.toBeInTheDocument();
 
         fireEvent.change(screen.getByLabelText('Addresses'), { target: { value: ADDRESS.address } });
         fireEvent.click(formSubmit);
-        const reviewSubmit = await screen.findByRole('button', { name: 'Create unsigned transaction' });
+        const reviewSubmit = await screen.findByRole('button', { name: /^Create Unsigned Transaction$/ });
         expect(reviewSubmit).not.toBe(formSubmit);
         expect(reviewSubmit).toHaveClass(buttonStyles.success);
         expect(reviewSubmit.querySelector('svg')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Back' }).querySelector('svg')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Review' })).not.toBeInTheDocument();
+    });
+
+    // A form error raised on Publish opens the closed section that
+    // holds its field, on every attempt, even after the user closed it.
+    it('opens the closed Memo section when Publish refuses the memo', async () => {
+        mount();
+        await screen.findByLabelText('From');
+        const memoHeader = screen.getByRole('button', { name: /^Memo\b/ });
+        expect(memoHeader).toHaveAttribute('aria-expanded', 'false');
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'a|b' } });
+        fireEvent.click(screen.getByRole('button', { name: /^Publish List$/ }));
+        expect(await screen.findByText('Memo cannot contain | or ; characters.')).toBeInTheDocument();
+        await waitFor(() => expect(memoHeader).toHaveAttribute('aria-expanded', 'true'));
+        fireEvent.click(memoHeader);
+        expect(memoHeader).toHaveAttribute('aria-expanded', 'false');
+        fireEvent.click(screen.getByRole('button', { name: /^Publish List$/ }));
+        await waitFor(() => expect(memoHeader).toHaveAttribute('aria-expanded', 'true'));
     });
 
     it('gives the contact picker add action an icon', async () => {
@@ -151,10 +181,10 @@ describe('ListCreateForm screen rules', () => {
                 entries: [{ chain: 'bitcoin', address: ADDRESS.address, label: 'Primary' }],
             }],
         });
-        fireEvent.click(await screen.findByRole('button', { name: 'Add from contacts' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Add From Contacts' }));
         fireEvent.click(await screen.findByRole('checkbox', { name: /Alice/ }));
 
-        const add = screen.getByRole('button', { name: 'Add 1 selected' });
+        const add = screen.getByRole('button', { name: 'Add 1 Selected' });
         expect(add.querySelector('svg')).toBeInTheDocument();
     });
 });

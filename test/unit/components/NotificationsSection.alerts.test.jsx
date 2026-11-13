@@ -109,7 +109,7 @@ describe('notification categories and permission', () => {
         try {
             render(<NotificationsSection />);
 
-            expect(await screen.findByRole('button', { name: 'Allow notifications' })).toBeTruthy();
+            expect(await screen.findByRole('button', { name: 'Allow Notifications' })).toBeTruthy();
             expect(screen.getByText(/Optional\. Allows XChain Wallet/)).toHaveTextContent(
                 'You can revoke access here at any time.',
             );
@@ -117,15 +117,15 @@ describe('notification categories and permission', () => {
             expect(category).not.toBeChecked();
             expect(category).toBeDisabled();
             expect(request).not.toHaveBeenCalled();
-            fireEvent.click(screen.getByRole('button', { name: 'Allow notifications' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Allow Notifications' }));
 
             await waitFor(() => expect(request).toHaveBeenCalledWith({ permissions: ['notifications'] }));
             await waitFor(() => expect(category).toBeChecked());
             expect(category).toBeEnabled();
-            fireEvent.click(await screen.findByRole('button', { name: 'Revoke permission' }));
+            fireEvent.click(await screen.findByRole('button', { name: 'Revoke Permission' }));
 
             await waitFor(() => expect(remove).toHaveBeenCalledWith({ permissions: ['notifications'] }));
-            expect(await screen.findByRole('button', { name: 'Allow notifications' })).toBeTruthy();
+            expect(await screen.findByRole('button', { name: 'Allow Notifications' })).toBeTruthy();
             expect(category).not.toBeChecked();
             expect(category).toBeDisabled();
         } finally {
@@ -151,14 +151,14 @@ describe('notification categories and permission', () => {
         };
         try {
             render(<NotificationsSection />);
-            expect(await screen.findByRole('button', { name: 'Revoke permission' })).toBeTruthy();
+            expect(await screen.findByRole('button', { name: 'Revoke Permission' })).toBeTruthy();
             const category = screen.getByRole('switch', { name: 'Transaction confirmations' });
             expect(category).toBeChecked();
 
             granted = false;
             for (const listener of removedListeners) listener({ permissions: ['notifications'] });
 
-            expect(await screen.findByRole('button', { name: 'Allow notifications' })).toBeTruthy();
+            expect(await screen.findByRole('button', { name: 'Allow Notifications' })).toBeTruthy();
             expect(category).not.toBeChecked();
             expect(category).toBeDisabled();
             expect(request).not.toHaveBeenCalled();
@@ -175,7 +175,7 @@ describe('notification categories and permission', () => {
             expect(screen.getByText(/Notifications are blocked/)).toHaveTextContent(
                 'Open your browser or system settings, find XChain Wallet, and allow notifications.',
             );
-            expect(screen.queryByRole('button', { name: 'Request permission' })).toBeNull();
+            expect(screen.queryByRole('button', { name: 'Request Permission' })).toBeNull();
             const category = screen.getByRole('switch', { name: 'Transaction confirmations' });
             expect(category).not.toBeChecked();
             expect(category).toBeDisabled();
@@ -230,11 +230,13 @@ describe('price alert manager', () => {
             onBack={vi.fn()}
         />);
 
+        // Settings opens on its group list; the price alert form is in Notifications.
+        fireEvent.click(screen.getByRole('button', { name: /^Notifications/ }));
         fireEvent.change(screen.getByLabelText('Direction'), { target: { value: 'below' } });
         fireEvent.change(screen.getByLabelText('Target price'), { target: { value: '123' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Choose a held token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Select an asset' }));
 
-        expect(screen.getByRole('heading', { level: 1, name: 'Choose a coin or token' })).toBeTruthy();
+        expect(screen.getByRole('heading', { level: 1, name: 'Choose Asset' })).toBeTruthy();
         expect(screen.queryByRole('heading', { name: 'Settings' })).toBeNull();
         expect(screen.queryByRole('switch', { name: 'Transaction confirmations' })).toBeNull();
 
@@ -242,7 +244,7 @@ describe('price alert manager', () => {
         expect(screen.getByLabelText('Direction').value).toBe('below');
         expect(screen.getByLabelText('Target price').value).toBe('123');
 
-        fireEvent.click(screen.getByRole('button', { name: 'Choose a held token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Select an asset' }));
         fireEvent.click(screen.getByRole('button', { name: 'Select PEPE' }));
 
         expect(screen.getByRole('button', { name: /PEPE/ })).toBeTruthy();
@@ -277,7 +279,7 @@ describe('price alert manager', () => {
             'Delete and recreate an alert to use the current display currency.',
         );
         fireEvent.click(edit);
-        fireEvent.click(screen.getByRole('button', { name: 'Add alert' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add Alert' }));
         await waitFor(() => expect(priceAlerts.updateAlert).toHaveBeenCalledWith('alert-1', {
             chainId: 'bitcoin-mainnet',
             direction: 'above',
@@ -292,7 +294,7 @@ describe('price alert manager', () => {
 
         expect(screen.getByText('Loading price alerts…')).toBeTruthy();
         expect(screen.queryByText(/No price alerts yet/)).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Add alert' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Add Alert' })).toBeNull();
     });
 
     it('offers a retry after the alert list fails to load', () => {
@@ -300,7 +302,7 @@ describe('price alert manager', () => {
         render(<NotificationsSection walletId="wallet-1" />);
 
         expect(screen.getByRole('alert')).toHaveTextContent('Couldn\'t load price alerts.');
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         expect(priceAlerts.reload).toHaveBeenCalledTimes(1);
         expect(screen.queryByText(/No price alerts yet/)).toBeNull();
     });
@@ -320,7 +322,7 @@ describe('price alert manager', () => {
         )).toBe(true);
 
         fireEvent.change(screen.getByLabelText('Target price'), { target: { value: '71000' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Add alert' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add Alert' }));
 
         await waitFor(() => expect(priceAlerts.addAlert).toHaveBeenCalledWith({
             chainId: 'bitcoin-mainnet',
@@ -338,7 +340,7 @@ describe('price alert manager', () => {
         expect(screen.getByLabelText('Target price').value).toBe('70000');
         fireEvent.change(screen.getByLabelText('Direction'), { target: { value: 'below' } });
         fireEvent.change(screen.getByLabelText('Target price'), { target: { value: '65000' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Add alert' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add Alert' }));
 
         await waitFor(() => expect(priceAlerts.updateAlert).toHaveBeenCalledWith('alert-1', {
             chainId: 'bitcoin-mainnet',
@@ -410,5 +412,32 @@ describe('price alert manager', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'Could not update the price alert. Try again.',
         );
+    });
+
+    it('puts price alerts last with each alert x above the compact add form', () => {
+        settings.notifications.priceAlerts = true;
+        priceAlerts.alerts = [alertRecord()];
+        const { container } = render(<NotificationsSection walletId="wallet-1" />);
+
+        // Price alerts are the last block on the page.
+        const priceSwitch = screen.getByRole('switch', { name: 'Price alerts' });
+        for (const other of screen.getAllByRole('switch').filter((node) => node !== priceSwitch)) {
+            expect(other.compareDocumentPosition(priceSwitch) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        }
+
+        // Each saved alert carries a small x that removes it.
+        const remove = screen.getByRole('button', { name: 'Remove Bitcoin price alert' });
+        expect(remove.querySelector('svg')).not.toBeNull();
+        expect(remove.textContent.trim()).toBe('');
+
+        // The add form: the coin row, then above/below and the price, then Add Alert.
+        const rows = ['coin', 'filters', 'action'].map((row) => container.querySelector(`[data-row="${row}"]`));
+        expect(rows.every(Boolean)).toBe(true);
+        expect(rows[0].compareDocumentPosition(rows[1]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(rows[1].compareDocumentPosition(rows[2]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(within(rows[1]).getByLabelText('Direction')).toBeTruthy();
+        expect(within(rows[1]).getByLabelText('Target price')).toBeTruthy();
+        expect(within(rows[2]).getByRole('button', { name: 'Add Alert' })).toBeTruthy();
+        expect(remove.compareDocumentPosition(rows[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 });

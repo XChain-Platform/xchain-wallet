@@ -67,22 +67,28 @@ afterEach(() => {
     vi.clearAllMocks();
 });
 
+// From is a closed standard section; open it, then find its picker icon.
+async function chooseSourceButton() {
+    fireEvent.click(await screen.findByRole('button', { name: /^From\b/, expanded: false }));
+    return screen.getByRole('button', { name: 'Choose source address' });
+}
+
 describe('UnionListForm From picker and submit', () => {
     it('gives From a picker icon button that opens the own-address picker on the form network', async () => {
         mount();
-        const open = await screen.findByRole('button', { name: 'Choose source address' });
+        const open = await chooseSourceButton();
         expect((await screen.findByLabelText('From')).value).toBe(FIRST.address);
 
         fireEvent.click(open);
 
         const picker = await screen.findByTestId('own-picker');
         expect(picker.getAttribute('data-chain')).toBe(CHAIN);
-        expect(screen.getByText('From address')).toBeTruthy();
+        expect(screen.getByText('From Address')).toBeTruthy();
     });
 
     it('returns to the form with the picked address', async () => {
         mount();
-        fireEvent.click(await screen.findByRole('button', { name: 'Choose source address' }));
+        fireEvent.click(await chooseSourceButton());
         fireEvent.click(await screen.findByText('pick second'));
 
         await waitFor(() => expect(screen.queryByTestId('own-picker')).toBeNull());
@@ -91,7 +97,7 @@ describe('UnionListForm From picker and submit', () => {
 
     it('switches the form network when the picker switches chain', async () => {
         mount();
-        fireEvent.click(await screen.findByRole('button', { name: 'Choose source address' }));
+        fireEvent.click(await chooseSourceButton());
         fireEvent.click(await screen.findByText('switch chain'));
 
         await waitFor(() => expect(screen.getByTestId('own-picker').getAttribute('data-chain')).toBe('litecoin-mainnet'));
@@ -101,7 +107,7 @@ describe('UnionListForm From picker and submit', () => {
 
     it('submits through a green Create union list button with an icon', async () => {
         mount();
-        const submit = await screen.findByRole('button', { name: 'Create union list' });
+        const submit = await screen.findByRole('button', { name: /^Create union list$/i });
         expect(submit.getAttribute('type')).toBe('submit');
         expect(submit.className).toMatch(/success/);
         expect(submit.querySelector('svg')).not.toBeNull();

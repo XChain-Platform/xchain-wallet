@@ -98,7 +98,7 @@ describe('CollectiblesView cards', () => {
         );
 
         expect(screen.queryByText('No collectibles yet')).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Show 1 hidden collectible' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Show 1 Hidden Collectible' }));
         fireEvent.click(screen.getByRole('button', { name: 'Unpin LONGART' }));
         expect(onTogglePin).toHaveBeenCalledWith('bitcoin-regtest:LONGART', false);
         expect(screen.getByRole('list', { name: 'Hidden collectibles' })).toBeTruthy();
@@ -115,7 +115,7 @@ describe('CollectiblesView cards', () => {
 
         const open = screen.getByRole('button', { name: /open/i });
         expect(open.className.split(' ')).toContain(buttonStyles.btn);
-        const toggle = screen.getByRole('button', { name: 'Show 1 hidden collectible' });
+        const toggle = screen.getByRole('button', { name: 'Show 1 Hidden Collectible' });
         expect(toggle.className.split(' ')).toContain(buttonStyles.btn);
     });
 
@@ -125,8 +125,8 @@ describe('CollectiblesView cards', () => {
             'utf8',
         );
 
-        expect(css).toMatch(/minmax\(min\(9rem, 100%\), 1fr\)/);
-        expect(css).toMatch(/@media \(min-width: 48rem\)[\s\S]*minmax\(10rem, 12rem\)/);
+        expect(css).toMatch(/minmax\(min\(5\.75rem, 100%\), 1fr\)/);
+        expect(css).toMatch(/@media \(min-width: 48rem\)[\s\S]*minmax\(7\.5rem, 9rem\)/);
         expect(css).toMatch(/overflow-wrap: break-word/);
         expect(css).toMatch(/word-break: normal/);
         expect(css).not.toMatch(/-webkit-line-clamp/);

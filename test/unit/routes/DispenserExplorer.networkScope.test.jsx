@@ -62,7 +62,7 @@ function renderExplorer({ activeNetwork, getDispensersForToken }) {
 async function searchFor(token) {
     // The settings load is async; the chain list is empty until it lands, and
     // searching before then would escape the filter - so wait for it.
-    await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Enter a token or seller address to search.')).toBeTruthy());
     const input = screen.getByRole('searchbox');
     fireEvent.change(input, { target: { value: token } });
     fireEvent.click(screen.getByRole('button', { name: /search/i }));
@@ -75,7 +75,7 @@ describe('DispenserExplorer network scoping', () => {
 
         expect(screen.getByRole('form', { name: 'Dispenser search' })).toBeTruthy();
         expect(screen.queryByRole('region', { name: 'Find open dispensers' })).toBeNull();
-        await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
+        await waitFor(() => expect(screen.getByText('Enter a token or seller address to search.')).toBeTruthy());
         expect(screen.queryByText(/Search by token ticker to find open dispensers/)).toBeNull();
         expect(screen.queryByText(/Ticker name, such as MYTOKEN/)).toBeNull();
         expect(action).toBeDisabled();
@@ -84,11 +84,13 @@ describe('DispenserExplorer network scoping', () => {
 
     it('says All networks without repeating ticker guidance', async () => {
         renderExplorer({ activeNetwork: 'mainnet', getDispensersForToken: vi.fn() });
-        await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
+        await waitFor(() => expect(screen.getByText('Enter a token or seller address to search.')).toBeTruthy());
 
+        // The Network select sits in the title-bar filter panel.
+        fireEvent.click(screen.getByRole('button', { name: 'Filter dispensers' }));
         expect(screen.getByRole('option', { name: 'All networks' })).toBeInTheDocument();
         expect(screen.queryByRole('option', { name: 'All chains' })).toBeNull();
-        const field = screen.getByLabelText('Token ticker');
+        const field = screen.getByLabelText('Search a token or seller address');
         expect(field).not.toHaveAttribute('aria-describedby');
         expect(screen.queryByText(/Ticker name, such as MYTOKEN/)).toBeNull();
     });
@@ -128,7 +130,7 @@ describe('DispenserExplorer network scoping', () => {
         }));
         renderExplorer({ activeNetwork: 'mainnet', getDispensersForToken });
 
-        await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
+        await waitFor(() => expect(screen.getByText('Enter a token or seller address to search.')).toBeTruthy());
         const input = screen.getByRole('searchbox');
         const form = input.closest('form');
 
@@ -143,14 +145,16 @@ describe('DispenserExplorer network scoping', () => {
         pending.get('SECOND').forEach((resolve, index) => resolve({
             rows: index === 0 ? [{ action_index: 2, give_tick: 'SECOND', address: 'new-result' }] : [],
         }));
-        expect(await screen.findByText(/SECOND @/)).toBeTruthy();
+        // Results are grouped cards, so the token name can show more than once.
+        expect((await screen.findAllByText(/SECOND/)).length).toBeGreaterThan(0);
 
         pending.get('FIRST').forEach((resolve, index) => resolve({
             rows: index === 0 ? [{ action_index: 1, give_tick: 'FIRST', address: 'old-result' }] : [],
         }));
         await Promise.resolve();
-        expect(screen.queryByText(/FIRST @/)).toBeNull();
-        expect(screen.getByText(/SECOND @/)).toBeTruthy();
+        expect(screen.queryAllByText(/FIRST/)).toHaveLength(0);
+        expect(screen.queryAllByText(/old-result/)).toHaveLength(0);
+        expect(screen.getAllByText(/SECOND/).length).toBeGreaterThan(0);
     });
 
     it('a REGTEST search queries only regtest chains', async () => {
@@ -246,7 +250,7 @@ describe('DispenserExplorer network scoping', () => {
             .mockResolvedValue({ data: [] });
         renderExplorer({ activeNetwork: 'mainnet', getDispensersForToken });
 
-        await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
+        await waitFor(() => expect(screen.getByText('Enter a token or seller address to search.')).toBeTruthy());
         const input = screen.getByRole('searchbox');
         fireEvent.change(input, { target: { value: 'XCHAIN' } });
         fireEvent.click(screen.getByRole('button', { name: 'Search' }));
@@ -254,11 +258,11 @@ describe('DispenserExplorer network scoping', () => {
         expect(screen.getByRole('status', { name: 'Searching dispensers' })).toBeInTheDocument();
         await waitFor(() => expect(resolveFirst).toBeTruthy());
         await act(async () => resolveFirst.reject(new Error('service unavailable')));
-        fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Try Again' }));
 
         expect(await screen.findByText('No matching dispensers')).toBeInTheDocument();
         expect(getDispensersForToken).toHaveBeenCalledTimes(chainIdsOn('mainnet').length * 2);
-        fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Clear Search' }));
         expect(input).toHaveValue('');
         expect(screen.queryByText(/Search by token ticker to find open dispensers/)).toBeNull();
         expect(screen.queryByText(/Ticker name, such as MYTOKEN/)).toBeNull();

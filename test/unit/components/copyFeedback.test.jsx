@@ -47,9 +47,9 @@ describe('clipboard control feedback', () => {
     it('reports a plain failure when raw transaction copying is unavailable', async () => {
         render(<RawPsbtViewer developerMode psbtHex="deadbeef" />);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Copy unsigned transaction code' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Copy Unsigned Transaction Code' }));
 
-        expect(await screen.findByText('Copy failed: clipboard unavailable')).toBeTruthy();
+        expect(await screen.findByText('Copy Failed: Clipboard Unavailable')).toBeTruthy();
         expect(writeText).toHaveBeenCalledWith('deadbeef');
     });
 

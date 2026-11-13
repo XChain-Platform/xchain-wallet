@@ -16,6 +16,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { AdvancedActionsForm, fieldLabel } from '../../../packages/core/src/shared/routes/AdvancedActionsForm.jsx';
 
 const BTC = 'bitcoin-mainnet';
@@ -27,13 +28,16 @@ const FROM = {
     source: 'hd',
 };
 
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); resetWalletModes(); });
 
 function sleepMessaging() {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode: 'watcher' }], activeWalletId: 'w' });
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [BTC]: [FROM] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [BTC]: FROM }),
-        getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher', activeNetwork: 'mainnet' }),
+        getSettings: vi.fn().mockResolvedValue({ activeNetwork: 'mainnet' }),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'w', name: 'W', walletMode: 'watcher' }]),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         listActions: vi.fn().mockResolvedValue(['SLEEP']),
         getActionFormats: vi.fn().mockResolvedValue({ 0: 'VERSION|RESUME_BLOCK|MEMO' }),

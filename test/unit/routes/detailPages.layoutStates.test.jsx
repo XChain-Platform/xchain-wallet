@@ -6,6 +6,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { BetFeedDetail } from '../../../packages/core/src/shared/routes/BetFeedDetail.jsx';
 import { ContractDetail } from '../../../packages/core/src/shared/routes/ContractDetail.jsx';
 import { DispenserDetail } from '../../../packages/core/src/shared/routes/DispenserDetail.jsx';
@@ -13,6 +14,8 @@ import { ListDetail } from '../../../packages/core/src/shared/routes/ListDetail.
 import { PollDetail } from '../../../packages/core/src/shared/routes/PollDetail.jsx';
 import { StakeDetail } from '../../../packages/core/src/shared/routes/StakeDetail.jsx';
 import { SwapForm } from '../../../packages/core/src/shared/routes/SwapForm.jsx';
+import { readFileSync } from 'node:fs';
+import betFeedStyles from '../../../packages/core/src/shared/routes/BetFeedDetail.module.css';
 import detailStyles from '../../../packages/core/src/shared/routes/IssueTokenForm.module.css';
 import tableStyles from '../../../packages/core/src/shared/components/DataTable.module.css';
 import pollStyles from '../../../packages/core/src/shared/routes/PollDetail.module.css';
@@ -105,11 +108,13 @@ function expectWrappingValue(element, text) {
         || element.classList.contains(pollStyles.resultOption)
         || element.classList.contains(pollStyles.resultValues)
         || element.classList.contains(pollStyles.optionLabel)
+        || element.classList.contains(pollStyles.question)
         || element.classList.contains(sectionHeaderStyles.title)).toBe(true);
 }
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     vi.clearAllMocks();
 });
 
@@ -190,6 +195,8 @@ describe('detail page loading and empty states', () => {
         });
         mount(<DispenserDetail walletId="wallet" chainId={CHAIN} actionIndex="7" onBack={() => {}} />, messaging);
 
+        // Dispense and lifecycle activity sit on the Fills tab.
+        fireEvent.click(await screen.findByRole('tab', { name: 'Fills' }));
         const dispensesLoading = await screen.findByText('Loading dispenses…');
         expect(dispensesLoading.closest('[role="status"]')).toBeTruthy();
         expect(screen.queryByText('No dispenses yet.')).toBeNull();
@@ -216,6 +223,7 @@ describe('detail page loading and empty states', () => {
         });
         mount(<DispenserDetail walletId="wallet" chainId={CHAIN} actionIndex="7" onBack={() => {}} />, messaging);
 
+        fireEvent.click(await screen.findByRole('tab', { name: 'Fills' }));
         const dispenses = await screen.findByText('No dispenses yet');
         expect(dispenses.closest('ul')).toBeNull();
         expect(screen.queryByRole('list', { name: 'Dispenses' })).toBeNull();
@@ -326,15 +334,15 @@ describe('412px protocol detail layouts', () => {
         );
 
         expect(await screen.findByText(LONG_NAME)).toBeTruthy();
-        expect(screen.getByRole('heading', { level: 1, name: 'Address list' })).toBeTruthy();
+        expect(screen.getByRole('heading', { level: 1, name: 'Address List' })).toBeTruthy();
         expect(screen.queryByRole('heading', { name: 'List details' })).toBeNull();
         expectCompactCanvas(view.container);
         expectWrappingValue(detailValue('Name'), LONG_NAME);
         expectWrappingValue(detailValue('Block'), LARGE_AMOUNT);
         expect(screen.getByRole('heading', { name: 'Actions' })).toBeTruthy();
         expect(screen.getByLabelText(OTHER_LONG_ADDRESS).textContent).toBe(OTHER_LONG_ADDRESS);
-        expect(screen.getByRole('button', { name: 'Fork & edit' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Share list' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Fork & Edit' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Share List' })).toBeTruthy();
     });
 
     it('keeps stake names, amounts, activity, and every action visible', async () => {
@@ -363,7 +371,7 @@ describe('412px protocol detail layouts', () => {
         );
 
         await waitFor(() => expect(detailValue('Role')).toHaveTextContent(LONG_NAME));
-        expect(screen.getByRole('heading', { level: 1, name: 'Validator stake' })).toBeTruthy();
+        expect(screen.getByRole('heading', { level: 1, name: 'Validator Stake' })).toBeTruthy();
         expect(screen.queryByRole('heading', { name: 'Position details' })).toBeNull();
         expectCompactCanvas(view.container);
         expectWrappingValue(detailValue('Role'), LONG_NAME);
@@ -408,16 +416,19 @@ describe('412px protocol detail layouts', () => {
         );
 
         await waitFor(() => expect(detailValue('Dispensing')).toBeTruthy());
-        expect(screen.getByRole('heading', { level: 1, name: 'Dispenser detail' })).toBeTruthy();
+        expect(screen.getByRole('heading', { level: 1, name: 'Dispenser Detail' })).toBeTruthy();
         expect(screen.queryByRole('heading', { name: 'Dispenser details' })).toBeNull();
         expectCompactCanvas(view.container);
         expectWrappingValue(detailValue('Dispensing'), LARGE_AMOUNT);
         expectWrappingValue(detailValue('Payment'), LARGE_AMOUNT);
-        expect(screen.getByRole('heading', { name: 'Actions' })).toBeTruthy();
-        expect(screen.getByRole('heading', { name: 'Activity' })).toBeTruthy();
+        // The page is a Home-style card with Buy, Details and Fills tabs (Settings for an owner).
+        for (const name of ['Buy', 'Details', 'Fills']) {
+            expect(screen.getByRole('tab', { name })).toBeTruthy();
+        }
         await waitFor(() => expect(screen.getByLabelText(OTHER_LONG_ADDRESS).textContent).toBe(OTHER_LONG_ADDRESS));
         expect(screen.getByLabelText(OTHER_LONG_ADDRESS).closest('dd').style.overflowWrap).toBe('anywhere');
-        expect(screen.getByRole('button', { name: 'More' })).toHaveClass(buttonStyles.btn);
+        fireEvent.click(screen.getByRole('tab', { name: 'Fills' }));
+        expect(await screen.findByRole('list', { name: 'Dispenses' })).toBeTruthy();
     });
 
     it('keeps a long poll question, option, amount, and vote action visible', async () => {
@@ -444,7 +455,8 @@ describe('412px protocol detail layouts', () => {
 
         expect(await screen.findByText(LONG_NAME.repeat(2))).toBeTruthy();
         expectCompactCanvas(view.container);
-        expectWrappingValue(detailValue('Question'), LONG_NAME.repeat(2));
+        // The question heads the page as its own wrapping line, not a details row.
+        expectWrappingValue(screen.getByText(LONG_NAME.repeat(2)), LONG_NAME.repeat(2));
         expectWrappingValue(detailValue('Closes at block'), LARGE_AMOUNT);
         expectWrappingValue(screen.getByText(`0: ${option}`), option);
         expect(screen.getByRole('button', { name: 'Vote' })).toBeTruthy();
@@ -506,11 +518,18 @@ describe('412px protocol detail layouts', () => {
         expect(await screen.findByRole('heading', { name: LONG_NAME.repeat(2) })).toBeTruthy();
         expectCompactCanvas(view.container);
         expectWrappingValue(screen.getByText(`0: ${outcome}`), outcome);
-        expectWrappingValue(screen.getByText(new RegExp(`^${LARGE_AMOUNT}`)), LARGE_AMOUNT);
+        // The pool figure shows twice now (the pool span and the "% of the pot" fact); check the pool span.
+        const poolSpan = screen.getAllByText(new RegExp(`^${LARGE_AMOUNT}`)).find((el) => el.tagName === 'SPAN');
+        expectWrappingValue(poolSpan, LARGE_AMOUNT);
+        // The outcome buttons and Place bet are on the Bet tab.
+        fireEvent.click(screen.getByRole('tab', { name: 'Bet' }));
         const outcomeAction = screen.getByRole('button', { name: outcome });
-        expect(outcomeAction.style.whiteSpace).toBe('normal');
-        expect(outcomeAction.style.overflowWrap).toBe('anywhere');
-        expect(screen.getByRole('button', { name: 'Place bet' })).toBeTruthy();
+        // The outcome segment wraps through its stylesheet rule, not inline styles.
+        expect(outcomeAction).toHaveClass(betFeedStyles.outcomeSegment);
+        const betCss = readFileSync('packages/core/src/shared/routes/BetFeedDetail.module.css', 'utf8');
+        expect(betCss).toMatch(/\.outcomeSegment\.outcomeSegment\s*\{[^}]*white-space:\s*normal;/s);
+        expect(betCss).toMatch(/\.outcomeName\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
+        expect(screen.getByRole('button', { name: 'Place Bet' })).toBeTruthy();
     });
 
     it('keeps long swap terms, large amounts, and review actions visible', async () => {
@@ -522,9 +541,11 @@ describe('412px protocol detail layouts', () => {
             source: 'hd',
             signerId: 'signer',
         };
+        // The wallet's mode is read from the wallet list, not from settings.
+        publishWalletModes({ wallets: [{ id: 'wallet', walletMode: 'watcher' }], activeWalletId: 'wallet' });
         const messaging = messagingWith({
             getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [address] }),
-            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            listWallets: vi.fn().mockResolvedValue([{ id: 'wallet', name: 'W', walletMode: 'watcher' }]),
             getWalletBalances: vi.fn().mockResolvedValue({}),
             getTokenInfo: vi.fn().mockResolvedValue({ divisibility: 18 }),
         });
@@ -534,16 +555,16 @@ describe('412px protocol detail layouts', () => {
         );
 
         fireEvent.click(await screen.findByRole('button', { name: /Get token:/ }));
-        fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Choose Select Get Token' }));
         fireEvent.change(screen.getByLabelText(`Give amount (${LONG_TICK})`), { target: { value: LARGE_AMOUNT } });
         fireEvent.change(screen.getByLabelText(`Get amount (${LONG_GET_TICK})`), { target: { value: LARGE_AMOUNT } });
-        fireEvent.click(screen.getByRole('button', { name: 'Create swap' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Swap' }));
 
         expect(await screen.findByRole('form', { name: 'Review swap' })).toBeTruthy();
         expectCompactCanvas(view.container);
         expectWrappingValue(detailValue('Give amount'), `${LARGE_AMOUNT} ${LONG_TICK}`);
         expectWrappingValue(detailValue('Get amount'), `${LARGE_AMOUNT} ${LONG_GET_TICK}`);
         expect(screen.getByRole('button', { name: 'Edit' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Create unsigned swap transaction' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Create Unsigned Swap Transaction' })).toBeTruthy();
     });
 });

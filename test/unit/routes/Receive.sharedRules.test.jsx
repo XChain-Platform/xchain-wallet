@@ -58,14 +58,13 @@ afterEach(() => {
 });
 
 describe('Receive field help tips', () => {
-    it('explains the address type choice', async () => {
+    // Receive no longer offers an Address type select or an Address label editor, so those two
+    // help tips are retired with their fields.
+    it('no longer offers the Address type or Address label fields', async () => {
         renderReceive();
-        expect(await tipText('About Address type')).toMatch(/SegWit is the usual choice/);
-    });
-
-    it('explains the private address label', async () => {
-        renderReceive();
-        expect(await tipText('About Address label')).toMatch(/never written on chain/);
+        await screen.findByRole('button', { name: /^About Amount/ });
+        expect(screen.queryByRole('button', { name: 'About Address type' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'About Address label' })).toBeNull();
     });
 
     it('explains the requested amount', async () => {

@@ -155,8 +155,9 @@ describe('test-network fiat suppression', () => {
             />
         )));
 
-        expect(await screen.findByText('Test coins have no value.')).toBeInTheDocument();
-        const balance = screen.getByRole('region', { name: 'BTC balance' });
+        // The coin page's hero shows the coin amount only; the "Test coins have
+        // no value" line belongs to Home's hero (checked above).
+        const balance = await screen.findByRole('region', { name: 'BTC' });
         expect(balance).not.toHaveTextContent('$');
         expect(screen.queryByText('24h')).toBeNull();
         expect(screen.queryByRole('tablist', { name: 'Chart range' })).toBeNull();

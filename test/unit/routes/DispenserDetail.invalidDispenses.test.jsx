@@ -91,12 +91,17 @@ const rowOf = (text) => {
     return li;
 };
 const untilRows = () => waitFor(() => rowOf('DOGESWAP'));
+// The page opens on Details; the dispense list is on the Fills tab.
+const openFills = async () => {
+    fireEvent.click(await screen.findByRole('tab', { name: /^Fills$/ }));
+};
 
 afterEach(() => cleanup());
 
 describe('dispenser detail: refused dispenses', () => {
     it('marks a refused row Invalid with the reason, and leaves the honoured row as it was', async () => {
         mount([HONOURED, REFUSED]);
+        await openFills();
         await untilRows();
 
         const refused = rowOf('500 DOGESWAP');
@@ -115,26 +120,31 @@ describe('dispenser detail: refused dispenses', () => {
 
     it('keeps the refused attempt in the list rather than dropping it', async () => {
         mount([HONOURED, REFUSED]);
+        await openFills();
         await untilRows();
         expect(rowOf('500 DOGESWAP')).toBeInTheDocument();
     });
 
     it('excludes the refused amount from the vended total', async () => {
         mount([HONOURED, REFUSED]);
-        await untilRows();
+        // The totals are on the default Details tab.
         // 100 honoured; the 500 attempt moved nothing.
-        expect(screen.getByTestId('vended-total')).toHaveTextContent('100 DOGESWAP in 1 fill');
-        expect(screen.getByText('1 of 1,000 this fill')).toBeInTheDocument();
+        expect(await screen.findByTestId('vended-total')).toHaveTextContent('100 DOGESWAP in 1 fill');
+        expect(screen.getByText(/1 of 1,000 this fill/)).toBeInTheDocument();
     });
 
     it('shows no vended total when every dispense was refused', async () => {
         mount([REFUSED]);
+        await openFills();
         await untilRows();
+        fireEvent.click(screen.getByRole('tab', { name: /^Details$/ }));
+        expect(await screen.findByText(/0 of 1,000 this fill/)).toBeInTheDocument();
         expect(screen.queryByTestId('vended-total')).toBeNull();
     });
 
     it('carries the marker into the lifecycle timeline', async () => {
         mount([HONOURED, REFUSED]);
+        await openFills();
         await untilRows();
         fireEvent.click(screen.getByRole('tab', { name: 'Lifecycle' }));
         const refused = rowOf('500 DOGESWAP');

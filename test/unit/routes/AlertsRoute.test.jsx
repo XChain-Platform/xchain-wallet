@@ -30,6 +30,7 @@ const rows = [
 ];
 
 const mount = (props = {}) => render(<AlertsRoute onBack={vi.fn()} alerts={rows} {...props} />);
+const openFilter = () => fireEvent.click(screen.getByRole('button', { name: 'Filter notifications' }));
 
 afterEach(() => {
     cleanup();
@@ -45,14 +46,18 @@ describe('AlertsRoute', () => {
         expect(markAllButton).toBeTruthy();
         expect(markAllButton.querySelector('svg')).toHaveAttribute('width', '18');
         expect(within(header).getByText('3')).toBeTruthy();
-        expect(within(header).getAllByRole('button')).toHaveLength(2);
-        expect(screen.getByRole('searchbox', { name: 'Search alerts' })).toBeTruthy();
-        const select = screen.getByRole('combobox', { name: 'Filter alert type' });
-        expect(within(select).getByRole('option', { name: 'All types (4)' })).toBeTruthy();
-        expect(within(select).getByRole('option', { name: 'Price (1)' })).toBeTruthy();
-        expect(within(select).getByRole('option', { name: 'Activity (1)' })).toBeTruthy();
-        expect(within(select).getByRole('option', { name: 'Payments (1)' })).toBeTruthy();
-        expect(within(select).getByRole('option', { name: 'Security (1)' })).toBeTruthy();
+        // Back, Mark all read and the Filter button share the title line.
+        expect(within(header).getAllByRole('button')).toHaveLength(3);
+        // The search, Unread and the counted types sit in the filter panel.
+        openFilter();
+        expect(screen.getByRole('searchbox', { name: 'Search notifications' })).toBeTruthy();
+        const types = screen.getByRole('group', { name: 'Notification type' });
+        expect(within(types).getByRole('checkbox', { name: 'Unread (3)' })).toBeTruthy();
+        expect(within(types).getByRole('checkbox', { name: 'All types (4)' })).toBeChecked();
+        expect(within(types).getByRole('checkbox', { name: 'Price (1)' })).toBeTruthy();
+        expect(within(types).getByRole('checkbox', { name: 'Activity (1)' })).toBeTruthy();
+        expect(within(types).getByRole('checkbox', { name: 'Payments (1)' })).toBeTruthy();
+        expect(within(types).getByRole('checkbox', { name: 'Security (1)' })).toBeTruthy();
         expect(screen.getByRole('heading', { name: 'Today' })).toBeTruthy();
         expect(screen.getByRole('heading', { name: 'Yesterday' })).toBeTruthy();
         expect(screen.getByRole('heading', { name: earlierLabel })).toBeTruthy();
@@ -76,26 +81,48 @@ describe('AlertsRoute', () => {
 
     it('filters every alert text, reports matches, highlights matches, and clears search', () => {
         mount();
-        fireEvent.change(screen.getByRole('searchbox', { name: 'Search alerts' }), { target: { value: 'BTC' } });
+        // No match line while nothing is filtered.
+        expect(screen.queryByText(/notifications match/)).toBeNull();
+        openFilter();
+        const search = screen.getByRole('searchbox', { name: 'Search notifications' });
+        fireEvent.change(search, { target: { value: 'BTC' } });
 
-        expect(screen.getByText('1 alerts match')).toBeTruthy();
+        expect(screen.getByText('1 notifications match')).toBeTruthy();
         expect(screen.getAllByText('BTC')).toHaveLength(2);
         expect(screen.getAllByText('BTC').every((node) => node.tagName === 'MARK')).toBe(true);
         expect(screen.queryByText('Send still pending')).toBeNull();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));
+        fireEvent.change(search, { target: { value: '' } });
         expect(screen.getByText('Send still pending')).toBeTruthy();
+        expect(screen.queryByText(/notifications match/)).toBeNull();
     });
 
     it('shows type counts and filters to the selected type', () => {
         mount();
-        const select = screen.getByRole('combobox', { name: 'Filter alert type' });
-        expect(within(select).getByRole('option', { name: 'All types (4)' })).toBeTruthy();
-        expect(within(select).getByRole('option', { name: 'Payments (1)' })).toBeTruthy();
+        openFilter();
+        const types = screen.getByRole('group', { name: 'Notification type' });
+        expect(within(types).getByRole('checkbox', { name: 'All types (4)' })).toBeChecked();
+        const payments = within(types).getByRole('checkbox', { name: 'Payments (1)' });
 
-        fireEvent.change(select, { target: { value: 'payments' } });
+        fireEvent.click(payments);
+        expect(payments).toBeChecked();
+        expect(within(types).getByRole('checkbox', { name: 'All types (4)' })).not.toBeChecked();
         expect(screen.getByText('Payment due tomorrow')).toBeTruthy();
         expect(screen.queryByText('BTC rose above $120,000')).toBeNull();
+
+        // Unchecking the last type falls back to All.
+        fireEvent.click(payments);
+        expect(within(types).getByRole('checkbox', { name: 'All types (4)' })).toBeChecked();
+        expect(screen.getByText('BTC rose above $120,000')).toBeTruthy();
+    });
+
+    it('narrows to unread alerts beside the type choice', () => {
+        mount();
+        openFilter();
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Unread (3)' }));
+        expect(screen.queryByText('Send still pending')).toBeNull();
+        expect(screen.getByText('BTC rose above $120,000')).toBeTruthy();
+        expect(screen.getByText('Payment due tomorrow')).toBeTruthy();
     });
 
     it('marks every row read, clears the badge state, and persists through messaging', async () => {
@@ -122,7 +149,14 @@ describe('AlertsRoute', () => {
 
         expect(onSelect).toHaveBeenCalledOnce();
         expect(screen.queryByLabelText('Unread')).toBeNull();
-        await waitFor(() => expect(messaging.markAlertRead).toHaveBeenCalledWith({ id: 'price', walletId: 'wallet-1' }));
+        // The inbox also receives the alert's record (without its action) so it stays read.
+        await waitFor(() => expect(messaging.markAlertRead).toHaveBeenCalledWith({
+            id: 'price',
+            walletId: 'wallet-1',
+            alert: expect.objectContaining({
+                id: 'price', type: 'price', title: 'BTC rose above $120,000', read: true,
+            }),
+        }));
     });
 
     it('loads delivered inbox rows through the shell messaging path', async () => {
@@ -135,7 +169,7 @@ describe('AlertsRoute', () => {
 
     it('shows one plain empty state and has no serious accessibility violations', async () => {
         const { container } = mount({ alerts: [] });
-        expect(screen.getByRole('heading', { name: 'No alerts' })).toBeTruthy();
+        expect(screen.getByRole('heading', { name: 'No notifications' })).toBeTruthy();
         expect(screen.getByText('Wallet activity, security, and price changes appear here.')).toBeTruthy();
         await expectNoSeriousAxeViolations(container);
     });

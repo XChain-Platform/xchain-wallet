@@ -244,11 +244,11 @@ describe('main flow browser-storage privacy', () => {
         fireEvent.change(screen.getByLabelText(/^Password/), { target: { value: PASSWORD } });
         fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
         fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Reveal recovery phrase' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Reveal Recovery Phrase' }));
         fireEvent.click(screen.getByRole('checkbox', { name: /saved my recovery phrase/ }));
-        fireEvent.click(screen.getByRole('button', { name: 'Verify recovery phrase' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Verify Recovery Phrase' }));
         answerQuiz();
-        fireEvent.click(screen.getByRole('button', { name: 'Create wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Wallet' }));
         await waitFor(() => expect(importMnemonic).toHaveBeenCalledOnce());
         await waitFor(() => expect(indexedDbWrites).toHaveLength(1));
         cleanup();
@@ -275,7 +275,7 @@ describe('main flow browser-storage privacy', () => {
         fireEvent.change(screen.getByLabelText('Wallet password'), {
             target: { value: PASSWORD },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Reveal phrase' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal Phrase' }));
         await screen.findByText(PHRASE);
         cleanup();
 

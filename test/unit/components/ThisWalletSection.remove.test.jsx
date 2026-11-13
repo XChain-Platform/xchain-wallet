@@ -40,12 +40,14 @@ function mount(walletsAfterRemoval, overrides = {}) {
         ...overrides,
     };
 
+    // Settings' Remove wallet page (initialSubpageId 'wallet-remove') hosts
+    // the removal part and the active-wallet handover after it.
     render(
         <MessagingContext.Provider value={{ messaging, shell: 'web' }}>
             <Settings
                 onBack={() => {}}
                 activeWallet={ACTIVE_WALLET}
-                initialSubpageId="this-wallet"
+                initialSubpageId="wallet-remove"
                 reload={reload}
             />
         </MessagingContext.Provider>,
@@ -59,7 +61,7 @@ async function removeActiveWallet() {
     fireEvent.change(screen.getByRole('textbox', { name: 'Confirm wallet name' }), {
         target: { value: ACTIVE_WALLET.name },
     });
-    const confirm = screen.getByRole('button', { name: 'Remove wallet' });
+    const confirm = screen.getByRole('button', { name: 'Remove Wallet' });
     expect(confirm).toBeEnabled();
     fireEvent.click(confirm);
     await screen.findByText('Wallet removed.');
@@ -86,10 +88,10 @@ describe('ThisWalletSection removal completion', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Remove…' }));
         const confirmation = screen.getByRole('textbox', { name: 'Confirm wallet name' });
         fireEvent.change(confirmation, { target: { value: ACTIVE_WALLET.name } });
-        fireEvent.click(screen.getByRole('button', { name: 'Remove wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Remove Wallet' }));
         expect(await screen.findByText(VAULT_CONFLICT_MESSAGE)).toBeTruthy();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Remove wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Remove Wallet' }));
         expect(await screen.findByText('Removal refused')).toBeTruthy();
     });
 
@@ -130,7 +132,7 @@ describe('ThisWalletSection removal completion', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Remove…' }));
         const input = screen.getByRole('textbox', { name: 'Confirm wallet name' });
         fireEvent.change(input, { target: { value: ACTIVE_WALLET.name } });
-        fireEvent.click(screen.getByRole('button', { name: 'Remove wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Remove Wallet' }));
 
         expect(input.disabled).toBe(true);
         expect(screen.getByRole('button', { name: 'Cancel' }).disabled).toBe(true);
@@ -173,7 +175,7 @@ describe('ThisWalletSection removal completion', () => {
         expect(readBalanceCache(ACTIVE_WALLET.id, 'account-active')).toBeNull();
         expect(reload).toHaveBeenCalledOnce();
         expect(screen.queryByRole('button', { name: 'Remove…' })).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Remove wallet' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Remove Wallet' })).toBeNull();
     });
 
     it('clears the empty vault after removing its last wallet', async () => {
@@ -187,7 +189,7 @@ describe('ThisWalletSection removal completion', () => {
         expect(messaging.listWallets).toHaveBeenCalledOnce();
         expect(reload).toHaveBeenCalledOnce();
         expect(screen.queryByRole('button', { name: 'Remove…' })).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Remove wallet' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Remove Wallet' })).toBeNull();
     });
 
     it('clears the removed selection and reloads when fallback selection fails', async () => {

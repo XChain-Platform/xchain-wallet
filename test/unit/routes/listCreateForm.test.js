@@ -130,7 +130,7 @@ describe('ListCreateForm: the bridge-foreclosure disclosure', () => {
         const textarea = await screen.findByLabelText('Tokens');
         expect(textarea).toHaveAttribute('autocapitalize', 'off');
 
-        fireEvent.click(screen.getByRole('button', { name: 'Add from token picker' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add From Token Picker' }));
         fireEvent.click(await screen.findByLabelText(/^Select MiXeD!(?:[\s,]|$)/));
 
         expect(await screen.findByLabelText('Tokens')).toHaveValue('MiXeD!');

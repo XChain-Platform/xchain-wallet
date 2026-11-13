@@ -56,7 +56,7 @@ describe('AddressPreferencesForm memo delimiters', () => {
             const target = mountForm();
             const memo = await screen.findByLabelText(/^Memo$/);
             fireEvent.change(memo, { target: { value } });
-            fireEvent.click(screen.getByRole('button', { name: 'Update preferences' }));
+            fireEvent.click(screen.getByRole('button', { name: /^Update preferences$/i }));
 
             expect(await screen.findByText('Memo cannot contain "|" or ";".')).toBeTruthy();
             expect(screen.queryByRole('form', { name: 'Review preferences' })).toBeNull();
@@ -69,7 +69,7 @@ describe('AddressPreferencesForm memo delimiters', () => {
         mountForm();
         const memo = await screen.findByLabelText(/^Memo$/);
         fireEvent.change(memo, { target: { value: 'café 🚀' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Update preferences' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Update preferences$/i }));
 
         expect(await screen.findByRole('form', { name: 'Review preferences' })).toBeTruthy();
         expect(screen.getByText('café 🚀')).toBeTruthy();

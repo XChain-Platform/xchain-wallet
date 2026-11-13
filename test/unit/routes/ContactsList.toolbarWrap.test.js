@@ -68,19 +68,23 @@ describe('list toolbar control alignment', () => {
     it('uses the shared medium Input for every route search field', () => {
         const toolbar = readCss('packages/core/src/shared/components/ListToolbar.jsx');
         expect(toolbar).toMatch(/<Input[\s\S]*?type="search"[\s\S]*?size="md"/);
-        for (const name of ['DispensersList', 'MyLists', 'ContactsList', 'MessagingInbox']) {
+        for (const name of ['MyLists', 'ContactsList', 'MessagingInbox']) {
             expect(readCss(`packages/core/src/shared/routes/${name}.jsx`)).toMatch(/<ListToolbar\b/);
         }
-        // These toolbars use the shared medium Input, which owns the control tokens.
-        for (const name of ['StakingList']) {
+        // Lists that moved their search to the title-bar filter panel get the same
+        // medium Input from the shared ListFilterMenu, never a toolbar of their own.
+        const filterMenu = readCss('packages/core/src/shared/components/ListFilterMenu.jsx');
+        expect(filterMenu).toMatch(/<Input[\s\S]*?size="md"/);
+        for (const name of ['DispensersList', 'StakingList', 'AddressList']) {
             const route = readCss(`packages/core/src/shared/routes/${name}.jsx`);
-            expect(route).toMatch(/<Input\s+type="search"\s+size="md"/);
+            expect(route).toMatch(/<ListFilterMenu\b/);
+            expect(route).not.toMatch(/<ListToolbar\b/);
         }
         mediumControl(routeCss('AddressList'), '.searchField input');
     });
 
-    it('uses the shared medium-height underline tabs for address types', () => {
-        expect(addressListSource).toMatch(/<Tabs[\s\S]*?value=\{sourceFilter\}/);
+    it('keeps the shared medium-height underline tabs and picks address types from the filter panel', () => {
+        expect(addressListSource).toMatch(/<IconSelect[\s\S]*?value=\{sourceFilter\}/);
         expect(rule(tabsCss, '.tabs')).toMatch(/min-height:\s*var\(--xc-control-h-md\)/);
         expect(rule(tabsCss, '.tab')).toMatch(/min-height:\s*var\(--xc-control-h-md\)/);
         expect(rule(tabsCss, '.tab')).toMatch(/border-bottom:\s*2px solid transparent/);

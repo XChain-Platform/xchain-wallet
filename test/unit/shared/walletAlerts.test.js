@@ -78,7 +78,10 @@ describe('buildWalletAlerts', () => {
         const root = join(here, '..', '..', '..', 'packages');
         for (const file of [
             join(root, 'web', 'src', 'App.jsx'),
-            join(root, 'core', 'src', 'shared', 'routes', 'Home.jsx'),
+            // Home no longer builds alerts: each shell builds them for its menu
+            // bell, so the other two shells call the shared builder as well.
+            join(root, 'extension', 'src', 'popup', 'App.jsx'),
+            join(root, 'desktop', 'renderer', 'App.jsx'),
         ]) {
             const src = readFileSync(file, 'utf8');
             expect(src, file).not.toMatch(/['"](unread-messages|legacy-format)['"]/);

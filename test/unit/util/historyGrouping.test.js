@@ -614,5 +614,80 @@ describe('shared/utils/historyGrouping', () => {
             expect(sections[0].items[0].entry.actionIndex).toBe('2');
             expect(sections.at(-1)).toMatchObject({ label: 'Date unavailable' });
         });
+
+        // A blockless row sits in the section its status pill names: proved
+        // into a block (Confirmed) or given up on (Failed) is settled, and
+        // dates into its day by its own time like an indexed row.
+        describe('settled blockless rows', () => {
+            const NOW = Date.parse('2026-03-08T16:00:00.000Z');
+            const meta = (over) => ({
+                origin: 'local',
+                firstSeenMs: null,
+                observedAtMs: NOW - 3_600_000,
+                broadcastAtMs: NOW - 3_600_000,
+                lastMempoolSeenMs: null,
+                chainConfirmed: false,
+                confirmedAtMs: null,
+                failed: false,
+                replaced: false,
+                ...over,
+            });
+            const blockless = (actionIndex, timestamp, pending, raw = {}) => ({
+                kind: 'entry',
+                entry: { ...entry({ chainId: BTC, actionIndex, action: 'SEND', timestamp, raw }), pending },
+            });
+
+            it('dates a proved row by its block time and orders it among the confirmed rows', () => {
+                process.env.TZ = 'America/New_York';
+                const sections = groupHistoryItemsByLocalDay([
+                    blockless('proved', NOW - 3_600_000, meta({
+                        chainConfirmed: true,
+                        // The block was learned yesterday evening local time.
+                        confirmedAtMs: Date.parse('2026-03-08T02:00:00.000Z'),
+                    })),
+                    flatItem({ actionIndex: 'today', timestamp: Date.parse('2026-03-08T15:00:00.000Z') }),
+                    flatItem({ actionIndex: 'late', timestamp: Date.parse('2026-03-08T03:00:00.000Z') }),
+                    flatItem({ actionIndex: 'early', timestamp: Date.parse('2026-03-08T01:00:00.000Z') }),
+                ], NOW, NOW);
+
+                expect(sections.map((section) => section.key)).toEqual(['day:2026-03-08', 'day:2026-03-07']);
+                expect(sections[1].items.map((item) => item.entry.actionIndex))
+                    .toEqual(['late', 'proved', 'early']);
+            });
+
+            it('puts a failed row in its day by its own time, where a rejected indexed row goes', () => {
+                process.env.TZ = 'America/New_York';
+                const sections = groupHistoryItemsByLocalDay([
+                    blockless('failed', Date.parse('2026-03-08T14:00:00.000Z'), meta({ failed: true }), { status: 'failed' }),
+                    flatItem({ actionIndex: 'newer', timestamp: Date.parse('2026-03-08T15:00:00.000Z') }),
+                    flatItem({
+                        actionIndex: 'rejected',
+                        timestamp: Date.parse('2026-03-08T13:00:00.000Z'),
+                        raw: { status: 'invalid' },
+                    }),
+                ], NOW, NOW);
+
+                expect(sections.map((section) => section.key)).toEqual(['day:2026-03-08']);
+                expect(sections[0].items.map((item) => item.entry.actionIndex))
+                    .toEqual(['newer', 'failed', 'rejected']);
+            });
+
+            it('judges a dropped send on the status clock, not the day-label clock', () => {
+                process.env.TZ = 'America/New_York';
+                const seenAt = NOW - 120_000;
+                const item = blockless('dropped', seenAt, meta({ firstSeenMs: seenAt }));
+                const confirmed = flatItem({ actionIndex: 'newer', timestamp: NOW - 10_000 });
+
+                // The day clock is from before the grace ran out; the status
+                // clock is now, and the row has dropped.
+                const sections = groupHistoryItemsByLocalDay([item, confirmed], NOW - 100_000, NOW);
+                expect(sections.map((section) => section.key)).toEqual(['day:2026-03-08']);
+                expect(sections[0].items.map((it) => it.entry.actionIndex)).toEqual(['newer', 'dropped']);
+
+                // Inside the grace it is still in flight.
+                expect(groupHistoryItemsByLocalDay([item, confirmed], NOW, seenAt + 1000)[0].key)
+                    .toBe('pending');
+            });
+        });
     });
 });

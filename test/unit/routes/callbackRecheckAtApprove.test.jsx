@@ -94,7 +94,7 @@ function mount(messaging) {
 }
 
 async function openConfirm() {
-    const execute = await screen.findByRole('button', { name: 'Execute callback' });
+    const execute = await screen.findByRole('button', { name: 'Execute Callback' });
     await waitFor(() => expect(execute).toBeEnabled());
     await act(async () => { fireEvent.click(execute); });
     await screen.findByRole('button', { name: 'Approve' });

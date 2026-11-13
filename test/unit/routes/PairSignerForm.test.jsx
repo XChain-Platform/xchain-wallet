@@ -82,7 +82,7 @@ describe('PairSignerForm hardware guidance', () => {
         fireEvent.click(screen.getByRole('button', { name: /Trezor/ }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent(expected);
-        expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Try Again' })).toBeInTheDocument();
     });
 
     it('explains how to recover when the wrong Ledger app is open', async () => {
@@ -149,7 +149,7 @@ describe('PairSignerForm hardware guidance', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             /firmware is too old\. Update it to version 2\.1\.0 or newer with Ledger Live, reconnect the device, then try again\./,
         );
-        expect(screen.getByRole('button', { name: 'Update firmware first' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /^Update firmware first$/i })).toBeDisabled();
     });
 });
 
@@ -249,6 +249,27 @@ describe('PairSignerForm pairing flow', () => {
         expect(contentRule).toContain('justify-content: flex-start;');
     });
 
+    it('ends each vendor row in the Back-sized chevron at the right edge', () => {
+        mount();
+
+        const chevronRule = cssRule('.vendorChevron');
+        expect(chevronRule).toContain('--xc-icon-size: 32px;');
+        expect(chevronRule).toContain('width: calc(var(--xc-icon-size) / 3);');
+        expect(chevronRule).toContain('margin-inline-start: auto;');
+        expect(cssRule('.vendorChevron svg')).toContain('width: var(--xc-icon-size);');
+
+        for (const name of ['Trezor', 'Ledger']) {
+            const row = screen.getByRole('button', { name: new RegExp(name) });
+            const chevron = row.querySelector(`.${pairSignerStyles.vendorChevron}`);
+            expect(chevron).toHaveAttribute('aria-hidden', 'true');
+            // The forward glyph is the Back chevron mirrored, drawn in Back's box.
+            expect(chevron.querySelector('svg path')).toHaveAttribute('d', 'm9 18 6-6-6-6');
+            // It is the row's last element, after the vendor name and line.
+            expect(row.querySelector(`.${pairSignerStyles.vendorCardContent}`)
+                .compareDocumentPosition(chevron) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        }
+    });
+
     it('leaves vendor selection through the header back button without a Cancel action', () => {
         const onBack = vi.fn();
         mount({ onBack });
@@ -267,15 +288,26 @@ describe('PairSignerForm pairing flow', () => {
         const pairTrezor = vi.fn(async () => ({ signer: {}, pairingInfo: PAIRING_INFO }));
         mountSimple({ pairTrezor, messaging: { registerSigner } });
 
-        expect(screen.getByText('Step 1 of 4')).toHaveAttribute('aria-current', 'step');
+        // The step count rides on the title line as the header subtitle and
+        // stays the one element marked as the current step.
+        const currentStep = () => {
+            const marked = document.querySelectorAll('[aria-current="step"]');
+            expect(marked).toHaveLength(1);
+            return marked[0].textContent;
+        };
+        expect(screen.getByText('Step 1 of 4')).toBeInTheDocument();
+        expect(currentStep()).toBe('Step 1 of 4');
         await act(async () => {
             fireEvent.click(screen.getByRole('button', { name: /Trezor/ }));
         });
         expect(screen.getByText('Step 3 of 4')).toBeInTheDocument();
+        expect(currentStep()).toBe('Step 3 of 4');
 
-        const cancel = screen.getByRole('button', { name: 'Cancel' });
-        const pairSigner = screen.getByRole('button', { name: 'Pair signer' });
-        expect(cancel.querySelector('svg')).toBeInTheDocument();
+        // The form keeps one action; cancelling is the header Back, as on the
+        // device-choice step.
+        expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Back to previous screen' })).toBeEnabled();
+        const pairSigner = screen.getByRole('button', { name: /^Pair signer$/i });
         expect(pairSigner.querySelector('svg')).toBeInTheDocument();
         expect(pairSigner).toHaveClass(buttonStyles.success);
 
@@ -288,8 +320,9 @@ describe('PairSignerForm pairing flow', () => {
             label: 'Travel signer',
         }));
         expect(screen.getByText('Step 4 of 4')).toBeInTheDocument();
+        expect(currentStep()).toBe('Step 4 of 4');
         const unpair = screen.getByRole('button', { name: 'Unpair' });
-        const finish = screen.getByRole('button', { name: 'Finish pairing' });
+        const finish = screen.getByRole('button', { name: 'Finish Pairing' });
         expect(unpair.querySelector('svg')).toBeInTheDocument();
         expect(finish.querySelector('svg')).toBeInTheDocument();
         expect(finish).toHaveClass(buttonStyles.success);
@@ -306,7 +339,7 @@ describe('PairSignerForm pairing flow', () => {
         });
         expect(screen.getByText('Step 1 of 4')).toBeInTheDocument();
         expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-        expect(screen.getByRole('form', { name: 'Choose hardware signer' })).toBeInTheDocument();
+        expect(screen.getByRole('form', { name: 'Choose hardware wallet' })).toBeInTheDocument();
     });
 
     it('ignores a late hardware result after the user cancels the flow', async () => {
@@ -326,6 +359,6 @@ describe('PairSignerForm pairing flow', () => {
             finishPairing({ signer: {}, pairingInfo: PAIRING_INFO });
         });
         expect(screen.queryByLabelText('Label')).not.toBeInTheDocument();
-        expect(screen.getByRole('form', { name: 'Choose hardware signer' })).toBeInTheDocument();
+        expect(screen.getByRole('form', { name: 'Choose hardware wallet' })).toBeInTheDocument();
     });
 });

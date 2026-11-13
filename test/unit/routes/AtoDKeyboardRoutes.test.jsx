@@ -62,14 +62,13 @@ describe('A-D route keyboard flows', () => {
 
         const savings = (await screen.findByText('Savings')).closest('button');
         const spending = screen.getByText('Spending').closest('button');
+        // My Accounts: Back and the plus on the title bar, then one row per
+        // account (a row switches to it; renaming lives on the account's page).
         const stops = [
             screen.getByRole('button', { name: 'Back to previous screen' }),
+            screen.getByRole('button', { name: 'Add Account' }),
             savings,
-            screen.getByRole('button', { name: 'Rename Savings' }),
             spending,
-            screen.getByRole('button', { name: 'Rename Spending' }),
-            screen.getByRole('button', { name: 'Add account' }),
-            screen.getByRole('button', { name: 'Manage' }),
         ];
 
         for (const stop of stops) {
@@ -78,11 +77,12 @@ describe('A-D route keyboard flows', () => {
             await user.keyboard('{Enter}');
         }
 
-        expect(onBack).toHaveBeenCalledTimes(3);
+        // Back is pressed once, and switching to the other account returns once more.
+        expect(onBack).toHaveBeenCalledTimes(2);
+        // The active account's row does nothing; the other switches.
+        expect(onSwitch).toHaveBeenCalledOnce();
         expect(onSwitch).toHaveBeenCalledWith('a2');
-        expect(onRenameAccount).toHaveBeenNthCalledWith(1, accounts[0]);
-        expect(onRenameAccount).toHaveBeenNthCalledWith(2, accounts[1]);
-        expect(onRenameAccount).toHaveBeenNthCalledWith(3, accounts[0]);
+        expect(onRenameAccount).not.toHaveBeenCalled();
         expect(onAddAccount).toHaveBeenCalledOnce();
     });
 
@@ -148,19 +148,26 @@ describe('A-D route keyboard flows', () => {
 
         await user.tab({ shift: true });
         expect(screen.getByRole('button', { name: 'About Account name' })).toHaveFocus();
+        // The open Account section's header sits between the help tip and Back.
+        await user.tab({ shift: true });
+        expect(screen.getByRole('button', { name: /^Account/ })).toHaveFocus();
         await user.tab({ shift: true });
         expect(screen.getByRole('button', { name: 'Back to previous screen' })).toHaveFocus();
         await user.keyboard('{Enter}');
         expect(onBack).toHaveBeenCalledOnce();
 
         await user.tab();
+        expect(screen.getByRole('button', { name: /^Account/ })).toHaveFocus();
+        await user.tab();
         expect(screen.getByRole('button', { name: 'About Account name' })).toHaveFocus();
         await user.tab();
         expect(name).toHaveFocus();
         await user.clear(name);
         await user.type(name, 'Trading');
-        await user.tab();
-        expect(screen.getByRole('button', { name: 'Add account' })).toHaveFocus();
+        // The Look section's controls come before the action; keep tabbing until it is reached.
+        const action = screen.getByRole('button', { name: 'Add Account' });
+        for (let i = 0; i < 20 && document.activeElement !== action; i += 1) await user.tab();
+        expect(action).toHaveFocus();
         await user.keyboard('{Enter}');
 
         await waitFor(() => expect(onCreated).toHaveBeenCalledWith(account));

@@ -6,6 +6,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { ContractDetail } from '../../../packages/core/src/shared/routes/ContractDetail.jsx';
 import { ContractsList } from '../../../packages/core/src/shared/routes/ContractsList.jsx';
 import { DeployContractForm } from '../../../packages/core/src/shared/routes/DeployContractForm.jsx';
@@ -41,7 +42,7 @@ async function flush() {
     });
 }
 
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); resetWalletModes(); });
 
 describe('contract route request isolation', () => {
     it('starts execution history at page one and clears ownership on a contract switch', async () => {
@@ -72,6 +73,8 @@ describe('contract route request isolation', () => {
 
         await screen.findByText('ping #41-1');
         expect(screen.getByText(/Owner:/).parentElement).toHaveTextContent('(you)');
+        // Calls are the History tab's list; its pager is the one with Next.
+        fireEvent.click(screen.getByRole('tab', { name: 'History' }));
         fireEvent.click(screen.getByRole('button', { name: /Next/ }));
         await waitFor(() => expect(executions).toHaveBeenCalledWith(expect.objectContaining({
             contractActionIndex: '41',
@@ -176,7 +179,7 @@ describe('contract list failure containment', () => {
         await waitFor(() => {
             // Every section failed, and the page says so once with one Try again.
             expect(screen.getAllByText(/Couldn't load contracts\. Try again\./)).toHaveLength(1);
-            expect(screen.getAllByRole('button', { name: 'Try again' })).toHaveLength(1);
+            expect(screen.getAllByRole('button', { name: 'Try Again' })).toHaveLength(1);
         });
     });
 
@@ -214,8 +217,8 @@ describe('contract form submit locks', () => {
         )));
 
         fireEvent.change(await screen.findByLabelText('Method'), { target: { value: 'ping' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
-        const form = await screen.findByRole('form', { name: 'Review contract call' });
+        fireEvent.click(screen.getByRole('button', { name: 'Call Contract' }));
+        const form = await screen.findByRole('form', { name: 'Review Contract Call' });
         fireEvent.submit(form);
         fireEvent.submit(form);
 
@@ -232,7 +235,7 @@ describe('contract form submit locks', () => {
             target: { value: 'module.exports = { run() { return 1; } };' },
         });
         fireEvent.change(screen.getByLabelText('Gas limit'), { target: { value: '50000' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish contract' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish Contract' }));
         const form = await screen.findByRole('form', { name: 'Review contract publication' });
         fireEvent.submit(form);
         fireEvent.submit(form);
@@ -241,11 +244,19 @@ describe('contract form submit locks', () => {
     });
 });
 
+// Both factories below build a watch-only wallet-1; the mode comes from the
+// wallet list, not from settings.
+function watchOnlyWallet() {
+    publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode: 'watcher' }], activeWalletId: 'wallet-1' });
+    return () => Promise.resolve([{ id: 'wallet-1', name: 'W', walletMode: 'watcher' }]);
+}
+
 function executeMessaging(overrides = {}) {
     return {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [ADDRESS] }),
         getActiveAddresses: () => Promise.resolve({}),
-        getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+        getSettings: () => Promise.resolve({}),
+        listWallets: watchOnlyWallet(),
         signerReady: () => Promise.resolve({ ready: false }),
         getContractByActionIndex: () => Promise.resolve({ data: {} }),
         ...overrides,
@@ -256,7 +267,8 @@ function deployMessaging(overrides = {}) {
     return {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [ADDRESS] }),
         getActiveAddresses: () => Promise.resolve({}),
-        getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+        getSettings: () => Promise.resolve({}),
+        listWallets: watchOnlyWallet(),
         signerReady: () => Promise.resolve({ ready: false }),
         listContractTemplates: () => Promise.resolve({ templates: [], patterns: [] }),
         listPendingDeploys: () => Promise.resolve([]),

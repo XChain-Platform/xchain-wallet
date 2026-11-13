@@ -70,7 +70,7 @@ describe('AboutSection diagnostics', () => {
                 password: 'hunter2',
                 address: '1BoatSLRHtKNngkdXEeobR76b53LETtpyT',
             });
-            fireEvent.click(screen.getByRole('button', { name: 'Copy diagnostics' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Copy Diagnostics' }));
 
             // The button label also reads "Copied" now; wait for the status line.
             await screen.findByText(/^Copied \(\d+ bytes\)/);
@@ -90,7 +90,7 @@ describe('AboutSection diagnostics', () => {
         Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
         try {
             mount();
-            fireEvent.click(screen.getByRole('button', { name: 'Copy diagnostics' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Copy Diagnostics' }));
 
             expect(await screen.findByText(/Copy is not available here/)).toBeTruthy();
             expect(screen.queryByText(/Copied/)).toBeNull();
@@ -102,12 +102,12 @@ describe('AboutSection diagnostics', () => {
 
     it('uses the page scroll for long diagnostics and license text', async () => {
         mount();
-        fireEvent.click(screen.getByRole('button', { name: 'Show preview' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Show Preview' }));
         const preview = await screen.findByText(/"version": "test"/);
         expect(preview.style.overflow).toBe('');
         expect(preview.style.maxHeight).toBe('');
 
-        fireEvent.click(screen.getByRole('button', { name: 'Show full text' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Show Full Text' }));
         const license = document.getElementById('full-license-text');
         expect(license.style.overflow).toBe('');
         expect(license.style.maxHeight).toBe('');
@@ -119,7 +119,7 @@ describe('AboutSection diagnostics', () => {
         const summary = screen.getByText(/XChain Wallet is free/).parentElement;
         expect([...summary.querySelectorAll('p')].every((paragraph) => !paragraph.textContent.includes('\n'))).toBe(true);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Show full text' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Show Full Text' }));
         const license = document.getElementById('full-license-text');
         const paragraphs = [...license.querySelectorAll('p')];
         expect(paragraphs.length).toBeGreaterThan(1);
@@ -135,7 +135,7 @@ describe('AboutSection diagnostics', () => {
         };
         try {
             mount(diagnostics);
-            fireEvent.click(screen.getByRole('button', { name: 'Report a problem' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Report a Problem' }));
 
             expect(open).toHaveBeenCalledOnce();
             const [url, target, features] = open.mock.calls[0];

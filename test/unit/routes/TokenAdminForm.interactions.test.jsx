@@ -9,6 +9,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { TokenAdminForm } from '../../../packages/core/src/shared/routes/TokenAdminForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const NEW_OWNER = 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu';
@@ -21,7 +22,8 @@ const SOURCE = {
     signerId: 'signer-1',
 };
 
-const ADMIN_ACTION_PATTERN = /^(Lock token|Update description|Transfer ownership|Update mint settings|Update callback settings|Update access lists|Update bridge settings)$/;
+// Action labels are Title Case verbs.
+const ADMIN_ACTION_PATTERN = /^(Lock Token|Update Description|Transfer Ownership|Update Mint Settings|Update Callback Settings|Update Access Lists|Update Bridge Settings)$/;
 const adminAction = () => screen.getByRole('button', { name: ADMIN_ACTION_PATTERN });
 
 function mountAdmin(mode, overrides = {}, initialTick = 'TOKEN') {
@@ -52,6 +54,9 @@ function mountAdmin(mode, overrides = {}, initialTick = 'TOKEN') {
             return vi.fn().mockResolvedValue({});
         },
     });
+    // A wallet's mode is published by the shell from the wallet list, not read
+    // from settings; these cases run the watcher wallet.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode: 'watcher' }], activeWalletId: 'w' });
     render(
         <MessagingProvider shell="web" messaging={messaging}>
             <TokenAdminForm
@@ -74,26 +79,29 @@ async function pickCallbackToken(tick) {
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     __clearTokenInfoCache();
 });
 
 describe('TokenAdminForm review interaction safety', () => {
     it('gives the Network, Token and Callback token fields a help tip', async () => {
         mountAdmin('callback-settings', {}, '');
-        await screen.findByLabelText('From');
+        // Network and From address sit in the closed From section.
+        await screen.findByLabelText('From address');
+        fireEvent.click(screen.getByRole('button', { name: /^From / }));
         expect(screen.getByRole('button', { name: 'About Network' })).toBeTruthy();
         expect(screen.getByRole('button', { name: 'About Token' })).toBeTruthy();
         expect(screen.getByRole('button', { name: 'About Callback token' })).toBeTruthy();
     });
 
     it.each([
-        ['lock', 'Lock token'],
-        ['description', 'Update description'],
-        ['transfer', 'Transfer ownership'],
-        ['mint-settings', 'Update mint settings'],
-        ['callback-settings', 'Update callback settings'],
-        ['access-lists', 'Update access lists'],
-        ['bridge-settings', 'Update bridge settings'],
+        ['lock', 'Lock Token'],
+        ['description', 'Update Description'],
+        ['transfer', 'Transfer Ownership'],
+        ['mint-settings', 'Update Mint Settings'],
+        ['callback-settings', 'Update Callback Settings'],
+        ['access-lists', 'Update Access Lists'],
+        ['bridge-settings', 'Update Bridge Settings'],
     ])('names the watcher %s action %s', async (mode, label) => {
         mountAdmin(mode);
 
@@ -273,7 +281,7 @@ describe('TokenAdminForm review interaction safety', () => {
         fireEvent.click(adminAction());
 
         expect(await screen.findByLabelText('Type LOCK to confirm')).toHaveValue('');
-        expect(screen.getByRole('button', { name: /Create unsigned transaction/ })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /Create Unsigned Transaction/ })).toBeDisabled();
     });
 
     it('keeps the irreversible warning in confirmation instead of above the lock flags', async () => {
@@ -289,9 +297,9 @@ describe('TokenAdminForm review interaction safety', () => {
         fireEvent.click(preview);
 
         const confirmation = await screen.findByLabelText('Type LOCK to confirm');
-        expect(screen.getByRole('button', { name: /Create unsigned transaction/ })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /Create Unsigned Transaction/ })).toBeDisabled();
         fireEvent.change(confirmation, { target: { value: 'LOCK' } });
-        expect(screen.getByRole('button', { name: /Create unsigned transaction/ })).toBeEnabled();
+        expect(screen.getByRole('button', { name: /Create Unsigned Transaction/ })).toBeEnabled();
     });
 
     it('picks the callback token from held tokens on the form network', async () => {
@@ -301,7 +309,7 @@ describe('TokenAdminForm review interaction safety', () => {
 
         const field = await screen.findByRole('button', { name: 'Callback token: Select a token' });
         fireEvent.click(field);
-        expect(await screen.findByRole('heading', { name: 'Select callback token' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Select Callback Token' })).toBeInTheDocument();
         fireEvent.click(await screen.findByRole('button', { name: /^Select PAY on Bitcoin/ }));
 
         expect(await screen.findByRole('button', { name: 'Callback token: PAY on Bitcoin' }))

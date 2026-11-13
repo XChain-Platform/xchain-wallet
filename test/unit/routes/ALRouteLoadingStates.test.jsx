@@ -8,12 +8,10 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AccountPicker } from '../../../packages/core/src/shared/routes/AccountPicker.jsx';
 import { BetFeedsList } from '../../../packages/core/src/shared/routes/BetFeedsList.jsx';
-import { CrossChainTemplates } from '../../../packages/core/src/shared/routes/CrossChainTemplates.jsx';
 import { GovernancePolls } from '../../../packages/core/src/shared/routes/GovernancePolls.jsx';
 import { ListDetail } from '../../../packages/core/src/shared/routes/ListDetail.jsx';
 
 const BTC = 'bitcoin-mainnet';
-const DOGE = 'dogecoin-mainnet';
 const ADDRESS = { address: 'bc1qloadingstates000000000000000000000000' };
 const TECHNICAL_ERROR = 'GET /BTC/api/private returned HTTP 503';
 
@@ -56,7 +54,7 @@ describe('A-L route load failures', () => {
 
         expect(await screen.findByText("Couldn't load accounts. Try again.")).toBeInTheDocument();
         expect(screen.queryByText(TECHNICAL_ERROR)).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
 
         expect(await screen.findByText('No accounts yet')).toBeInTheDocument();
         expect(listAccounts).toHaveBeenCalledTimes(2);
@@ -91,7 +89,7 @@ describe('A-L route load failures', () => {
 
         expect(await screen.findByText('Could not load betting markets. Try again.')).toBeInTheDocument();
         expect(screen.queryByText(TECHNICAL_ERROR)).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
 
         expect(await screen.findByText('No markets')).toBeInTheDocument();
         expect(betFeeds).toHaveBeenCalledTimes(2);
@@ -107,32 +105,6 @@ describe('A-L route load failures', () => {
         );
 
         await waitFor(() => expectBusy('Loading betting markets'));
-    });
-
-    it('retries CrossChainTemplates with a plain failure sentence', async () => {
-        const getAddressesByChain = vi.fn()
-            .mockRejectedValueOnce(new Error(TECHNICAL_ERROR))
-            .mockResolvedValueOnce({ [BTC]: [ADDRESS], [DOGE]: [{ address: 'Dloadingstates' }] });
-        mount(
-            <CrossChainTemplates walletId="wallet-1" onLaunch={() => {}} onBack={() => {}} />,
-            { getAddressesByChain },
-        );
-
-        expect(await screen.findByText('Could not load wallet networks. Try again.')).toBeInTheDocument();
-        expect(screen.queryByText(TECHNICAL_ERROR)).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
-
-        expect((await screen.findAllByRole('button', { name: 'Use template' })).length).toBeGreaterThan(0);
-        expect(getAddressesByChain).toHaveBeenCalledTimes(2);
-    });
-
-    it('marks a slow CrossChainTemplates load as busy', () => {
-        mount(
-            <CrossChainTemplates walletId="wallet-1" onLaunch={() => {}} onBack={() => {}} />,
-            { getAddressesByChain: vi.fn(() => pending()) },
-        );
-
-        expectBusy('Loading cross-chain templates');
     });
 
     it('retries GovernancePolls with a plain failure sentence', async () => {
@@ -155,7 +127,7 @@ describe('A-L route load failures', () => {
 
         expect(await screen.findByText("Couldn't load governance polls. Try again.")).toBeInTheDocument();
         expect(screen.queryByText(TECHNICAL_ERROR)).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
 
         expect(await screen.findByText('No polls yet')).toBeInTheDocument();
         expect(governancePolls).toHaveBeenCalledTimes(2);
@@ -195,7 +167,7 @@ describe('A-L route load failures', () => {
 
         expect(await screen.findByText("Couldn't load this list. Something went wrong. Try again.")).toBeInTheDocument();
         expect(screen.queryByText(TECHNICAL_ERROR)).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
 
         expect(await screen.findByText('List not found')).toBeInTheDocument();
         expect(getListByActionIndex).toHaveBeenCalledTimes(2);

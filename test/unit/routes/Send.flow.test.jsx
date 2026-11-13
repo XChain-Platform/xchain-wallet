@@ -30,6 +30,29 @@ import {
 } from '../../../packages/desktop/renderer/deepLinkRoute.js';
 import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 import { userEvent } from '../../helpers/userEvent.js';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
+
+// The Asset field opens the token picker page; a stub with one button per
+// tick the cases choose keeps them about Send's own behaviour.
+vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
+    TokenPicker: ({ title, onSelect, onBack }) => (
+        <section aria-label={title}>
+            <h2>{title}</h2>
+            {['BTC', 'PEPE', 'XCP'].map((tick) => (
+                <button key={tick} type="button" onClick={() => onSelect({ chainId: 'bitcoin-mainnet', tick })}>
+                    {`Pick ${tick}`}
+                </button>
+            ))}
+            <button type="button" onClick={onBack}>Back</button>
+        </section>
+    ),
+}));
+
+/** Choose the asset on the Asset picker page, as a user does. */
+function chooseAsset(tick) {
+    fireEvent.click(screen.getByRole('button', { name: /^Asset/ }));
+    fireEvent.click(screen.getByRole('button', { name: `Pick ${tick}` }));
+}
 import { decomposedFor, signedReplyFor } from '../../helpers/hwSignedReply.js';
 
 const CHAIN_ID = 'bitcoin-mainnet';
@@ -92,6 +115,9 @@ function mount({
     hardware = null,
     prefill = null,
 } = {}) {
+    // A wallet's mode is published by the shell from the wallet list, not read
+    // from settings.
+    publishWalletModes({ wallets: [{ id: WALLET_ID, walletMode }], activeWalletId: WALLET_ID });
     const sourceAddress = hardware ? {
         id: 'address-1',
         address: FROM,
@@ -399,6 +425,7 @@ async function approveWithPassword(messaging) {
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     localStorage.clear();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
@@ -522,7 +549,7 @@ describe('Send flow with mocked messaging', () => {
         const messaging = mount({ prefill: route.sendPrefill });
 
         expect(await screen.findByRole('form', { name: 'Send' })).toBeInTheDocument();
-        expect(screen.getByLabelText('Token')).toHaveValue('BTC');
+        expect(screen.getByRole('button', { name: /^Asset: BTC/ })).toBeInTheDocument();
         expect(screen.getByLabelText(/^Amount \(/)).toHaveValue(AMOUNT);
         expect(screen.getByTestId('payment-request-message')).toHaveTextContent(message);
         expect(document.querySelector('img[src="x"]')).toBeNull();
@@ -574,6 +601,7 @@ describe('Send flow with mocked messaging', () => {
             `xchain:BTC/execute?contract=12&method=pay&params=${encodeURIComponent(argument)}`,
             registry,
         );
+        publishWalletModes({ wallets: [{ id: WALLET_ID, walletMode: 'watcher' }], activeWalletId: WALLET_ID });
         const base = {
             getAddressesByChain: vi.fn().mockResolvedValue({
                 [CHAIN_ID]: [{
@@ -618,8 +646,8 @@ describe('Send flow with mocked messaging', () => {
         expect(globalThis.contractLinkRan).toBeUndefined();
         expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
-        const review = await screen.findByRole('form', { name: 'Review contract call' });
+        fireEvent.click(screen.getByRole('button', { name: 'Call Contract' }));
+        const review = await screen.findByRole('form', { name: 'Review Contract Call' });
         expect(review).toHaveTextContent(argument);
         expect(document.querySelector('img[src="x"]')).toBeNull();
         expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
@@ -628,14 +656,17 @@ describe('Send flow with mocked messaging', () => {
     it('keeps field labels ahead of their values in DOM reading order', async () => {
         mount();
 
-        const from = await screen.findByLabelText('From');
+        const from = await screen.findByLabelText('From address');
         const fromLabel = document.querySelector(`label[for="${from.id}"]`);
-        const token = screen.getByLabelText('Token');
-        const tokenLabel = document.querySelector(`label[for="${token.id}"]`);
+        // The Asset field is a picker button whose visible label row sits
+        // directly before it in its field wrapper.
+        const asset = screen.getByRole('button', { name: /^Asset/ });
+        const assetLabelRow = asset.parentElement.firstElementChild;
 
         expect(fromLabel.compareDocumentPosition(from) & Node.DOCUMENT_POSITION_FOLLOWING)
             .toBeTruthy();
-        expect(tokenLabel.compareDocumentPosition(token) & Node.DOCUMENT_POSITION_FOLLOWING)
+        expect(assetLabelRow).toHaveTextContent('Asset');
+        expect(assetLabelRow.compareDocumentPosition(asset) & Node.DOCUMENT_POSITION_FOLLOWING)
             .toBeTruthy();
     });
 
@@ -679,7 +710,7 @@ describe('Send flow with mocked messaging', () => {
     it('tabs through payment fields and reviews only a valid Enter submission', async () => {
         const user = userEvent.setup();
         const messaging = mount();
-        await screen.findByLabelText('From');
+        await screen.findByLabelText('From address');
         const destination = await screen.findByLabelText(/^To$/);
         const contacts = screen.getByRole('button', { name: 'Open address book' });
         destination.focus();
@@ -687,9 +718,9 @@ describe('Send flow with mocked messaging', () => {
         await user.tab();
         expect(document.activeElement).toBe(contacts);
         await user.tab();
-        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'About Token' }));
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'About Asset' }));
         await user.tab();
-        expect(document.activeElement).toBe(screen.getByLabelText('Token'));
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: /^Asset/ }));
         await user.tab();
         expect(document.activeElement).toBe(screen.getByRole('button', { name: 'About Amount (BTC)' }));
         await user.tab();
@@ -767,12 +798,12 @@ describe('Send flow with mocked messaging', () => {
             },
         });
         await screen.findByLabelText(/^To$/);
-        fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'PEPE' } });
+        chooseAsset('PEPE');
         const password = await screen.findByLabelText('Wallet password', {}, { timeout: 1500 });
         fireEvent.change(password, { target: { value: PASSWORD } });
-        fireEvent.click(screen.getByRole('button', { name: 'Recover keys' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Recover Keys' }));
 
-        fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'BTC' } });
+        chooseAsset('BTC');
         expect(screen.queryByLabelText('Wallet password')).not.toBeInTheDocument();
         scan.resolve({ recoveredKeyHashes: ['aa'] });
         await Promise.resolve();
@@ -810,15 +841,17 @@ describe('Send flow with mocked messaging', () => {
 
         expect(toField).toHaveValue(TO);
         expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.25000000');
-        fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'XCP' } });
+        chooseAsset('XCP');
         expect(screen.getByLabelText('Memo')).toHaveValue('Coffee shop');
 
-        fireEvent.change(toField, { target: { value: '' } });
-        fireEvent.paste(toField, {
+        // The picker page replaced the form, so read the field again.
+        const freshToField = screen.getByLabelText(/^To$/);
+        fireEvent.change(freshToField, { target: { value: '' } });
+        fireEvent.paste(freshToField, {
             clipboardData: { getData: () => `bitcoin:${TO}?req-extra=needed` },
         });
 
-        expect(toField).toHaveValue('');
+        expect(freshToField).toHaveValue('');
         expect(await screen.findByText(
             'This payment request requires a feature this wallet does not support.',
         )).toBeInTheDocument();
@@ -857,10 +890,11 @@ describe('Send flow with mocked messaging', () => {
         fireEvent.paste(toField, {
             clipboardData: { getData: () => `bitcoin:${TO}?amount=0.25&message=Rent` },
         });
-        fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'XCP' } });
+        chooseAsset('XCP');
         expect(screen.getByLabelText('Memo')).toHaveValue('Rent');
 
-        fireEvent.paste(toField, {
+        // The picker page replaced the form, so read the field again.
+        fireEvent.paste(screen.getByLabelText(/^To$/), {
             clipboardData: { getData: () => `bitcoin:${TO}?amount=0.5` },
         });
         expect(screen.getByLabelText('Memo')).toHaveValue('');
@@ -1119,7 +1153,7 @@ describe('Send flow with mocked messaging', () => {
         expect(announcement).toHaveAttribute('aria-atomic', 'true');
         expect(announcement).toHaveTextContent(/network accepted your transaction/i);
         expect(within(screen.getByRole('main')).getAllByRole('status')).toHaveLength(1);
-        expect(screen.getByRole('button', { name: 'Copy transaction ID' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Copy Transaction ID' })).toBeInTheDocument();
         expect(screen.getByRole('link', { name: /View in block explorer/i })).toHaveAttribute(
             'href',
             `https://explorer.xchain.io/BTC/tx/${TXID}`,
@@ -1155,9 +1189,9 @@ describe('Send flow with mocked messaging', () => {
         await approveWithPassword(messaging);
         await screen.findByRole('heading', { name: 'Broadcast pending' });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Save recipient' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save Recipient' }));
         fireEvent.change(screen.getByLabelText('Contact name'), { target: { value: 'Alice' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save contact' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save Contact' }));
 
         await waitFor(() => expect(messaging.saveContact).toHaveBeenCalledWith({
             input: {
@@ -1167,7 +1201,7 @@ describe('Send flow with mocked messaging', () => {
             },
         }));
         expect(await screen.findByText('Recipient saved to contacts.')).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Save recipient' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Save Recipient' })).not.toBeInTheDocument();
     });
 
     it('submits only one contact save when the post-send form submits twice', async () => {
@@ -1178,7 +1212,7 @@ describe('Send flow with mocked messaging', () => {
         await openPasswordConfirm(messaging);
         await approveWithPassword(messaging);
         await screen.findByRole('heading', { name: 'Broadcast pending' });
-        fireEvent.click(screen.getByRole('button', { name: 'Save recipient' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save Recipient' }));
         fireEvent.change(screen.getByLabelText('Contact name'), { target: { value: 'Alice' } });
         const saveForm = screen.getByLabelText('Contact name').closest('form');
 
@@ -1203,7 +1237,7 @@ describe('Send flow with mocked messaging', () => {
         expect(within(screen.getByRole('main')).getByRole('status')).toHaveTextContent(/queued-transactions banner/i);
         expect(within(screen.getByRole('main')).getByRole('status')).toHaveTextContent(/don't send this payment again/i);
         expect(screen.queryByText(TXID)).not.toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Send another' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Send Another' })).not.toBeInTheDocument();
     });
 
     it('shows a known node rejection plainly and retains the signed transaction without re-signing', async () => {
@@ -1281,7 +1315,7 @@ describe('Send flow with mocked messaging', () => {
 
         const review = await screen.findByRole('form', { name: 'Review payment' });
         expect(scroller.scrollTop).toBe(0);
-        expect(screen.getByRole('heading', { name: 'Review and send' })).toHaveFocus();
+        expect(screen.getByRole('heading', { name: 'Review and Send' })).toHaveFocus();
         expect(review).toHaveTextContent(`Send ${AMOUNT} BTC on Bitcoin to ${TO}`);
         expect(review).toHaveTextContent('Network');
         expect(review).toHaveTextContent('Bitcoin');
@@ -1346,7 +1380,7 @@ describe('Send flow with mocked messaging', () => {
                 getActiveAddresses: vi.fn(() => active.promise),
             },
         });
-        await waitFor(() => expect(screen.getByLabelText('From')).toHaveValue(SAVED_LOOKALIKE));
+        await waitFor(() => expect(screen.getByLabelText('From address')).toHaveValue(SAVED_LOOKALIKE));
         await fillSendForm();
         const review = await screen.findByRole('form', { name: 'Review payment' });
         expect(review).toHaveTextContent('bc1q11…abcdef');

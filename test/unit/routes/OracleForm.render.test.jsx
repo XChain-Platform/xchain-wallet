@@ -43,12 +43,21 @@ describe('OracleForm rendering', () => {
             </MessagingProvider>,
         );
 
-        expect(await screen.findByRole('heading', { name: 'My oracle' })).toBeInTheDocument();
+        // Page titles are Title Case.
+        expect(await screen.findByRole('heading', { name: 'My Oracle' })).toBeInTheDocument();
         expect(screen.getByLabelText('Publishing address')).toHaveValue(ADDRESS.address);
         expect(screen.getByLabelText('Token ticker')).toHaveValue('PRICE');
         expect(screen.getByLabelText('Currency')).toHaveValue('USD');
         expect(await screen.findByText(/has not published any prices yet/i)).toBeInTheDocument();
         expect(oracleFeeds).toHaveBeenCalledWith({ chainId: CHAIN, address: ADDRESS.address });
+    });
+
+    it('has no Prices wrapper heading or its help tip above the form', async () => {
+        mountOracle();
+        await screen.findByLabelText('Publishing address');
+        expect(screen.queryByRole('heading', { name: /^Prices$/ })).toBeNull();
+        expect(screen.queryByRole('button', { name: /^About Prices$/, hidden: true })).toBeNull();
+        expect(document.body.textContent).not.toMatch(/token price in traditional currency/);
     });
 });
 
@@ -69,7 +78,9 @@ function mountOracle() {
 }
 
 const tipText = (name) => {
-    const tip = screen.getByRole('button', { name });
+    // From and Memo are standard sections, closed on load, so their
+    // help buttons are found with hidden: true.
+    const tip = screen.getByRole('button', { name, hidden: true });
     return document.getElementById(tip.getAttribute('aria-describedby')).textContent;
 };
 

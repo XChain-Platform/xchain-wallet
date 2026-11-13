@@ -240,7 +240,7 @@ describe('History usability', () => {
             />,
         ));
 
-        fireEvent.click(screen.getByRole('button', { name: 'Show holders' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Show Holders' }));
 
         expect(await screen.findByText('25 holders')).toBeInTheDocument();
         expect(screen.getByText('… and 5 more not shown')).toBeInTheDocument();
@@ -281,7 +281,7 @@ describe('History usability', () => {
         ));
 
         fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Copy transaction ID' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Copy Transaction ID' }));
         expect(await screen.findByText('Copy failed: the clipboard is unavailable.')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'More' }));
@@ -322,7 +322,7 @@ describe('History usability', () => {
             ));
 
             fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
-            fireEvent.click(screen.getByRole('button', { name: 'Copy transaction ID' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Copy Transaction ID' }));
             await waitFor(() => expect(writeText).toHaveBeenCalledWith(txHash));
 
             expect(screen.getByRole('link', { name: 'XChain' }))

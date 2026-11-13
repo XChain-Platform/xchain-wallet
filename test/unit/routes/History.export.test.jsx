@@ -127,7 +127,9 @@ describe('History export button', () => {
         const button = await screen.findByRole('button', { name: 'Export…' });
         await waitFor(() => expect(button).toBeEnabled());
 
-        fireEvent.change(screen.getByLabelText('Search history'), {
+        // The search box lives in the title-line filter menu.
+        fireEvent.click(screen.getByRole('button', { name: 'History filters' }));
+        fireEvent.change(await screen.findByLabelText('Search history'), {
             target: { value: 'no such transaction' },
         });
 
@@ -151,16 +153,17 @@ describe('History export button', () => {
         try {
             mountHistory([historyRow()]);
             const trigger = await screen.findByRole('button', { name: 'Export…' });
-            const additionalDetails = screen.getByRole('button', { name: 'More filters' });
+            // The filters, Show fiat and Grouping sit in the title-line filter menu.
+            const filterButton = screen.getByRole('button', { name: 'History filters' });
+            fireEvent.click(filterButton);
+            expect(filterButton).toHaveAttribute('aria-expanded', 'true');
             const showFiat = screen.getByRole('button', { name: 'Show fiat: Off' });
             const grouping = screen.getByRole('radiogroup', { name: 'Grouping mode' });
-            const toolbar = additionalDetails.parentElement;
+            const toolbar = showFiat.parentElement;
             const phone = mediaBlock(historyCss, 'not all and (min-width: 480px)');
 
             expect(window.innerWidth).toBe(360);
             expect(toolbar).not.toBeNull();
-            expect(additionalDetails.parentElement).toBe(toolbar);
-            expect(showFiat.parentElement).toBe(toolbar);
             expect(grouping.parentElement).toBe(toolbar);
             // Export sits in the page actions row beside Refresh, outside the
             // foldable filter card, so it stays reachable while the filters
@@ -168,10 +171,9 @@ describe('History export button', () => {
             expect(trigger.parentElement).toHaveAttribute('data-xc-page-actions');
             expect(trigger.closest('#history-filter-panel')).toBeNull();
             expect(trigger.closest(`.${historyStyles.filterFooter}`)).toBeNull();
-            for (const control of [additionalDetails, showFiat, grouping, trigger]) {
+            for (const control of [showFiat, grouping, trigger]) {
                 expect(control).toHaveClass(historyStyles.toolbarControl);
             }
-            expect(additionalDetails).toHaveAttribute('aria-pressed', 'false');
             expect(showFiat).toHaveAttribute('aria-pressed', 'false');
             expect(trigger).toHaveClass(buttonStyles.secondary);
             expect(ruleBody(historyCss, '.filterFooter')).toMatch(

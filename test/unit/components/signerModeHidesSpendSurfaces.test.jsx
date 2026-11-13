@@ -131,7 +131,9 @@ function messagingFor(walletMode) {
             native: { tick: 'LTC', quantity: '100000000', divisibility: 8 },
             tokens: [],
         }),
-        getSettings: vi.fn().mockResolvedValue({ walletMode, grace: { testSendThresholdSats: 0 } }),
+        // §20: the mode is the wallet's own, read from the safe wallet list.
+        listWallets: vi.fn().mockResolvedValue([{ id: 'w', name: 'W', walletMode }]),
+        getSettings: vi.fn().mockResolvedValue({ grace: { testSendThresholdSats: 0 } }),
         getSignerStatus: vi.fn().mockResolvedValue({ unlocked: false }),
         listContacts: vi.fn().mockResolvedValue([]),
         getRecentDestinations: vi.fn().mockResolvedValue([]),
@@ -167,8 +169,10 @@ describe('Send: the route refuses in signer mode', () => {
 
     it('refuses, and says why and how to undo it, in signer mode', async () => {
         mount(Send, 'signer');
-        expect(await screen.findByText(/signer mode\. It can sign transactions from a watch-only wallet, but it can't send them to the network/i))
+        expect(await screen.findByText(/air-gapped signer\. It can sign transactions from a watch-only wallet, but it can't send them to the network/i))
             .toBeInTheDocument();
+        // The way to see the mode is Wallet Details; Settings no longer has one.
+        expect(screen.getByText(/shown on Wallet Details/i)).toBeInTheDocument();
         // The form must be GONE, not merely covered: the To field is the one
         // input a URI intent would have pre-filled.
         expect(screen.queryByLabelText(/^To$/)).toBeNull();
@@ -185,7 +189,7 @@ describe('Receive: the route refuses in signer mode', () => {
 
     it('refuses in signer mode', async () => {
         mount(Receive, 'signer');
-        expect(await screen.findByText(/signer mode\. It can sign transactions from a watch-only wallet, but it doesn't have an address for receiving funds/i))
+        expect(await screen.findByText(/air-gapped signer\. It can sign transactions from a watch-only wallet, but it doesn't have an address for receiving funds/i))
             .toBeInTheDocument();
     });
 });

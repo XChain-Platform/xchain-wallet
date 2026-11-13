@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -167,12 +167,13 @@ describe('ComposeMessage text limit', () => {
             toAddress: recipient,
         });
         const message = await screen.findByLabelText('Message');
-        const submit = screen.getByRole('button', { name: 'Send message' });
+        const submit = screen.getByRole('button', { name: 'Send Message' });
 
         fireEvent.change(message, { target: { value: '📦' } });
         const counter = screen.getByText(`4 / ${MAX_MESSAGE_BYTES.toLocaleString()} bytes.`);
         const labelRow = counter.parentElement;
-        expect(labelRow).toContainElement(screen.getByText('Message'));
+        // The section title is also "Message", so read the label inside the counter's row.
+        expect(within(labelRow).getByText('Message')).toBeTruthy();
         expect(labelRow).not.toContainElement(message);
         expect(counter).toHaveAttribute('aria-live', 'polite');
         expect(submit.disabled).toBe(false);
@@ -189,7 +190,7 @@ describe('ComposeMessage text limit', () => {
         const recipient = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
         const messaging = mount(ComposeMessage, { chainId: BTC, toAddress: recipient });
         const message = await screen.findByLabelText('Message');
-        const submit = screen.getByRole('button', { name: 'Send message' });
+        const submit = screen.getByRole('button', { name: 'Send Message' });
         const atLimit = 'é'.repeat((MAX_MESSAGE_BYTES / 2 - 62) / 2);
 
         fireEvent.change(message, { target: { value: atLimit } });
@@ -236,7 +237,7 @@ describe('ComposeMessage text limit', () => {
         const message = await screen.findByLabelText('Message');
 
         fireEvent.change(message, { target: { value: '   \n  ' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Send Message' }));
 
         expect(await screen.findByText('Write a message to send, or attach a file.')).toBeTruthy();
         expect(messaging.composeMessageForConfirm).not.toHaveBeenCalled();
@@ -250,13 +251,15 @@ describe('ComposeMessage text limit', () => {
 
         expect(await screen.findByText('Enter a valid address')).toBeTruthy();
         expect(messaging.getRecipientPubkey).not.toHaveBeenCalled();
-        expect(screen.queryByRole('button', { name: /Request encrypted session/i })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Request Encrypted Session (Publish Your Key)' })).toBeNull();
     });
 
     it('refuses unsupported and oversized attachments with specific limits', async () => {
         mount(ComposeMessage, { chainId: BTC, fixedEncryption: 'plaintext' });
-        // The limit rides in the label, like Publish file's field (U94).
-        const input = await screen.findByLabelText(`Attachment (up to ${MAX_MESSAGE_ATTACHMENT_BYTES.toLocaleString()} bytes)`);
+        // The limit rides in the standard file field's label (U94); the
+        // dialog's own input carries the plain Attachment name.
+        await screen.findByLabelText(`Attachment (up to ${MAX_MESSAGE_ATTACHMENT_BYTES.toLocaleString()} bytes)`);
+        const input = screen.getByLabelText('Attachment');
 
         fireEvent.change(input, {
             target: { files: [new File(['#!/bin/sh'], 'run.sh', { type: 'application/x-sh' })] },
@@ -281,15 +284,20 @@ describe('ComposeMessage text limit', () => {
 
     it('accepts a supported attachment and reports its exact size', async () => {
         mount(ComposeMessage, { chainId: BTC, fixedEncryption: 'plaintext' });
-        // The limit rides in the label, like Publish file's field (U94).
-        const input = await screen.findByLabelText(`Attachment (up to ${MAX_MESSAGE_ATTACHMENT_BYTES.toLocaleString()} bytes)`);
+        // The limit rides in the standard file field's label (U94).
+        const display = await screen.findByLabelText(`Attachment (up to ${MAX_MESSAGE_ATTACHMENT_BYTES.toLocaleString()} bytes)`);
+        const input = screen.getByLabelText('Attachment');
 
         fireEvent.change(input, {
             target: { files: [new File(['hello'], 'note.txt', { type: 'text/plain' })] },
         });
 
-        expect(await screen.findByText(/Attached: note\.txt \(5 bytes\)/)).toBeTruthy();
+        // The attached file's name and exact size sit in the field, and its X
+        // removes the attachment.
+        await waitFor(() => expect(display).toHaveValue('note.txt (5 bytes)'));
         expect(screen.queryByRole('alert')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Remove attachment' }));
+        expect(display).toHaveValue('');
     });
 
     it('round-trips supported attachment metadata without mixing it into visible text', () => {
@@ -319,13 +327,13 @@ describe('ComposeMessage text limit', () => {
 });
 
 describe('LinkForm memo limit', () => {
-    it('shows a live counter and explains the memo limit when Link actions is pressed', async () => {
+    it('shows a live counter and explains the memo limit when Link Actions is pressed', async () => {
         const messaging = mount(LinkForm);
         const [firstIndex, secondIndex] = await screen.findAllByLabelText('Action number');
         fireEvent.change(firstIndex, { target: { value: '11' } });
         fireEvent.change(secondIndex, { target: { value: '22' } });
         const memo = screen.getByLabelText('Memo');
-        const submit = await screen.findByRole('button', { name: 'Link actions' });
+        const submit = await screen.findByRole('button', { name: 'Link Actions' });
 
         fireEvent.change(memo, { target: { value: AT_LIMIT } });
         expect(screen.getByText(`${MAX_TEXT_LENGTH} / ${MAX_TEXT_LENGTH}`)).toBeTruthy();
@@ -348,7 +356,7 @@ describe('CallbackForm memo limit', () => {
             initialFromAddress: SOURCE.address,
         });
         const memo = await screen.findByLabelText('Memo');
-        const submit = await screen.findByRole('button', { name: 'Execute callback' });
+        const submit = await screen.findByRole('button', { name: 'Execute Callback' });
 
         fireEvent.change(memo, { target: { value: AT_LIMIT } });
         expect(screen.getByText(`${MAX_TEXT_LENGTH} / ${MAX_TEXT_LENGTH}`)).toBeTruthy();
@@ -371,7 +379,7 @@ describe('CallbackForm memo limit', () => {
         fireEvent.change(memo, { target: { value: 'safe\u0000unsafe' } });
 
         expect(screen.getByText('Memo cannot contain control characters.')).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Execute callback' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Execute Callback' }).disabled).toBe(true);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 });

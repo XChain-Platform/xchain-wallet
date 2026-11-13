@@ -94,7 +94,7 @@ describe('SharedListDirectory names', () => {
         });
 
         const row = await screen.findByRole('listitem', { name: 'Token list 12' });
-        fireEvent.click(within(row).getByRole('button', { name: 'Choose list' }));
+        fireEvent.click(within(row).getByRole('button', { name: 'Choose List' }));
 
         expect(state.onSelect).toHaveBeenCalledWith({
             actionIndex: 1012,

@@ -94,7 +94,7 @@ describe('New contact', () => {
             </MessagingProvider>,
         );
         fireEvent.click(await screen.findByRole('button', { name: 'Create first contact' }));
-        await screen.findByRole('heading', { level: 1, name: 'New contact' });
+        await screen.findByRole('heading', { level: 1, name: 'New Contact' });
         fireEvent.paste(screen.getByLabelText('Address'), {
             clipboardData: { getData: () => `  ${BTC}\n` },
         });

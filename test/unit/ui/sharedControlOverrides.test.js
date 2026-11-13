@@ -29,10 +29,4 @@ describe('shared control overrides', () => {
         expect(rule(css, '.rbfRow')).not.toMatch(/cursor\s*:/);
     });
 
-    it('the wallet row menu button keeps the control radius', () => {
-        const css = read('packages/core/src/shared/routes/WalletPicker.module.css');
-
-        expect(rule(css, '.rowWrap .rowMenuBtn')).toMatch(/border-radius:\s*var\(--xc-control-radius\)/);
-    });
-
 });

@@ -18,7 +18,7 @@ const VIEWPORT_WIDTH = 320;
 const originalInnerWidth = Object.getOwnPropertyDescriptor(window, 'innerWidth');
 const originalMatchMedia = window.matchMedia;
 const alertsCss = readFileSync(
-    'packages/core/src/shared/components/AlertsOverlay.module.css',
+    'packages/core/src/shared/routes/AlertsRoute.module.css',
     'utf8',
 );
 
@@ -125,7 +125,7 @@ describe('A through H routes at 320px', () => {
             },
         );
 
-        expect(await screen.findByRole('button', { name: 'Add account' })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: 'Add Account' })).toBeInTheDocument();
         expectFitsNarrowViewport(view.container);
     });
 
@@ -155,7 +155,7 @@ describe('A through H routes at 320px', () => {
             { listAccounts: vi.fn().mockResolvedValue([]) },
         );
 
-        expect(screen.getByRole('button', { name: 'Add account' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Add Account' })).toBeInTheDocument();
         expectFitsNarrowViewport(view.container);
     });
 
@@ -176,12 +176,12 @@ describe('A through H routes at 320px', () => {
         );
 
         expect(screen.getByRole('button', { name: 'Review' })).toBeInTheDocument();
-        expect(ruleBody(alertsCss, '.alert')).toMatch(/min-width:\s*0/);
-        expect(ruleBody(alertsCss, '.alertHead')).toMatch(/min-width:\s*0/);
-        expect(ruleBody(alertsCss, '.alertTitle'))
-            .toMatch(/min-width:\s*0[\s\S]*overflow-wrap:\s*anywhere/);
-        expect(ruleBody(alertsCss, '.alertMessage'))
-            .toMatch(/min-width:\s*0[\s\S]*overflow-wrap:\s*anywhere/);
+        // The text column may shrink below its content, and long titles and
+        // messages wrap inside it instead of widening the row.
+        expect(ruleBody(alertsCss, '.rowGrid')).toMatch(/minmax\(0,\s*1fr\)/);
+        expect(ruleBody(alertsCss, '.copy')).toMatch(/min-width:\s*0/);
+        expect(ruleBody(alertsCss, '.title')).toMatch(/overflow-wrap:\s*anywhere/);
+        expect(ruleBody(alertsCss, '.message')).toMatch(/overflow-wrap:\s*anywhere/);
         expectFitsNarrowViewport(view.container);
     });
 

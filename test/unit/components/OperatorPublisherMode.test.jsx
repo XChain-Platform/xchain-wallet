@@ -106,7 +106,7 @@ describe('OperatorPublisherMode', () => {
 
         fireEvent.change(reference, { target: { value: '' } });
         fireEvent.change(screen.getByLabelText('Value'), { target: { value: '12.5' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish value' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish Value' }));
 
         expect(reference).toHaveValue('');
         expect(screen.getByRole('alert')).toHaveTextContent('Feed reference number is required.');
@@ -120,14 +120,14 @@ describe('OperatorPublisherMode', () => {
 
         fireEvent.change(screen.getByLabelText('Feed reference number'), { target: { value: '4.2' } });
         fireEvent.change(screen.getByLabelText('Value'), { target: { value: '12' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish value' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish Value' }));
         expect(screen.getByRole('alert')).toHaveTextContent(
             'Feed reference number must be a positive whole number.',
         );
 
         fireEvent.change(screen.getByLabelText('Feed reference number'), { target: { value: '42' } });
         fireEvent.change(screen.getByLabelText('Value'), { target: { value: 'twelve' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish value' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish Value' }));
         expect(screen.getByRole('alert')).toHaveTextContent('Value must be a number.');
         expect(lane.run).not.toHaveBeenCalled();
     });
@@ -138,7 +138,7 @@ describe('OperatorPublisherMode', () => {
         await waitFor(() => expect(screen.queryByText('Loading source address…')).toBeNull());
 
         fireEvent.change(screen.getByLabelText('Value'), { target: { value } });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish value' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish Value' }));
 
         expect(screen.getByRole('alert')).toHaveTextContent('Value must be a number.');
         expect(lane.run).not.toHaveBeenCalled();
@@ -266,7 +266,7 @@ describe('OperatorPublisherMode', () => {
             target: { value: ' 42 ' },
         });
         fireEvent.change(screen.getByLabelText('Value'), { target: { value: ' 12.5 ' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish value' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish Value' }));
 
         await waitFor(() => expect(lane.run).toHaveBeenCalledWith({
             actionData: {

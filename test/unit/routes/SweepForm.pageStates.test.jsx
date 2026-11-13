@@ -15,6 +15,7 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 
 const confirmResult = { current: null, calls: 0 };
 
@@ -87,6 +88,8 @@ function mountSweep({ getAddressesByChain, migrate = false, walletMode = 'full' 
             migrateTo: { walletId: 'wallet-new', name: 'New wallet', address: DESTINATION },
         }
         : {};
+    // A wallet's mode is published from the wallet list, not read from settings.
+    publishWalletModes({ wallets: [{ id: 'wallet-old', walletMode }], activeWalletId: 'wallet-old' });
     const { container } = render(
         <MessagingProvider shell="web" messaging={messaging}>
             <SweepForm walletId="wallet-old" onBack={() => {}} {...props} />
@@ -115,6 +118,7 @@ afterEach(() => {
     localStorage.clear();
     confirmResult.current = null;
     confirmResult.calls = 0;
+    resetWalletModes();
 });
 
 describe('SweepForm lays out every page state through FormPage', () => {

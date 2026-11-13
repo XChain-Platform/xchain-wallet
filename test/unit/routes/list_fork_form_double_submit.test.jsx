@@ -13,6 +13,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { ListCreateForm } from '../../../packages/core/src/shared/routes/ListCreateForm.jsx';
 import { ListForkForm } from '../../../packages/core/src/shared/routes/ListForkForm.jsx';
 import { ListRenameForm } from '../../../packages/core/src/shared/routes/ListRenameForm.jsx';
@@ -38,10 +39,13 @@ const CURRENT_ROW = {
 };
 
 function mountFork() {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode: 'watcher' }], activeWalletId: 'wallet-1' });
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: ADDRESS.id } }),
-        getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher', activeNetwork: 'mainnet' }),
+        getSettings: vi.fn().mockResolvedValue({ activeNetwork: 'mainnet' }),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'W', walletMode: 'watcher' }]),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         getListByActionIndex: vi.fn().mockResolvedValue(CURRENT_ROW),
         buildActionPsbtRequest: vi.fn().mockResolvedValue({ psbtHex: '70736274ff' }),
@@ -91,10 +95,13 @@ const BTC_OWNER = {
 const DESTINATION = '1FWDonkMbC6hL64JiysuggHnUAw2CKWszs';
 
 function existingListMessaging(overrides = {}) {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode: 'watcher' }], activeWalletId: 'wallet-1' });
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [BTC]: [BTC_OWNER] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [BTC]: { id: BTC_OWNER.id } }),
-        getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher', activeNetwork: 'mainnet' }),
+        getSettings: vi.fn().mockResolvedValue({ activeNetwork: 'mainnet' }),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'W', walletMode: 'watcher' }]),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         getListByActionIndex: vi.fn(async ({ actionIndex }) => ({
             action_index: Number(actionIndex),
@@ -142,6 +149,7 @@ function renderExistingForm(Component, messaging, listRef) {
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     vi.clearAllMocks();
 });
 
@@ -150,9 +158,9 @@ describe('ListForkForm first-leg submission', () => {
         const { messaging } = mountFork();
         await screen.findByText(/Forking token list #2700/);
         fireEvent.change(screen.getByLabelText('Add tokens'), { target: { value: 'NEWTICK' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish Edit' }));
 
-        const submit = await screen.findByRole('button', { name: 'Create unsigned transaction' });
+        const submit = await screen.findByRole('button', { name: 'Create Unsigned Transaction' });
         let releaseMembership;
         const membership = new Promise((resolve) => { releaseMembership = resolve; });
         messaging.getListByActionIndex.mockImplementation(() => membership);
@@ -185,8 +193,8 @@ describe('list form submission locks', () => {
         fireEvent.change(await screen.findByLabelText('Tokens'), {
             target: { value: 'XCHAIN' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
-        const submit = await screen.findByRole('button', { name: 'Create unsigned transaction' });
+        fireEvent.click(screen.getByRole('button', { name: 'Create Unsigned Transaction' }));
+        const submit = await screen.findByRole('button', { name: 'Create Unsigned Transaction' });
         act(() => {
             submit.click();
             submit.click();
@@ -211,7 +219,7 @@ describe('list form submission locks', () => {
         fireEvent.change(screen.getByLabelText('Type TRANSFER to confirm'), {
             target: { value: 'TRANSFER' },
         });
-        const submit = screen.getByRole('button', { name: 'Create unsigned transaction' });
+        const submit = screen.getByRole('button', { name: 'Create Unsigned Transaction' });
         act(() => {
             submit.click();
             submit.click();
@@ -324,7 +332,7 @@ describe('existing list form identity', () => {
         fireEvent.change(screen.getByLabelText('Type TRANSFER to confirm'), {
             target: { value: 'TRANSFER' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Unsigned Transaction' }));
         await waitFor(() => expect(messaging.buildActionPsbtRequest).toHaveBeenCalledTimes(1));
 
         view.switchTo({

@@ -11,6 +11,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Locked } from '../../../packages/core/src/shared/routes/Locked.jsx';
+import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { clearDemoWalletId, clearLockoutState } from '../../../packages/core/src/flows/index.js';
 
 const css = readFileSync(
@@ -81,17 +82,18 @@ describe('Locked compact-height layout', () => {
     it.each(VIEWPORTS)('renders every lock-screen control at $width x $height ($name)', (viewport) => {
         renderLocked(viewport);
 
-        expect(screen.getByRole('heading', { name: 'Unlock wallet' })).toBeVisible();
+        // The lock screen's heading is the product name, with no wallet name.
+        expect(screen.getByRole('heading', { level: 1, name: branding.PRODUCT_NAME })).toBeVisible();
         expect(screen.getByLabelText('Password')).toBeVisible();
         expect(screen.getByRole('button', { name: 'Unlock Wallet' })).toBeVisible();
-        expect(screen.getByRole('button', { name: 'Forgot password?' })).toBeVisible();
+        expect(screen.getByRole('button', { name: 'Forgot Password?' })).toBeVisible();
     });
 
     it('orders the primary action before recovery and toggles password visibility in memory', () => {
         renderLocked({ width: 360, height: 640 });
         const password = screen.getByLabelText('Password');
         const unlock = screen.getByRole('button', { name: 'Unlock Wallet' });
-        const forgot = screen.getByRole('button', { name: 'Forgot password?' });
+        const forgot = screen.getByRole('button', { name: 'Forgot Password?' });
         const storageWrite = vi.spyOn(Storage.prototype, 'setItem');
         const consoleWrites = ['log', 'info', 'warn', 'error', 'debug']
             .map((method) => vi.spyOn(console, method).mockImplementation(() => {}));

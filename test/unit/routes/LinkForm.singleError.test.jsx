@@ -4,9 +4,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { LinkForm } from '../../../packages/core/src/shared/routes/LinkForm.jsx';
 
 const BTC = 'bitcoin-mainnet';
@@ -20,7 +21,12 @@ const address = (id, chain) => ({
     signerId: 'signer-1',
 });
 
-afterEach(cleanup);
+// Every case here runs as a watch-only wallet. The mode comes from the wallet
+// list, not from settings.
+beforeEach(() => {
+    publishWalletModes({ wallets: [{ id: 'w', walletMode: 'watcher' }], activeWalletId: 'w' });
+});
+afterEach(() => { cleanup(); resetWalletModes(); });
 
 describe('LinkForm error banner', () => {
     it('states a rejected action number once, not once for the live check and once for Review', async () => {
@@ -29,7 +35,7 @@ describe('LinkForm error banner', () => {
         const client = {
             getAddressesByChain: vi.fn().mockResolvedValue({ [BTC]: [btc], [LTC]: [ltc] }),
             getActiveAddresses: vi.fn().mockResolvedValue({ [BTC]: btc, [LTC]: ltc }),
-            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            getSettings: vi.fn().mockResolvedValue({}),
             signerReady: vi.fn().mockResolvedValue({ ready: false }),
             getActionByIndex: vi.fn(({ chainId }) => (chainId === BTC
                 ? Promise.reject(new Error('Explorer returned HTTP 500 for /BTC/api/action/10'))
@@ -49,8 +55,7 @@ describe('LinkForm error banner', () => {
         await waitFor(() => expect(screen.getByRole('alert'))
             .toHaveTextContent('Could not verify Action 1'));
         // Both lookups have to settle before the button stops reading "Looking up actions…".
-        fireEvent.click(await screen.findByRole('button', { name: 'Link actions' }));
-
+        fireEvent.click(await screen.findByRole('button', { name: 'Link Actions' }));
         expect(screen.getAllByText(/Could not verify Action 1/)).toHaveLength(1);
     });
 });

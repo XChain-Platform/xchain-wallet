@@ -51,12 +51,14 @@ describe('AdvancedActionsForm blank form', () => {
                 <AdvancedActionsForm walletId="w" onBack={() => {}} />
             </MessagingProvider>,
         );
+        // Network sits in the closed From section; open it so its help shows.
+        fireEvent.click(await screen.findByRole('button', { name: /^From\b/, expanded: false }));
         expect(await screen.findByRole('button', { name: 'About Network' })).toBeInTheDocument();
         await waitFor(() => expect(document.querySelector('option[value="BROADCAST"]')).toBeTruthy());
         const picker = document.querySelector('option[value="BROADCAST"]').closest('select');
         fireEvent.change(picker, { target: { value: 'BROADCAST' } });
         await screen.findByLabelText('MESSAGE');
-        fireEvent.click(screen.getByRole('button', { name: 'Sign action' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Sign Action' }));
 
         expect((await screen.findAllByText('Enter a value for MESSAGE.')).length).toBeGreaterThan(0);
         expect(screen.getByLabelText('MESSAGE')).toHaveAttribute('aria-invalid', 'true');

@@ -11,7 +11,7 @@
 // PC-52 through the real Send form: adding a recipient must change the PAYLOAD,
 // not just the screen.
 //
-// These drive the component the way a user does (type, click "+ Add recipient",
+// These drive the component the way a user does (type, click "+ Add Recipient",
 // submit) and assert what crosses the messaging boundary, because that is the
 // only place the multi-leg send becomes real. The two refusals are here for the
 // same reason: a form that renders a warning but still submits would compose a
@@ -22,14 +22,17 @@ import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/re
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 
 vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
     TokenPicker: ({ title, onSelect, onBack }) => (
         <section aria-label={title}>
             <h2>{title}</h2>
-            <button type="button" onClick={() => onSelect({ chainId: CHAIN, tick: 'DANK' })}>
-                Pick DANK
-            </button>
+            {['PEPE', 'DANK', 'BTC', 'GATED'].map((tick) => (
+                <button key={tick} type="button" onClick={() => onSelect({ chainId: CHAIN, tick })}>
+                    {`Pick ${tick}`}
+                </button>
+            ))}
             <button type="button" onClick={onBack}>Back</button>
         </section>
     ),
@@ -53,6 +56,9 @@ const ADDRESSES = {
 };
 
 function mount({ gated = false, watcher = false } = {}) {
+    // A wallet's mode is published by the shell from the wallet list, not read
+    // from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode: watcher ? 'watcher' : 'full' }], activeWalletId: 'w' });
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getAddressBalances: vi.fn().mockResolvedValue({
@@ -95,12 +101,14 @@ function mount({ gated = false, watcher = false } = {}) {
     return messaging;
 }
 
-const addRecipient = () => screen.getByRole('button', { name: /Add recipient/ });
+const addRecipient = () => screen.getByRole('button', { name: /Add Recipient/ });
 
 /** Fill the first recipient (the ordinary single-send fields). */
 async function fillFirst({ tick = 'PEPE', amount = '7', to = ALICE } = {}) {
     fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: to } });
-    fireEvent.change(screen.getByLabelText(/^Token$/), { target: { value: tick } });
+    // The asset is chosen in the Asset picker page, not typed.
+    fireEvent.click(screen.getByRole('button', { name: /^Asset/ }));
+    fireEvent.click(screen.getByRole('button', { name: `Pick ${tick}` }));
     // The primary amount label carries its unit ("Amount (PEPE)").
     fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: amount } });
 }
@@ -122,7 +130,10 @@ async function fillRow(n, { to, amount, tick } = {}) {
     }
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    resetWalletModes();
+});
 
 // The form's error summary repeats each field message as a link, so a field
 // assertion reads the error node attached to its own input.
@@ -286,7 +297,7 @@ describe('Send: multi-recipient (PC-52)', () => {
         fireEvent.click(screen.getByRole('switch', { name: /Different token per recipient/ }));
         const pickerButton = screen.getByRole('button', { name: /Recipient 2 token: PEPE/ });
         fireEvent.click(pickerButton);
-        expect(screen.getByRole('heading', { name: 'Select token for recipient 2' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Select Token for Recipient 2' })).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Pick DANK' }));
         // The amount typed for PEPE is cleared with the token change and typed again for DANK.
         await fillRow(1, { amount: '3' });
@@ -308,7 +319,7 @@ describe('Send: multi-recipient (PC-52)', () => {
     it('does not offer a second recipient for the native coin', async () => {
         mount();
         await fillFirst({ tick: 'BTC', amount: '0.5' });
-        expect(screen.queryByRole('button', { name: /Add recipient/ })).toBeNull();
+        expect(screen.queryByRole('button', { name: /Add Recipient/ })).toBeNull();
     });
 
     it('refuses to submit when the token is switched to the coin after rows were added', async () => {
@@ -318,7 +329,8 @@ describe('Send: multi-recipient (PC-52)', () => {
         await fillRow(1, { to: BOB, amount: '3' });
         // The rows are KEPT (the typed addresses are not thrown away) and the
         // send is blocked with the reason.
-        fireEvent.change(screen.getByLabelText(/^Token$/), { target: { value: 'BTC' } });
+        fireEvent.click(screen.getByRole('button', { name: /^Asset/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Pick BTC' }));
         expect(screen.getByText(/BTC can be sent to only one recipient/)).toBeInTheDocument();
         expect(screen.getByLabelText('Recipient 2 address')).toHaveValue(BOB);
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));

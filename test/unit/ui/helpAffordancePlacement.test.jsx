@@ -18,18 +18,22 @@ import { describe, expect, it } from 'vitest';
 const read = (name) => readFileSync(`packages/core/src/shared/routes/${name}`, 'utf8');
 
 describe('help tip placement', () => {
-    it('SignerSelectForm hands its tip to the section heading', () => {
+    it('SignerSelectForm hands its intro to the choice group help prop', () => {
         const source = read('SignerSelectForm.jsx');
-        expect(source).toMatch(/<FormSection\s+title=\{t\('signerSelect\.choose'\)\}\s+trailing=\{<InfoTip/);
-        expect(source.match(/<InfoTip/g)).toHaveLength(1);
+        expect(source).toMatch(/<RadioGroup\s+legend=\{t\('signerSelect\.title'\)\}[\s\S]*?help=\{t\('signerSelect\.intro'\)\}/);
+        expect(source).not.toMatch(/<FormSection\b/);
+        expect(source.match(/<InfoTip/g)).toBeNull();
     });
 
     it('ProjectRosterForm hands its explanations to field help props', () => {
         const source = read('ProjectRosterForm.jsx');
-        expect(source).not.toMatch(/<InfoTip/);
-        expect(source).toMatch(/help=\{`Only the current owner/);
-        expect(source).toMatch(/help=\{`Tokens on \$\{tick\}'s official-token list/);
-        expect(source).toMatch(/help="An optional note stored with the link/);
+        // The token rows are not one input, so their label row carries the
+        // one tip, the same InfoTip a field label draws.
+        expect(source.match(/<InfoTip/g)).toHaveLength(1);
+        expect(source).toMatch(/label=\{t\('projectRoster\.tokensHelp', \{ tick \}\)\}/);
+        expect(source).toMatch(/addressHelp=\{`Only the current owner/);
+        expect(source).toMatch(/help=\{t\('projectRoster\.listNameHelp', \{ tick \}\)\}/);
+        expect(source).toMatch(/help="An optional public note stored on the chain/);
     });
 
     it('PairPartnerWallet keeps its tip in the section heading and shows the role help as text', () => {

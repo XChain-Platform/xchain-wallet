@@ -138,7 +138,7 @@ describe('AdvancedActionsForm raw BATCH', () => {
         const command = await screen.findByLabelText('COMMAND');
         fireEvent.change(command, { target: { value: 'SEND|0|XCP|1|bc1qdest;ORDER|0|XCP|1|BTC|1' } });
         await waitFor(() => expect(host.validateAction).toHaveBeenCalled());
-        const button = await screen.findByRole('button', { name: 'Sign action' });
+        const button = await screen.findByRole('button', { name: 'Sign Action' });
         await waitFor(() => expect(button.disabled).toBe(false));
         fireEvent.click(button);
     }

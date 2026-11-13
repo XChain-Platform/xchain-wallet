@@ -32,7 +32,7 @@ describe('Home quick actions grid', () => {
         const body = ruleBody('.quickActions');
         expect(body).toMatch(/display:\s*grid/);
         expect(body).toMatch(/grid-auto-flow:\s*column/);
-        expect(body).toMatch(/grid-auto-columns:\s*minmax\(0,\s*7\.5rem\)/);
+        expect(body).toMatch(/grid-auto-columns:\s*minmax\(0,\s*5\.5rem\)/);
         expect(body).toMatch(/justify-content:\s*center/);
         expect(body).not.toMatch(/auto-fit|auto-fill/);
     });

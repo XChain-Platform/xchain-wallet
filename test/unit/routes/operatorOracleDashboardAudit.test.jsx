@@ -94,7 +94,7 @@ describe('operator and oracle dashboard audit', () => {
             .toHaveTextContent('Unclaimed rewards: 2 XCHAIN; Total rewards earned: 3 XCHAIN');
         expect(screen.getByText(/Format version: 2/)).toHaveTextContent('published value: 42000; published at block: 107');
 
-        fireEvent.click(screen.getByRole('button', { name: 'Refresh metrics' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh Metrics' }));
         expect(await screen.findByText("Couldn't load staking status.")).toBeTruthy();
         expect(screen.queryByText(/Cannot read properties/)).toBeNull();
         expect(screen.getByText('Total amount staked: 12.5 XCHAIN')).toBeTruthy();
@@ -117,11 +117,11 @@ describe('operator and oracle dashboard audit', () => {
             "Couldn't load staking status, delegation chain, validator performance, rewards trajectory and publishing activity.",
         );
         expect(container.querySelectorAll('[data-variant="error"]')).toHaveLength(1);
-        expect(screen.getAllByRole('button', { name: 'Try again' })).toHaveLength(1);
+        expect(screen.getAllByRole('button', { name: 'Try Again' })).toHaveLength(1);
 
         const loaders = [messaging.getStakesForAddress, messaging.getValidatorsForChain, messaging.getBroadcastsForAddress];
         const before = loaders.map((fn) => fn.mock.calls.length);
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         await waitFor(() => loaders.forEach((fn, i) => expect(fn.mock.calls.length).toBeGreaterThan(before[i])));
     });
 
@@ -137,7 +137,7 @@ describe('operator and oracle dashboard audit', () => {
         expect(screen.getByText('Market status: Taking bets')).toBeTruthy();
         expect(container.textContent).not.toContain('Market status: open');
 
-        fireEvent.click(screen.getByRole('button', { name: 'Refresh markets' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh Markets' }));
         await waitFor(() => expect(betFeeds).toHaveBeenCalledTimes(2));
         expect(await screen.findByText('Could not refresh your markets. The last known markets are still shown.')).toBeTruthy();
         expect(screen.getByText(/Market number: #42; Rain tomorrow/)).toBeTruthy();
@@ -147,7 +147,7 @@ describe('operator and oracle dashboard audit', () => {
         const empty = oracleMessaging([]);
         const emptyView = mount(OracleConsole, empty.messaging);
         expect(await screen.findByText('No markets yet')).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Refresh markets' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Refresh Markets' })).toBeTruthy();
         emptyView.unmount();
 
         const failed = oracleMessaging([]);
@@ -155,7 +155,7 @@ describe('operator and oracle dashboard audit', () => {
         mount(OracleConsole, failed.messaging);
         expect(await screen.findByText('Could not load your markets. Check your connection and try again.')).toBeTruthy();
         expect(screen.queryByText('No markets yet')).toBeNull();
-        expect(screen.getByRole('button', { name: 'Refresh markets' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Refresh Markets' })).toBeTruthy();
     });
 
     it('gives both routes narrow-screen wrapping and card sizing rules', () => {

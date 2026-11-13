@@ -86,8 +86,18 @@ function mount(client = messagingFor(), issuerAddress = OWNER.address) {
 }
 
 async function composeReady() {
-    await waitFor(() => expect(screen.getByLabelText('From')).toHaveValue(OWNER.address));
+    // The standard From section labels the field "From address".
+    await waitFor(() => expect(screen.getByLabelText('From address')).toHaveValue(OWNER.address));
 }
+
+// Opens a closed standard section by its title.
+function openSection(title) {
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${title}\\b`), expanded: false }));
+}
+
+const FILE_LABEL = /^Artwork file \(up to [\d,]+ bytes\)$/;
+// The file field's hidden picker input, named apart from the visible field.
+const PICKER_LABEL = 'Choose file to attach';
 
 function precedes(a, b) {
     // eslint-disable-next-line no-bitwise
@@ -125,10 +135,12 @@ describe('AttachContentForm app-wide form rulings', () => {
         mount();
         await composeReady();
 
-        const network = screen.getByRole('button', { name: /^Network: Bitcoin/ });
-        const from = screen.getByLabelText('From');
+        // Network and From sit in the closed From section; Title comes
+        // before the file (the standard file field), then Memo.
+        const network = screen.getByRole('button', { name: /^Network: Bitcoin/, hidden: true });
+        const from = screen.getByLabelText('From address');
         const token = screen.getByRole('button', { name: /^Token: ART on Bitcoin/ });
-        const fileGroup = screen.getByRole('group', { name: 'Artwork file' });
+        const file = screen.getByLabelText(FILE_LABEL);
         const title = screen.getByLabelText('Title');
         const memo = screen.getByLabelText('Memo');
 
@@ -136,19 +148,23 @@ describe('AttachContentForm app-wide form rulings', () => {
         expect(token).toBeDisabled();
         expect(precedes(network, from)).toBe(true);
         expect(precedes(from, token)).toBe(true);
-        expect(precedes(token, fileGroup)).toBe(true);
-        expect(precedes(fileGroup, title)).toBe(true);
-        expect(precedes(title, memo)).toBe(true);
+        expect(precedes(token, title)).toBe(true);
+        expect(precedes(title, file)).toBe(true);
+        expect(precedes(file, memo)).toBe(true);
     });
 
     it('offers only the token chain on the Network field', async () => {
         mount();
         await composeReady();
 
-        fireEvent.click(screen.getByRole('button', { name: /^Network: Bitcoin/ }));
-        const dialog = await screen.findByRole('dialog');
-        expect(within(dialog).getAllByRole('button', { name: /Bitcoin/ }).length).toBeGreaterThan(0);
-        expect(within(dialog).queryByRole('button', { name: /Litecoin|Dogecoin/ })).toBeNull();
+        // The token decides the network, so the standard From section
+        // shows it locked to the token chain; no other network can be picked.
+        openSection('From');
+        const network = screen.getByRole('button', { name: /^Network: Bitcoin/ });
+        expect(network).toBeDisabled();
+        fireEvent.click(network);
+        expect(screen.queryByRole('dialog')).toBeNull();
+        expect(screen.queryByRole('button', { name: /Litecoin|Dogecoin/ })).toBeNull();
     });
 
     it('seeds From with the owner address even when another address is active', async () => {
@@ -160,29 +176,33 @@ describe('AttachContentForm app-wide form rulings', () => {
     it('opens the own-address picker locked to the token chain and shows the owner mismatch for a non-owner pick', async () => {
         mount(messagingFor({ addresses: [OWNER, OTHER] }));
         await composeReady();
-        expect(screen.getByRole('button', { name: 'Attach artwork' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Attach Artwork' })).toBeEnabled();
 
+        openSection('From');
         fireEvent.click(screen.getByRole('button', { name: 'Choose source address' }));
         expect(await screen.findByTestId('own-address-picker')).toBeInTheDocument();
         expect(pickerProps.last).toMatchObject({ chainId: CHAIN, lockNetwork: true, walletId: 'wallet-1' });
 
         fireEvent.click(screen.getByRole('button', { name: 'Pick other address' }));
 
-        await waitFor(() => expect(screen.getByLabelText('From')).toHaveValue(OTHER.address));
+        await waitFor(() => expect(screen.getByLabelText('From address')).toHaveValue(OTHER.address));
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'The selected source address does not own ART. Choose the current owner address.',
         );
-        expect(screen.getByRole('button', { name: 'Attach artwork' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Attach Artwork' })).toBeDisabled();
     });
 
     it('labels the file chooser with a help tip and keeps only the live limit under it', async () => {
         mount();
         await composeReady();
 
-        const group = screen.getByRole('group', { name: 'Artwork file' });
-        const limit = document.getElementById(group.getAttribute('aria-describedby'));
-        expect(limit.textContent).toMatch(/^Up to [\d,]+ bytes with the current title and memo\.$/);
-        const before = Number(limit.textContent.match(/[\d,]+/)[0].replace(/,/g, ''));
+        // The standard file field carries the live limit in its label
+        // ("Artwork file (up to N bytes)"), not in a line under a chooser.
+        const limitOf = () => {
+            const label = screen.getByText(FILE_LABEL, { selector: 'label' });
+            return Number(label.textContent.match(/[\d,]+/)[0].replace(/,/g, ''));
+        };
+        const before = limitOf();
 
         // The intro and the static advice live only in the tip now.
         for (const pattern of [/Two signatures: one to upload the file/, /A compact image/]) {
@@ -192,32 +212,46 @@ describe('AttachContentForm app-wide form rulings', () => {
         }
         expect(screen.queryByText(/Keep it small/)).toBeNull();
         expect(screen.queryByText(/Store the artwork on the chain itself/)).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'About Artwork file' }));
+        fireEvent.click(screen.getByRole('button', { name: /^About Artwork file/ }));
         expect(await screen.findByText(/Two signatures: one to upload the file, one to make it official\. A compact image \(SVG, small PNG\/JPEG\/WebP\) works best\./))
             .toBeInTheDocument();
 
         fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'A gallery title' } });
-        const after = Number(limit.textContent.match(/[\d,]+/)[0].replace(/,/g, ''));
+        const after = limitOf();
         expect(after).toBeLessThan(before);
 
-        const input = screen.getByLabelText('Choose file to attach');
+        const input = screen.getByLabelText(PICKER_LABEL);
         fireEvent.change(input, { target: { files: [new File(['x'], 'art.png', { type: 'image/png' })] } });
         expect(await screen.findByText('art.png')).toBeInTheDocument();
-        expect(limit.textContent).toMatch(/^Up to [\d,]+ bytes with the current title and memo\.$/);
+        expect(limitOf()).toBeGreaterThan(0);
+        // The standard file field: the picked name in the read-only field,
+        // and X in place of Upload at its edge.
+        expect(screen.getByLabelText(FILE_LABEL)).toHaveValue('art.png');
+        expect(screen.getByLabelText(FILE_LABEL).closest('[data-file-field]')).not.toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Remove file' }));
+        expect(screen.getByLabelText(FILE_LABEL)).toHaveValue('');
+        expect(screen.getByRole('button', { name: 'Choose a file' })).toBeInTheDocument();
     });
 
     it('shows the Optional pill, help tip and counter on the Title and Memo label lines', async () => {
         mount();
         await composeReady();
 
-        expect(screen.getAllByText('Optional')).toHaveLength(2);
+        // Title keeps its own Optional pill inside the required
+        // Artwork section; Memo and Token Picture are optional sections whose
+        // headers carry the tag (the Memo field has none of its own).
+        expect(screen.getAllByText('Optional')).toHaveLength(3);
+        const titleRow = screen.getByText('Title', { selector: 'label' }).parentElement;
+        expect(within(titleRow).getByText('Optional')).toBeInTheDocument();
+        expect(within(screen.getByRole('button', { name: /^Memo\b/ })).getByText('Optional')).toBeInTheDocument();
+        expect(within(screen.getByRole('button', { name: /^Token Picture\b/ })).getByText('Optional')).toBeInTheDocument();
         expect(screen.queryByText(/\(optional\)/i)).toBeNull();
         expect(screen.getByText('0 / 100')).toBeInTheDocument();
         expect(screen.getByText('0 / 250')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'About Title' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'About Memo' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'About From' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'About Network' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'About Memo', hidden: true })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'About From address', hidden: true })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'About Network', hidden: true })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'About Token' })).toBeInTheDocument();
     });
 
@@ -225,8 +259,9 @@ describe('AttachContentForm app-wide form rulings', () => {
         mount();
         await composeReady();
 
-        expect(screen.getByRole('slider', { name: 'Network fee' })).toBeInTheDocument();
-        expect(screen.queryByRole('switch')).toBeNull();
+        // The fee selector sits in the standard Network fee section, closed.
+        expect(screen.getByRole('slider', { name: 'Network fee', hidden: true })).toBeInTheDocument();
+        expect(screen.queryByRole('switch', { hidden: true })).toBeNull();
         expect(screen.queryByText(/protocol fee/i)).toBeNull();
         expect(screen.queryByText('Total')).toBeNull();
     });
@@ -259,51 +294,53 @@ describe('AttachContentForm app-wide form rulings', () => {
         mount(client);
         await composeReady();
 
+        // The action reads "Attach Artwork"; the file is the standard
+        // file field (its chooser is the native control, not a form button).
         let form = screen.getByRole('form', { name: 'Attach artwork' });
-        expectOneGreenAction(form, 'Attach artwork');
-        expectButtonsHaveIcons(form, ['Attach artwork', 'Choose a file']);
+        expectOneGreenAction(form, 'Attach Artwork');
+        expectButtonsHaveIcons(form, ['Attach Artwork']);
 
-        fireEvent.change(screen.getByLabelText('Choose file to attach'), {
+        fireEvent.change(screen.getByLabelText(PICKER_LABEL), {
             target: { files: [new File(['x'], 'art.png', { type: 'image/png' })] },
         });
         await screen.findByText('art.png');
-        expect(screen.getByRole('button', { name: 'Choose a different file' }).querySelector('svg')).not.toBeNull();
+        openSection('Token Picture');
         fireEvent.click(screen.getByRole('checkbox'));
-        fireEvent.click(screen.getByRole('button', { name: 'Attach artwork' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Attach Artwork' }));
 
         form = await screen.findByRole('form', { name: 'Review artwork upload' });
-        expectOneGreenAction(form, 'Upload file');
-        expectButtonsHaveIcons(form, ['Back', 'Upload file']);
-        fireEvent.click(within(form).getByRole('button', { name: 'Upload file' }));
+        expectOneGreenAction(form, 'Upload File');
+        expectButtonsHaveIcons(form, ['Back', 'Upload File']);
+        fireEvent.click(within(form).getByRole('button', { name: 'Upload File' }));
         let approve = await screen.findByTestId('confirm-approve');
         await waitFor(() => expect(approve).toBeEnabled());
         fireEvent.click(approve);
 
         form = await screen.findByRole('form', { name: 'Review artwork link' });
-        expectOneGreenAction(form, 'Link artwork to ART');
-        expectButtonsHaveIcons(form, ['Link artwork to ART']);
-        fireEvent.click(within(form).getByRole('button', { name: 'Link artwork to ART' }));
+        expectOneGreenAction(form, 'Link Artwork to ART');
+        expectButtonsHaveIcons(form, ['Link Artwork to ART']);
+        fireEvent.click(within(form).getByRole('button', { name: 'Link Artwork to ART' }));
         approve = await screen.findByTestId('confirm-approve');
         await waitFor(() => expect(approve).toBeEnabled());
         fireEvent.click(approve);
 
         form = await screen.findByRole('form', { name: 'Upload token info' });
-        expectOneGreenAction(form, 'Upload token info');
-        expectButtonsHaveIcons(form, ['Skip (artwork only)', 'Upload token info']);
-        fireEvent.click(within(form).getByRole('button', { name: 'Upload token info' }));
+        expectOneGreenAction(form, 'Upload Token Info');
+        expectButtonsHaveIcons(form, ['Skip (Artwork Only)', 'Upload Token Info']);
+        fireEvent.click(within(form).getByRole('button', { name: 'Upload Token Info' }));
         approve = await screen.findByTestId('confirm-approve');
         await waitFor(() => expect(approve).toBeEnabled());
         fireEvent.click(approve);
 
         // The token-info wait stage: its only button is the ghost Close.
-        const close = await screen.findByRole('button', { name: 'Close (keep waiting)' });
+        const close = await screen.findByRole('button', { name: 'Close (Keep Waiting)' });
         expect(close.querySelector('svg')).not.toBeNull();
         expect(close).not.toHaveClass(buttonStyles.success);
         await act(async () => { releaseTis(); });
 
         form = await screen.findByRole('form', { name: 'Update token description' });
-        expectOneGreenAction(form, 'Update description');
-        expectButtonsHaveIcons(form, ['Skip', 'Update description']);
+        expectOneGreenAction(form, 'Update Description');
+        expectButtonsHaveIcons(form, ['Skip', 'Update Description']);
         fireEvent.click(within(form).getByRole('button', { name: 'Skip' }));
 
         const done = await screen.findByRole('button', { name: 'Done' });

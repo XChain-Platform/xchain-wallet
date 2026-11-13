@@ -78,7 +78,7 @@ describe('web multi-tab safety', () => {
         unsubscribe();
     });
 
-    it('updates the locked tab heading when the active tab switches wallets', () => {
+    it('keeps the locked tab heading on the product name when the active tab switches wallets', () => {
         writeActiveWallet('wallet-1', 'Primary');
         const messaging = {
             unlockWallet: vi.fn(),
@@ -90,10 +90,15 @@ describe('web multi-tab safety', () => {
             React.createElement(Locked, { onUnlocked: vi.fn() }),
         ));
 
-        expect(screen.getByRole('heading', { name: 'Primary' })).toBeTruthy();
+        // The lock screen shows only the logo, the product name and the password
+        // field, so no wallet name appears before or after the other tab switches.
+        expect(screen.getByRole('heading', { name: 'XChain Wallet' })).toBeTruthy();
+        expect(screen.queryByText('Primary')).toBeNull();
         writeActiveWallet('wallet-2', 'Savings');
         act(() => window.dispatchEvent(new StorageEvent('storage', { key: 'xc:activeWallet' })));
 
-        expect(screen.getByRole('heading', { name: 'Savings' })).toBeTruthy();
+        expect(screen.getByRole('heading', { name: 'XChain Wallet' })).toBeTruthy();
+        expect(screen.queryByText('Savings')).toBeNull();
+        expect(screen.queryByText('Primary')).toBeNull();
     });
 });

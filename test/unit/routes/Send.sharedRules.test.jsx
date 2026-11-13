@@ -12,6 +12,18 @@ import { ToastHost } from '../../../packages/core/src/shared/components/ToastHos
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 
+// The Asset field opens the token picker page; a stub with one button for the
+// token under test keeps these cases about the shared field rules.
+vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
+    TokenPicker: ({ title, chainIdFilter, onSelect, onBack }) => (
+        <section aria-label={title}>
+            <h2>{title}</h2>
+            <button type="button" onClick={() => onSelect({ chainId: chainIdFilter, tick: 'PEPE' })}>Pick PEPE</button>
+            <button type="button" onClick={onBack}>Back</button>
+        </section>
+    ),
+}));
+
 const CHAIN = 'bitcoin-mainnet';
 const FROM = 'bc1qsendersendersendersendersendersendersa';
 const TO = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
@@ -116,8 +128,9 @@ describe('Send shared field and action rules', () => {
             'How much of the selected asset to send. Max fills the most this From address can send after the network fee.',
         );
 
-        fireEvent.change(screen.getByLabelText(/^Token$/), { target: { value: 'PEPE' } });
-        const addRecipient = await screen.findByRole('button', { name: /Add recipient/ });
+        fireEvent.click(screen.getByRole('button', { name: /^Asset/ }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Pick PEPE' }));
+        const addRecipient = await screen.findByRole('button', { name: /Add Recipient/ });
         expectIcon(addRecipient);
         fireEvent.click(addRecipient);
 
@@ -135,7 +148,8 @@ describe('Send shared field and action rules', () => {
         expect(screen.getByLabelText(/^Recipient 2 amount/)).toHaveValue('1,000');
 
         expectIcon(screen.getByRole('button', { name: 'Remove recipient 2' }));
-        fireEvent.click(screen.getByText('Advanced'));
+        // Memo is its own optional section, closed on load.
+        fireEvent.click(screen.getByRole('button', { name: /^Memo/, expanded: false }));
         expectTip(
             screen.getByRole('button', { name: 'About Memo' }),
             'The memo is stored with this token send on chain and is readable by anyone, up to 250 characters.',
@@ -148,8 +162,8 @@ describe('Send shared field and action rules', () => {
         fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '0.02' } });
         await screen.findByText(/First payment to this address/);
 
-        expectIcon(screen.getByRole('button', { name: /Continue with the full amount/ }));
-        expectIcon(screen.getByRole('button', { name: /Send a small test first/ }));
+        expectIcon(screen.getByRole('button', { name: /Continue With the Full Amount/ }));
+        expectIcon(screen.getByRole('button', { name: /Send a Small Test First/ }));
     });
 
     it('makes Done the only green result action and keeps every result action iconized', async () => {
@@ -157,9 +171,9 @@ describe('Send shared field and action rules', () => {
         await driveToResult(messaging);
 
         const done = screen.getByRole('button', { name: 'Done' });
-        const saveRecipient = screen.getByRole('button', { name: 'Save recipient' });
-        const viewHistory = screen.getByRole('button', { name: 'View in history' });
-        const sendAnother = screen.getByRole('button', { name: 'Send another' });
+        const saveRecipient = screen.getByRole('button', { name: 'Save Recipient' });
+        const viewHistory = screen.getByRole('button', { name: 'View in History' });
+        const sendAnother = screen.getByRole('button', { name: 'Send Another' });
         [done, saveRecipient, viewHistory, sendAnother].forEach(expectIcon);
         expect(done).toHaveClass(buttonStyles.success);
         expect(screen.getAllByRole('button').filter((button) => button.classList.contains(buttonStyles.success)))
@@ -171,9 +185,12 @@ describe('Send shared field and action rules', () => {
             'The name used for this recipient in your contacts.',
         );
         const cancel = screen.getByRole('button', { name: 'Cancel' });
-        const saveContact = screen.getByRole('button', { name: 'Save contact' });
+        const saveContact = screen.getByRole('button', { name: 'Save Contact' });
         expectIcon(cancel);
         expectIcon(saveContact);
-        expect(saveContact).not.toHaveClass(buttonStyles.success);
+        // The inline form's own submit is that form's main action, so it is
+        // green; its Cancel is not.
+        expect(saveContact).toHaveClass(buttonStyles.success);
+        expect(cancel).not.toHaveClass(buttonStyles.success);
     });
 });

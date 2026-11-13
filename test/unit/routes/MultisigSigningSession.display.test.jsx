@@ -113,7 +113,7 @@ afterEach(() => {
 describe('MultisigSigningSession signing links', () => {
     it('exports a link containing the same envelope as the QR frames', async () => {
         await mountAndOpen(session());
-        fireEvent.click(screen.getByRole('button', { name: 'Export signing request' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Export Signing Request' }));
 
         const link = screen.getByLabelText('Signing link').value;
         const frames = screen.getByLabelText('Signing data to copy').value.split('\n');
@@ -123,7 +123,7 @@ describe('MultisigSigningSession signing links', () => {
 
     it('copies through the shared non-sensitive clipboard helper', async () => {
         await mountAndOpen(session());
-        fireEvent.click(screen.getByRole('button', { name: 'Export signing request' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Export Signing Request' }));
         const link = screen.getByLabelText('Signing link').value;
         fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
 
@@ -135,7 +135,7 @@ describe('MultisigSigningSession signing links', () => {
         const share = vi.fn().mockResolvedValue(undefined);
         Object.defineProperty(globalThis.navigator, 'share', { configurable: true, value: share });
         await mountAndOpen(session());
-        fireEvent.click(screen.getByRole('button', { name: 'Export signing request' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Export Signing Request' }));
         const link = screen.getByLabelText('Signing link').value;
         fireEvent.click(screen.getByRole('button', { name: 'Share' }));
 
@@ -144,7 +144,7 @@ describe('MultisigSigningSession signing links', () => {
 
     it('hides Share when the shell has no share sheet', async () => {
         await mountAndOpen(session());
-        fireEvent.click(screen.getByRole('button', { name: 'Export signing request' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Export Signing Request' }));
         expect(screen.queryByRole('button', { name: 'Share' })).toBeNull();
     });
 
@@ -152,7 +152,7 @@ describe('MultisigSigningSession signing links', () => {
         const share = vi.fn().mockRejectedValue(Object.assign(new Error('cancelled'), { name: 'AbortError' }));
         Object.defineProperty(globalThis.navigator, 'share', { configurable: true, value: share });
         await mountAndOpen(session());
-        fireEvent.click(screen.getByRole('button', { name: 'Export signing request' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Export Signing Request' }));
         fireEvent.click(screen.getByRole('button', { name: 'Share' }));
 
         await waitFor(() => expect(share).toHaveBeenCalledOnce());
@@ -167,8 +167,11 @@ describe('MultisigSigningSession signing links', () => {
         const link = buildMultisigSessionLink(envelope);
         render(<MultisigSigningSession walletId="wallet-1" onBack={() => {}} />);
 
+        // The link field sits behind the dashed Open a signing link row.
+        expect(screen.queryByLabelText('Signing link to open')).toBeNull();
+        fireEvent.click(await screen.findByRole('button', { name: /Open a signing link/ }));
         fireEvent.change(await screen.findByLabelText('Signing link to open'), { target: { value: link } });
-        fireEvent.click(screen.getByRole('button', { name: 'Open signing link' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Open Signing Link' }));
 
         await waitFor(() => expect(messaging.importMultisigSigningRequest).toHaveBeenCalledWith({
             walletId: 'wallet-1',
@@ -279,7 +282,7 @@ describe('MultisigSigningSession reply transport', () => {
     it('rejects a cosigner signature from a different session with clear copy', async () => {
         const activeSession = session({ signatures: [signature(PK_A)] });
         await mountAndOpen(activeSession);
-        fireEvent.click(screen.getByRole('button', { name: 'Import cosigner reply' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Import Cosigner Reply' }));
 
         const otherRef = {
             chainId: activeSession.chainId,
@@ -298,7 +301,7 @@ describe('MultisigSigningSession reply transport', () => {
         fireEvent.change(screen.getByLabelText('Cosigner reply chunks'), {
             target: { value: chunks.join('\n') },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Submit chunks' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Submit Chunks' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'This cosigner reply belongs to a different signing session.',
@@ -314,11 +317,11 @@ describe('MultisigSigningSession reply transport', () => {
             partialSigs: [signature(PK_A)],
         }));
 
-        expect(screen.getByRole('button', { name: 'Export signing request' })).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Export signing request' }));
+        expect(screen.getByRole('button', { name: 'Export Signing Request' })).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Export Signing Request' }));
         expect(screen.getByLabelText('Signing data to copy').value).toMatch(/^XCW:/);
-        fireEvent.click(screen.getByRole('button', { name: 'Back to tracker' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Import partial signature' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to Tracker' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Import Partial Signature' }));
         expect(screen.getByText(/partial signature, checks that it belongs to this session and step/i)).toBeTruthy();
     });
 
@@ -329,7 +332,7 @@ describe('MultisigSigningSession reply transport', () => {
             aggNonce: '44'.repeat(66),
         });
         await mountAndOpen(activeSession);
-        fireEvent.click(screen.getByRole('button', { name: 'Import partial signature' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Import Partial Signature' }));
 
         const activeRef = {
             chainId: activeSession.chainId,
@@ -349,7 +352,7 @@ describe('MultisigSigningSession reply transport', () => {
         fireEvent.change(screen.getByLabelText('Cosigner reply chunks'), {
             target: { value: chunks.join('\n') },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Submit chunks' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Submit Chunks' }));
 
         await waitFor(() => expect(messaging.contributeMultisigSignature).toHaveBeenCalledWith({
             sessionId: activeSession.id,
@@ -371,7 +374,7 @@ describe('MultisigSigningSession broadcast readiness', () => {
         expect(screen.getByLabelText('Signatures remaining')).toHaveTextContent(
             '1 more signature required.',
         );
-        const finalize = screen.getByRole('button', { name: 'Finalize transaction' });
+        const finalize = screen.getByRole('button', { name: 'Finalize Transaction' });
         expect(finalize).toBeDisabled();
         fireEvent.click(finalize);
         expect(messaging.finalizeMultisigSigningSession).not.toHaveBeenCalled();
@@ -385,7 +388,7 @@ describe('MultisigSigningSession broadcast readiness', () => {
             signatures: [signature(PK_A), signature(PK_B)],
         }));
 
-        fireEvent.click(screen.getByRole('button', { name: 'Finalize transaction' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Finalize Transaction' }));
         expect(messaging.finalizeMultisigSigningSession).toHaveBeenCalledTimes(1);
         view.unmount();
         await act(async () => {
@@ -405,7 +408,7 @@ describe('MultisigSigningSession broadcast readiness', () => {
             signatures: [signature(PK_A), signature(PK_B)],
         }));
 
-        fireEvent.click(screen.getByRole('button', { name: 'Finalize transaction' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Finalize Transaction' }));
         expect(isAutoLockHeld()).toBe(true);
         await act(async () => {
             finalizeRequest.resolve(undefined);
@@ -422,8 +425,79 @@ describe('MultisigSigningSession broadcast readiness', () => {
         }));
 
         expect(screen.getByText('This signed transaction is ready to broadcast.')).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Export signed transaction' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Export Signed Transaction' })).toBeTruthy();
         expect(screen.queryByRole('button', { name: /import/i })).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Sign with my key' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Sign With My Key' })).toBeNull();
+    });
+});
+
+describe('MultisigSigningSession sessions list', () => {
+    it('groups sessions by what to do next, folds Done, and leads each row with its action', async () => {
+        messaging.listMultisigSigningSessions.mockResolvedValue([
+            session({ id: 'wait', actionSummary: 'Send 0.25 BTC to bc1qdestination', signatures: [signature(PK_A)] }),
+            session({ id: 'ready', actionSummary: 'Send 0.5 BTC', status: 'finalized', finalizedTxHex: '00' }),
+            session({ id: 'sent', actionSummary: 'Send 0.1 BTC', status: 'broadcast' }),
+            session({ id: 'gone', actionSummary: 'Send 5 BTC', status: 'cancelled' }),
+        ]);
+        render(<MultisigSigningSession walletId="wallet-1" onBack={() => {}} />);
+
+        const ready = await screen.findByRole('list', { name: /Ready to send/ });
+        const waiting = screen.getByRole('list', { name: /Waiting on cosigners/ });
+        expect(within(ready).getByText('Send 0.5 BTC')).toBeTruthy();
+        expect(within(ready).getByText('Send now')).toBeTruthy();
+        // The destination stays on the session page; the row shows the action.
+        expect(within(waiting).getByText('Send 0.25 BTC')).toBeTruthy();
+        expect(within(waiting).getByText('1 of 2')).toBeTruthy();
+        expect(within(waiting).getByText(/^2 of 3 SegWit · /)).toBeTruthy();
+
+        // Ready to send leads, Waiting on cosigners follows, Done comes last folded.
+        const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
+        expect(headings[0]).toMatch(/^Ready to send/);
+        expect(headings[1]).toMatch(/^Waiting on cosigners/);
+        const doneToggle = screen.getByRole('button', { name: 'Done (2)' });
+        expect(doneToggle).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.queryByText('Send 0.1 BTC')).toBeNull();
+        fireEvent.click(doneToggle);
+        const done = screen.getByRole('list', { name: 'Done (2)' });
+        expect(within(done).getByText('Sent')).toBeTruthy();
+        expect(within(done).getByText('Cancelled')).toBeTruthy();
+    });
+
+    it('starts a session from the plus: pick the multisig, then Send, then the send form', async () => {
+        const multisig = {
+            multisigConfigId: 'ms-1', address: 'bc1qmultisigaddress', scheme: 'p2wsh-multisig',
+            threshold: 2, cosignerCount: 3, overCeiling: false,
+        };
+        const started = session({ id: 'new-session', actionSummary: 'Send 0.001 BTC to bc1qdest' });
+        messaging.listMultisigSigningSessions.mockResolvedValue([]);
+        messaging.getMultisigSigningSession.mockResolvedValue(started);
+        messaging.getAddressesByChain = vi.fn().mockResolvedValue({ 'bitcoin-mainnet': [{ id: 'a' }] });
+        messaging.listMultisigReceiveAddresses = vi.fn().mockResolvedValue([
+            multisig,
+            { ...multisig, multisigConfigId: 'ms-2', address: null, overCeiling: true },
+        ]);
+        messaging.startMultisigSend = vi.fn().mockResolvedValue({ id: 'new-session' });
+        render(<MultisigSigningSession walletId="wallet-1" onBack={() => {}} />);
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Start a Signing Session' }));
+        const multisigs = await screen.findByRole('list', { name: 'Multisigs on this network' });
+        expect(messaging.listMultisigReceiveAddresses).toHaveBeenCalledWith({ walletId: 'wallet-1', chainId: 'bitcoin-mainnet' });
+        // A multisig with no spendable address is listed but cannot be picked.
+        expect(within(multisigs).getAllByRole('button')).toHaveLength(1);
+        fireEvent.click(within(multisigs).getByRole('button'));
+
+        fireEvent.click(within(await screen.findByRole('list', { name: 'Actions' })).getByRole('button', { name: /Send/ }));
+        expect(await screen.findByRole('heading', { level: 1, name: 'Send From Multisig' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Start Signing' })).toBeTruthy();
+    });
+
+    it('shows the open-a-signing-link entry as one outlined row under the list', async () => {
+        messaging.listMultisigSigningSessions.mockResolvedValue([session()]);
+        render(<MultisigSigningSession walletId="wallet-1" onBack={() => {}} />);
+        const row = await screen.findByRole('button', { name: /Open a signing link/ });
+        expect(row.className).toMatch(/openLinkRow/);
+        expect(row).toHaveTextContent('Paste or scan');
+        const css = readFileSync('packages/core/src/shared/routes/MultisigSigningSession.module.css', 'utf8');
+        expect(css).toMatch(/\.openLinkRow \{[^}]*border: 1px (solid|dashed) var\(--xc-accent-primary\)/);
     });
 });

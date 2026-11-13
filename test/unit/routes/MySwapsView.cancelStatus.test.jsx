@@ -124,7 +124,7 @@ describe('MySwapsView: cancel row status', () => {
         fireEvent.click(within(row).getByRole('button', { name: 'Cancel' }));
 
         expect(utils.getByText('This swap has an invalid action ID and cannot be changed.')).toBeTruthy();
-        expect(utils.getByRole('button', { name: 'Cancel swap' }).disabled).toBe(true);
+        expect(utils.getByRole('button', { name: 'Cancel Swap' }).disabled).toBe(true);
     });
 
     it('keeps valid swaps usable when explorer arrays contain malformed rows', async () => {

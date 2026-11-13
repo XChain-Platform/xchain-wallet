@@ -72,9 +72,9 @@ function expectEveryButtonHasIcon(utils) {
 }
 
 describe('OracleConsole inline form actions', () => {
-    it('edit lists: green Update lists with an icon, help tips on both list fields, no hint paragraph', async () => {
-        const utils = await openForm('open', 'Edit lists');
-        const main = utils.getByRole('button', { name: 'Update lists' });
+    it('edit lists: green Update Lists with an icon, help tips on both list fields, no hint paragraph', async () => {
+        const utils = await openForm('open', 'Edit Lists');
+        const main = utils.getByRole('button', { name: 'Update Lists' });
         expect(isSuccess(main)).toBe(true);
         expect(main.querySelector('svg')).toBeTruthy();
         expect(utils.queryByText(/Leave a field blank/)).toBeNull();
@@ -86,9 +86,9 @@ describe('OracleConsole inline form actions', () => {
         expectEveryButtonHasIcon(utils);
     });
 
-    it('resolve: green Publish result with an icon, the warning in the question tip, outcome toggles with icons', async () => {
+    it('resolve: green Publish Result with an icon, the warning in the question tip, outcome toggles with icons', async () => {
         const utils = await openForm('closed', 'Resolve');
-        const main = utils.getByRole('button', { name: 'Publish result' });
+        const main = utils.getByRole('button', { name: 'Publish Result' });
         expect(isSuccess(main)).toBe(true);
         expect(main.querySelector('svg')).toBeTruthy();
         expect(utils.getByRole('button', { name: 'Yes' }).querySelector('svg')).toBeTruthy();
@@ -100,9 +100,9 @@ describe('OracleConsole inline form actions', () => {
         expectEveryButtonHasIcon(utils);
     });
 
-    it('cancel: Cancel market stays the danger action with an icon and no green button shows', async () => {
-        const utils = await openForm('closed', 'Cancel and refund');
-        const main = utils.getByRole('button', { name: 'Cancel market' });
+    it('cancel: Cancel Market stays the danger action with an icon and no green button shows', async () => {
+        const utils = await openForm('closed', 'Cancel and Refund');
+        const main = utils.getByRole('button', { name: 'Cancel Market' });
         expect(/danger/.test(main.className)).toBe(true);
         expect(main.querySelector('svg')).toBeTruthy();
         expect([...utils.container.querySelectorAll('button')].filter(isSuccess)).toHaveLength(0);

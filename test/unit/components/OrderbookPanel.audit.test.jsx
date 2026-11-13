@@ -112,7 +112,7 @@ describe('OrderbookPanel market display', () => {
         expect(screen.queryByText('Loading order book…')).toBeNull();
         expect(screen.queryByText('Price (BTC)')).toBeNull();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
 
         expect(await screen.findByTitle('0.01')).toHaveTextContent('0.01');
         expect(getOrderbook).toHaveBeenCalledTimes(2);

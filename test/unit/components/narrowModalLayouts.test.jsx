@@ -7,7 +7,6 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 import { CommandPalette } from '../../../packages/core/src/shared/commandPalette/CommandPalette.jsx';
-import { AlertsOverlay } from '../../../packages/core/src/shared/components/AlertsOverlay.jsx';
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
 import { ConfirmModal } from '../../../packages/core/src/shared/components/ConfirmModal.jsx';
 import { GatedFileViewer } from '../../../packages/core/src/shared/components/GatedFileViewer.jsx';
@@ -73,7 +72,6 @@ describe('320x568 modal inventory', () => {
             ...modalFiles(COMPONENT_DIR),
             ...modalFiles(UI_DIR),
         ].sort()).toEqual([
-            'AlertsOverlay.jsx',
             'GatedFileViewer.jsx',
             'NetworkPicker.jsx',
             'OverlaySurface.jsx',
@@ -133,21 +131,6 @@ describe('320x568 modal renders', () => {
         expect(actions).toBe(dialog.firstElementChild.lastElementChild);
         expect(actions).toContainElement(screen.getByRole('button', { name: 'Confirm' }));
         expect(actions.previousElementSibling).toHaveTextContent('Long warning');
-    });
-
-    it('keeps the Alerts close control above its scrolling body', () => {
-        const alerts = Array.from({ length: 20 }, (_, index) => ({
-            id: String(index),
-            severity: 'info',
-            title: `Alert ${index}`,
-            message: 'Detailed alert message',
-        }));
-        render(<AlertsOverlay alerts={alerts} onClose={() => {}} />);
-
-        const panel = screen.getByRole('dialog', { name: /^Alerts/ }).firstElementChild;
-        const close = screen.getByRole('button', { name: 'Close alerts' });
-        expect(close).toBe(panel.firstElementChild.lastElementChild);
-        expect(panel.lastElementChild).toContainElement(screen.getByText('Alert 19'));
     });
 
     it('keeps the file viewer actions after its scrolling preview', () => {
@@ -226,12 +209,6 @@ describe('320x568 modal layout contracts', () => {
         expect(rule(overlay, '.body')).toMatch(/flex:\s*1 1 auto/);
         expect(rule(overlay, '.body')).toMatch(/overflow-y:\s*auto/);
         expect(rule(overlay, '.footer')).toMatch(/flex:\s*0 0 auto/);
-
-        const alerts = css('AlertsOverlay.module.css');
-        expectPanelWithinViewport(rule(alerts, '.panel'), 380);
-        expect(rule(alerts, '.header')).toMatch(/flex:\s*0 0 auto/);
-        expect(rule(alerts, '.body')).toMatch(/min-height:\s*0/);
-        expect(rule(alerts, '.body')).toMatch(/overflow-y:\s*auto/);
 
         const viewer = css('GatedFileViewer.module.css');
         expectPanelWithinViewport(rule(viewer, '.panel'), 520);

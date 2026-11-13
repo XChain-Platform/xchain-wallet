@@ -145,7 +145,7 @@ describe('KeyboardSection', () => {
 
     it('resets every override in one persisted update', async () => {
         const messaging = await setup({ lock: 'mod+j', settings: 'mod+.' });
-        fireEvent.click(screen.getByRole('button', { name: 'Reset all shortcuts' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reset All Shortcuts' }));
         await waitFor(() => expect(messaging.updateSettings).toHaveBeenCalledWith({
             keyboard: { bindings: {} },
         }));

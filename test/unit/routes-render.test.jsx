@@ -86,6 +86,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vites
 import { render, act as domAct, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes } from '../../packages/core/src/shared/hooks/useWalletMode.js';
 import { MintForm } from '../../packages/core/src/shared/routes/MintForm.jsx';
 import { DestroyForm } from '../../packages/core/src/shared/routes/DestroyForm.jsx';
 import { createDefaultSettings } from '../../packages/core/src/schemas/settings.js';
@@ -236,6 +237,13 @@ const props = {
 const ROUTE_PROPS = {
     'ViewPrivateKey.jsx': {
         address: { id: 'addr-1', address: props.address },
+    },
+    // The bet market card is a presentational component fed by BetFeedDetail;
+    // it reads the outcomes list on its first line.
+    'BetMarketHero.jsx': {
+        outcomes: [],
+        pools: [],
+        bets: [],
     },
 };
 
@@ -560,6 +568,8 @@ function recordingMessaging({ walletMode = 'full' } = {}) {
 // tick via initialChainId+initialTick) and fill the amount.
 async function mountActionForm(Form, { walletMode } = {}) {
     const { messaging, calls } = recordingMessaging({ walletMode });
+    // §20: forms read the active wallet's own mode, which the shell publishes.
+    if (walletMode) publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     let utils;
     await domAct(async () => {
         utils = render(

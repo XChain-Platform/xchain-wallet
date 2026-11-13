@@ -50,13 +50,11 @@ const physicalProperties = new Set([
 // Safe-area insets name physical screen cutouts, LTR numbers scale from their
 // LTR edge, and number inputs stay LTR in every locale.
 const allowedPhysicalDeclarations = new Set([
-    'packages/core/src/shared/components/AlertsOverlay.module.css|.overlay|padding|env(safe-area-inset-top, 0) env(safe-area-inset-right, 0) env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0)',
     'packages/core/src/shared/components/GatedFileViewer.module.css|.overlay|padding|calc(var(--xc-space-4) + env(safe-area-inset-top, 0)) calc(var(--xc-space-4) + env(safe-area-inset-right, 0)) calc(var(--xc-space-4) + env(safe-area-inset-bottom, 0)) calc(var(--xc-space-4) + env(safe-area-inset-left, 0))',
     "packages/core/src/shared/components/LeftNav.module.css|.layout[data-xc-tier='compact'] > .main > .header|padding|env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px)",
     'packages/core/src/shared/components/NoticeModal.module.css|.overlay|padding|calc(var(--xc-page-top) + env(safe-area-inset-top, 0)) calc(var(--xc-space-4) + env(safe-area-inset-right, 0)) calc(var(--xc-page-top) + env(safe-area-inset-bottom, 0)) calc(var(--xc-space-4) + env(safe-area-inset-left, 0))',
     'packages/core/src/shared/components/OverlaySurface.module.css|.dialogOverlay|padding|calc(var(--xc-space-4) + env(safe-area-inset-top, 0px)) calc(var(--xc-space-4) + env(safe-area-inset-right, 0px)) calc(var(--xc-space-4) + env(safe-area-inset-bottom, 0px)) calc(var(--xc-space-4) + env(safe-area-inset-left, 0px))',
     'packages/core/src/shared/routes/ContactsList.module.css|.modalOverlay|padding|calc(var(--xc-space-4) + env(safe-area-inset-top, 0px)) calc(var(--xc-space-4) + env(safe-area-inset-right, 0px)) calc(var(--xc-space-4) + env(safe-area-inset-bottom, 0px)) calc(var(--xc-space-4) + env(safe-area-inset-left, 0px))',
-    'packages/core/src/shared/routes/TokenDetail.module.css|.balanceHeroAmountFitInner|transform-origin|left center',
     'packages/core/src/ui/FeeSelector.module.css|.customInput|direction|ltr',
     "packages/core/src/ui/Input.module.css|.input:is([type='number'],[inputmode='decimal'],[inputmode='numeric'])|direction|ltr",
     "packages/core/src/ui/tokens.css|:where( input[type='number'],input[inputmode='numeric'],input[inputmode='decimal'] )|direction|ltr",
@@ -88,15 +86,13 @@ const ltrIslands = [
     'packages/core/src/shared/routes/ContactsList.module.css|.addressText',
     'packages/core/src/shared/routes/ContractScreens.module.css|.monospaceInput,.monospaceValue,.codeSource',
     'packages/core/src/shared/routes/DispenserDetail.module.css|.dispenseAmount,.dispensePaid,.remainingPill',
-    'packages/core/src/shared/routes/DispenserExplorer.module.css|.numericValue',
+    'packages/core/src/shared/components/DispenserExplorerCard.module.css|.give,.price',
     'packages/core/src/shared/routes/History.module.css|.dateRow input,.paginationCount,.copyableText,.pendingSegments,.pendingAmount',
     'packages/core/src/shared/routes/IssueTokenForm.module.css|.txid',
     'packages/core/src/shared/routes/Locked.module.css|.lockoutCountdown',
     'packages/core/src/shared/routes/MySwapsView.module.css|.side',
     'packages/core/src/shared/routes/StakeDetail.module.css|.eventAmount',
     'packages/core/src/shared/routes/StakingList.module.css|.amount',
-    'packages/core/src/shared/routes/TokenDetail.module.css|.balanceHeroAmount',
-    'packages/core/src/shared/routes/ViewPrivateKey.module.css|.wif',
     'packages/core/src/ui/AddressText.module.css|.addr',
     'packages/web/src/style-guide/sections/AddressListSection.module.css|.abAddr',
     'packages/web/src/style-guide/sections/BalanceListSection.module.css|.amounts',
@@ -253,7 +249,7 @@ describe('wallet CSS logical properties', () => {
     });
 
     it('allows a safe-area shorthand only while every inset stays exact', () => {
-        const file = join(coreSource, 'shared', 'components', 'AlertsOverlay.module.css');
+        const file = join(coreSource, 'shared', 'components', 'GatedFileViewer.module.css');
         const source = readFileSync(file, 'utf8');
 
         expect(physicalDeclarations(source, file)).toHaveLength(1);
@@ -307,14 +303,8 @@ describe('wallet CSS logical properties', () => {
     it('mirrors directional chrome in shared components', () => {
         const component = (name) => readFileSync(join(coreSource, 'shared', 'components', name), 'utf8');
 
-        expect(component('AlertsOverlay.module.css')).toMatch(
-            /:global\(html\[dir='rtl'\]\) \.panel\s*\{[^}]*--xc-slide-in-offset:\s*calc\(-1 \* var\(--xc-space-5\)\)/s,
-        );
         expect(component('LearnNote.module.css')).toMatch(
             /:global\(\[dir='rtl'\]\)[^{]+\{[^}]*transform:\s*scaleX\(-1\)/s,
-        );
-        expect(component('PlatformSwitcher.module.css')).toMatch(
-            /:global\(\[dir='rtl'\]\) \.trigger svg,[^{]+\{[^}]*transform:\s*scaleX\(-1\)/s,
         );
 
         for (const name of [
@@ -336,7 +326,9 @@ describe('wallet CSS logical properties', () => {
         const route = (name, selector) => ruleFor(`packages/core/src/shared/routes/${name}.module.css`, selector);
         const value = (rule, property) => rule?.nodes.find((node) => node.type === 'decl' && node.prop === property)?.value;
 
-        expect(value(route('MarketActivity', ":global([dir='rtl']) .marketSelectorChevron"), 'transform')).toBe('scaleX(-1)');
+        // The market card's token chevron points down, so it needs no mirror rule.
+        expect(route('MarketActivity', '.tokenChevron')).toBeTruthy();
+        expect(route('MarketActivity', ":global([dir='rtl']) .tokenChevron")).toBeNull();
         expect(value(route('MySwapsView', ":global([dir='rtl']) .side + .side::before"), 'transform')).toBe('scaleX(-1)');
         expect(value(route('OnboardingCarousel', ":global([dir='rtl']) .frame"), '--xc-frame-enter-offset')).toBe('calc(-1 * var(--xc-space-4))');
         expect(value(route('History', ":global([dir='rtl']) .rowSelected"), 'box-shadow')).toBe('inset -3px 0 0 var(--xc-control-selected)');

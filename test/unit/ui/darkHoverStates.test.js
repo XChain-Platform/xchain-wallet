@@ -32,6 +32,8 @@ describe('dark palette hover states', () => {
 
     it('out-ranks the Button kit hover on the market selector', () => {
         const css = read('packages/core/src/shared/routes/MarketActivity.module.css');
-        expect(css).toMatch(/\.marketSelector\.marketSelector:hover:not\(:disabled\)\s*\{\s*background:\s*var\(--xc-bg-muted\)/);
+        // The selector sits on the blue hero now (.tokenButton), so its hover
+        // keeps the card colour instead of the muted fill.
+        expect(css).toMatch(/\.tokenButton\.tokenButton:hover:not\(:disabled\)\s*\{\s*background:\s*transparent/);
     });
 });

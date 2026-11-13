@@ -58,13 +58,13 @@ describe('co-signer account screens', () => {
         );
 
         await screen.findByText('Build agent');
-        fireEvent.click(screen.getByRole('button', { name: 'Disable' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Turn Off' }));
 
-        const dialog = screen.getByRole('dialog', { name: 'Disable this agent account?' });
+        const dialog = screen.getByRole('dialog', { name: 'Turn off this agent account?' });
         expect(within(dialog).getByText(/revokes the agent's signing access/i)).toBeTruthy();
         expect(updateCoSignerAccount).not.toHaveBeenCalled();
 
-        fireEvent.click(within(dialog).getByRole('button', { name: 'Disable' }));
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Turn Off' }));
         await waitFor(() => expect(updateCoSignerAccount).toHaveBeenCalledWith({
             id: account.id,
             patch: { enabled: false },
@@ -111,7 +111,10 @@ describe('co-signer account screens', () => {
             target: { value: `04${'b'.repeat(64)}` },
         });
 
-        expect(await screen.findByText(/starting with 02 or 03/i, { selector: 'p' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Create agent account' }).disabled).toBe(true);
+        // Create stays pressable; the refusal shows on the press and nothing is provisioned.
+        fireEvent.click(screen.getByRole('button', { name: 'Create agent account' }));
+        expect((await screen.findAllByText(/starting with 02 or 03/i)).length).toBeGreaterThan(0);
+        expect(screen.getByLabelText('Agent public key')).toHaveAttribute('aria-invalid', 'true');
+        expect(screen.queryByRole('heading', { name: 'Review Agent Account' })).toBeNull();
     });
 });

@@ -7,6 +7,18 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 
+// The Asset field opens the token picker page; a stub with one button for the
+// token under test keeps these cases about Max.
+vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
+    TokenPicker: ({ title, chainIdFilter, onSelect, onBack }) => (
+        <section aria-label={title}>
+            <h2>{title}</h2>
+            <button type="button" onClick={() => onSelect({ chainId: chainIdFilter, tick: 'PEPE' })}>Pick PEPE</button>
+            <button type="button" onClick={onBack}>Back</button>
+        </section>
+    ),
+}));
+
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
 
@@ -99,6 +111,8 @@ describe('Send Max', () => {
         await waitFor(() => expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.99999000'));
         expect(quote).toHaveBeenLastCalledWith(expect.objectContaining({ feePerKb: 6000 }));
 
+        // The Network fee section starts closed: open it to reach the slider.
+        fireEvent.click(screen.getByRole('button', { name: /^Network fee/, expanded: false }));
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
             target: { value: '2' },
         });
@@ -112,7 +126,8 @@ describe('Send Max', () => {
             nativeQuantity: '2000',
             tokens: [{ tick: 'PEPE', quantity: '123456789', divisibility: 8 }],
         });
-        fireEvent.change(await screen.findByLabelText(/^Token$/), { target: { value: 'PEPE' } });
+        fireEvent.click(await screen.findByRole('button', { name: /^Asset/ }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Pick PEPE' }));
         const max = await screen.findByRole('button', { name: 'Use max available amount' });
         await waitFor(() => expect(max).toBeEnabled());
         fireEvent.click(max);

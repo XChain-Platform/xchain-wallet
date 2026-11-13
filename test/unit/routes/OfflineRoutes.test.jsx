@@ -308,14 +308,16 @@ describe('offline route behavior from reachability', () => {
             />
         ));
 
-        const balance = await screen.findByRole('region', { name: 'CACHE balance' });
+        // The blue card is captioned with the asset; the Actions tab (selected first) holds the tiles.
+        const balance = await screen.findByRole('region', { name: /CACHE/ });
         expect(balance).toHaveTextContent('10');
         expectOneOfflineNotice();
-        const actions = within(screen.getByRole('group', { name: 'Quick actions' }));
+        const actions = within(screen.getByRole('group', { name: 'Actions for CACHE' }));
         expect(actions.getByRole('button', { name: 'Send' })).toBeDisabled();
-        expect(actions.getByText('Send needs a network connection.')).toBeInTheDocument();
         expect(actions.getByRole('button', { name: 'Exchange' })).toBeDisabled();
-        expect(actions.getByText('Exchange needs a network connection.')).toBeInTheDocument();
+        // The reason lines sit under the tile grid, not inside it.
+        expect(screen.getByText('Send needs a network connection.')).toBeInTheDocument();
+        expect(screen.getByText('Exchange needs a network connection.')).toBeInTheDocument();
     });
 
     it('keeps cached Markets rows and disables opening a market with a reason', async () => {

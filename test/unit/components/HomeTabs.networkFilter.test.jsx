@@ -27,7 +27,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useFiatRate.js', () => ({
     priceTokenRows: (rows) => rows,
 }));
 
-import { HomeTabs } from '../../../packages/core/src/shared/components/HomeTabs.jsx';
+import { HomeTabs, ActivityEntryRow } from '../../../packages/core/src/shared/components/HomeTabs.jsx';
 
 const descriptors = new Map([
     ['custom-alpha', {
@@ -71,9 +71,13 @@ describe('HomeTabs network filtering', () => {
         expect(screen.getAllByRole('button', { name: 'Filter and sort' })).toHaveLength(1);
         fireEvent.click(button);
 
-        expect(screen.getByRole('radio', { name: 'Name' })).toBeChecked();
-        expect(screen.getByRole('radio', { name: 'Value' })).toBeInTheDocument();
-        expect(screen.getByRole('searchbox', { name: 'Search tokens by name' })).toBeInTheDocument();
+        const sort = screen.getByRole('button', { name: /^Sort/ });
+        expect(sort).toHaveAttribute('aria-haspopup', 'listbox');
+        fireEvent.click(sort);
+        expect(screen.getByRole('option', { name: 'Sort by name' })).toHaveAttribute('aria-selected', 'true');
+        expect(screen.getByRole('option', { name: 'Sort by value' })).toBeInTheDocument();
+        fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape' });
+        expect(screen.getByRole('searchbox', { name: 'Search coins by name' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /^Filter by network/ })).toBeInTheDocument();
 
         fireEvent.keyDown(window, { key: 'Escape' });
@@ -144,18 +148,24 @@ describe('HomeTabs network filtering', () => {
             raw: { amount: '1', tick: 'BTC', destination: 'bc1qpeer' },
             link: null,
         });
+        // Home has no Activity tab now (History holds that list), so the row
+        // that tab used is rendered on its own.
         const { container } = render(
-            <HomeTabs
-                chainRegistry={chainRegistry}
-                balances={{ 'custom-alpha': balance('BTC') }}
-                walletId="wallet"
-                networkFilter="all"
-                recentActivity={[entry('confirmed', 123456), entry('pending', 0)]}
-                onActivityOpen={() => {}}
-            />,
+            <div>
+                {[entry('confirmed', 123456), entry('pending', 0)].map((e) => (
+                    <ActivityEntryRow
+                        key={e.key}
+                        entry={e}
+                        walletAddresses={new Set([address])}
+                        assetLookup={new Map()}
+                        chainTip={null}
+                        onSelectEntry={() => {}}
+                        allowRemoteImages={false}
+                    />
+                ))}
+            </div>,
         );
 
-        fireEvent.click(await screen.findByRole('tab', { name: 'Activity' }));
         const rows = [...container.querySelectorAll('[data-activity-row]')];
         const confirmed = rows.find((row) => row.textContent.includes('Confirmed'));
         const pending = rows.find((row) => row.textContent.includes('Pending'));

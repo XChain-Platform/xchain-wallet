@@ -36,7 +36,7 @@ describe('BetFeedsList states', () => {
     it('shows the initial loading state while wallet addresses resolve', () => {
         mount({ getAddressesByChain: vi.fn(() => pending()) });
 
-        expect(screen.getByRole('heading', { name: 'Betting' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Bet Markets' })).toBeInTheDocument();
         expect(screen.getByText(/Loading/)).toBeInTheDocument();
         expect(screen.queryByText('No markets')).toBeNull();
     });
@@ -50,13 +50,13 @@ describe('BetFeedsList states', () => {
 
         expect(await screen.findByRole('heading', { name: 'No markets' })).toBeInTheDocument();
         expect(screen.getByText(/No markets are taking bets/)).toBeInTheDocument();
-        const takingBets = screen.getByRole('tab', { name: 'Taking bets' });
-        const allMarkets = screen.getByRole('tab', { name: 'All markets' });
-        expect(takingBets).toHaveAttribute('aria-selected', 'true');
-        expect(allMarkets).toHaveAttribute('aria-selected', 'false');
+        // The Status choice now lives in the title-line filter menu.
+        fireEvent.click(screen.getByRole('button', { name: 'Filter bet markets' }));
+        const status = screen.getByRole('combobox', { name: 'Status' });
+        expect(status).toHaveValue('open');
 
-        fireEvent.click(allMarkets);
-        expect(allMarkets).toHaveAttribute('aria-selected', 'true');
+        fireEvent.change(status, { target: { value: 'all' } });
+        expect(status).toHaveValue('all');
         expect(await screen.findByText(/Markets created on this network/)).toBeInTheDocument();
         expect(betFeeds).toHaveBeenLastCalledWith({ chainId: CHAIN, opts: { limit: 50 } });
     });

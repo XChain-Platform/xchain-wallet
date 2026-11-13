@@ -69,6 +69,8 @@ describe('<TokenPicker> selection hand-off', () => {
     it('restores the rows when the search is cleared', async () => {
         mountPicker();
         await screen.findAllByText(LONG_TICKER);
+        // Search sits behind the title-bar filter button.
+        fireEvent.click(screen.getByRole('button', { name: 'Filter coins and tokens' }));
         const search = screen.getByRole('searchbox', { name: 'Search coins or tokens' });
 
         fireEvent.change(search, { target: { value: 'missing' } });

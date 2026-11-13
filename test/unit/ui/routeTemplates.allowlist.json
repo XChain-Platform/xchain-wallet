@@ -32,8 +32,20 @@
         },
         "packages/core/src/shared/routes/BatchComposerForm.jsx": {
             "heading": {
+                "count": 3,
+                "reason": "The result-screen successTitle heading, plus the per-transaction labels inside the result and the review summary: items of the action's own result and confirm screens, not group titles. One result pattern shared by every action; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+            }
+        },
+        "packages/core/src/shared/routes/CoSignerAccountDetail.jsx": {
+            "heading": {
                 "count": 1,
-                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+                "reason": "The agent account's name inside its identity card, the page's one hero name like the approved token hero; a title of the card's subject, not a group title."
+            }
+        },
+        "packages/core/src/shared/routes/MultisigSigningSession.jsx": {
+            "heading": {
+                "count": 1,
+                "reason": "The group heading of each signing-status list, a labelled list heading with a count badge that SectionHeader does not draw."
             }
         },
         "packages/core/src/shared/routes/BroadcastForm.jsx": {
@@ -62,8 +74,8 @@
         },
         "packages/core/src/shared/routes/DispenserDetail.jsx": {
             "heading": {
-                "count": 4,
-                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+                "count": 6,
+                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage), plus the two card titles (Dispenser Details, Expiration and Access Lists) on the blue-card detail page. One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
             }
         },
         "packages/core/src/shared/routes/DispenserForm.jsx": {
@@ -146,7 +158,7 @@
         },
         "packages/core/src/shared/routes/ProjectRosterForm.jsx": {
             "heading": {
-                "count": 3,
+                "count": 4,
                 "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
             }
         },
@@ -190,10 +202,52 @@
                 "reason": "The inline password prompt that unlocks a gated file inside the token detail files panel; a field under the file list, not a page form."
             }
         },
-        "packages/core/src/shared/routes/ViewPrivateKey.jsx": {
+        "packages/core/src/shared/routes/AddAccountForm.jsx": {
+            "screen": {
+                "count": 1,
+                "reason": "A wallet-management form still on its own Screen until the form-standard port (wave B) moves every *Form route onto FormPage at once."
+            }
+        },
+        "packages/core/src/shared/routes/RenameAccountForm.jsx": {
+            "screen": {
+                "count": 1,
+                "reason": "A wallet-management form still on its own Screen until the form-standard port (wave B) moves every *Form route onto FormPage at once."
+            }
+        },
+        "packages/core/src/shared/routes/RenameWalletForm.jsx": {
+            "screen": {
+                "count": 1,
+                "reason": "A wallet-management form still on its own Screen until the form-standard port (wave B) moves every *Form route onto FormPage at once."
+            }
+        },
+        "packages/core/src/shared/routes/VerifySignatureForm.jsx": {
+            "screen": {
+                "count": 1,
+                "reason": "A signing tool form still on its own Screen until the form-standard port (wave B) moves every *Form route onto FormPage at once."
+            }
+        },
+        "packages/core/src/shared/routes/ContractDetail.jsx": {
+            "heading": {
+                "count": 3,
+                "reason": "The contract page's About title, the screen-reader Actions title for its tab panel, and the method list title inside the blue-card page layout (G-series detail pages); card and panel titles, not page group titles."
+            }
+        },
+        "packages/core/src/shared/routes/DispenserExplorer.jsx": {
+            "form": {
+                "count": 1,
+                "reason": "The one large search field whose magnifier submits it; a search box at the top of a list page, not a page form."
+            }
+        },
+        "packages/core/src/shared/routes/MarketActivity.jsx": {
             "heading": {
                 "count": 1,
-                "reason": "The danger-tone 'Before you continue' headline over the private key warning list. SectionHeader has no danger tone, so moving it drops the warning colour; that is a design call."
+                "reason": "The title of a market list card under the Marketplace blue card; a card title inside the page, not a page group title."
+            }
+        },
+        "packages/core/src/shared/routes/OracleRecord.jsx": {
+            "heading": {
+                "count": 1,
+                "reason": "The focusable group head that a Resolve or Disputes jump lands on inside the oracle record list; it takes focus by ref, which SectionHeader does not forward."
             }
         }
     }

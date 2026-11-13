@@ -102,7 +102,7 @@ describe.each(VIEWS)('$name follows the shared button and field rulings', ({ Vie
     it('edit panel: one green named Update action with an icon, Optional pill and tips', async () => {
         const { utils, item } = await openRow();
         fireEvent.click(within(item).getByRole('button', { name: 'Edit' }));
-        const submit = utils.getByRole('button', { name: `Update ${noun}` });
+        const submit = utils.getByRole('button', { name: `Update ${noun[0].toUpperCase()}${noun.slice(1)}` });
         expect(submit.className).toContain(buttonStyles.success);
         expect(hasIcon(submit)).toBe(true);
         expect(utils.queryByRole('button', { name: `Edit ${noun}` })).toBeNull();
@@ -114,7 +114,7 @@ describe.each(VIEWS)('$name follows the shared button and field rulings', ({ Vie
         expect(expiration.labels[0].textContent).toBe('New expiration');
         expect(utils.getAllByText('Optional').length).toBeGreaterThanOrEqual(2);
 
-        for (const name of ['Set allow-list', 'Set block-list']) {
+        for (const name of ['Set Allow-List', 'Set Block-List']) {
             expect(hasIcon(utils.getByRole('button', { name }))).toBe(true);
         }
         // The expiration field and the access-list row each carry a "?" tip.
@@ -125,7 +125,7 @@ describe.each(VIEWS)('$name follows the shared button and field rulings', ({ Vie
     it('cancel panel: the cancel action is the green forward action with an icon', async () => {
         const { utils, item } = await openRow();
         fireEvent.click(within(item).getByRole('button', { name: 'Cancel' }));
-        const submit = utils.getByRole('button', { name: `Cancel ${noun}` });
+        const submit = utils.getByRole('button', { name: `Cancel ${noun[0].toUpperCase()}${noun.slice(1)}` });
         expect(submit.className).toContain(buttonStyles.success);
         expect(submit.className).not.toContain(buttonStyles.danger);
         expect(hasIcon(submit)).toBe(true);

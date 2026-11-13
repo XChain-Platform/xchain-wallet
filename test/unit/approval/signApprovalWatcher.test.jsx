@@ -8,8 +8,9 @@ import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 
 vi.mock('../../../packages/extension/src/approval/messaging.js', () => ({
-    listWallets: vi.fn(async () => [{ id: 'wallet-1', name: 'Wallet 1' }]),
-    getSettings: vi.fn(async () => ({ walletMode: 'watcher' })),
+    // §20: the mode is the signing wallet's own.
+    listWallets: vi.fn(async () => [{ id: 'wallet-1', name: 'Wallet 1', walletMode: 'watcher' }]),
+    getSettings: vi.fn(async () => ({})),
     getAddressesByChain: vi.fn(async () => ({ 'bitcoin-regtest': [] })),
     parsePsbt: vi.fn(async () => ({
         decomposed: { inputs: [], outputs: [] },
@@ -83,7 +84,7 @@ describe('SignApproval in watcher mode', () => {
             addresses: [{ chainId: 'bitcoin-regtest', address: 'bcrt1qwatcher' }],
         } }],
     ])('refuses a %s dApp request for a watch-only account without offering approval', async (kind, request) => {
-        messaging.getSettings.mockResolvedValueOnce({ walletMode: 'full' });
+        messaging.listWallets.mockResolvedValueOnce([{ id: 'wallet-1', name: 'Wallet 1', walletMode: 'full' }]);
         messaging.getAddressesByChain.mockResolvedValueOnce({
             'bitcoin-regtest': [{
                 id: 'watch-address',

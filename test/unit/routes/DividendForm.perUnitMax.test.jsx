@@ -23,6 +23,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { DividendForm } from '../../../packages/core/src/shared/routes/DividendForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
@@ -62,10 +63,13 @@ function mountDividend({
     walletMode = 'full',
     feeQuote = { supported: true, valid: true, xchainFee: '0.00000000' },
 } = {}) {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
-        getSettings: vi.fn().mockResolvedValue({ walletMode }),
+        getSettings: vi.fn().mockResolvedValue({}),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'w', name: 'W', walletMode }]),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
         getHoldersForToken: vi.fn().mockResolvedValue({
@@ -129,7 +133,7 @@ const maxButton = () => screen.getByRole('button', { name: /max available/i });
 // Hidden Max and inert Max are both acceptable; a LIVE Max on an
 // uncomputable rate is not.
 const maxButtonOrNull = () => screen.queryByRole('button', { name: /max available/i });
-const submitButton = () => screen.getByRole('button', { name: 'Pay dividend' });
+const submitButton = () => screen.getByRole('button', { name: 'Pay Dividend' });
 
 // The summary line is assembled from several JSX expressions inside one
 // paragraph, so its text lands in separate DOM text nodes; match against
@@ -158,6 +162,7 @@ beforeEach(() => {
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     __clearTokenInfoCache();
     vi.useRealTimers();
 });
@@ -429,7 +434,7 @@ describe('DividendForm Max fills a rate, not the balance', () => {
         fireEvent.change(amountField(), { target: { value: '4999' } });
         fireEvent.click(submitButton());
         await flushTimers();
-        expect(screen.getByRole('button', { name: 'Pay dividend' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Pay Dividend' }).disabled).toBe(true);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 });
@@ -441,7 +446,8 @@ describe('DividendForm review hint', () => {
         await pickDividendToken();
         await maxReady();
         fireEvent.change(amountField(), { target: { value: '9.998' } });
-        expect(submitButton()).toHaveAccessibleName('Pay dividend');
+        // The standard's action labels are Title Case.
+        expect(submitButton()).toHaveAccessibleName('Pay Dividend');
         fireEvent.click(submitButton());
         await flushTimers();
         expect(screen.getByText(
@@ -503,7 +509,9 @@ describe('DividendForm per-unit amount follows the dividend token format', () =>
     it('gives From a help tip written for the dividend form', async () => {
         mountDividend();
         await flushTimers();
-        const tip = screen.getByRole('button', { name: 'About From' });
+        // The standard From section's field is From address; open it.
+        fireEvent.click(screen.getByRole('button', { name: /^From / }));
+        const tip = screen.getByRole('button', { name: 'About From address' });
         expect(document.getElementById(tip.getAttribute('aria-describedby')).textContent)
             .toBe('The address that pays the dividend. It must hold the dividend token and pays the network fee.');
     });

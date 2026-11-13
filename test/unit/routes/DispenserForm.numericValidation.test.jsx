@@ -9,6 +9,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispenserForm } from '../../../packages/core/src/shared/routes/DispenserForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
+import * as walletModes from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { userEvent } from '../../helpers/userEvent.js';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -32,6 +33,8 @@ async function mountForm({
     getWalletBalances,
     getTokenInfo,
 } = {}) {
+    // A wallet's mode is published by the shell from the wallet list, not read from settings.
+    walletModes.publishWalletModes?.({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const composeForConfirm = vi.fn().mockResolvedValue({
         psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 1,
     });
@@ -76,7 +79,34 @@ async function mountForm({
 afterEach(() => {
     cleanup();
     __clearTokenInfoCache();
+    walletModes.resetWalletModes?.();
 });
+
+// Balances that put the given tokens in the source address, so the "Buyers
+// pay with" picker lists them.
+const holdingTokens = (ticks) => vi.fn().mockResolvedValue({
+    [CHAIN]: [{
+        address: SOURCE.address,
+        balances: { tokens: ticks.map((tick) => ({ tick, quantity: '100', divisibility: 0 })) },
+    }],
+});
+
+// "Buyers pay with" is an asset picker page: choose the token there, which
+// switches the form from the coin lane to the token lane.
+async function payWithToken(utils, tick) {
+    await act(async () => {
+        fireEvent.click(utils.getByRole('button', { name: /^Buyers pay with:/ }));
+        await drainMicrotasks();
+    });
+    await act(async () => {
+        fireEvent.click(utils.getByRole('button', { name: new RegExp(tick) }));
+        await drainMicrotasks();
+    });
+}
+
+// Fiat and oracle pricing, like the dispenser address, sit in the closed
+// Dispenser Terms section.
+const openTerms = (utils) => fireEvent.click(utils.getByRole('button', { name: /^Dispenser Terms/ }));
 
 describe('DispenserForm numeric validation', () => {
     it('rejects a dispensed amount finer than the token divisibility', async () => {
@@ -88,7 +118,7 @@ describe('DispenserForm numeric validation', () => {
         fireEvent.change(give, { target: { value: '1.234' } });
         fireEvent.change(utils.getByLabelText(/^Escrow amount/), { target: { value: '10' } });
         fireEvent.change(utils.getByLabelText(/^Trigger price/), { target: { value: '0.01' } });
-        fireEvent.click(utils.getByRole('button', { name: 'Create dispenser' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Create Dispenser' }));
 
         expect(await utils.findByText('Amount can have at most 2 decimal places.'))
             .toBeInTheDocument();
@@ -136,7 +166,7 @@ describe('DispenserForm numeric validation', () => {
         fireEvent.change(utils.getByLabelText(/^Escrow amount/), { target: { value: '100' } });
         fireEvent.change(utils.getByLabelText(/^Trigger price/), { target: { value: '0.001' } });
         fireEvent.change(utils.getByLabelText(/^Trigger price/), { target: { value: 'many' } });
-        fireEvent.click(utils.getByRole('button', { name: 'Create dispenser' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Create Dispenser' }));
 
         expect(utils.getByRole('alert')).toHaveTextContent('Trigger price must be a positive number.');
         expect(utils.composeForConfirm).not.toHaveBeenCalled();
@@ -150,7 +180,7 @@ describe('DispenserForm numeric validation', () => {
         fireEvent.change(utils.getByLabelText(/^Give amount/), { target: { value: '1.' } });
         fireEvent.change(utils.getByLabelText(/^Escrow amount/), { target: { value: '10' } });
         fireEvent.change(utils.getByLabelText(/^Trigger price/), { target: { value: '0.001' } });
-        fireEvent.click(utils.getByRole('button', { name: 'Create dispenser' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Create Dispenser' }));
 
         expect(utils.getByRole('alert')).toHaveTextContent('Per-fill give amount must be a positive number.');
         expect(utils.composeForConfirm).not.toHaveBeenCalled();
@@ -172,18 +202,18 @@ describe('DispenserForm numeric validation', () => {
     it('rejects payment-token and native prices beyond their asset precision', async () => {
         const utils = await mountForm({
             getTokenInfo: vi.fn().mockImplementation(({ tick }) => Promise.resolve({ tick, divisibility: 0 })),
+            getWalletBalances: holdingTokens(['PAY']),
         });
         fireEvent.change(utils.getByLabelText(/^Give amount/), { target: { value: '1' } });
         fireEvent.change(utils.getByLabelText(/^Escrow amount/), { target: { value: '10' } });
         fireEvent.change(utils.getByLabelText(/^Trigger price/), { target: { value: '0.000000001' } });
-        fireEvent.click(utils.getByRole('button', { name: 'Create dispenser' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Create Dispenser' }));
         expect(utils.getByRole('alert')).toHaveTextContent('Trigger price can have at most 8 decimal places for BTC.');
 
-        fireEvent.click(utils.getByLabelText('A token'));
-        fireEvent.change(utils.getByLabelText('Payment token'), { target: { value: 'PAY' } });
+        await payWithToken(utils, 'PAY');
         fireEvent.change(utils.getByLabelText('Payment amount per fill'), { target: { value: '1.1' } });
-        await waitFor(() => expect(utils.getByRole('button', { name: 'Create dispenser' })).toBeEnabled());
-        fireEvent.click(utils.getByRole('button', { name: 'Create dispenser' }));
+        await waitFor(() => expect(utils.getByRole('button', { name: 'Create Dispenser' })).toBeEnabled());
+        fireEvent.click(utils.getByRole('button', { name: 'Create Dispenser' }));
         expect(utils.getByRole('alert')).toHaveTextContent('Payment amount must be a whole number because PAY is indivisible.');
         expect(utils.composeForConfirm).not.toHaveBeenCalled();
     });
@@ -202,7 +232,7 @@ describe('DispenserForm numeric validation', () => {
         fireEvent.change(utils.getByLabelText(/^Give amount/), { target: { value: '1' } });
         fireEvent.change(utils.getByLabelText(/^Escrow amount/), { target: { value: '6' } });
         fireEvent.change(utils.getByLabelText(/^Trigger price/), { target: { value: '0.001' } });
-        fireEvent.click(utils.getByRole('button', { name: 'Create dispenser' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Create Dispenser' }));
 
         expect(utils.getByRole('alert')).toHaveTextContent('This address holds only 5 JDOG.');
         expect(utils.composeForConfirm).not.toHaveBeenCalled();
@@ -218,7 +248,7 @@ describe('DispenserForm numeric validation', () => {
         fireEvent.change(utils.getByLabelText(/^Give amount/), { target: { value: '10' } });
         fireEvent.change(utils.getByLabelText(/^Escrow amount/), { target: { value: '100' } });
         fireEvent.change(utils.getByLabelText(/^Trigger price/), { target: { value: '0.001' } });
-        fireEvent.click(utils.getByRole('button', { name: 'Create dispenser' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Create Dispenser' }));
         expect(await utils.findByText(/Each time someone sends 0.001 BTC/)).toBeInTheDocument();
 
         fireEvent.click(utils.getByRole('button', { name: 'Back to previous screen' }));
@@ -228,30 +258,29 @@ describe('DispenserForm numeric validation', () => {
     });
 
     it('validates the payment-token ticker before composing', async () => {
-        const utils = await mountForm();
+        const utils = await mountForm({ getWalletBalances: holdingTokens(['BAD/NAME']) });
         fireEvent.change(utils.getByLabelText(/^Give amount/), { target: { value: '10' } });
         fireEvent.change(utils.getByLabelText(/^Escrow amount/), { target: { value: '100' } });
-        fireEvent.click(utils.getByLabelText('A token'));
-        fireEvent.change(utils.getByLabelText('Payment token'), { target: { value: 'BAD/NAME' } });
+        await payWithToken(utils, 'BAD/NAME');
         fireEvent.change(utils.getByLabelText('Payment amount per fill'), { target: { value: '1' } });
-        fireEvent.click(utils.getByRole('button', { name: 'Create dispenser' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Create Dispenser' }));
 
         expect(utils.getByRole('alert')).toHaveTextContent(/Payment token/i);
         expect(utils.composeForConfirm).not.toHaveBeenCalled();
     });
 
-    it('titles the screen in sentence case like every other form', async () => {
+    it('titles the screen in Title Case like every other form', async () => {
         const utils = await mountForm();
-        expect(utils.getByRole('heading', { name: 'Create dispenser' })).toBeInTheDocument();
+        expect(utils.getByRole('heading', { name: 'Create Dispenser' })).toBeInTheDocument();
     });
 
     it('requires a currency for a fiat amount instead of silently dropping the field', async () => {
         const utils = await mountForm();
         fireEvent.change(utils.getByLabelText(/^Give amount/), { target: { value: '10' } });
         fireEvent.change(utils.getByLabelText(/^Escrow amount/), { target: { value: '100' } });
-        fireEvent.click(utils.getByRole('button', { name: /Advanced options/ }));
+        openTerms(utils);
         fireEvent.change(utils.getByLabelText(/^Fiat amount/), { target: { value: '12.34' } });
-        fireEvent.click(utils.getByRole('button', { name: 'Create dispenser' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Create Dispenser' }));
 
         expect(utils.getByRole('alert')).toHaveTextContent('Fiat pricing needs a fiat currency.');
         expect(utils.composeForConfirm).not.toHaveBeenCalled();
@@ -261,10 +290,10 @@ describe('DispenserForm numeric validation', () => {
         const utils = await mountForm();
         fireEvent.change(utils.getByLabelText(/^Give amount/), { target: { value: '10' } });
         fireEvent.change(utils.getByLabelText(/^Escrow amount/), { target: { value: '100' } });
-        fireEvent.click(utils.getByRole('button', { name: /Advanced options/ }));
+        openTerms(utils);
         fireEvent.change(utils.getByLabelText('Priced in fiat'), { target: { value: 'USD' } });
         fireEvent.change(utils.getByLabelText(/^Oracle address/), { target: { value: 'not-an-address' } });
-        fireEvent.click(utils.getByRole('button', { name: 'Create dispenser' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Create Dispenser' }));
 
         expect(utils.getByRole('alert')).toHaveTextContent('Oracle address: This is not a valid Bitcoin address.');
         expect(utils.composeForConfirm).not.toHaveBeenCalled();
@@ -278,6 +307,7 @@ describe('DispenserForm numeric validation', () => {
             walletMode: 'watcher',
             onBack,
             buildActionPsbtRequest,
+            getWalletBalances: holdingTokens(['PAY']),
             generateDispenserAddress: vi.fn().mockResolvedValue({
                 id: 'dispenser', address: 'bc1qdispenserdispenserdispenserdispens',
             }),
@@ -285,22 +315,21 @@ describe('DispenserForm numeric validation', () => {
         fireEvent.change(utils.getByLabelText(/^Give amount/), { target: { value: '10' } });
         fireEvent.change(utils.getByLabelText(/^Escrow amount/), { target: { value: '100' } });
         fireEvent.change(utils.getByLabelText(/^Trigger price/), { target: { value: 'not-a-price' } });
-        fireEvent.click(utils.getByLabelText('A token'));
-        fireEvent.change(utils.getByLabelText('Payment token'), { target: { value: 'PAY' } });
+        await payWithToken(utils, 'PAY');
         fireEvent.change(utils.getByLabelText('Payment amount per fill'), { target: { value: '2' } });
 
         await act(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Create dispenser' }));
+            fireEvent.click(utils.getByRole('button', { name: 'Create Dispenser' }));
             await drainMicrotasks();
         });
         expect(utils.getByText(/Each time someone sends 2 PAY/)).toBeInTheDocument();
         expect(utils.getAllByText('Dispenser address')).toHaveLength(1);
 
         await act(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Create unsigned transaction' }));
+            fireEvent.click(utils.getByRole('button', { name: 'Create Unsigned Transaction' }));
             await Promise.resolve();
         });
-        expect(utils.getByRole('button', { name: 'Create unsigned transaction' })).toBeDisabled();
+        expect(utils.getByRole('button', { name: 'Create Unsigned Transaction' })).toBeDisabled();
         expect(buildActionPsbtRequest).toHaveBeenCalledWith(expect.objectContaining({
             actionData: {
                 action: 'DISPENSER',
@@ -324,9 +353,9 @@ describe('DispenserForm per-fill labels', () => {
     // AmountField appends the unit in brackets, so "Give amount (per fill)"
     // read "Give amount (per fill) (JDOG)". Labels carry no brackets of their own.
     it('reads "per fill" without a second set of brackets', async () => {
-        const utils = await mountForm();
+        const utils = await mountForm({ getWalletBalances: holdingTokens(['PAY']) });
         expect(utils.getByLabelText('Give amount per fill (JDOG)')).toBeInTheDocument();
-        fireEvent.click(utils.getByRole('radio', { name: 'A token' }));
+        await payWithToken(utils, 'PAY');
         expect(utils.getByLabelText('Payment amount per fill')).toBeInTheDocument();
         const labels = [...document.querySelectorAll('label')].map((label) => label.textContent || '');
         expect(labels.filter((text) => /\)\s*\(/.test(text))).toEqual([]);

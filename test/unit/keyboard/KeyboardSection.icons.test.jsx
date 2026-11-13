@@ -30,7 +30,7 @@ describe('KeyboardSection button icons', () => {
         const rebinds = screen.getAllByRole('button', { name: 'Rebind' });
         expect(rebinds.length).toBeGreaterThan(0);
         for (const button of rebinds) expect(button.querySelector('svg')).not.toBeNull();
-        expect(screen.getByRole('button', { name: 'Reset all shortcuts' }).querySelector('svg')).not.toBeNull();
+        expect(screen.getByRole('button', { name: 'Reset All Shortcuts' }).querySelector('svg')).not.toBeNull();
         fireEvent.click(rebinds[0]);
         expect(screen.getByRole('button', { name: 'Cancel' }).querySelector('svg')).not.toBeNull();
     });

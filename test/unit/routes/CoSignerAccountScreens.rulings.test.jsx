@@ -53,12 +53,12 @@ function mountDetail(acct) {
 }
 
 describe('Agent accounts list', () => {
-    it('empty: one green New agent account with an icon, no second blue button', async () => {
+    it('empty: one New agent account plus on the title line with an icon, no second button', async () => {
         const { onProvision } = mountList([]);
         expect(await screen.findByRole('heading', { name: 'No agent accounts yet' })).toBeInTheDocument();
         const buttons = screen.getAllByRole('button', { name: 'New agent account' });
         expect(buttons).toHaveLength(1);
-        expect(buttons[0]).toHaveClass(buttonStyles.success);
+        expect(buttons[0]).toHaveClass(buttonStyles.ghost);
         expect(buttons[0].querySelector('svg')).not.toBeNull();
         fireEvent.click(buttons[0]);
         expect(onProvision).toHaveBeenCalledTimes(1);
@@ -75,31 +75,31 @@ describe('Agent accounts list', () => {
             expect(li.querySelector(`.${listStyles.rowIcon} svg`)).not.toBeNull();
         }
         expect(screen.queryByText('How agent accounts work')).toBeNull();
-        expect(screen.getByRole('button', { name: 'New agent account' })).toHaveClass(buttonStyles.success);
+        expect(screen.getByRole('button', { name: 'New agent account' })).toHaveClass(buttonStyles.ghost);
     });
 });
 
 describe('Agent account detail', () => {
-    it('a disabled account offers a green Enable with an icon; Edit policy carries an icon', async () => {
+    // The account page's actions are the token page's tiles, each with an icon.
+    it('a turned-off account offers a Turn On tile; Edit Rules carries an icon', async () => {
         mountDetail(account({ enabled: false }));
-        const enable = await screen.findByRole('button', { name: 'Enable' });
-        expect(enable).toHaveClass(buttonStyles.success);
-        expect(enable.querySelector('svg')).not.toBeNull();
-        const edit = screen.getByRole('button', { name: 'Edit policy' });
+        const turnOn = await screen.findByRole('button', { name: 'Turn On' });
+        expect(turnOn.querySelector('svg')).not.toBeNull();
+        const edit = screen.getByRole('button', { name: 'Edit Rules' });
         expect(edit).not.toHaveClass(buttonStyles.success);
         expect(edit.querySelector('svg')).not.toBeNull();
     });
 
-    it('an enabled account offers Disable with an icon and no green button', async () => {
+    it('an active account offers a Turn Off tile with an icon and no green button', async () => {
         mountDetail(account());
-        const disable = await screen.findByRole('button', { name: 'Disable' });
-        expect(disable).not.toHaveClass(buttonStyles.success);
-        expect(disable.querySelector('svg')).not.toBeNull();
+        const turnOff = await screen.findByRole('button', { name: 'Turn Off' });
+        expect(turnOff).not.toHaveClass(buttonStyles.success);
+        expect(turnOff.querySelector('svg')).not.toBeNull();
     });
 
     it('the edit view names its action Update policy, tips Account name, and has no What changes box', async () => {
         mountDetail(account());
-        fireEvent.click(await screen.findByRole('button', { name: 'Edit policy' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Edit Rules' }));
         const update = screen.getByRole('button', { name: 'Update policy' });
         expect(update).toHaveClass(buttonStyles.success);
         expect(update.querySelector('svg')).not.toBeNull();

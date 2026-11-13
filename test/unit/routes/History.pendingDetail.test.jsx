@@ -262,7 +262,7 @@ describe('History pending detail branch', () => {
             + 'The network hasn\'t reported the transaction data yet.',
         )).toBeTruthy();
         expect(outputLine(panel, `-100 XCHAIN`, THEIRS)).toBeTruthy();
-        expect(within(outputLine(panel, `-100 XCHAIN`, THEIRS)).getByRole('button', { name: 'Copy address' }))
+        expect(within(outputLine(panel, `-100 XCHAIN`, THEIRS)).getByRole('button', { name: 'Copy Address' }))
             .toHaveTextContent(/^Copy$/);
     });
 

@@ -23,12 +23,15 @@ function rule(selector) {
     return css.slice(start, css.indexOf('}', start));
 }
 
+// The approved redesign retired the Receive label editor (labels are not edited on Receive),
+// so the wrap rule it needed is gone with it.
 describe('Receive label editor layout', () => {
-    it('wraps instead of squeezing the field', () => {
-        const editor = rule('.labelEditor');
-        expect(editor).toMatch(/display:\s*flex/);
-        expect(editor).toMatch(/flex-wrap:\s*wrap/);
-        expect(editor).not.toMatch(/grid-template-columns/);
-        expect(rule('.labelEditor > :first-child')).toMatch(/flex:\s*1 1 12rem/);
+    it('no longer carries a label editor row or its stylesheet rule', () => {
+        expect(css).not.toContain('.labelEditor');
+        const jsx = readFileSync(
+            join(dirname(fileURLToPath(import.meta.url)), '../../../packages/core/src/shared/routes/Receive.jsx'),
+            'utf8',
+        );
+        expect(jsx).not.toContain('labelEditor');
     });
 });

@@ -54,7 +54,7 @@ describe('BackupSection U57 and U63', () => {
     it('export form: green named submit, tips on both password fields', () => {
         mount();
         fireEvent.click(screen.getByRole('button', { name: 'Export…' }));
-        expectOnlyGreen('Export backup');
+        expectOnlyGreen('Export Backup');
         expectEveryButtonHasIcon();
         expect(screen.getAllByRole('button', { name: /^About .*password/i }).length).toBeGreaterThanOrEqual(2);
     });
@@ -62,7 +62,7 @@ describe('BackupSection U57 and U63', () => {
     it('reveal form: green Reveal phrase and a password tip', () => {
         mount();
         fireEvent.click(screen.getByRole('button', { name: 'Show…' }));
-        expectOnlyGreen('Reveal phrase');
+        expectOnlyGreen('Reveal Phrase');
         expectEveryButtonHasIcon();
         expect(screen.getByRole('button', { name: /^About .*password/i })).toBeTruthy();
     });
@@ -70,7 +70,7 @@ describe('BackupSection U57 and U63', () => {
     it('test form: green Run test and tips on phrase, format, addresses and passphrase', () => {
         mount();
         fireEvent.click(screen.getByRole('button', { name: 'Test…' }));
-        expectOnlyGreen('Run test');
+        expectOnlyGreen('Run Test');
         expectEveryButtonHasIcon();
         for (const name of [/phrase to test/i, /format/i, /addresses to check/i, /passphrase/i]) {
             expect(screen.getByRole('button', { name: new RegExp(`^About .*${name.source}`, 'i') })).toBeTruthy();
@@ -79,9 +79,9 @@ describe('BackupSection U57 and U63', () => {
 
     it('publish form: green Publish labels and tips on network and password', async () => {
         mount();
-        fireEvent.click(screen.getByRole('button', { name: 'Publish now…' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish Now…' }));
         await screen.findByLabelText('Publish network');
-        expectOnlyGreen('Publish labels');
+        expectOnlyGreen('Publish Labels');
         expectEveryButtonHasIcon();
         const tips = screen.getAllByRole('button', { name: /^About / });
         expect(tips.length).toBeGreaterThanOrEqual(2);
@@ -91,7 +91,7 @@ describe('BackupSection U57 and U63', () => {
         mount();
         fireEvent.click(screen.getByRole('button', { name: 'Check…' }));
         await screen.findByLabelText('Restore network');
-        expectOnlyGreen('Check for contacts');
+        expectOnlyGreen('Check for Contacts');
         expectEveryButtonHasIcon();
         expect(screen.getAllByRole('button', { name: /^About / }).length).toBeGreaterThanOrEqual(2);
     });

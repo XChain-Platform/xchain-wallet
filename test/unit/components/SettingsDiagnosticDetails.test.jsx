@@ -54,7 +54,7 @@ describe('settings diagnostic disclosures', () => {
         fireEvent.change(screen.getByLabelText('Recovery phrase to test'), {
             target: { value: 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Run test' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Run Test' }));
 
         const mismatch = await screen.findByText(/Address #2: your wallet has bc1qexpected, but this recovery phrase gives bc1qderivedmismatch/);
         const missing = screen.getByText(/Address #3: not in your wallet yet; this recovery phrase gives bc1qderivednew/);

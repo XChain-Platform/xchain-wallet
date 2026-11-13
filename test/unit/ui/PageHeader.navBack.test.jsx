@@ -161,13 +161,14 @@ describe('PageHeader Back by layout', () => {
     // A trailing action takes the same small control height, so a screen with
     // one (History refresh, Contacts add) is no taller than one without, and
     // keeps the touch floor through a hit area centred on the box.
-    it('sizes trailing actions to the Back control height with a touch-floor hit area', () => {
-        const trailing = pageHeaderCss.match(/\n\.trailing button:not\(\[role="menuitem"\]\) \{([^}]*)\}/)?.[1] || '';
-        const hit = pageHeaderCss.match(/\n\.trailing button:not\(\[role="menuitem"\]\)::before \{([^}]*)\}/)?.[1] || '';
+    it('sizes trailing actions to the app bar button height with a touch-floor hit area', () => {
+        const trailing = pageHeaderCss.match(/\n\.trailing button:not\(\[role="menuitem"\], \[role="dialog"\] \*\) \{([^}]*)\}/)?.[1] || '';
+        const hit = pageHeaderCss.match(/\n\.trailing button:not\(\[role="menuitem"\], \[role="dialog"\] \*\)::before \{([^}]*)\}/)?.[1] || '';
+        // The approved redesign sizes trailing icon buttons to the app bar's 44px buttons (G82).
         for (const prop of ['width', 'height', 'min-width', 'min-height']) {
-            expect(trailing).toMatch(new RegExp(`(?:^|\\s)${prop}:\\s*var\\(--xc-control-h-sm\\);`));
+            expect(trailing).toMatch(new RegExp(`(?:^|\\s)${prop}:\\s*var\\(--xc-control-h-md\\);`));
         }
-        expect(trailing).not.toMatch(/--xc-control-h-md/);
+        expect(trailing).not.toMatch(/--xc-control-h-sm/);
         expect(trailing).toMatch(/position:\s*relative/);
         expect(hit).toMatch(/position:\s*absolute/);
         expect(hit).toMatch(/width:\s*max\(100%,\s*var\(--xc-control-hit-min/);

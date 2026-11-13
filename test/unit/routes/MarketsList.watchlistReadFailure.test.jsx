@@ -46,7 +46,9 @@ describe('MarketsList watchlist read failure', () => {
             </MessagingProvider>,
         );
         await screen.findByText('XCP');
-        fireEvent.click(screen.getByRole('tab', { name: 'All' }));
+        // The Show choice (Popular, All, Watchlist) is in the title-line filter menu.
+        fireEvent.click(screen.getByRole('button', { name: 'Filter markets' }));
+        fireEvent.change(screen.getByRole('combobox', { name: 'Show' }), { target: { value: 'all' } });
         const row = (name) => screen.getByRole('button', { name: `Open ${name} market` }).closest('li');
         await waitFor(() => expect(row('XCP').querySelector('button[aria-label="Remove from watchlist"]')).not.toBeNull());
 

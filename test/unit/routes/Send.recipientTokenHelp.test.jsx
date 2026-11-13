@@ -103,15 +103,18 @@ describe("Send: added recipient Token field help", () => {
     it("shows the help tip on the added recipient token row", async () => {
         mount();
         fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: ALICE } });
-        fireEvent.change(screen.getByLabelText(/^Token$/), { target: { value: "PEPE" } });
-        fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: "7" } });
+        fireEvent.click(await screen.findByRole("button", { name: /^Asset/ }));
+        fireEvent.click(await screen.findByRole("button", { name: "Pick PEPE" }));
+        fireEvent.change(await screen.findByLabelText(/^Amount \(/), { target: { value: "7" } });
         await screen.findByText(/PEPE available/);
-        fireEvent.click(await screen.findByRole("button", { name: /Add recipient/ }));
+        fireEvent.click(await screen.findByRole("button", { name: /Add Recipient/ }));
         fireEvent.click(screen.getByRole("switch", { name: /different token/i }));
         await screen.findByRole("button", { name: /Recipient 2 token/ });
+        // The first field is the form's Asset field; the added row's is Token.
+        expect(screen.getAllByRole("button", { name: "About Asset" })).toHaveLength(1);
         const tips = screen.getAllByRole("button", { name: "About Token" });
-        expect(tips).toHaveLength(2);
-        fireEvent.click(tips[1]);
+        expect(tips).toHaveLength(1);
+        fireEvent.click(tips[0]);
         expect(await screen.findByText(/The token this recipient receives/)).toBeTruthy();
     });
 });

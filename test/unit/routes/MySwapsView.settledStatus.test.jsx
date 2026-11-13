@@ -170,8 +170,8 @@ describe('MySwapsView: settled status', () => {
             const detail = utils.getByLabelText('Swap amounts');
             expect(detail.textContent).toContain(`Give ${longAmount} DOGESWAP`);
             expect(detail.textContent).toContain(`Get ${longAmount} DOGE`);
-            expect(utils.getByRole('button', { name: 'Set allow-list' })).toBeTruthy();
-            expect(utils.getByRole('button', { name: 'Set block-list' })).toBeTruthy();
+            expect(utils.getByRole('button', { name: 'Set Allow-List' })).toBeTruthy();
+            expect(utils.getByRole('button', { name: 'Set Block-List' })).toBeTruthy();
 
             const narrow = mediaBlock(swapViewCss, '(max-width: 420px)');
             expect(ruleBody(narrow, '.rowHead')).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\)/);
@@ -253,7 +253,7 @@ describe('MySwapsView: settled status', () => {
         const utils = await open(messaging);
         const row = rowFor(section(utils, 'Open swaps'), 705);
         fireEvent.click(within(row).getByRole('button', { name: 'Cancel' }));
-        fireEvent.click(utils.getByRole('button', { name: 'Cancel swap' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Cancel Swap' }));
 
         expect(await utils.findByText('This swap is no longer open. Refresh My swaps and try again.')).toBeTruthy();
         expect(detailReader).toHaveBeenCalledTimes(2);
@@ -275,7 +275,7 @@ describe('MySwapsView: settled status', () => {
         fireEvent.change(utils.getByLabelText('New expiration'), {
             target: { value: '2099-01-02T03:04' },
         });
-        fireEvent.click(utils.getByRole('button', { name: 'Update swap' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Update Swap' }));
 
         expect(await utils.findByText('This swap is no longer open. Refresh My swaps and try again.')).toBeTruthy();
         expect(cancelReader).toHaveBeenCalledTimes(2);

@@ -150,7 +150,7 @@ async function fill(utils, { tick = 'pepecash', value = '0.05', fee } = {}) {
 
 async function preview(utils) {
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('button', { name: 'Publish price' }));
+        fireEvent.click(utils.getByRole('button', { name: /^Publish price$/i }));
         await drainMicrotasks();
     });
 }
@@ -229,11 +229,14 @@ describe('OracleForm submit payload', () => {
     it('offers a published price as an action and prefills its values', async () => {
         const { utils } = await mountForm({ feeds: liveFeed('0.05') });
 
+        // Published prices sit in their own closed section, and the
+        // usage fee in its optional section, closed on load.
+        fireEvent.click(utils.getByRole('button', { name: /^Published Prices/, expanded: false }));
         fireEvent.click(utils.getByRole('button', { name: 'PEPECASH in USD' }));
 
         expect(utils.getByRole('textbox', { name: /^Token ticker/ }).value).toBe('PEPECASH');
         expect(utils.getByRole('textbox', { name: /^Price of one/ }).value).toBe('0.05');
-        expect(utils.getByRole('textbox', { name: /^Usage fee/ }).value).toBe('0.01');
+        expect(utils.getByRole('textbox', { name: /^Usage fee/, hidden: true }).value).toBe('0.01');
     });
 
     it('does not describe a failed feed read as an address with no published prices', async () => {

@@ -84,7 +84,7 @@ describe('Q through Z routes at a 320px viewport', () => {
             { listAccounts: vi.fn().mockResolvedValue([]) },
         );
 
-        expect(screen.getByRole('button', { name: 'Rename account' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Save Changes' })).toBeEnabled();
         expectNoFixedWidthBeyondViewport(container);
     });
 
@@ -101,14 +101,14 @@ describe('Q through Z routes at a 320px viewport', () => {
             <ScanRoute onBack={vi.fn()} onClassified={vi.fn()} />,
         );
 
-        expect(screen.getByRole('button', { name: 'Use pasted text' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Use Pasted Text' })).toBeInTheDocument();
         expectNoFixedWidthBeyondViewport(container);
     });
 
     it('keeps Verify signature within the viewport and shows Verify signature', () => {
         const { container } = renderRoute(<VerifySignatureForm onBack={vi.fn()} />);
 
-        expect(screen.getByRole('button', { name: 'Verify signature' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Verify Signature' })).toBeInTheDocument();
         expectNoFixedWidthBeyondViewport(container);
     });
 
@@ -129,7 +129,8 @@ describe('Q through Z routes at a 320px viewport', () => {
             />,
         );
 
-        expect(screen.getByRole('button', { name: 'I understand, continue' })).toBeEnabled();
+        // One form holds the warning, the wallet password and the I understand action.
+        expect(screen.getByRole('button', { name: 'I Understand' })).toBeEnabled();
         expectNoFixedWidthBeyondViewport(container);
     });
 });

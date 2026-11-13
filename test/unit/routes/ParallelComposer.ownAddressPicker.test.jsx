@@ -82,7 +82,7 @@ describe('ParallelComposer own-address picker', () => {
         await waitFor(() => expect(screen.getByRole('textbox', { name: 'From' })).toHaveValue(LTC_ADDRESS));
         expect(screen.getByRole('button', { name: /^Network: Litecoin/ })).toBeTruthy();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Sign and send queue' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Sign and Send Queue' }));
         const review = await screen.findByRole('form', { name: 'Review parallel actions' });
         expect(review).toHaveTextContent(LTC_ADDRESS.slice(0, 6));
     });

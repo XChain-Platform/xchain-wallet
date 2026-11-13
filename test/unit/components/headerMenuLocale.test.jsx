@@ -15,8 +15,6 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { HeaderActionMenu } from '../../../packages/core/src/shared/components/HeaderActionMenu.jsx';
 import { NetworkFilter } from '../../../packages/core/src/shared/components/NetworkFilter.jsx';
 import { NetworkFilterDropdown } from '../../../packages/core/src/shared/components/NetworkFilterDropdown.jsx';
-import { platformLinkLabel } from '../../../packages/core/src/shared/platformLinkLabel.js';
-import PLATFORM_LINKS from '../../../packages/core/src/shared/platform-links.json';
 import { registerLocale, setLocale } from '../../../packages/core/src/i18n/index.js';
 import pseudoRtl from '../../../packages/core/src/i18n/locales/pseudo-rtl/index.js';
 
@@ -47,16 +45,6 @@ describe('header menu copy follows the active locale', () => {
 
         expect(onMenuToggle).toHaveBeenCalledOnce();
         expect(screen.queryByRole('menu')).toBeNull();
-    });
-
-    it('resolves every generated site key through the dictionary', () => {
-        for (const site of PLATFORM_LINKS.links) {
-            expect(platformLinkLabel(site), site.key).toMatch(WRAPPED);
-        }
-    });
-
-    it('keeps the generated label for a site key it does not know', () => {
-        expect(platformLinkLabel({ key: 'newsite', label: 'New site' })).toBe('New site');
     });
 });
 

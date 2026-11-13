@@ -22,6 +22,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { ListForkForm } from '../../../packages/core/src/shared/routes/ListForkForm.jsx';
 
 const CHAIN = 'dogecoin-mainnet';
@@ -44,10 +45,13 @@ function mountFork({ owner = ADDRESS.address, getAddressesByChain, walletMode = 
         list: CURRENT_ITEMS,
         state: { edit_resolution_active: true, current_list: CURRENT_ITEMS, owner },
     };
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode }], activeWalletId: 'wallet-1' });
     const target = {
         getAddressesByChain: getAddressesByChain || vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: ADDRESS.id } }),
-        getSettings: vi.fn().mockResolvedValue({ walletMode, activeNetwork: 'mainnet' }),
+        getSettings: vi.fn().mockResolvedValue({ activeNetwork: 'mainnet' }),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'W', walletMode }]),
         signerReady: vi.fn().mockResolvedValue({ ready: walletMode === 'full' }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: walletMode === 'full' ? 'unlocked' : 'locked' }),
         getListByActionIndex: vi.fn().mockResolvedValue(row),
@@ -108,6 +112,7 @@ function byText(container, selector, text) {
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     vi.clearAllMocks();
 });
 
@@ -141,7 +146,7 @@ describe('ListForkForm lays out every non-signing state through FormPage', () =>
         const container = mountFork({ walletMode: 'watcher' });
         fireEvent.change(await screen.findByLabelText('Add tokens'), { target: { value: 'ADD' } });
         fireEvent.click(screen.getByRole('checkbox', { name: 'REMOVE' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Publish edit$/i }));
         await waitFor(() => expect(container.textContent).toContain('Not available in watcher mode'));
         const title = byText(container, 'h2', 'Not available in watcher mode');
         const root = formPageRoot(container, title);

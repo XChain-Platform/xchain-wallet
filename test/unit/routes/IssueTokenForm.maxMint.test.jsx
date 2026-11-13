@@ -75,7 +75,7 @@ async function fill({ supply, maxMint }) {
 }
 
 async function submit() {
-    fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
 }
 
 async function composedParams() {
