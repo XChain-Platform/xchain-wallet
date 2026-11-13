@@ -37,6 +37,8 @@ const lazyRoute = (load, name) => lazy(() => load().then((module) => ({ default:
 
 const MarketsList = lazyRoute(() => import('@xchain-wallet/core/shared/routes/MarketsList.jsx'), 'MarketsList');
 const MarketView = lazyRoute(() => import('@xchain-wallet/core/shared/routes/MarketView.jsx'), 'MarketView');
+// The Trade page; its pair and opening side ride on activeMarket.trade.
+const MarketTrade = lazyRoute(() => import('@xchain-wallet/core/shared/routes/MarketTrade.jsx'), 'MarketTrade');
 const MarketActivity = lazyRoute(() => import('@xchain-wallet/core/shared/routes/MarketActivity.jsx'), 'MarketActivity');
 const CreateOrderForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/CreateOrderForm.jsx'), 'CreateOrderForm');
 const MyOrdersView = lazyRoute(() => import('@xchain-wallet/core/shared/routes/MyOrdersView.jsx'), 'MyOrdersView');
@@ -73,6 +75,8 @@ export const DEX_SURFACE_ENABLED = true;
  *   activeMarket: any,
  *   setActiveMarket: (m: any) => void,
  *   setUnlockedView: (v: any) => void,
+ *   goBack: () => void,
+ *   landView: (v: string) => void,
  *   setDispenserRef: (r: any) => void,
  *   formBack: () => void,
  * }} ctx
@@ -87,6 +91,8 @@ export function renderDexRoute(unlockedView, ctx) {
         activeMarket,
         setActiveMarket,
         setUnlockedView,
+        goBack,
+        landView,
         setDispenserRef,
         formBack,
     } = ctx;
@@ -101,7 +107,7 @@ export function renderDexRoute(unlockedView, ctx) {
                     setActiveMarket({ chainId, tick1, tick2 });
                     setUnlockedView('market');
                 }}
-                onBack={() => setUnlockedView('home')}
+                onBack={goBack}
             />
         );
     }
@@ -113,7 +119,8 @@ export function renderDexRoute(unlockedView, ctx) {
                 title={t('shell.markets.selectAsset')}
                 backLabel={t('shell.markets.back')}
                 hideOwnFilter
-                onBack={() => setUnlockedView('markets')}
+                onBack={goBack}
+                // A pick returns to Markets with the asset, never a second Markets.
                 onSelect={(sel) => {
                     setMarketsAsset({
                         chainId: sel.chainId,
@@ -121,7 +128,7 @@ export function renderDexRoute(unlockedView, ctx) {
                         displayName: sel.displayName,
                         kind: sel.kind,
                     });
-                    setUnlockedView('markets');
+                    landView('markets');
                 }}
             />
         );
@@ -135,13 +142,46 @@ export function renderDexRoute(unlockedView, ctx) {
                 tick2={activeMarket.tick2}
                 onBack={() => {
                     setActiveMarket(null);
-                    setUnlockedView('markets');
+                    goBack();
                 }}
                 onSwap={() => setActiveMarket({
                     chainId: activeMarket.chainId,
                     tick1: activeMarket.tick2,
                     tick2: activeMarket.tick1,
                 })}
+                // Buy, Sell and a book price open the Trade page route.
+                onTrade={(trade) => {
+                    setActiveMarket({
+                        chainId: activeMarket.chainId,
+                        tick1: activeMarket.tick1,
+                        tick2: activeMarket.tick2,
+                        trade,
+                    });
+                    setUnlockedView('market-trade');
+                }}
+            />
+        );
+    }
+    // The Trade page. Back drops the trade and returns to the market.
+    if (unlockedView === 'market-trade' && activeMarket && activeWalletId) {
+        return (
+            <MarketTrade
+                walletId={activeWalletId}
+                chainId={activeMarket.chainId}
+                tick1={activeMarket.tick1}
+                tick2={activeMarket.tick2}
+                side={activeMarket.trade?.side}
+                mode={activeMarket.trade?.mode}
+                price={activeMarket.trade?.price ?? null}
+                pick={activeMarket.trade?.pick}
+                onBack={() => {
+                    setActiveMarket({
+                        chainId: activeMarket.chainId,
+                        tick1: activeMarket.tick1,
+                        tick2: activeMarket.tick2,
+                    });
+                    goBack();
+                }}
             />
         );
     }
@@ -167,7 +207,7 @@ export function renderDexRoute(unlockedView, ctx) {
             <MyOrdersView
                 walletId={activeWalletId}
                 accountId={activeAccountId}
-                onBack={() => setUnlockedView('home')}
+                onBack={goBack}
                 onCreateOrder={() => setUnlockedView('create-order')}
             />
         );
@@ -177,7 +217,7 @@ export function renderDexRoute(unlockedView, ctx) {
             <MySwapsView
                 walletId={activeWalletId}
                 accountId={activeAccountId}
-                onBack={() => setUnlockedView('home')}
+                onBack={goBack}
                 onCreateSwap={() => setUnlockedView('swap')}
             />
         );
@@ -206,9 +246,9 @@ export function renderDexRoute(unlockedView, ctx) {
         return (
             <MarketActivity
                 walletId={activeWalletId}
-                onBack={() => setUnlockedView('home')}
+                onBack={goBack}
                 onOpenDispenser={(chainId, actionIndex) => {
-                    setDispenserRef({ chainId, actionIndex, origin: 'explorer' });
+                    setDispenserRef({ chainId, actionIndex });
                     setUnlockedView('dispenser-detail');
                 }}
             />

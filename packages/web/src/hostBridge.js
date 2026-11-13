@@ -1461,6 +1461,7 @@ export async function createWalletLocal(req) {
         strengthBits = 128,
         bip39Passphrase = '',
         activeChainIds = DEFAULT_ACTIVE_CHAIN_IDS,
+        walletMode,
     } = req;
 
     const meta = createMetaBackend();
@@ -1499,6 +1500,7 @@ export async function createWalletLocal(req) {
             // Same password, same params: the wallet seal reuses the vault
             // key instead of paying a second Argon2id round.
             masterKey,
+            walletMode,
         });
         vault = v;
         await sdkBound();
@@ -1569,6 +1571,7 @@ export async function importMnemonicLocal(req) {
         format,
         chainId,
         activeNetwork,
+        walletMode,
     } = req;
     if (importingWif && (typeof chainId !== 'string' || chainId.length === 0)) {
         throw new Error('wallet.import: chainId is required for a WIF private key');
@@ -1621,6 +1624,7 @@ export async function importMnemonicLocal(req) {
                 sdkRegistry,
                 name,
                 kdfParams,
+                walletMode,
             })
             : await flowsNs.importMnemonic({
                 password,
@@ -1642,6 +1646,7 @@ export async function importMnemonicLocal(req) {
                 // mainnet). Undefined keeps the flow's own inference from the
                 // first chain id.
                 activeNetwork,
+                walletMode,
             });
         vault = v;
         await sdkBound();

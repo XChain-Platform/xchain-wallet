@@ -98,10 +98,10 @@ export function CopyButtonSection() {
             <Markup>
 {`import { CopyButton } from '@xchain-wallet/core/ui';
 
-<CopyButton value={address} label="Copy address" />`}
+<CopyButton value={address} label="Copy Address" />`}
             </Markup>
             <LiveExample label="Copy feedback is announced and returns to idle automatically.">
-                <CopyButton value={ADDRESS} label="Copy address" />
+                <CopyButton value={ADDRESS} label="Copy Address" />
             </LiveExample>
         </Section>
     );

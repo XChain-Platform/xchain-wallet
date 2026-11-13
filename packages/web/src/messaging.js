@@ -436,6 +436,16 @@ export function quoteProtocolFee(opts) {
 }
 
 /**
+ * The chain's published fee schedule (gas table, gas price, oracle prices).
+ *
+ * @param {{ chainId: string }} opts
+ * @returns {Promise<object|null>} an sdk.getFeeSchedule answer, or null
+ */
+export function getFeeSchedule(opts) {
+    return /** @type {any} */ (sendMessage('sdk.getFeeSchedule', opts));
+}
+
+/**
  * §20 / Cluster W FOLLOWUP 5: watcher-mode helper for the non-Send
  * action surface. Builds an unsigned PSBT for any XChain action without
  * unlocking the wallet, calling a signer, or broadcasting.
@@ -1352,6 +1362,11 @@ export function governanceVotes(req) {
     return /** @type {any} */ (sendMessage('governance.votes', req));
 }
 
+/** One address's live vote delegations. @param {{ chainId: string, address: string }} req */
+export function governanceVoteDelegations(req) {
+    return /** @type {any} */ (sendMessage('governance.voteDelegations', req));
+}
+
 /** @param {{ chainId: string, address: string, opts?: object }} req */
 export function getBroadcastsForAddress(req) {
     return /** @type {any} */ (sendMessage('broadcasts.forAddress', req));
@@ -1448,6 +1463,31 @@ export function provisionCoSignerAccount(req) {
 /** @param {{ walletId: string }} req */
 export function listCoSignerAccounts(req) {
     return /** @type {any} */ (sendMessage('coSigner.list', req));
+}
+
+/** @param {{ walletId: string }} req */
+export function getCoSignerAccountBalances(req) {
+    return /** @type {any} */ (sendMessage('coSigner.balances', req));
+}
+
+/** @param {{ chainId: string, ticks: string[] }} req */
+export function resolveCoSignerTokenIds(req) {
+    return /** @type {any} */ (sendMessage('coSigner.resolveTokenIds', req));
+}
+
+/** Co-sign requests waiting on the owner for one agent account. @param {{ accountId: string }} req */
+export function listCoSignRequests(req) {
+    return /** @type {any} */ (sendMessage('coSign.pending', req));
+}
+
+/** @param {{ id: string }} req */
+export function refuseCoSignRequest(req) {
+    return /** @type {any} */ (sendMessage('coSign.refuse', req));
+}
+
+/** Bring the request's approval window forward to approve it there. @param {{ id: string }} req */
+export function focusCoSignRequest(req) {
+    return /** @type {any} */ (sendMessage('coSign.focus', req));
 }
 
 /** @param {{ id: string }} req */

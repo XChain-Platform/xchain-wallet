@@ -1086,7 +1086,7 @@ const config = {
         synopsis: 'Self-custodial multi-chain XChain Platform wallet',
         description:
             'Self-custodial wallet for the XChain Platform (Bitcoin, Dogecoin, '
-                + 'Litecoin). Supports token issuance, hardware signers (Ledger + '
+                + 'Litecoin). Supports token issuance, hardware wallets (Ledger + '
                 + 'Trezor via WebHID), and the full XChain action surface.',
     },
     appImage: {

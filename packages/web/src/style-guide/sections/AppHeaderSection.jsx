@@ -34,18 +34,16 @@ export function AppHeaderSection() {
 {`<AppHeader
     activeWallet={{ id: walletId, name: 'Everyday wallet' }}
     onLock={lock}
-    onPopOut={openInNewWindow}
     onMenuToggle={palette.togglePalette}
     menuOpen={palette.open}
 />`}
             </Markup>
 
-            <LiveExample label="Wallet name, lock, pop-out, and menu">
+            <LiveExample label="Wallet name, lock, and menu">
                 <div style={{ border: '1px solid var(--xc-border)', borderRadius: 'var(--xc-radius-md)', overflow: 'hidden' }}>
                     <AppHeader
                         activeWallet={{ id: 'wallet-example', name: 'Everyday wallet' }}
                         onLock={() => {}}
-                        onPopOut={() => {}}
                         onMenuToggle={() => {}}
                     />
                 </div>

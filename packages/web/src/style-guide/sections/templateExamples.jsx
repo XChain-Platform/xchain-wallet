@@ -38,7 +38,7 @@ function PageGutterGuide() {
 export function ExampleFormScreen({ withError = false }) {
     const [address, setAddress] = useState('');
     return (
-        <Screen variant="full" header={<PageHeader onBack={noop} title="Verify signature" />}>
+        <Screen variant="full" header={<PageHeader onBack={noop} title="Verify Signature" />}>
             <PageGutterGuide />
             <FormPage
                 label="Verify signature"
@@ -48,7 +48,7 @@ export function ExampleFormScreen({ withError = false }) {
                 actions={(
                     <>
                         <Button variant="ghost" onClick={noop}>Cancel</Button>
-                        <Button type="submit" variant="primary">Verify signature</Button>
+                        <Button type="submit" variant="primary">Verify Signature</Button>
                     </>
                 )}
             >
@@ -69,7 +69,7 @@ export function ExampleFormScreen({ withError = false }) {
 /** A long form split into titled sections: Issue token. */
 export function ExampleSectionedFormScreen() {
     return (
-        <Screen variant="full" header={<PageHeader onBack={noop} title="Issue token" />}>
+        <Screen variant="full" header={<PageHeader onBack={noop} title="Issue Token" />}>
             <PageGutterGuide />
             <FormPage
                 sectioned
@@ -77,8 +77,8 @@ export function ExampleSectionedFormScreen() {
                 onSubmit={(e) => e.preventDefault()}
                 actions={(
                     <>
-                        <Button variant="ghost" onClick={noop}>Save draft</Button>
-                        <Button type="submit" variant="primary">Review</Button>
+                        <Button variant="ghost" onClick={noop}>Save Draft</Button>
+                        <Button type="submit" variant="primary" icon={<Icon.CheckIcon />}>Review</Button>
                     </>
                 )}
             >
@@ -111,7 +111,7 @@ const ROWS = [
 /** A list with a toolbar and a titled group: Payments due. */
 export function ExampleListScreen() {
     return (
-        <Screen variant="full" header={<PageHeader onBack={noop} title="Payments due" />}>
+        <Screen variant="full" header={<PageHeader onBack={noop} title="Payments Due" />}>
             <PageGutterGuide />
             <ListPage
                 intro="Coin payments your matched DEX orders are waiting on."
@@ -162,7 +162,7 @@ export function ExampleEmptyScreen() {
                     icon={<Icon.HandshakeIcon />}
                     title="No polls yet"
                     body="Create the first poll on this network."
-                    actionLabel="Create poll"
+                    actionLabel="Create Poll"
                     onAction={noop}
                 />
             </ListPage>

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useState } from 'react';
-import { Button, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, Icon, StatusMessage } from '@xchain-wallet/core/ui';
 import { t } from '../../../core/src/i18n/index.js';
 import { useExtensionWallet } from '../useExtensionWallet.js';
 import styles from './ExtensionBanner.module.css';
@@ -72,7 +72,7 @@ export function ExtensionBanner() {
                 <Button
                     variant="secondary"
                     size="sm"
-                    icon={null}
+                    icon={<Icon.RefreshIcon />}
                     onClick={disable}
                 >
                     {t('extensionBanner.switchBack')}
@@ -95,7 +95,7 @@ export function ExtensionBanner() {
                 <Button
                     variant="primary"
                     size="sm"
-                    icon={null}
+                    icon={<Icon.LinkIcon />}
                     onClick={enable}
                     disabled={connecting}
                 >
@@ -106,7 +106,7 @@ export function ExtensionBanner() {
                 <Button
                     variant="secondary"
                     size="sm"
-                    icon={null}
+                    icon={<Icon.XIcon />}
                     onClick={dismiss}
                     aria-label={t('extensionBanner.dismissLabel')}
                 >

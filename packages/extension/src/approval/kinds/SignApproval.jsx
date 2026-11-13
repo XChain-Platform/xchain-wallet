@@ -58,6 +58,7 @@ import { resolveFeeUnit, settingsCustomToDisplayRate } from '@xchain-wallet/core
 import { WATCH_ONLY_SIGNING_MESSAGE } from '@xchain-wallet/core/shared/addressSelection.js';
 import { OriginIdentity } from '@xchain-wallet/core/shared/components/OriginIdentity.jsx';
 import { formatNativeBaseUnits, tickerForDescriptor } from '../../../../core/src/registry/coinTicker.js';
+import { walletModeOf } from '../../../../core/src/schemas/wallet.js';
 import {
     listWallets,
     resolveApproval,
@@ -210,9 +211,18 @@ export function SignApproval({ id, kind, payload, onReject }) {
     useEffect(() => {
         let cancelled = false;
         setWalletId(null);
+        setWalletMode(null);
         setWatchOnlyBlocked(false);
         setSignInAllowedAddresses(null);
         setWalletsSettled(false);
+        // The wallet this request resolves to; its own mode (§20) decides
+        // whether this prompt may sign. Until it is known the approval stays
+        // blocked; with no wallet resolved it reads as full mode.
+        let picked = null;
+        const pick = (wallet) => {
+            picked = wallet;
+            setWalletId(wallet.id);
+        };
         async function loadSigningWallet() {
             try {
                 const list = await listWallets();
@@ -226,7 +236,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 }
 
                 if (walletSigningTargets.length === 0 && kind !== 'signIn') {
-                    setWalletId(wallets[0].id);
+                    pick(wallets[0]);
                     return;
                 }
 
@@ -265,13 +275,17 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 );
                 if (kind === 'signIn'
                     && !candidates.some((candidate) => targetMatches(candidate, false))) {
-                    setWalletId(wallets[0].id);
+                    pick(wallets[0]);
                     setSignInAllowedAddresses(offeredSignInAddresses);
                     return;
                 }
                 const match = candidates.find((candidate) => targetMatches(candidate, true));
                 if (!match) {
-                    if (candidates.some((candidate) => targetMatches(candidate, false))) {
+                    const watchOnlyMatch = candidates.find((candidate) => targetMatches(candidate, false));
+                    if (watchOnlyMatch) {
+                        // The request belongs to this wallet even though it
+                        // holds no signing key here; its own mode still applies.
+                        picked = watchOnlyMatch.wallet;
                         setWatchOnlyBlocked(true);
                         setError(WATCH_ONLY_SIGNING_MESSAGE);
                     } else {
@@ -279,7 +293,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                     }
                     return;
                 }
-                setWalletId(match.wallet.id);
+                pick(match.wallet);
                 if (kind === 'signIn') {
                     setSignInAllowedAddresses(new Set(
                         match.addresses
@@ -296,7 +310,10 @@ export function SignApproval({ id, kind, payload, onReject }) {
             } finally {
                 // Every answer, a match, no match or a failure, settles the
                 // list so the PSBT decode runs exactly once.
-                if (!cancelled) setWalletsSettled(true);
+                if (!cancelled) {
+                    setWalletMode(picked ? walletModeOf(picked) : 'full');
+                    setWalletsSettled(true);
+                }
             }
         }
         void loadSigningWallet();
@@ -323,11 +340,8 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 if (cancelled) return;
                 setSettings(s || null);
                 setDeveloperMode(Boolean(s?.developerMode));
-                setWalletMode(s?.walletMode || 'full');
             })
-            .catch(() => { /* keep developerMode false on failure */
-                if (!cancelled) setWalletMode('full');
-            });
+            .catch(() => { /* keep developerMode false on failure */ });
         return () => { cancelled = true; };
     }, []);
 

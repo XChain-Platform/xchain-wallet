@@ -94,6 +94,19 @@ import {
     ShellNavigationSection,
     UnavailableStatesSection,
 } from './sections/PickersAndShellSections.jsx';
+import { FormStandardSection, GiveGetStandardSection } from './sections/FormStandardSections.jsx';
+import {
+    FileFieldSection,
+    ListFilterMenuSection,
+    MarketTradePartsSection,
+    MnemonicGridSection,
+    PortfolioChartSection,
+    RouteErrorBoundarySection,
+    SparklineSection,
+    WalletIdentitySection,
+    WalletModeFieldSection,
+    WarningCardSection,
+} from './sections/WalletPartsSections.jsx';
 // Curated catalog: patterns we've established across the recent work
 // (Home, Receive, Send, TokenDetail). Add a section here when a new
 // pattern lands in two routes or you want to codify a one-off as
@@ -108,6 +121,18 @@ export const SECTIONS = [
     { id: 'form-page',             label: 'Form page',              Component: FormPageSection, primitives: ['FormPage'] },
     { id: 'form-error-summary',    label: 'Form error summary',     Component: FormErrorSummarySection, primitives: ['FormErrorSummary', 'FormNotice', 'FieldNote'] },
     { id: 'form-section',          label: 'Form section',           Component: FormSectionSection, primitives: ['FormSection'] },
+    { id: 'form-standard',         label: 'Form Standard',          Component: FormStandardSection },
+    { id: 'give-get',              label: 'Give / Get',             Component: GiveGetStandardSection },
+    { id: 'file-field',            label: 'File field',             Component: FileFieldSection, components: ['FileField'] },
+    { id: 'warning-card',          label: 'Warning card',           Component: WarningCardSection, components: ['WarningCard'] },
+    { id: 'wallet-mode-field',     label: 'Wallet mode field',      Component: WalletModeFieldSection, components: ['WalletModeField'] },
+    { id: 'list-filter-menu',      label: 'List filter menu',       Component: ListFilterMenuSection, components: ['ListFilterMenu'] },
+    { id: 'portfolio-chart',       label: 'Portfolio chart',        Component: PortfolioChartSection, components: ['PortfolioChart'] },
+    { id: 'sparkline',             label: 'Sparkline',              Component: SparklineSection, components: ['Sparkline'] },
+    { id: 'mnemonic-grid',         label: 'Mnemonic grid',          Component: MnemonicGridSection, components: ['MnemonicGrid'] },
+    { id: 'wallet-identity',       label: 'Wallet identity',        Component: WalletIdentitySection, components: ['WalletIdentity', 'TileLookFields'] },
+    { id: 'market-trade-parts',    label: 'Market trade parts',     Component: MarketTradePartsSection, components: ['marketTradeParts'] },
+    { id: 'route-error-boundary',  label: 'Route error boundary',   Component: RouteErrorBoundarySection, components: ['RouteErrorBoundary'] },
     { id: 'list-page',             label: 'List page',              Component: ListPageSection, primitives: ['ListPage'] },
     { id: 'list-row',              label: 'List row',               Component: ListRowSection, primitives: ['ListRow'] },
     { id: 'empty-state',           label: 'Empty state',            Component: EmptyStateSection, primitives: ['EmptyState'] },

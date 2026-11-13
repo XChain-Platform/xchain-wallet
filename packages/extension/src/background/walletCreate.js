@@ -59,6 +59,7 @@ async function createWithMnemonic(request, deps) {
         strengthBits = 128,
         bip39Passphrase = '',
         activeChainIds = DEFAULT_ACTIVE_CHAIN_IDS,
+        walletMode,
     } = /** @type {any} */ (request);
 
     const kdfParams = cryptoLib.makeFreshKdfParams();
@@ -88,6 +89,7 @@ async function createWithMnemonic(request, deps) {
                 // The wallet seal shares the vault key because the password
                 // and KDF params are identical for a fresh create.
                 masterKey,
+                walletMode,
             });
             await vault.save();
             mnemonic = result.mnemonic;
@@ -154,6 +156,7 @@ async function importWallet(request, deps) {
         chainId,
         addressType,
         activeNetwork,
+        walletMode,
     } = /** @type {any} */ (request);
     if (importingWif && (typeof chainId !== 'string' || chainId.length === 0)) {
         throw new Error('wallet.import: chainId is required for a WIF private key');
@@ -185,6 +188,7 @@ async function importWallet(request, deps) {
                     sdkRegistry: deps.sdkRegistry,
                     name,
                     kdfParams,
+                    walletMode,
                 })
                 : await flows.importMnemonic({
                     password,
@@ -203,6 +207,7 @@ async function importWallet(request, deps) {
                     // for mainnet). Undefined keeps the flow's own inference
                     // from the first chain id.
                     activeNetwork,
+                    walletMode,
                 });
             await vault.save();
             importedFormat = result.format ?? result.wallet.format;

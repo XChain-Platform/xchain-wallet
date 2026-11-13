@@ -14,6 +14,7 @@
 
 import { getRecentShellErrors } from './errorCapture.js';
 import { RUNTIME_MESSAGE_TIMEOUT_MS, sendMessage } from '../shared/chromeMessaging.js';
+import { SURFACE_ID } from '../shared/surfaceStateSync.js';
 
 export { sendMessage };
 
@@ -539,6 +540,16 @@ export function requoteNativeFee(opts) {
  */
 export function quoteProtocolFee(opts) {
     return /** @type {any} */ (sendMessage('action.quoteProtocolFee', opts));
+}
+
+/**
+ * The chain's published fee schedule (gas table, gas price, oracle prices).
+ *
+ * @param {{ chainId: string }} opts
+ * @returns {Promise<object|null>} an sdk.getFeeSchedule answer, or null
+ */
+export function getFeeSchedule(opts) {
+    return /** @type {any} */ (sendMessage('sdk.getFeeSchedule', opts));
 }
 
 /**
@@ -1719,6 +1730,11 @@ export function governanceVotes(req) {
     return /** @type {any} */ (sendMessage('governance.votes', req));
 }
 
+/** One address's live vote delegations. @param {{ chainId: string, address: string }} req */
+export function governanceVoteDelegations(req) {
+    return /** @type {any} */ (sendMessage('governance.voteDelegations', req));
+}
+
 /**
  * List BROADCAST actions published by an address. Backs the §42.7.5
  * Operator dashboard's Publishing activity section.
@@ -1853,6 +1869,31 @@ export function provisionCoSignerAccount(req) {
 /** @param {{ walletId: string }} req */
 export function listCoSignerAccounts(req) {
     return /** @type {any} */ (sendMessage('coSigner.list', req));
+}
+
+/** @param {{ walletId: string }} req */
+export function getCoSignerAccountBalances(req) {
+    return /** @type {any} */ (sendMessage('coSigner.balances', req));
+}
+
+/** @param {{ chainId: string, ticks: string[] }} req */
+export function resolveCoSignerTokenIds(req) {
+    return /** @type {any} */ (sendMessage('coSigner.resolveTokenIds', req));
+}
+
+/** Co-sign requests waiting on the owner for one agent account. @param {{ accountId: string }} req */
+export function listCoSignRequests(req) {
+    return /** @type {any} */ (sendMessage('coSign.pending', req));
+}
+
+/** @param {{ id: string }} req */
+export function refuseCoSignRequest(req) {
+    return /** @type {any} */ (sendMessage('coSign.refuse', req));
+}
+
+/** Bring the request's approval window forward to approve it there. @param {{ id: string }} req */
+export function focusCoSignRequest(req) {
+    return /** @type {any} */ (sendMessage('coSign.focus', req));
 }
 
 /** @param {{ id: string }} req */
@@ -2842,7 +2883,7 @@ export function getAirdropRecipients(req) {
  * @param {{ walletId: string }} req
  */
 export function removeWallet(req) {
-    return /** @type {any} */ (sendMessage('wallet.remove', req));
+    return /** @type {any} */ (sendMessage('wallet.remove', { ...req, surfaceId: SURFACE_ID }));
 }
 
 /**

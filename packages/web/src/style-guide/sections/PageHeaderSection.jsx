@@ -87,7 +87,7 @@ export function PageHeaderSection() {
                 <div style={frame}>
                     <div style={{ ...headerSlot, borderTop: 'none' }}>
                         <PageHeader
-                            title="Address book"
+                            title="Address Book"
                         />
                     </div>
                 </div>

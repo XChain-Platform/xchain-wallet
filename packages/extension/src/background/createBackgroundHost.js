@@ -227,6 +227,7 @@ const {
     pollDetail,
     pollResults,
     votesForQuery,
+    voteDelegationsForAddress,
     contractStakeAction,
     broadcastsForAddress,
     linksForAddress,
@@ -645,7 +646,7 @@ async function pickSignerFromRequest({ vault, walletId, signerId, signerPool }) 
         const transport = signerBridge.getTransport(record.id);
         if (!transport) {
             throw new Error(
-                'Hardware signer is not connected. Open the wallet UI, re-pair if needed, and try again.',
+                'Hardware wallet is not connected. Open the wallet UI, re-pair if needed, and try again.',
             );
         }
         const descriptor = { kind: record.kind, address: null, signerRecord: record };
@@ -987,6 +988,7 @@ function toSafeWallet(w) {
         // encryptedPassphrase.
         passphraseStored: typeof w.encryptedPassphrase === 'string' && w.encryptedPassphrase.length > 0,
         multisigs: Array.isArray(w.multisigs) ? w.multisigs : [],
+        walletMode: schemas.wallet.walletModeOf(w),
     };
 }
 
@@ -2006,16 +2008,16 @@ export function createBackgroundHost(deps) {
         if (typeof walletId !== 'string' || walletId.length === 0) {
             throw new Error('pairing: walletId is required');
         }
-        // The lane owns the mode flip. Doing it here rather than in the
-        // renderer keeps pairing atomic (a payload always reports the mode
-        // that is actually persisted) and keeps the lane working in shells
-        // that expose no settings shims of their own.
-        if (req?.walletMode === 'watcher' || req?.walletMode === 'signer') {
-            await updateSettings(vault, { walletMode: req.walletMode });
-        }
-        const wallet = await vault.wallets.get(walletId);
+        let wallet = await vault.wallets.get(walletId);
         if (!wallet) {
             throw new Error(`pairing: no wallet with id "${walletId}"`);
+        }
+        // Pairing sets this wallet's watcher or signer mode on its record here,
+        // so a payload always reports the mode that is actually persisted.
+        if ((req?.walletMode === 'watcher' || req?.walletMode === 'signer')
+            && wallet.walletMode !== req.walletMode) {
+            wallet = { ...wallet, walletMode: req.walletMode };
+            await vault.wallets.put(wallet);
         }
         // A standalone xpub export confirms the password every time. Public
         // keys cannot spend, but they reveal the account's complete address
@@ -2080,7 +2082,7 @@ export function createBackgroundHost(deps) {
                 return { payload: { keys: publicKeys }, encoded: null };
             }
             const payload = buildPairingPayload({
-                walletMode: settings?.walletMode,
+                walletMode: wallet.walletMode,
                 keys,
                 label: typeof req?.label === 'string' ? req.label : '',
             });
@@ -2098,7 +2100,7 @@ export function createBackgroundHost(deps) {
                 format: wallet.format,
             });
             const local = buildPairingPayload({
-                walletMode: settings?.walletMode,
+                walletMode: wallet.walletMode,
                 keys,
                 label: typeof req?.label === 'string' ? req.label : '',
             });
@@ -2493,7 +2495,11 @@ export function createBackgroundHost(deps) {
         // blob and rehydrate into every later boot, and no route can list them
         // again because the banner only ever asks for the active wallet.
         await pruneWalletFromQueue(walletId);
-        await publishSurfaceState('wallets', { change: 'removed', walletId });
+        await publishSurfaceState('wallets', {
+            change: 'removed',
+            walletId,
+            ...(typeof req?.surfaceId === 'string' && req.surfaceId ? { originSurface: req.surfaceId } : {}),
+        });
         const removedAccountIds = new Set(removedAccounts.map((account) => account.id));
         const affectedOrigins = new Set(sitesBefore
             .filter((site) => {
@@ -4641,6 +4647,17 @@ export function createBackgroundHost(deps) {
         return flows.listCoSignerAccounts(vault, req?.walletId);
     });
 
+    // Every agent account's balance in one batch read per chain, keyed by account id.
+    host.register('coSigner.balances', async (req, { vault, sdkRegistry, chainRegistry }) => {
+        return flows.coSignerAccountBalances({ vault, sdkRegistry, chainRegistry, walletId: req?.walletId });
+    });
+
+    // The token numbers of the tickers an agent account's rules name, read when
+    // the owner saves the rules (one read per distinct ticker); signing never asks.
+    host.register('coSigner.resolveTokenIds', async (req, { sdkRegistry, chainRegistry }) => {
+        return flows.resolveCoSignerTokenIds({ sdkRegistry, chainRegistry, chainId: req?.chainId, ticks: req?.ticks });
+    });
+
     host.register('coSigner.get', async (req, { vault }) => {
         return flows.getCoSignerAccount(vault, req?.id);
     });
@@ -4749,7 +4766,7 @@ export function createBackgroundHost(deps) {
         const transport = signerBridge.getTransport(descriptor.signerRecord.id);
         if (!transport) {
             throw new Error(
-                'Hardware signer is not connected. Open the wallet UI, re-pair if needed, and try again.',
+                'Hardware wallet is not connected. Open the wallet UI, re-pair if needed, and try again.',
             );
         }
         const signer = buildRemoteSigner(descriptor, transport);
@@ -4806,7 +4823,7 @@ export function createBackgroundHost(deps) {
             const transport = signerBridge.getTransport(descriptor.signerRecord.id);
             if (!transport) {
                 throw new Error(
-                    'Hardware signer is not connected. Open the wallet UI, re-pair if needed, and try again.',
+                    'Hardware wallet is not connected. Open the wallet UI, re-pair if needed, and try again.',
                 );
             }
             const signer = buildRemoteSigner(descriptor, transport);
@@ -5483,6 +5500,11 @@ export function createBackgroundHost(deps) {
         return votesForQuery({ ...req, sdkRegistry });
     });
 
+    // One address's live vote delegations, one read for the My delegations list.
+    host.register('governance.voteDelegations', async (req, { sdkRegistry }) => {
+        return voteDelegationsForAddress({ ...req, sdkRegistry });
+    });
+
     // BET writes. One action name over four formats, so each gets its own route
     // rather than a single route taking a version from the caller: a resolve and
     // a place-bet differ on the wire only by AMOUNT, and the messaging boundary
@@ -6039,6 +6061,24 @@ export function createBackgroundHost(deps) {
         return validateActionDryRun({ ...req, sdkRegistry });
     });
 
+    // The chain's published fee schedule (the indexer's /feeschedule: gas
+    // table, gas price, oracle prices), which useFeeSchedule reads so a form
+    // can show a fee before the action is complete enough to quote. Display
+    // only, so a chain without an explorer or a failed read answers null.
+    host.register('sdk.getFeeSchedule', async (req, { sdkRegistry }) => {
+        const chainId = req?.chainId;
+        if (typeof chainId !== 'string' || !chainId) {
+            throw new Error('sdk.getFeeSchedule: chainId is required');
+        }
+        const sdk = sdkRegistry.get(chainId);
+        if (typeof sdk?.getFeeSchedule !== 'function') return null;
+        try {
+            return await sdk.getFeeSchedule();
+        } catch {
+            return null;
+        }
+    });
+
 
     host.register('signer.register', async (req, { vault }) => {
         return registerSigner({ ...req, vault });
@@ -6291,6 +6331,47 @@ export function createBackgroundHost(deps) {
             return { resolved: ok };
         });
     }
+
+    // The agent account page shows the co-sign requests waiting on the owner.
+    // It lists them with the same read-only preview the approval window shows,
+    // can refuse one, and sends Approve to that window, where the password and
+    // every signing check stay; nothing here signs.
+    // A shell whose approvals cannot list parked requests answers with none.
+    const broker = /** @type {any} */ (approvals);
+    const canList = Boolean(broker && typeof broker.listPending === 'function');
+    const coSignEntry = (id) => (canList
+        ? broker.listPending('coSign').find((entry) => entry.id === id) || null
+        : null);
+    host.register('coSign.pending', async (req, { vault, sdkRegistry }) => {
+        const accountId = /** @type {any} */ (req)?.accountId;
+        if (typeof accountId !== 'string' || accountId.length === 0) {
+            throw new Error('coSign.pending: accountId is required');
+        }
+        if (!canList) return [];
+        const entries = broker.listPending('coSign')
+            .filter((entry) => entry.payload?.payload?.accountId === accountId);
+        return Promise.all(entries.map(async (entry) => {
+            const base = { id: entry.id, origin: entry.payload?.origin ?? null };
+            try {
+                const preview = await flows.previewCoSignRequest({
+                    vault, sdkRegistry, accountId, request: { psbt: entry.payload.payload.psbtHex },
+                });
+                return { ...base, ...preview };
+            } catch (err) {
+                return { ...base, decodeOk: false, decodeReason: err?.message || 'DECODE_FAILED', policyOk: false };
+            }
+        }));
+    });
+    host.register('coSign.refuse', async (req) => {
+        const id = /** @type {any} */ (req)?.id;
+        if (!coSignEntry(id)) return { resolved: false };
+        return { resolved: await broker.resolve(id, { approved: false }) };
+    });
+    host.register('coSign.focus', async (req) => {
+        const id = /** @type {any} */ (req)?.id;
+        if (!coSignEntry(id) || typeof broker.focus !== 'function') return { focused: false };
+        return { focused: await broker.focus(id) };
+    });
 
     // Every software-signed action that spends coins claims them around its
     // whole route (see withSpendClaim); a send claims inside sendWithHold.

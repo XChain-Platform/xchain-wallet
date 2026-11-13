@@ -265,6 +265,13 @@ export const TOKEN_GROUPS = [
             color('--xc-badge-multisig-taproot-fg', 'Badge multisig taproot fg'),
             color('--xc-badge-multisig-taproot-border', 'Badge multisig taproot border'),
             token('--xc-shadow-selected-ring', 'Inset ring on a pressed collectible card', 'shadow'),
+            // The brand colours behind the blue balance cards and their charts.
+            color('--xc-brand-blue', 'Brand blue'),
+            color('--xc-brand-purple', 'Brand purple'),
+            token('--xc-brand-gradient', 'Brand gradient', 'value'),
+            token('--xc-shadow-text-on-brand', 'Text shadow over a chart on the brand card', 'shadow'),
+            color('--xc-brand-card-gain', 'Gain figure on the brand card'),
+            color('--xc-brand-card-loss', 'Loss figure on the brand card'),
         ],
     },
 ];

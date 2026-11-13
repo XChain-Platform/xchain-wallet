@@ -94,7 +94,7 @@ export function SignCredentialsSection() {
             id="sign-credentials"
             title="Sign credentials"
             tag="CANONICAL · SignCredentials"
-            kicker="The credentials half of a signing form: a note when the wallet is already unlocked, the password field when it is not, and the device block for a hardware signer."
+            kicker="The credentials half of a signing form: a note when the wallet is already unlocked, the password field when it is not, and the device block for a hardware wallet."
         >
             <Guidance
                 what={<><code>&lt;SignCredentials fromAddress chainId password onPasswordChange unlocked /&gt;</code>. A software address with an unlocked session shows a short note; a locked one shows the password field; a Trezor or Ledger address shows the device status block.</>}

@@ -10,6 +10,7 @@
 
 import { NoticeModal } from '@xchain-wallet/core/shared/components/NoticeModal.jsx';
 import { ConfirmModal } from '@xchain-wallet/core/shared/components/ConfirmModal.jsx';
+import { Icon } from '@xchain-wallet/core/ui';
 import { Section, Guidance, Markup, LiveExample } from '../StyleGuidePage.jsx';
 
 // Dialogs are fixed overlays; each example's frame is its own viewport, so
@@ -46,7 +47,7 @@ if (await confirm({ title: 'Remove this contact?', message: 'It is deleted from 
                 <NoticeModal title="Message sent" message="It confirms in about 10 minutes." onClose={noop} />
             </LiveExample>
             <LiveExample label="ConfirmModal" minHeight={FRAME_H} padded={false}>
-                <ConfirmModal title="Leave this screen?" message="The form you started is not saved." confirmLabel="Leave" onConfirm={noop} onCancel={noop} />
+                <ConfirmModal title="Leave this screen?" message="The form you started is not saved." confirmLabel="Leave" confirmIcon={<Icon.BackIcon />} onConfirm={noop} onCancel={noop} />
             </LiveExample>
             <LiveExample label="ConfirmModal, danger" minHeight={FRAME_H} padded={false}>
                 <ConfirmModal title="Remove this contact?" message="It is deleted from this device." confirmLabel="Remove" danger onConfirm={noop} onCancel={noop} />
