@@ -69,7 +69,7 @@ export function defaultRangeId() {
  * @param {Array<any>} props.rows                  rows from `buildBalanceRows`, already network-filtered
  * @param {string | null} [props.walletId]         used to seed synthesized walks per wallet so flipping wallets reshuffles
  */
-export function PortfolioChart({ rows, walletId, nativePriceMap, nativePricesLoading, nativePricesError }) {
+export function PortfolioChart({ rows, walletId, nativePriceMap, nativePricesLoading, nativePricesError, behind = false, onRangeChange }) {
     const { messaging } = useMessaging();
     const { settings } = useSettings();
     const fiatCurrency = settings?.fiatCurrency || 'USD';
@@ -158,8 +158,15 @@ export function PortfolioChart({ rows, walletId, nativePriceMap, nativePricesLoa
     const [historyByKey, setHistoryByKey] = useState(
         /** @type {Record<string, { histories: Record<string, Array<[number, number]> | null>, loading: boolean, error: string | null }>} */ ({}),
     );
+    // Once a daily range has been picked for this chain set and currency, the
+    // daily series stays wanted: a switch back to 24h or 1W neither cancels
+    // the request in flight nor drops what it brought, so a later daily range
+    // reads the held series instead of asking again.
+    const dailyWantedKeys = useRef(new Set());
+    if (range.source === 'daily') dailyWantedKeys.current.add(historyRequestKey);
+    const dailyWanted = dailyWantedKeys.current.has(historyRequestKey);
     useEffect(() => {
-        if (isDemo || range.source !== 'daily' || historyChainIds.length === 0) return undefined;
+        if (isDemo || !dailyWanted || historyChainIds.length === 0) return undefined;
         if (historyRequests.current.has(historyRequestKey)) return undefined;
         historyRequests.current.add(historyRequestKey);
         let cancelled = false;
@@ -171,7 +178,10 @@ export function PortfolioChart({ rows, walletId, nativePriceMap, nativePricesLoa
             const existing = existingHistories[chainId] ?? basePriceMap?.[chainId]?.historyDaily;
             if (hasDailyHistory(existing)) histories[chainId] = existing;
         }
-        if (typeof messaging?.getNativePricesRequest !== 'function') {
+        // Only the chains without a held series are asked for; with every
+        // series held there is no request at all.
+        const missingAtStart = historyChainIds.filter((chainId) => !hasDailyHistory(histories[chainId]));
+        if (missingAtStart.length === 0 || typeof messaging?.getNativePricesRequest !== 'function') {
             setHistoryByKey((current) => ({
                 ...current,
                 [historyRequestKey]: { histories, loading: false, error: null },
@@ -217,13 +227,13 @@ export function PortfolioChart({ rows, walletId, nativePriceMap, nativePricesLoa
                 requestHistories(missing);
             }, delay);
         };
-        requestHistories(historyChainIds);
+        requestHistories(missingAtStart);
         return () => {
             cancelled = true;
             if (retryTimer !== null) clearTimeout(retryTimer);
             historyRequests.current.delete(historyRequestKey);
         };
-    }, [fiatCurrency, historyChainKey, historyRequestKey, isDemo, messaging, range.source]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [dailyWanted, fiatCurrency, historyChainKey, historyRequestKey, isDemo, messaging]); // eslint-disable-line react-hooks/exhaustive-deps
     const historyState = historyByKey[historyRequestKey];
     const effectivePriceMap = useMemo(() => {
         if (!historyState) return basePriceMap;
@@ -281,37 +291,57 @@ export function PortfolioChart({ rows, walletId, nativePriceMap, nativePricesLoa
         }
         return names;
     }, [effectivePriceMap, hasData, isDemo, range, rows, seedId]);
-    const missingCoinsNotice = missingCoinNames.length > 0
+    // A coin still loading is not yet missing.
+    const missingCoinsNotice = missingCoinNames.length > 0 && !priceLoading
         ? t('components.portfolioChart.missingCoins', { coins: formatCoinList(missingCoinNames) })
         : '';
 
-    const { delta, pct } = useMemo(() => {
-        if (!hasData) return { delta: null, pct: null };
-        const start = series[0];
-        const end = series[series.length - 1];
-        const d = end - start;
-        const p = start > 0 ? (d / start) * 100 : null;
-        return { delta: d, pct: p };
-    }, [hasData, series]);
+    // The last line drawn, held so that a range switch or a price refresh
+    // keeps it on the card until the new series is ready instead of blanking
+    // the chart. It belongs to one wallet, coin set and currency, and is shown
+    // only while something loads: a load that ends empty or failed says so.
+    const heldScope = `${seedId || ''}|${nativeChainKey}|${fiatCurrency}`;
+    const heldLineRef = useRef(/** @type {{ scope: string, series: number[], rangeLabel: string } | null} */ (null));
+    if (hasData) heldLineRef.current = { scope: heldScope, series, rangeLabel: range.label };
+    const heldLine = heldLineRef.current?.scope === heldScope ? heldLineRef.current : null;
+    let drawnLine = null;
+    if (priceLoading) {
+        drawnLine = hasData ? { series, rangeLabel: range.label, held: false } : (heldLine ? { ...heldLine, held: true } : null);
+    } else if (hasData && !priceError) {
+        drawnLine = { series, rangeLabel: range.label, held: false };
+    }
 
-    const pctDisplay = percentChangeDisplay(pct);
-    const direction = pctDisplay?.direction ?? 'neutral';
+    const { delta, pctDisplay, direction, arrow } = useMemo(
+        () => seriesChange(hasData ? series : null),
+        [hasData, series],
+    );
     const tone = direction === 'positive'
         ? styles.changePositive
         : direction === 'negative' ? styles.changeNegative : styles.changeNeutral;
-    const arrow = direction === 'positive' ? '▲' : direction === 'negative' ? '▼' : '-';
     const selectedTabId = `${chartPanelId}-tab-${range.id}`;
+
+    // Hands the selected range's change to the balance card, which shows it
+    // in place of a fixed 24h figure.
+    const rangeChange = useMemo(
+        () => rangeChangeFor(hasData ? series : null, range.label, (value) => formatFiat(value, fiatCurrency)),
+        [hasData, series, range.label, fiatCurrency],
+    );
+    useEffect(() => {
+        if (typeof onRangeChange !== 'function') return;
+        onRangeChange(rangeChange);
+    }, [onRangeChange, rangeChange]);
 
     // Chart-icon toggle in TotalBalanceHero collapses the whole section.
     // The eye toggle is a separate, narrower concern handled below; it
     // suppresses the numeric delta line but leaves the chart shape and
     // range pills visible. The early return lives below every hook call
     // so the hook count stays stable as the toggle flips.
-    if (!chartVisible || !hasBalance) return null;
+    if ((!chartVisible && !behind) || !hasBalance) return null;
 
     return (
         <section
-            className={styles.wrap}
+            className={behind ? `${styles.wrap} ${styles.behind}${hidden ? ` ${styles.behindHidden}` : ''}` : styles.wrap}
+            data-chart-behind={behind ? 'true' : undefined}
             aria-label={t('components.portfolioChart.portfolioPerformance')}
             aria-busy={priceLoading || undefined}
         >
@@ -338,20 +368,28 @@ export function PortfolioChart({ rows, walletId, nativePriceMap, nativePricesLoa
                     <div className={styles.change} aria-hidden="true" />
                 )}
                 <div className={styles.slot}>
-                    {priceLoading ? (
+                    {drawnLine ? (
+                        <div className={styles.chart} data-chart-line={drawnLine.held ? 'held' : 'current'}>
+                            <Sparkline
+                                series={drawnLine.series}
+                                height={behind ? '100%' : 40}
+                                strokeColor={behind ? BEHIND_CHART_STROKE : undefined}
+                                areaFill={behind ? BEHIND_CHART_FILL : undefined}
+                                edgeToEdge={behind}
+                                label={t('components.portfolioChart.portfolioPerformanceChart')}
+                                rangeLabel={drawnLine.rangeLabel}
+                                formatValue={(value) => formatFiatTooltip(value, fiatCurrency)}
+                            />
+                            {/* The line stays drawn while the new range loads;
+                                a screen reader still hears that it is loading. */}
+                            {priceLoading ? (
+                                <StatusMessage variant="status" className="sr-only">{t('components.portfolioChart.loadingPriceHistory')}</StatusMessage>
+                            ) : null}
+                        </div>
+                    ) : priceLoading ? (
                         <StatusMessage variant="status" className={styles.slotMessage}>{t('components.portfolioChart.loadingPriceHistory')}</StatusMessage>
                     ) : priceError ? (
                         <StatusMessage variant="error" className={styles.slotMessage}>{priceError}</StatusMessage>
-                    ) : hasData ? (
-                        <div className={styles.chart}>
-                            <Sparkline
-                                series={series}
-                                height={40}
-                                label={t('components.portfolioChart.portfolioPerformanceChart')}
-                                rangeLabel={range.label}
-                                formatValue={(value) => formatFiatTooltip(value, fiatCurrency)}
-                            />
-                        </div>
                     ) : (
                         <div className={styles.placeholder}>{t('components.portfolioChart.noPriceHistoryForThis')}</div>
                     )}
@@ -360,25 +398,97 @@ export function PortfolioChart({ rows, walletId, nativePriceMap, nativePricesLoa
                     {missingCoinsNotice}
                 </div>
             </div>
-            <div className={`${styles.ranges} ${styles.rangesSpread}`} role="tablist" aria-label={t('routes.manageToken.chartRange')}>
-                {ranges.map((r) => (
-                    <button
-                        key={r.id}
-                        id={`${chartPanelId}-tab-${r.id}`}
-                        type="button"
-                        role="tab"
-                        aria-selected={r.id === range.id ? 'true' : 'false'}
-                        aria-controls={chartPanelId}
-                        tabIndex={r.id === range.id ? 0 : -1}
-                        className={`${styles.range} ${styles.rangeSlot} ${r.id === range.id ? styles.rangeActive : ''}`}
-                        onClick={() => setRangeId(r.id)}
-                    >
-                        <span className={styles.rangeLabel}>{r.label}</span>
-                    </button>
-                ))}
-            </div>
+            <ChartRangeTabs
+                panelId={chartPanelId}
+                ranges={ranges}
+                rangeId={range.id}
+                onSelect={setRangeId}
+            />
         </section>
     );
+}
+
+// The chart drawn behind a balance card (Home's and a coin or token's) takes
+// the logo purple: a light line over a deep area fill.
+export const BEHIND_CHART_STROKE = '#E7A6EB';
+export const BEHIND_CHART_FILL = 'rgba(138, 40, 143, 0.55)';
+
+/**
+ * The chart's range buttons, one equal slot per range along the card's foot.
+ * Home's portfolio chart and the coin and token balance card share it, so
+ * both cards draw the same pills.
+ *
+ * @param {object} props
+ * @param {string} props.panelId                 id of the tabpanel the tabs control; each tab is `${panelId}-tab-${id}`
+ * @param {Array<{ id: string, label: string }>} props.ranges
+ * @param {string} props.rangeId                 the selected range
+ * @param {(id: string) => void} props.onSelect
+ * @param {string} [props.className]             extra classes for the row
+ */
+export function ChartRangeTabs({ panelId, ranges, rangeId, onSelect, className = '' }) {
+    return (
+        <div className={`${styles.ranges} ${styles.rangesSpread}${className ? ` ${className}` : ''}`} role="tablist" aria-label={t('routes.manageToken.chartRange')}>
+            {ranges.map((r) => (
+                <button
+                    key={r.id}
+                    id={`${panelId}-tab-${r.id}`}
+                    type="button"
+                    role="tab"
+                    aria-selected={r.id === rangeId ? 'true' : 'false'}
+                    aria-controls={panelId}
+                    tabIndex={r.id === rangeId ? 0 : -1}
+                    className={`${styles.range} ${styles.rangeSlot} ${r.id === rangeId ? styles.rangeActive : ''}`}
+                    onClick={() => onSelect(r.id)}
+                >
+                    <span className={styles.rangeLabel}>{r.label}</span>
+                </button>
+            ))}
+        </div>
+    );
+}
+
+/**
+ * First-to-last change of a chart series, with its display direction and
+ * arrow. A missing or empty series has no change.
+ *
+ * @param {number[] | null | undefined} series
+ */
+export function seriesChange(series) {
+    if (!Array.isArray(series) || series.length === 0) {
+        return { delta: null, pct: null, pctDisplay: percentChangeDisplay(null), direction: 'neutral', arrow: '-' };
+    }
+    const start = series[0];
+    const end = series[series.length - 1];
+    const delta = end - start;
+    const pct = start > 0 ? (delta / start) * 100 : null;
+    const pctDisplay = percentChangeDisplay(pct);
+    const direction = pctDisplay?.direction ?? 'neutral';
+    const arrow = direction === 'positive' ? '▲' : direction === 'negative' ? '▼' : '-';
+    return { delta, pct, pctDisplay, direction, arrow };
+}
+
+/**
+ * The selected range's change in the shape a balance card shows
+ * (TotalBalanceHero's `rangeChange`). The series is in fiat, so `text` is a
+ * fiat amount and `delta` the unsigned fiat change a card can convert.
+ *
+ * @param {number[] | null | undefined} series
+ * @param {string} label                         the range's label
+ * @param {(value: number) => string} formatAmount formats an unsigned fiat amount
+ */
+export function rangeChangeFor(series, label, formatAmount) {
+    const { delta, pctDisplay, direction, arrow } = seriesChange(series);
+    const text = delta != null
+        ? `${arrow} ${formatAmount(Math.abs(delta))}${pctDisplay ? ` (${pctDisplay.text})` : ''}`
+        : null;
+    return {
+        text,
+        direction: text ? direction : 'neutral',
+        label,
+        delta: text ? Math.abs(delta) : null,
+        arrow,
+        pctText: pctDisplay ? pctDisplay.text : '',
+    };
 }
 
 // `seedId` is the wallet's own id for a real wallet and a constant for a

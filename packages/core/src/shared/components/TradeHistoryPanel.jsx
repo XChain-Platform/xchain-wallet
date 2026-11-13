@@ -139,7 +139,9 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                 background: 'var(--xc-card-bg)',
                 borderRadius: 'var(--xc-card-radius)',
                 padding: 'var(--xc-card-pad)',
-                marginTop: '0.75rem',
+                /* No top margin; the Market page's Open | Filled
+                   switch sits the page gap above it, as above Open orders. */
+                marginTop: 0,
             }}
         >
             <div style={{

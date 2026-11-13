@@ -3,7 +3,9 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+// The wallet tile saved by Edit wallet (colour, image, shape).
+import { readWalletTile, tileRadius, WALLET_TILE_EVENT, walletTileText } from '../utils/walletTile.js';
 import styles from './WalletIdentity.module.css';
 
 export const WALLET_TONES = [
@@ -55,6 +57,8 @@ export function IdentityAvatar({
     srcSet,
     imagePixels,
     className = '',
+    // The tile's text when it is not the initials of name.
+    text,
 }) {
     const [failedSrc, setFailedSrc] = useState(null);
     const sizing = AVATAR_CONTEXT[context] || AVATAR_CONTEXT.list;
@@ -81,7 +85,8 @@ export function IdentityAvatar({
         // swaps the letter ink to CanvasText there.
         color: identity ? 'var(--xc-text)' : 'var(--xc-avatar-ink, var(--xc-on-accent))',
         fontFamily: 'var(--xc-font-sans)',
-        fontSize: sizing.fontSize,
+        // Three or four characters (JW1, 1234) set smaller to fit.
+        fontSize: text && String(text).length >= 3 ? `calc(${sizing.fontSize} * ${({ 3: 0.75, 4: 0.6 })[String(text).length] || 0.5})` : sizing.fontSize,
         fontWeight: 700,
         letterSpacing: '-0.02em',
         lineHeight: 1,
@@ -95,7 +100,8 @@ export function IdentityAvatar({
             data-xc-avatar-context={context}
             aria-hidden="true"
         >
-            {initialsFor(name)}
+            {/* No letters behind an image, so a transparent image shows clean. */}
+            {showImage ? null : (text ?? initialsFor(name))}
             {showImage ? (
                 <img
                     src={src}
@@ -134,7 +140,14 @@ export function IdentityAvatar({
  * @param {'header'|'list'|'hero'} [props.context]
  */
 export function WalletIdentity({ wallet, label = '', namePrefix = '', active = false, context }) {
+    const [, setTileTick] = useState(0);
+    useEffect(() => {
+        const onTile = () => setTileTick((n) => n + 1);
+        window.addEventListener(WALLET_TILE_EVENT, onTile);
+        return () => window.removeEventListener(WALLET_TILE_EVENT, onTile);
+    }, []);
     if (!wallet) return null;
+    const tile = readWalletTile(wallet.id);
     const name = wallet.name || 'Unnamed wallet';
     const tone = walletIdentityTone(wallet.id);
     const avatarContext = context || (namePrefix ? 'header' : 'list');
@@ -142,7 +155,7 @@ export function WalletIdentity({ wallet, label = '', namePrefix = '', active = f
     return (
         <span
             className={`${styles.identity} ${label ? styles.context : ''}`.trim()}
-            style={{ '--xc-wallet-identity': WALLET_TONES[tone] }}
+            style={{ '--xc-wallet-identity': tile.colour || WALLET_TONES[tone], '--xc-avatar-shape': tile.shape ? tileRadius(tile.shape) : undefined }}
             data-wallet-tone={tone}
             data-testid="wallet-identity"
             title={name}
@@ -152,7 +165,9 @@ export function WalletIdentity({ wallet, label = '', namePrefix = '', active = f
                 name={name}
                 seed={wallet.id}
                 context={avatarContext}
-                tone={WALLET_TONES[tone]}
+                tone={tile.colour || WALLET_TONES[tone]}
+                src={tile.image || null}
+                text={walletTileText(name)}
                 className={`${styles.avatar} ${active ? styles.active : ''}`.trim()}
             />
             <span className={styles.name}>{namePrefix}{name}</span>

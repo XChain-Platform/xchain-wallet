@@ -1,6 +1,9 @@
 /* Matches Home.module.css `.headerPopup` exactly so the global header
    visually equals the per-route header it replaces. */
 .bar {
+    /* The app bar keeps the touch size (44px buttons) at every width and pointer,
+       so every shell, popup and desktop alike, has one bar height. */
+    --xc-control-h-md: 44px;
     container: app-header / inline-size;
     display: flex;
     align-items: center;
@@ -8,6 +11,14 @@
     flex-wrap: nowrap;
     gap: var(--xc-space-3);
     padding: var(--xc-space-2) var(--xc-space-3);
+    /* The app bar uses the page gutter on every side, so its buttons have the
+       same space around them and sit on the same lines as the page header
+       and rows. */
+    padding: var(--xc-page-gutter);
+    /* 2px less above, below and at the end edge, an optical correction: a
+       button's rounded outline reads as further from the edge than it is. */
+    padding-block: calc(var(--xc-page-gutter) - 2px);
+    padding-inline-end: calc(var(--xc-page-gutter) - 2px);
     background: var(--xc-surface);
     border-bottom: 1px solid var(--xc-border);
     width: 100%;
@@ -36,18 +47,6 @@
     height: var(--xc-control-h-md);
     border-radius: var(--xc-control-radius);
     --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
-}
-
-.popOut {
-    display: none;
-}
-
-@supports (container-type: inline-size) and (width: 1cqw) {
-    @container app-header (min-width: 640px) {
-        .popOut {
-            display: inline-flex;
-        }
-    }
 }
 
 .walletName {
@@ -82,8 +81,35 @@
     }
 }
 
-@media (max-width: 480px) {
-    .logo {
-        width: 44px;
-    }
+/* Phones keep the full 58px logo, the same size as the tablet and desktop bars. */
+
+/* The Notifications bell. Unread shows as a red count on the button's corner
+   and an accent edge, so something new is plain at a glance from any screen. */
+.bellWrap {
+    position: relative;
+    display: inline-flex;
+}
+
+.bellUnread.bellUnread {
+    border-color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
+}
+
+.bellBadge {
+    position: absolute;
+    inset-block-start: calc(-1 * var(--xc-space-1));
+    inset-inline-end: calc(-1 * var(--xc-space-1));
+    min-width: var(--xc-icon-md);
+    height: var(--xc-icon-md);
+    padding-inline: var(--xc-space-1);
+    box-sizing: border-box;
+    border: 2px solid var(--xc-surface);
+    border-radius: var(--xc-radius-pill, 999px);
+    background: var(--xc-danger);
+    color: var(--xc-on-danger);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    line-height: var(--xc-icon-xs);
+    text-align: center;
+    pointer-events: none;
 }

@@ -1,0 +1,134 @@
+/* Dispenser Explorer cards: icon, two text lines, a stock bar and a foot
+   line, with a chevron at the end. */
+.card {
+    composes: card from '../../ui/Card.module.css';
+    appearance: none;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--xc-space-3);
+    width: 100%;
+    min-width: 0;
+    min-height: var(--xc-tap-min);
+    box-sizing: border-box;
+    margin: 0;
+    color: var(--xc-text);
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+}
+
+.card:hover {
+    border-color: var(--xc-border-strong);
+}
+
+.card:focus-visible {
+    outline: none;
+    box-shadow: var(--xc-shadow-focus-ring);
+}
+
+/* A group row is a card without the stock and foot lines. */
+.groupRow {
+    min-height: 64px;
+}
+
+.icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.title {
+    min-width: 0;
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+}
+
+.give,
+.price {
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+.meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    min-width: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    overflow-wrap: anywhere;
+}
+
+.chain {
+    white-space: nowrap;
+}
+
+.stockBar {
+    display: block;
+    height: 4px;
+    margin-block: var(--xc-space-1) 2px;
+    border-radius: var(--xc-radius-pill);
+    background: var(--xc-bg-muted);
+    overflow: hidden;
+}
+
+.fill {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--xc-success);
+}
+
+.fillLow {
+    background: var(--xc-warning);
+}
+
+.foot {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0 var(--xc-space-2);
+    min-width: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+}
+
+.stock,
+.when {
+    white-space: nowrap;
+}
+
+.chevron {
+    display: inline-flex;
+    color: var(--xc-text-muted);
+}
+
+.chevron svg {
+    width: 1rem;
+    height: 1rem;
+}
+
+.chevronOpen {
+    transform: rotate(180deg);
+}
+
+@media (forced-colors: active) {
+    .card:focus-visible {
+        outline: 2px solid Highlight;
+        outline-offset: 2px;
+    }
+
+    .fill {
+        background: Highlight;
+    }
+}

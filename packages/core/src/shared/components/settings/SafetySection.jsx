@@ -57,7 +57,10 @@ function autolockOptionLabel(option, shell) {
         : option.label;
 }
 
-export function SafetySection() {
+// `only` renders one part (autolock, testSend, lookalike, undoSend,
+// biometric, panic, duress or reminders) on its own Settings page; null renders every part.
+export function SafetySection({ only = null } = {}) {
+    const show = (part) => !only || only === part;
     const { shell } = useMessaging();
     const { settings, loading, error, update } = useSettings();
     const [thresholdError, setThresholdError] = useState(/** @type {string | null} */ (null));
@@ -79,7 +82,8 @@ export function SafetySection() {
 
     return (
         <div style={STACK}>
-            <PanicSaveNotice />
+            {show('panic') ? <PanicSaveNotice /> : null}
+            {show('autolock') ? (
             <div style={ROW}>
                 <span style={ROW_TITLE}>
                     {t('settings.safety.autoLockTimeout')}{' '}
@@ -105,6 +109,9 @@ export function SafetySection() {
                     </Select>
                 </div>
             </div>
+            ) : null}
+            {show('testSend') ? (
+            <>
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={ROW_TITLE}>
@@ -149,6 +156,9 @@ export function SafetySection() {
             {thresholdError ? (
                 <Status id="test-send-threshold-error" text={thresholdError} tone="error" />
             ) : null}
+            </>
+            ) : null}
+            {show('lookalike') ? (
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={ROW_TITLE}>{t('settings.safety.lookalikeAddressWarnings')}</span>
@@ -158,10 +168,12 @@ export function SafetySection() {
                 </div>
                 <span style={ROW_LABEL}>{t('settings.safety.alwaysOn')}</span>
             </div>
-            <UndoSendRow />
-            <BiometricRow />
-            <PanicModeRow />
-            <DuressPassphraseRow />
+            ) : null}
+            {show('undoSend') ? <UndoSendRow /> : null}
+            {show('biometric') ? <BiometricRow /> : null}
+            {show('panic') ? <PanicModeRow /> : null}
+            {show('duress') ? <DuressPassphraseRow /> : null}
+            {show('reminders') ? (
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={ROW_TITLE}>{t('settings.safety.backupReminders')}</span>
@@ -171,6 +183,7 @@ export function SafetySection() {
                 </div>
                 <span style={ROW_LABEL}>{t('settings.safety.automatic')}</span>
             </div>
+            ) : null}
         </div>
     );
 }

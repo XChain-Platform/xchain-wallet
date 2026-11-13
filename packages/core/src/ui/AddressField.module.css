@@ -11,7 +11,10 @@
     --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
     --address-control-padding-x: var(--xc-control-pad-x-md, var(--xc-control-pad-x));
     --address-control-font-size: var(--xc-control-font-md, var(--xc-control-font));
-    --address-field-action-room: calc(var(--xc-tap-min) + var(--address-control-padding-x) + var(--xc-space-1));
+    /* The room the read-only address leaves for the field icon is the icon
+       button itself (inset 4px from the control edge) plus a 4px gap, so a
+       full address that fits is shown whole, not trimmed early. */
+    --address-field-action-room: calc(var(--xc-tap-min) + var(--xc-space-1) * 2);
     --address-control-row: 2;
     position: relative;
     display: grid;

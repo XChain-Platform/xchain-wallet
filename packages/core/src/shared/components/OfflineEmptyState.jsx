@@ -34,7 +34,7 @@ export function OfflineEmptyState({ body, onRetry, titleAs }) {
             body={body}
             actionLabel={onRetry ? t('common.tryAgain') : undefined}
             onAction={onRetry}
-            actionIcon={onRetry ? <Icon.RefreshIcon /> : undefined}
+            actionIcon={<Icon.RefreshIcon />}
         />
     );
 }

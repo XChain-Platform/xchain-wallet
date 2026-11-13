@@ -12,6 +12,7 @@ import { useContext } from 'react';
 import { ShellNoticesContext } from '../shared/components/noticesRoute.js';
 import { useHideReachabilityNotice } from '../shared/components/hideReachabilityNotice.js';
 import { Button } from './Button.jsx';
+import { RefreshIcon } from './icons/index.jsx';
 import styles from './StatusMessage.module.css';
 import { t } from '../i18n/index.js';
 
@@ -112,7 +113,7 @@ export function StatusMessage({ variant = 'status', id, children, className, det
                     type="button"
                     variant="secondary"
                     size="sm"
-                    icon={null}
+                    icon={<RefreshIcon />}
                     className={styles.recovery}
                     aria-label={recovery.ariaLabel || recovery.label}
                     disabled={recovery.disabled}
@@ -183,7 +184,7 @@ export function StatusMessageGroup({ entries }) {
                             type="button"
                             variant="secondary"
                             size="sm"
-                            icon={null}
+                            icon={<RefreshIcon />}
                             className={styles.recovery}
                             aria-label={entry.recovery.ariaLabel || entry.recovery.label}
                             disabled={entry.recovery.disabled}

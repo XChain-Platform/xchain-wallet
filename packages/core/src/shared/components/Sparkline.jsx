@@ -30,6 +30,9 @@ export function Sparkline({
     series,
     height = 80,
     strokeWidth = 1.5,
+    strokeColor,
+    areaFill,
+    edgeToEdge = false,
     label = t('components.sparkline.priceTrend'),
     rangeLabel,
     formatValue,
@@ -45,22 +48,23 @@ export function Sparkline({
         const max = Math.max(...values);
         const flat = max === min;
         const range = max - min;
-        const xStep = 98 / (values.length - 1);
+        const x0 = edgeToEdge ? 0 : 1;
+        const xStep = (edgeToEdge ? 100 : 98) / (values.length - 1);
         return values
             .map((v, i) => {
-                const x = 1 + i * xStep;
+                const x = x0 + i * xStep;
                 const y = flat ? 50 : 99 - ((v - min) / range) * 98;
                 return `${x.toFixed(2)},${y.toFixed(2)}`;
             })
             .join(' ');
-    }, [values]);
+    }, [values, edgeToEdge]);
     if (!points) return null;
     const first = values[0];
     const last = values[values.length - 1];
     const tone = last > first ? 'up' : last < first ? 'down' : 'unchanged';
-    const stroke = tone === 'up'
+    const stroke = strokeColor || (tone === 'up'
         ? 'var(--xc-success)'
-        : tone === 'down' ? 'var(--xc-danger)' : 'var(--xc-text-muted)';
+        : tone === 'down' ? 'var(--xc-danger)' : 'var(--xc-text-muted)');
     const summary = describeChartSeries(values, { label, rangeLabel, formatValue });
     return (
         <svg
@@ -71,6 +75,7 @@ export function Sparkline({
             aria-label={summary}
         >
             <title>{summary}</title>
+            {areaFill ? <polygon fill={areaFill} stroke="none" points={edgeToEdge ? `0,100 ${points} 100,100` : `1,100 ${points} 99,100`} /> : null}
             <polyline
                 fill="none"
                 stroke={stroke}

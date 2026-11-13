@@ -38,6 +38,18 @@
     border-radius: 0;
 }
 
+/* Inside a form, a flush card is a list (Pair signer's devices, a section's
+   rows), and a list keeps its own rounded card even when it sits in a
+   collapsible form section (itself a flush card) or a padded card. One more
+   class outweighs the flattening rule above; padded cards still flatten. */
+.formCard .card .flush,
+.formCard .flush .flush {
+    padding: 0;
+    background: var(--xc-card-bg);
+    border: var(--xc-card-border);
+    border-radius: var(--xc-card-radius);
+}
+
 /* A group can opt a self-contained composition out of ancestor flattening.
    Notifications uses this to preserve its separately ruled price-alert block
    when the Settings list itself becomes one card. */

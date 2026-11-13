@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { ConfirmModal } from './ConfirmModal.jsx';
+import { TrashIcon } from '../../ui/icons/index.jsx';
 import { t } from '../../i18n/index.js';
 
 export const DEMO_EXIT_MESSAGE = 'This permanently deletes the demo wallet and all of its sample accounts, addresses, balances, and history from this device. Real wallets and their data are not affected. If another wallet is available, the app opens it. Otherwise, the app clears the local demo wallet data and returns you to wallet setup. This cannot be undone.';
@@ -28,7 +29,8 @@ export function DemoExitConfirm({ busy, error, onConfirm, onCancel, message = DE
         <ConfirmModal
             title={t('components.demoExitConfirm.exitDemoAndDeleteIts')}
             message={message}
-            confirmLabel={t('walletDetails.exitDemo')}
+            confirmLabel={t('walletDetails.exitDemoAction')}
+            confirmIcon={<TrashIcon />}
             danger
             busy={busy}
             error={error}

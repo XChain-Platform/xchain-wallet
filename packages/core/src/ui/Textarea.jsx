@@ -47,6 +47,9 @@ export const Textarea = /* @__PURE__ */ forwardRef(function Textarea(
         hint,
         error,
         counter: customCounter,
+        // A host that shows the count elsewhere (a section header)
+        // keeps maxLength's cap without the field's own count.
+        hideCounter = false,
         id,
         optional = false,
         size = 'md',
@@ -157,7 +160,7 @@ export const Textarea = /* @__PURE__ */ forwardRef(function Textarea(
             {...rest}
         />
     );
-    const counter = hasCustomCounter || maxLength != null ? (
+    const counter = !hideCounter && (hasCustomCounter || maxLength != null) ? (
         <div id={counterId} className={styles.counter} aria-live="polite">
             {hasCustomCounter ? customCounter : <>{characterCount} / {maxLength}</>}
         </div>
@@ -170,7 +173,6 @@ export const Textarea = /* @__PURE__ */ forwardRef(function Textarea(
                     <label htmlFor={textareaId} className={styles.label}>
                         {requirement.label}
                     </label>
-                    {requirement.isOptional ? <OptionalPill id={optionalPillId} /> : null}
                     {hasHelp ? (
                         <InfoTip
                             className={styles.labelHelp}
@@ -178,6 +180,8 @@ export const Textarea = /* @__PURE__ */ forwardRef(function Textarea(
                             aria={t('ui.field.about', { label: fieldHelpName(requirement.label, rest['aria-label']) })}
                         />
                     ) : null}
+                    {/* The ? help comes first, then the Optional tag. */}
+                    {requirement.isOptional ? <OptionalPill id={optionalPillId} /> : null}
                     {counter}
                 </div>
             ) : label ? (

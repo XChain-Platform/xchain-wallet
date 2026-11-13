@@ -339,7 +339,6 @@ export const Input = forwardRef(function Input(
                     <label htmlFor={inputId} className={styles.label}>
                         {requirement.label}
                     </label>
-                    {requirement.isOptional ? <OptionalPill id={optionalPillId} /> : null}
                     {hasHelp ? (
                         <InfoTip
                             className={styles.labelHelp}
@@ -347,6 +346,8 @@ export const Input = forwardRef(function Input(
                             aria={t('ui.field.about', { label: fieldHelpName(requirement.label, externalLabel) })}
                         />
                     ) : null}
+                    {/* The ? help comes first, then the Optional tag. */}
+                    {requirement.isOptional ? <OptionalPill id={optionalPillId} /> : null}
                     {counter}
                 </div>
             ) : label ? (

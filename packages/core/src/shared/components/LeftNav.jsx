@@ -46,9 +46,9 @@ const NAV_ROW_BUTTON = `${buttonStyles.btn} ${buttonStyles.ghost} ${buttonStyles
  * `aria-current="page"`.
  *
  * Two of those rows are conditional on the wallet, not the build:
- * `isSignerMode` (§20) removes Send and Receive, because the Wallet Mode
- * screen promises exactly that when the user picks the air-gapped signer
- * role.
+ * `isSignerMode` (§20) removes Send and Receive, because an air-gapped
+ * signer wallet promises exactly that when the user picks that mode at
+ * create, import or pair.
  *
  * Visibility is the parent's responsibility: this component renders
  * itself unconditionally. `<FullLayoutWithNav>` decides whether the

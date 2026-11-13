@@ -12,12 +12,14 @@ import { forwardRef } from 'react';
 import { Input } from './Input.jsx';
 import { FieldIconButton } from './FieldIconButton.jsx';
 import { AddressText } from './AddressText.jsx';
-import { UsersIcon, ScanIcon } from './icons/index.jsx';
+import { UsersIcon, TokenListIcon } from './icons/index.jsx';
 import styles from './AddressField.module.css';
 
 const ICONS = {
     contacts: { Component: UsersIcon, defaultLabel: 'Open address book' },
-    addresses: { Component: ScanIcon, defaultLabel: 'Choose address' },
+    // The From chooser shows the same list icon the Network and Token
+    // fields carry on their right, so all three pickers look alike.
+    addresses: { Component: TokenListIcon, defaultLabel: 'Choose address' },
 };
 
 /**
@@ -29,7 +31,7 @@ const ICONS = {
  *     saved contacts (ContactsPickerScreen), and picking an entry fills
  *     the field.
  *   - From ("addresses"): the source address a transaction spends from,
- *     always one of the wallet's own. The field is read-only; the QR
+ *     always one of the wallet's own. The field is read-only; the list
  *     icon navigates to the wallet's own address list (the same screen
  *     as change-address) to select one.
  *

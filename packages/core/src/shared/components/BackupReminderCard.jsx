@@ -93,7 +93,7 @@ export function BackupReminderCard({
                     <Button
                         size="sm"
                         variant="secondary"
-                        icon={null}
+                        icon={<Icon.ClockIcon />}
                         onClick={() => {
                             flowsLib.dismissBackupReminder(walletId);
                             setState(flowsLib.computeBackupReminderState({

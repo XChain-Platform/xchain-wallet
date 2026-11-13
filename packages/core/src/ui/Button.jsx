@@ -93,9 +93,12 @@ export const Button = forwardRef(function Button({
     // A native title keeps the icon action discoverable with a pointer and
     // keyboard focus while the accessible name remains available to AT.
     const title = rest.title || (iconOnly && typeof ariaLabel === 'string' ? ariaLabel : undefined);
+    // A form's submit is its main action and reads as go: green. A submit that
+    // names another variant (danger, secondary, ghost, a side tone) keeps it.
+    const drawnVariant = type === 'submit' && variant === 'primary' ? 'success' : variant;
     const classes = [
         styles.btn,
-        styles[variant],
+        styles[drawnVariant],
         styles[size],
         iconOnly ? styles.iconOnly : null,
         block ? styles.block : null,

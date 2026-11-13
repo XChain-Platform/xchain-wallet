@@ -245,3 +245,21 @@
     color: var(--xc-text);
     background: var(--xc-bg-muted);
 }
+
+/* The row's forward chevron matches the Back chevron's size (a 32px icon box). The glyph
+   fills only the middle third, so the box gives back its empty sides and the amounts keep their room. */
+.rowChevron {
+    --xc-icon-size: 32px;
+    display: inline-flex;
+    justify-content: center;
+    /* Only the middle third of the box holds the glyph and its stroke; the
+       rest is clipped so the box adds no width and never overhangs the row. */
+    width: calc(var(--xc-icon-size) / 3);
+    overflow: hidden;
+}
+
+.rowChevron svg {
+    flex: 0 0 auto;
+    width: var(--xc-icon-size);
+    height: var(--xc-icon-size);
+}

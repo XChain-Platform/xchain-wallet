@@ -13,7 +13,8 @@
     --xc-button-hover-border: transparent;
     justify-content: normal;
     max-width: none;
-    padding: var(--xc-card-pad);
+    /* The same row inset as the Coins and Tokens lists. */
+    padding: var(--xc-list-row-padding);
     background: transparent;
     border: 0;
     border-radius: 0;
@@ -67,8 +68,11 @@
     background: var(--xc-bg-muted);
 }
 
+/* The icon sits a step further from its text than the other cells sit from
+   each other. */
 .mark {
     grid-area: mark;
+    margin-inline-end: var(--xc-space-1);
 }
 
 .labelCell,
@@ -163,18 +167,18 @@
 }
 
 .confirmed {
-    background: var(--xc-success-bg, rgba(20, 111, 52, 0.10));
-    color: var(--xc-success, #14b86c);
+    background: var(--xc-success-bg);
+    color: var(--xc-success);
 }
 
 .failed {
-    background: var(--xc-danger-bg, rgba(220, 38, 38, 0.10));
-    color: var(--xc-danger-fg, #d93838);
+    background: var(--xc-danger-bg);
+    color: var(--xc-danger-fg);
 }
 
 .pending {
-    background: var(--xc-warning-bg, rgba(217, 119, 6, 0.10));
-    color: var(--xc-warning, #d99000);
+    background: var(--xc-warning-bg);
+    color: var(--xc-warning);
 }
 
 .block {
@@ -220,4 +224,36 @@
         padding: 0 var(--xc-space-1);
         font-size: 9px;
     }
+}
+
+/* Outlined status pills: the text keeps the readable status colour; the
+   outline and a stronger tint carry the brightness. Each tint is listed
+   first as the plain status background for browsers without color-mix(). */
+.status.confirmed {
+    border: 1px solid var(--xc-success-fill);
+    background: var(--xc-success-bg);
+    background: color-mix(in srgb, var(--xc-success-fill) 16%, transparent);
+}
+
+.status.pending {
+    border: 1px solid var(--xc-warning);
+    background: var(--xc-warning-bg);
+    background: color-mix(in srgb, var(--xc-warning) 18%, transparent);
+}
+
+.status.failed {
+    border: 1px solid var(--xc-danger);
+    background: var(--xc-danger-bg);
+    background: color-mix(in srgb, var(--xc-danger) 14%, transparent);
+}
+
+/* A row with no trailing control renders no trailing cell and drops that
+   column, so the status pill sits one row inset from the right edge.
+   ActivityRow sets the class, since the Safari 16 baseline has no :has(). */
+.row.row.noTrailing {
+    grid-template-columns: auto minmax(3rem, 1fr) auto auto;
+    grid-template-areas:
+        "mark label label status"
+        "mark primary primary primary"
+        "mark block block time";
 }

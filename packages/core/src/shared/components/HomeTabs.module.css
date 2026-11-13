@@ -1,7 +1,8 @@
 .wrap {
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-3);
+    /* 8px between every Home block. */
+    gap: var(--xc-space-2);
     width: 100%;
 }
 
@@ -99,4 +100,106 @@
    one step below the row list. */
 .seeAllActivity {
     margin-top: var(--xc-space-3);
+}
+
+/* An icon beside each Home tab label. */
+.tabWithIcon {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+}
+
+.tabIcon {
+    --xc-icon-size: var(--xc-icon-sm);
+    display: inline-flex;
+    flex: 0 0 auto;
+}
+
+
+/* The balance card and the chart behind it, stacked in one cell on the
+   flat app blue (no gradient). */
+.heroStack {
+    display: grid;
+    position: relative;
+    border-radius: var(--xc-card-radius);
+    background: var(--xc-accent-primary);
+    box-shadow: var(--xc-shadow-md);
+    overflow: hidden;
+    color: var(--xc-on-accent);
+}
+
+/* Forced-colors mode drops the app blue, so the card pins both halves. */
+@media (forced-colors: active) {
+    .heroStack {
+        background: Canvas;
+        color: CanvasText;
+        border: 1px solid CanvasText;
+    }
+}
+
+.heroStack > * {
+    grid-area: 1 / 1;
+    min-width: 0;
+}
+
+.heroStack > section:first-child {
+    position: relative;
+    z-index: 1;
+    background: transparent;
+    box-shadow: none;
+    pointer-events: none;
+}
+
+.heroStack > section:first-child button,
+.heroStack > section:first-child [role='menu'] {
+    pointer-events: auto;
+}
+
+/* Set by the card's component when a chart is drawn behind it (Safari 16
+   has no :has()), so the range chips at the foot clear the figures. */
+.heroStackWithChart > section:first-child {
+    padding-bottom: calc(var(--xc-space-6) + var(--xc-space-1) + var(--xc-space-2));
+}
+
+/* The Home tabs take the shared framed style (Tabs.module.css). */
+
+/* Inside the framed row the tabs share the width evenly (the shared
+   min-width: max-content would size them by label), with side padding tight
+   enough that all four tabs fit beside the filter button on a 360px popup. */
+.tabsRow.tabsRow [role='tab'] {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-inline: var(--xc-space-1);
+}
+
+/* The DeFi rows' forward chevron, at the Back chevron's size like the Coins
+   and Tokens rows (BalanceList .rowChevron): a 32px icon box that gives back
+   its empty sides so the stroke meets the row's padding. */
+.rowChevron {
+    --xc-icon-size: 32px;
+    display: inline-flex;
+    justify-content: center;
+    /* Only the middle third of the box holds the glyph and its stroke; the
+       rest is clipped so the box adds no width and never overhangs the row. */
+    width: calc(var(--xc-icon-size) / 3);
+    overflow: hidden;
+}
+
+.rowChevron svg {
+    flex: 0 0 auto;
+    width: var(--xc-icon-size);
+    height: var(--xc-icon-size);
+}
+
+/* A DeFi row is two lines: the action and its status badge on top, the amount
+   and date under them, the chevron down the right edge. Tripled selector to
+   outrank ActivityRow's narrow width areas. */
+.defiRow.defiRow.defiRow {
+    grid-template-areas:
+        "mark label label status trailing"
+        "mark primary primary time trailing";
+    /* A Coins or Tokens row's height: its content floor plus the shared
+       row inset above and below (BalanceList .row and .rowContent). */
+    min-height: calc(var(--xc-control-h-lg) + 2 * var(--xc-list-row-padding));
+    box-sizing: border-box;
 }

@@ -1,0 +1,21 @@
+/* The choose-file field: a read-only Input whose whole box opens the file
+   dialog, and which marks itself as a drop target while a file is dragged
+   over it. */
+
+.root {
+    min-width: 0;
+}
+
+.display {
+    min-height: var(--xc-tap-min);
+    cursor: pointer;
+}
+
+.display:disabled {
+    cursor: not-allowed;
+}
+
+.root[data-drop-active='true'] .display {
+    border-style: dashed;
+    border-color: var(--xc-accent-primary);
+}

@@ -100,3 +100,10 @@
         outline-offset: 2px;
     }
 }
+
+/* In the stacked filter panel every picker keeps its own height; a picker that
+   grows in a row (the network dropdown's 10rem basis) would otherwise stand
+   160px tall in the column. */
+.menu.menu > * {
+    flex: 0 0 auto;
+}

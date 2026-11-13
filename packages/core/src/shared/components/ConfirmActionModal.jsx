@@ -33,7 +33,20 @@ import { oracleUsageFeeLine } from '../../flows/oracleFeeDisclosure.js';
 import { envelopeTransactionLines } from '../../flows/envelopeFeeDisclosure.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
-import { formatDisplayAmount } from '../utils/amountFormat.js';
+import { formatDisplayAmount, sumDecimalStrings, trimAmountTail } from '../utils/amountFormat.js';
+import {
+    ConfirmAddressCard,
+    ConfirmChangesCard,
+    ConfirmCostCard,
+    ConfirmHero,
+    ConfirmNotice,
+    ConfirmTechnicalDetails,
+    changesFromSimulation,
+    mergeChanges,
+    preflightCleanPass,
+    summaryFromDecoded,
+    confirmSummaryStyles,
+} from './ConfirmSummary.jsx';
 import { formatUnixSecondsLocal } from '../utils/dateTime.js';
 import { formatNativeBaseUnits } from '../../registry/coinTicker.js';
 import { defaultRegistry } from '../../registry/index.js';
@@ -51,6 +64,8 @@ import { useSuppressSpamToastsOnConfirm } from './ToastHost.jsx';
 import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/extension.js';
 import '../../i18n/locales/en/send.js';
+import '../../i18n/locales/en/balances.js';
+import '../../i18n/locales/en/execute.js';
 
 const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', 'done', 'error', 'signed-not-broadcast']);
 const chainRegistry = defaultRegistry();
@@ -113,7 +128,7 @@ function formatReviewDecoded(decoded) {
 // fee. An unnamed action, or a variant name built on a fee-bearing one
 // (ORDER_MATCH, a DEPLOY chunk), is not known, and ISSUE is treated as fee
 // bearing because the envelope does not say whether it creates a token.
-function composedActionName(composed) {
+export function composedActionName(composed) {
     const carriers = [composed];
     const seen = new Set();
     for (let index = 0; index < carriers.length; index += 1) {
@@ -266,6 +281,12 @@ export function reviewActionLabel(decoded, fallback, chainLabel) {
  * @param {(amount: string) => string|null} [props.formatNativeFee]
  * @param {(amount: string) => string|null} [props.formatProtocolFee]
  * @param {string} [props.totalText]                         total debit when amount and fees share one unit
+ * @param {import('./ConfirmSummary.jsx').ConfirmSummaryInput|null} [props.summary]   action
+ *   variant: the hero and the rows only the form knows (ActionConfirmScreen resolves a fallback)
+ * @param {{ amount: string, ticker: string, fiat?: string|null, estimate?: boolean }|null} [props.networkFee]
+ *   Action-page cost card: the network fee as a figure (the composed fee, or the form's estimate marked as one)
+ * @param {string|null} [props.paymentAmount]               native coin the action itself sends, for the total cost
+ * @param {import('react').ReactNode} [props.technicalDetails]   form-specific review rows shown under Technical details
  */
 export function ConfirmActionModal({
     phase, composed, report, reportLoading, acknowledged, onAcknowledge,
@@ -276,6 +297,7 @@ export function ConfirmActionModal({
     sourceAddress = null, sourceName = '', nativeTicker = '',
     signingWallet = null, hardwareSigner = false,
     formatNativeFee, formatProtocolFee,
+    summary = null, networkFee = null, paymentAmount = null, technicalDetails = null,
 }) {
     const formattedDecoded = formatReviewDecoded(decoded);
     const fallbackHeadline = variant === 'message'
@@ -470,11 +492,16 @@ export function ConfirmActionModal({
             titleRef={titleRef}
         />
     );
+    // The action page's footer is an outlined Reject and a green Approve with
+    // a check, under the page title Confirm. The handlers and every gate on
+    // Approve are shared; only the icons differ by variant.
+    const k6 = variant === 'action';
+    const approveLabel = resolvedApproveLabel;
     const footer = (
-        <div className={styles.footer}>
+        <div className={k6 ? `${styles.footer} ${styles.footerK6}` : styles.footer}>
             <Button
                 variant="secondary"
-                icon={<Icon.ThumbsDownIcon />}
+                icon={k6 ? <Icon.XIcon /> : <Icon.ThumbsDownIcon />}
                 onClick={handleReject}
                 disabled={exitsLocked}
                 data-testid="confirm-reject"
@@ -483,16 +510,307 @@ export function ConfirmActionModal({
             </Button>
             <Button
                 variant="success"
-                icon={<Icon.ThumbsUpIcon />}
+                icon={k6 ? <Icon.CheckIcon /> : <Icon.ThumbsUpIcon />}
                 onClick={handleApprove}
                 disabled={approveDisabled || !approveSettled || signaturePhase || terminal || !canApprove || !credentialsReady || !!refusal}
                 data-testid="confirm-approve"
-                aria-label={resolvedApproveLabel}
+                aria-label={approveLabel}
             >
-                {resolvedApproveLabel}
+                {approveLabel}
             </Button>
         </div>
     );
+
+    // §5.3.4: a credential failure returns the page to `ready` with this error
+    // set, so the user retypes and re-approves the SAME PSBT. It is the first
+    // item of page content, ahead of the header row.
+    const errorBlock = error?.presentation === 'status' ? (
+        <div className={styles.hwNote} role="status" data-testid="confirm-notice">
+            {userFacingMessage(
+                error,
+                'The request stopped because the wallet service returned no explanation.',
+            )}
+        </div>
+    ) : error ? (
+        <StatusMessage variant="error" role="alert" testId="confirm-error">
+            {userFacingMessage(
+                error,
+                'The request stopped because the wallet service returned no explanation.',
+            )}
+        </StatusMessage>
+    ) : null;
+
+    const intentHeader = (
+        <div className={styles.header}>
+            <span className={styles.actionLabel} data-testid="confirm-action-label">{actionHeaderLabel}</span>
+            <span className={styles.chainBadge} data-testid="confirm-chain-badge">{chainLabel}</span>
+        </div>
+    );
+    const walletIdentity = (
+        <WalletIdentity wallet={resolvedSigningWallet} label={t('components.confirmActionModal.signingWith')} />
+    );
+    const originIdentity = (
+        <OriginIdentity
+            origin={requestOrigin}
+            label={t('extension.approval.requestingSite')}
+            testId="confirm-request-origin"
+        />
+    );
+    // Settings > Developer Mode > Learn Mode. Renders nothing unless the user
+    // asked for it.
+    const learnNote = <LearnNote variant={variant} chainLabel={chainLabel} />;
+    const intentSummary = variant === 'action' && reviewDecoded ? (
+        <ActionIntentSummary decoded={reviewDecoded} simulation={simulation} />
+    ) : null;
+    const contractCallWarning = isContractCall ? (
+        <p className={styles.hwNote} data-testid="contract-call-warning">
+            {CONTRACT_CALL_WARNING}
+        </p>
+    ) : null;
+    // The wallet can hold several addresses per chain, so the action row names
+    // the spender alongside the balance debit. Message signing uses the same
+    // row for its signing address.
+    const sourceRow = (variant === 'action' || variant === 'message') && sourceAddress ? (
+        <dl className={styles.sourceRow} data-testid="confirm-source">
+            <dt className={styles.sourceLabel}>
+                {variant === 'message' ? t('components.confirmActionModal.signingAddress') : t('send.fields.from')}
+            </dt>
+            <dd className={styles.sourceValue}>
+                {sourceName ? (
+                    <span className={styles.sourceName}>{sourceName}</span>
+                ) : null}
+                <AddressText address={sourceAddress} highlight truncate={false} />
+            </dd>
+        </dl>
+    ) : null;
+    // The fee and total lines as text, exactly as the page has stated them
+    // since §5.2.5. A plain native-coin payment has no XChain action, so
+    // pre-flight does not apply to it and its panel is not shown.
+    const feeLines = (
+        <>
+            {feeText ? (
+                <div className={styles.fee} data-testid="confirm-fee">{feeText}</div>
+            ) : null}
+
+            {envelopeLines ? (
+                <div className={styles.fee} data-testid="confirm-envelope-transactions">
+                    <div>{t('components.confirmActionModal.twoTransactionsBothSignedNow')}</div>
+                    {envelopeLines.map((line) => (
+                        <div key={line.role} data-testid={`confirm-envelope-${line.role}`}>{line.text}</div>
+                    ))}
+                </div>
+            ) : null}
+
+            {/* Directly under the miner fee so the two costs read as one
+                section, and named as itself so neither passes for the other. */}
+            {protocolFee ? (
+                <div className={styles.fee} data-testid="confirm-protocol-fee">
+                    {protocolFee.text}{protocolFeeFiat ? ` (${protocolFeeFiat})` : ''}
+                </div>
+            ) : null}
+
+            {nativeProtocolFeeAmount ? (
+                <div className={styles.fee} data-testid="confirm-native-protocol-fee">
+                    {t('components.confirmActionModal.protocolFee')} {nativeProtocolFeeAmount} {nativeTicker}
+                    {nativeProtocolFeeFiat ? ` (${nativeProtocolFeeFiat})` : ''}
+                    {t('components.confirmActionModal.sentOnChainAndNot')}
+                </div>
+            ) : null}
+
+            {protocolFeeUnavailable ? (
+                <div className={styles.fee} data-testid="confirm-protocol-fee-unavailable">
+                    {t('components.confirmActionModal.protocolFeeEstimateUnavailable')}
+                </div>
+            ) : null}
+
+            {oracleFee ? (
+                <div className={styles.fee} data-testid="confirm-oracle-fee">{oracleFee.text}</div>
+            ) : null}
+
+            {totalText ? (
+                <div className={styles.fee} data-testid="confirm-total">{totalText}</div>
+            ) : null}
+        </>
+    );
+    // Pre-flight on the PSBT variant is REPORT-ONLY (§5.5): the wallet cannot
+    // rebuild a caller's PSBT, so findings inform but never block.
+    const preflightPanel = (variant === 'action' || variant === 'psbt') && !preflightNotApplicable ? (
+        <PreflightPanel
+            report={displayedReport}
+            loading={reportLoading}
+            acknowledged={acknowledged}
+            onAcknowledge={onAcknowledge}
+        />
+    ) : null;
+    // Fail-closed refusal (§5.5): no credentials, no Approve, no override.
+    // Rendered where the credentials would be so the user sees WHY there is
+    // nothing to sign with.
+    const refusalBlock = refusal ? (
+        <StatusMessage variant="error" role="alert" testId="confirm-refusal">
+            {refusal}
+        </StatusMessage>
+    ) : null;
+    const credentialsBlock = refusal ? null : (
+        <div className={styles.credentials}>
+            {credentials}
+        </div>
+    );
+    // Transaction-signing caveat only. Message signing moves no coins and has
+    // no outputs, so this note would be nonsense on that variant.
+    const hardwareNote = variant !== 'message' && hardwareSigner ? (
+        <p className={styles.hwNote}>
+            {t('components.confirmActionModal.aHardwareDeviceVerifiesNative')}
+        </p>
+    ) : null;
+    const phaseNotes = (
+        <>
+            {phase === 'rechecking' ? (
+                <p className={styles.recheck} data-testid="confirm-rechecking">{t('components.confirmActionModal.reChecking')}</p>
+            ) : null}
+            {signingTime.showElapsed ? (
+                <p className={styles.recheck} role="status" data-testid="confirm-signing-elapsed">
+                    {t('components.confirmActionModal.signingFor')} {signingTime.elapsedSeconds} {t('components.confirmActionModal.secondsCheckYourHardwareWallet')}
+                </p>
+            ) : null}
+            {signingTime.timedOut ? (
+                <StatusMessage variant="error" role="alert" testId="confirm-signing-timeout">
+                    {t('components.confirmActionModal.signingIsTakingLongerThan')}
+                </StatusMessage>
+            ) : null}
+            {/* The queue holds the signed transaction until the user
+                broadcasts it from the queued-transactions banner. */}
+            {phase === 'signed-not-broadcast' ? (
+                <p className={styles.queued} data-testid="confirm-queued">
+                    {t('components.confirmActionModal.signedNotBroadcastYet')}
+                </p>
+            ) : null}
+        </>
+    );
+
+    if (k6) {
+        // Top to bottom: hero, the address the action happens on, before and
+        // after, cost, the network check, technical details, then whatever
+        // the signer needs. Everything else stays under Technical details.
+        const hero = summary || summaryFromDecoded({ decoded: formattedDecoded, actionName: composedActionName(composed) });
+        const changes = mergeChanges(summary?.changes, changesFromSimulation(simulation));
+        const costRows = [];
+        if (networkFee?.amount) {
+            costRows.push({
+                key: 'network',
+                label: composed?.envelopeFees
+                    ? t('components.confirmSummary.networkFeeBoth')
+                    : networkFee.estimate
+                        ? t('components.confirmSummary.networkFeeEstimate')
+                        : t('send.networkFee'),
+                value: `${formatDisplayAmount(networkFee.amount)} ${networkFee.ticker || nativeTicker}`.trim(),
+                fiat: networkFee.fiat || null,
+                testId: 'confirm-cost-network-fee',
+            });
+        } else if (feeText) {
+            costRows.push({ key: 'network', label: t('send.networkFee'), text: feeText, testId: 'confirm-cost-network-fee' });
+        }
+        // The protocol fee as the screen already knows it: the XCHAIN lane
+        // from the pre-flight quote, the native lane from the composed
+        // output, else the form's own figure, else known free.
+        const formProtocolFee = summary?.protocolFee?.amount ? summary.protocolFee : null;
+        let protocolCost = null;
+        if (protocolFee) {
+            protocolCost = { value: `${formatDisplayAmount(protocolFee.amount)} XCHAIN`, fiat: protocolFeeFiat, xchain: protocolFee.amount };
+        } else if (nativeProtocolFeeAmount) {
+            protocolCost = { value: `${formatDisplayAmount(nativeProtocolFeeAmount)} ${nativeTicker}`.trim(), fiat: nativeProtocolFeeFiat, coin: nativeProtocolFeeAmount };
+        } else if (formProtocolFee) {
+            const tick = String(formProtocolFee.ticker || 'XCHAIN').toUpperCase();
+            const isCoin = tick === String(nativeTicker).toUpperCase();
+            const fiat = isCoin
+                ? (typeof formatNativeFee === 'function' ? formatNativeFee(formProtocolFee.amount) : null)
+                : (typeof formatProtocolFee === 'function' ? formatProtocolFee(formProtocolFee.amount) : null);
+            protocolCost = {
+                value: `${formatDisplayAmount(formProtocolFee.amount)} ${tick}`,
+                fiat,
+                ...(isCoin ? { coin: formProtocolFee.amount } : { xchain: formProtocolFee.amount }),
+            };
+        } else if (protocolFeeKnownFree || preflightNotApplicable || isKnownFreeAction(composed)) {
+            protocolCost = { value: '0 XCHAIN', fiat: null };
+        } else if (protocolFeeUnavailable) {
+            protocolCost = { value: t('balances.unavailable'), fiat: null, unknown: true };
+        }
+        if (protocolCost) {
+            costRows.push({ key: 'protocol', label: t('execute.protocolFee'), value: protocolCost.value, fiat: protocolCost.fiat, testId: 'confirm-cost-protocol-fee' });
+        }
+        if (oracleFee) {
+            costRows.push({ key: 'oracle', label: t('components.confirmSummary.oracleFee'), value: `${formatDisplayAmount(oracleFee.amount)} ${nativeTicker}`.trim(), fiat: typeof formatNativeFee === 'function' ? formatNativeFee(oracleFee.amount) : null, testId: 'confirm-cost-oracle-fee' });
+        }
+        // Total cost: every coin amount this transaction spends in one unit,
+        // plus an XCHAIN fee beside it. Shown only when the network fee is a
+        // known figure, since a total missing its biggest part would mislead.
+        if (networkFee?.amount && !protocolCost?.unknown) {
+            const coinParts = [paymentAmount, networkFee.amount, protocolCost?.coin, oracleFee?.amount].filter(Boolean);
+            const coinTotal = trimAmountTail(sumDecimalStrings(coinParts.map(String)));
+            const xchainPart = protocolCost?.xchain && Number(protocolCost.xchain) > 0
+                ? ` + ${formatDisplayAmount(protocolCost.xchain)} XCHAIN`
+                : '';
+            const ticker = networkFee.ticker || nativeTicker;
+            costRows.push({
+                key: 'total',
+                label: t('components.confirmSummary.totalCost'),
+                value: `${formatDisplayAmount(coinTotal)} ${ticker}`.trim() + xchainPart,
+                fiat: !xchainPart && typeof formatNativeFee === 'function' ? formatNativeFee(coinTotal) : null,
+                total: true,
+                testId: 'confirm-cost-total',
+            });
+        }
+        const cleanPass = !preflightNotApplicable && !reportLoading && preflightCleanPass(displayedReport);
+        const address = hero.address || sourceAddress;
+        // When the only address is the spender's own, the From row takes the
+        // address card's place, so the screen names the source once rather
+        // than in the card and again under Technical details.
+        const sourceIsCard = Boolean(sourceRow) && (!hero.address || hero.address === sourceAddress);
+        return (
+            <Screen
+                rootRef={pageRef}
+                variant={screenVariant}
+                header={header}
+                footer={footer}
+                restoreScroll={false}
+            >
+                <div
+                    className={`${styles.page} ${confirmSummaryStyles.stack}`}
+                    data-testid="confirm-modal"
+                    aria-label={t('components.confirmActionModal.confirm', { value: headlineText || 'action' })}
+                >
+                    {errorBlock}
+                    <ConfirmHero summary={hero} chainId={composed?.chainId} />
+                    {sourceIsCard ? (
+                        <div className={confirmSummaryStyles.card}>{sourceRow}</div>
+                    ) : address ? <ConfirmAddressCard address={address} /> : null}
+                    {originIdentity}
+                    {learnNote}
+                    {contractCallWarning}
+                    <ConfirmChangesCard rows={changes} />
+                    <ConfirmCostCard rows={costRows} />
+                    <ConfirmNotice text={summary?.notice} />
+                    {cleanPass ? (
+                        <StatusMessage variant="success" role={null} testId="confirm-checked">
+                            {t('components.confirmSummary.checked')}
+                        </StatusMessage>
+                    ) : preflightPanel}
+                    <ConfirmTechnicalDetails>
+                        {intentHeader}
+                        {walletIdentity}
+                        {sourceIsCard ? null : sourceRow}
+                        {intentSummary}
+                        {technicalDetails}
+                        {feeLines}
+                        {cleanPass ? preflightPanel : null}
+                    </ConfirmTechnicalDetails>
+                    {refusalBlock}
+                    {credentialsBlock}
+                    {hardwareNote}
+                    {phaseNotes}
+                </div>
+            </Screen>
+        );
+    }
 
     // The confirm page always opens at its top; it must not inherit how far
     // the form behind it was scrolled.
@@ -509,43 +827,16 @@ export function ConfirmActionModal({
                 data-testid="confirm-modal"
                 aria-label={t('components.confirmActionModal.confirm', { value: headlineText || 'action' })}
             >
-                {/* §5.3.4: a credential failure returns the page to `ready`
-                    with this error set, so the user retypes and re-approves
-                    the SAME PSBT. It is the first item of page content,
-                    ahead of the header row. */}
-                {error?.presentation === 'status' ? (
-                    <div className={styles.hwNote} role="status" data-testid="confirm-notice">
-                        {userFacingMessage(
-                            error,
-                            'The request stopped because the wallet service returned no explanation.',
-                        )}
-                    </div>
-                ) : error ? (
-                    <StatusMessage variant="error" role="alert" testId="confirm-error">
-                        {userFacingMessage(
-                            error,
-                            'The request stopped because the wallet service returned no explanation.',
-                        )}
-                    </StatusMessage>
-                ) : null}
+                {errorBlock}
 
-                <div className={styles.header}>
-                    <span className={styles.actionLabel} data-testid="confirm-action-label">{actionHeaderLabel}</span>
-                    <span className={styles.chainBadge} data-testid="confirm-chain-badge">{chainLabel}</span>
-                </div>
+                {intentHeader}
 
                 <div className={styles.body}>
-                    <WalletIdentity wallet={resolvedSigningWallet} label={t('components.confirmActionModal.signingWith')} />
-                    <OriginIdentity
-                        origin={requestOrigin}
-                        label={t('extension.approval.requestingSite')}
-                        testId="confirm-request-origin"
-                    />
+                    {walletIdentity}
+                    {originIdentity}
 
-                    {/* Settings > Developer Mode > Learn Mode. Renders
-                        nothing unless the user asked for it; first in the body
-                        because it frames everything under it. */}
-                    <LearnNote variant={variant} chainLabel={chainLabel} />
+                    {/* First in the body because it frames everything under it. */}
+                    {learnNote}
 
                     {/* §5.5 PSBT variant: the input/output enumeration is the
                         foregrounded content, ABOVE any action-data intent. */}
@@ -562,140 +853,15 @@ export function ConfirmActionModal({
                         </section>
                     ) : null}
 
-                    {variant === 'action' && reviewDecoded ? (
-                        <ActionIntentSummary decoded={reviewDecoded} simulation={simulation} />
-                    ) : null}
-
-                    {isContractCall ? (
-                        <p className={styles.hwNote} data-testid="contract-call-warning">
-                            {CONTRACT_CALL_WARNING}
-                        </p>
-                    ) : null}
-
-                    {/* The wallet can hold several addresses per chain, so the
-                        action row names the spender alongside the balance debit.
-                        Message signing uses the same row for its signing address. */}
-                    {(variant === 'action' || variant === 'message') && sourceAddress ? (
-                        <dl className={styles.sourceRow} data-testid="confirm-source">
-                            <dt className={styles.sourceLabel}>
-                                {variant === 'message' ? t('components.confirmActionModal.signingAddress') : t('send.fields.from')}
-                            </dt>
-                            <dd className={styles.sourceValue}>
-                                {sourceName ? (
-                                    <span className={styles.sourceName}>{sourceName}</span>
-                                ) : null}
-                                <AddressText address={sourceAddress} highlight truncate={false} />
-                            </dd>
-                        </dl>
-                    ) : null}
-
-                    {/* Pre-flight on the PSBT variant is REPORT-ONLY (§5.5): the
-                        wallet cannot rebuild a caller's PSBT, so findings inform
-                        but never block. The caller controls `canApprove`; this
-                        renders the panel either way so the user still sees them. */}
-                    {/* A plain native-coin payment has no XChain action,
-                        so pre-flight does not apply to it. Rendering the panel's
-                        null-report state here would tell the user "Pre-flight
-                        unavailable; proceeding is at your discretion" on an
-                        ordinary payment - alarming, and false: nothing failed
-                        and nothing is missing. Not applicable means not shown. */}
-                    {feeText ? (
-                        <div className={styles.fee} data-testid="confirm-fee">{feeText}</div>
-                    ) : null}
-
-                    {envelopeLines ? (
-                        <div className={styles.fee} data-testid="confirm-envelope-transactions">
-                            <div>{t('components.confirmActionModal.twoTransactionsBothSignedNow')}</div>
-                            {envelopeLines.map((line) => (
-                                <div key={line.role} data-testid={`confirm-envelope-${line.role}`}>{line.text}</div>
-                            ))}
-                        </div>
-                    ) : null}
-
-                    {/* Directly under the miner fee so the two costs read as
-                        one section, and named as itself so neither passes for
-                        the other (the same rule the delta rows follow). */}
-                    {protocolFee ? (
-                        <div className={styles.fee} data-testid="confirm-protocol-fee">
-                            {protocolFee.text}{protocolFeeFiat ? ` (${protocolFeeFiat})` : ''}
-                        </div>
-                    ) : null}
-
-                    {nativeProtocolFeeAmount ? (
-                        <div className={styles.fee} data-testid="confirm-native-protocol-fee">
-                            {t('components.confirmActionModal.protocolFee')} {nativeProtocolFeeAmount} {nativeTicker}
-                            {nativeProtocolFeeFiat ? ` (${nativeProtocolFeeFiat})` : ''}
-                            {t('components.confirmActionModal.sentOnChainAndNot')}
-                        </div>
-                    ) : null}
-
-                    {protocolFeeUnavailable ? (
-                        <div className={styles.fee} data-testid="confirm-protocol-fee-unavailable">
-                            {t('components.confirmActionModal.protocolFeeEstimateUnavailable')}
-                        </div>
-                    ) : null}
-
-                    {oracleFee ? (
-                        <div className={styles.fee} data-testid="confirm-oracle-fee">{oracleFee.text}</div>
-                    ) : null}
-
-                    {totalText ? (
-                        <div className={styles.fee} data-testid="confirm-total">{totalText}</div>
-                    ) : null}
-
-                    {(variant === 'action' || variant === 'psbt') && !preflightNotApplicable ? (
-                        <PreflightPanel
-                            report={displayedReport}
-                            loading={reportLoading}
-                            acknowledged={acknowledged}
-                            onAcknowledge={onAcknowledge}
-                        />
-                    ) : null}
-
-                    {/* Fail-closed refusal (§5.5): no credentials, no Approve,
-                        no override. Rendered where the credentials would be so
-                        the user sees WHY there is nothing to sign with. */}
-                    {refusal ? (
-                        <StatusMessage variant="error" role="alert" testId="confirm-refusal">
-                            {refusal}
-                        </StatusMessage>
-                    ) : null}
-
-                    {refusal ? null : (
-                        <div className={styles.credentials}>
-                            {credentials}
-                        </div>
-                    )}
-
-                    {/* Transaction-signing caveat only. Message signing moves no
-                        coins and has no outputs, so this note would be nonsense
-                        on that variant. */}
-                    {variant !== 'message' && hardwareSigner ? (
-                        <p className={styles.hwNote}>
-                            {t('components.confirmActionModal.aHardwareDeviceVerifiesNative')}
-                        </p>
-                    ) : null}
-
-                    {phase === 'rechecking' ? (
-                        <p className={styles.recheck} data-testid="confirm-rechecking">{t('components.confirmActionModal.reChecking')}</p>
-                    ) : null}
-                    {signingTime.showElapsed ? (
-                        <p className={styles.recheck} role="status" data-testid="confirm-signing-elapsed">
-                            {t('components.confirmActionModal.signingFor')} {signingTime.elapsedSeconds} {t('components.confirmActionModal.secondsCheckYourHardwareWallet')}
-                        </p>
-                    ) : null}
-                    {signingTime.timedOut ? (
-                        <StatusMessage variant="error" role="alert" testId="confirm-signing-timeout">
-                            {t('components.confirmActionModal.signingIsTakingLongerThan')}
-                        </StatusMessage>
-                    ) : null}
-                    {/* The queue holds the signed transaction until the user
-                        broadcasts it from the queued-transactions banner. */}
-                    {phase === 'signed-not-broadcast' ? (
-                        <p className={styles.queued} data-testid="confirm-queued">
-                            {t('components.confirmActionModal.signedNotBroadcastYet')}
-                        </p>
-                    ) : null}
+                    {intentSummary}
+                    {contractCallWarning}
+                    {sourceRow}
+                    {feeLines}
+                    {preflightPanel}
+                    {refusalBlock}
+                    {credentialsBlock}
+                    {hardwareNote}
+                    {phaseNotes}
                 </div>
             </div>
         </Screen>

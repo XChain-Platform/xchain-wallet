@@ -21,7 +21,8 @@ import { useContext, useEffect, useState } from 'react';
 import { Input } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { MessagingContext } from '../MessagingContext.js';
-import { ConfirmActionModal } from './ConfirmActionModal.jsx';
+import { ConfirmActionModal, composedActionName } from './ConfirmActionModal.jsx';
+import { summaryFromDecoded } from './ConfirmSummary.jsx';
 import { SignCredentials } from './SignCredentials.jsx';
 import { PanicPasswordGate, SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
 import { formatNativeBaseUnits, tickerForDescriptor } from '../../registry/coinTicker.js';
@@ -141,6 +142,14 @@ function useSourceIdentity(address, chainId, walletId) {
  * @param {(amount: string) => string|null} [props.formatNativeFee]
  * @param {(amount: string) => string|null} [props.formatProtocolFee]
  * @param {string} [props.totalText]             form-derived aggregate when the action decoder exposes only a per-unit amount
+ * @param {import('./ConfirmSummary.jsx').ConfirmSummaryInput|null} [props.summary]   K6 hero and
+ *   before and after input, built by the form from values it already holds
+ *   ({ verb, amount, ticker, chainId, direction, address, recipient, changes,
+ *   networkFee, protocolFee, notice }). `notice` is one fact the form no longer
+ *   shows as a standing warning; it renders as a muted line above the network check. Without one the hero comes from the decoded
+ *   action, or the action's name when nothing was decoded.
+ * @param {import('react').ReactNode} [props.technicalDetails]   form-specific review rows
+ *   shown under Technical details rather than above the footer
  */
 export function ActionConfirmScreen({
     confirmAction,
@@ -171,6 +180,8 @@ export function ActionConfirmScreen({
     formatNativeFee,
     formatProtocolFee,
     totalText,
+    summary = null,
+    technicalDetails = null,
 }) {
     // The popup and side panel share the stored active wallet, so a switch in
     // one rewrites it under a review open in the other. The review names the
@@ -254,6 +265,45 @@ export function ActionConfirmScreen({
     const sourceIdentity = useSourceIdentity(sourceAddress, composed?.chainId || chainId, walletId);
     const sourceName = [sourceIdentity.label, sourceIdentity.walletName].filter(Boolean).join(' · ');
 
+    // K6: the hero and the address card. A form's own summary wins; any other
+    // action shows what the host decoded, or its name when nothing was.
+    // An amount and its ticker travel as a pair: a form that states either one
+    // states the hero's figure, so a decoded amount is never shown beside the
+    // form's ticker (a dividend's per-unit rate read as its total).
+    const formStatesFigure = Boolean(summary) && ('amount' in summary || 'ticker' in summary);
+    const resolvedSummary = {
+        // A form summary overrides the decoded hero key by key, so a form that
+        // only adds a notice keeps the decoded amount and verb.
+        ...summaryFromDecoded({ decoded, actionName: composedActionName(composed) }),
+        ...(formStatesFigure ? { amount: '', ticker: '' } : {}),
+        ...(summary || {}),
+        chainId: summary?.chainId || composed?.chainId || chainId,
+    };
+    if (!resolvedSummary.address && sourceAddress) resolvedSummary.address = sourceAddress;
+    // The cost card's network fee as a figure: the composed transaction's
+    // exact fee, else the form's estimate, which stays labelled as one.
+    const estimateAmount = summary?.networkFee?.amount ? String(summary.networkFee.amount) : '';
+    const networkFee = exactCoinAmount
+        ? { amount: exactCoinAmount, ticker, fiat: exactFeeFiat, estimate: false }
+        : estimateAmount
+            ? {
+                amount: estimateAmount,
+                ticker: summary.networkFee.ticker || ticker,
+                fiat: typeof formatNativeFee === 'function' ? formatNativeFee(estimateAmount) : null,
+                estimate: true,
+            }
+            : null;
+    // Native coin the action itself sends, so Total cost covers the payment
+    // as well as its fees (a coin send), never a token amount.
+    const summaryPaysCoin = summary?.direction === 'out'
+        && summary?.amount
+        && String(summary.ticker || '').toUpperCase() === String(ticker).toUpperCase();
+    const paymentAmount = composed?.bareNativePayment
+        && amountDetail?.value
+        && String(tokenDetail?.value || '').toUpperCase() === String(ticker).toUpperCase()
+        ? String(amountDetail.value)
+        : (summaryPaysCoin ? String(summary.amount) : null);
+
     return (
         <ConfirmActionModal
             screenVariant={screenVariant}
@@ -298,6 +348,10 @@ export function ActionConfirmScreen({
             nativeTicker={ticker}
             formatNativeFee={formatNativeFee}
             formatProtocolFee={formatProtocolFee}
+            summary={resolvedSummary}
+            networkFee={networkFee}
+            paymentAmount={paymentAmount}
+            technicalDetails={technicalDetails}
             credentialsReady={credsComplete}
             credentials={(
                 <>

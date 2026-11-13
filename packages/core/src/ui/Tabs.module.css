@@ -103,3 +103,54 @@
     background: var(--xc-control-selected);
     color: var(--xc-control-selected-text);
 }
+
+/* Framed tabs: the tab row is one rounded outlined frame the height
+   of a control (so it matches the filter button beside it), and the selected
+   tab fills blue inside it. Tabs share the frame's width evenly. */
+.tabs.tabs {
+    /* The touch control height (44px) in every shell and width, as
+       the app bar keeps it, so a phone, the popup and the side panel draw the
+       same tab row. */
+    --xc-control-h-md: 44px;
+    height: var(--xc-control-h-md);
+    min-height: var(--xc-control-h-md);
+    padding: 3px;
+    gap: 3px;
+    border: 1px solid var(--xc-control-border);
+    border-radius: var(--xc-control-radius);
+}
+
+.tab.tab {
+    flex: 1 1 0;
+    min-width: max-content;
+    min-height: 0;
+    height: 100%;
+    padding: 0 var(--xc-space-2);
+    gap: var(--xc-space-1);
+    border: 0;
+    border-radius: calc(var(--xc-control-radius) - 3px);
+}
+
+.tab.tab[aria-selected='true'] {
+    background: var(--xc-accent-primary);
+    color: var(--xc-on-accent);
+    border-bottom-color: transparent;
+}
+
+@media (forced-colors: active) {
+    .tab.tab[aria-selected='true'] {
+        background: Highlight;
+        color: HighlightText;
+    }
+}
+
+/* On the narrowest screens the framed tabs tighten their padding so
+   four tabs and their icons fit beside the filter button without scrolling;
+   the label keeps the one tab text size every window uses. */
+@media (max-width: 400px) {
+    .tab.tab {
+        min-width: 0;
+        padding: 0 var(--xc-space-1);
+        gap: 3px;
+    }
+}

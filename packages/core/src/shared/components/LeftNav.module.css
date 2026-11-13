@@ -392,12 +392,13 @@
     flex: 0 0 64px;
 }
 
+/* The tablet and desktop layouts keep the same 8px page top as phones. */
 .layout[data-xc-tier='rail'] {
-    --xc-page-top: var(--xc-space-4);
+    --xc-page-top: var(--xc-space-2);
 }
 
 .layout[data-xc-tier='full'] {
-    --xc-page-top: var(--xc-space-4);
+    --xc-page-top: var(--xc-space-2);
 }
 
 /* The brand wordmark has no icon-only form. The app header keeps the
@@ -452,4 +453,49 @@
    visible rail already shows a Search button. */
 .layout[data-xc-rail='shown'] :global([data-header-menu='search-only']) {
     display: none;
+}
+
+/* With the side menu shown (iPad and desktop), the app bar runs the full
+   width across the top, logo in the corner above the menu; the menu and route
+   fill the row under it. The rail has no "XChain Wallet" label: the logo names the app. */
+.layout[data-xc-rail='shown'] {
+    display: grid;
+    /* The side menu keeps its own width: 220px, or the 64px icon rail on the
+       rail tier (below). */
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+}
+
+.layout[data-xc-rail='shown'] > .main {
+    display: contents;
+}
+
+.layout[data-xc-rail='shown'] > .main > .header {
+    grid-column: 1 / -1;
+    grid-row: 1;
+}
+
+.layout[data-xc-rail='shown'] > .sidebar {
+    grid-column: 1;
+    grid-row: 2;
+    width: 220px;
+    height: auto;
+    min-height: 0;
+}
+
+.layout[data-xc-rail='shown'] > .main > .mainBody {
+    grid-column: 2;
+    grid-row: 2;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    --xc-screen-h: 100%;
+}
+
+.layout[data-xc-rail='shown'] .nav > .brand {
+    display: none;
+}
+
+.layout[data-xc-rail='shown'][data-xc-tier='rail'] > .sidebar {
+    width: 64px;
 }

@@ -1,0 +1,62 @@
+/* Market rows for the coin and token detail page. Inside the Details list
+   the caller's row, label and value classes carry the look; the classes
+   here are the fallback for a list of their own (TokenMarketTab). */
+
+.card {
+    composes: card from '../../ui/Card.module.css';
+}
+
+.list {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.list > li + li {
+    border-top: var(--xc-table-row-divider);
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-3);
+    min-height: var(--xc-control-h-lg, 24px);
+    padding: var(--xc-space-2) 0;
+}
+
+.label {
+    color: var(--xc-text);
+    font-size: var(--xc-text-md);
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+.value {
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    text-align: end;
+}
+
+/* Label left, value right on one line whatever the caller's classes. */
+.labelCell {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.valueCell {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 60%;
+    overflow-wrap: anywhere;
+}
+
+.positive {
+    color: var(--xc-success);
+}
+
+.negative {
+    color: var(--xc-danger-fg);
+}

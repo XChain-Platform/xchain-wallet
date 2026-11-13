@@ -9,7 +9,10 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, FeeSelector, Input, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, Input, StatusMessage } from '@xchain-wallet/core/ui';
+import { BroadcastIcon, XIcon } from '../../ui/icons/index.jsx';
+// The Wallet Form Standard frame (From, main section, Network fee, one action).
+import { FeeSection, FormAction, FormFrame, FormSection, FromSection, useFormSections } from './formStandard/index.js';
 import { registry as registryLib } from '@xchain-wallet/core';
 import {
     estimateNativeSendFee,
@@ -28,10 +31,8 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import dashStyles from '../routes/ActionsMenu.module.css';
-import formStyles from '../routes/IssueTokenForm.module.css';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
-import '../../i18n/locales/en/send.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const DECIMAL_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/;
@@ -93,6 +94,20 @@ function OperatorPublisherModeView({
             <section style={SECTION_STYLE}>
                 <ActionConfirmScreen
                     {...submission.ownerLane.confirmProps}
+                    summary={{
+                        verb: t('components.operatorPublisherMode.publishValue'),
+                        ...(feedActionIndex.trim() && submission.value.trim()
+                            ? {
+                                target: t('components.confirmSummary.feedValueTarget', {
+                                    index: feedActionIndex.trim(),
+                                    value: submission.value.trim(),
+                                }),
+                            }
+                            : {}),
+                        direction: 'none',
+                        chainId,
+                        address: fromAddress?.address,
+                    }}
                     walletId={walletId}
                     screenVariant={variant}
                     chainLabel={descriptor?.displayName || chainId}
@@ -110,6 +125,7 @@ function OperatorPublisherModeView({
     return (
         <PublisherForm
             chainId={chainId}
+            address={address}
             open={open}
             onToggle={() => setOpen((shown) => !shown)}
             feed={feed}
@@ -255,7 +271,7 @@ function publisherResultPanel(result, clearResult) {
 }
 
 function PublisherForm({
-    chainId,
+    chainId, address,
     open, onToggle, feed, feedLoading, feedError, feedActionIndex, onFeedActionIndex,
     sourceLoading, sourceError, coinTicker, fee, submission,
 }) {
@@ -267,14 +283,17 @@ function PublisherForm({
         <section style={SECTION_STYLE}>
             <h3 style={{ fontSize: '0.95rem', margin: '0 0 0.25rem' }}>
                 {t('components.operatorPublisherMode.publisherMode')}
-                <button
+                <Button
                     type="button"
+                    variant="secondary"
+                    size="sm"
+                    icon={open ? <XIcon /> : <BroadcastIcon />}
                     onClick={onToggle}
                     aria-expanded={open}
-                    style={{ marginInlineStart: '0.5rem', fontSize: '0.85rem' }}
+                    style={{ marginInlineStart: '0.5rem' }}
                 >
                     {open ? t('components.operatorPublisherMode.leavePublisherMode') : t('components.operatorPublisherMode.enterPublisherMode')}
-                </button>
+                </Button>
             </h3>
             <p className={dashStyles.entryDescription}>
                 {t('components.operatorPublisherMode.publisherModeCreatesAnOn')} {open
@@ -282,33 +301,121 @@ function PublisherForm({
                     : t('components.operatorPublisherMode.chooseEnterPublisherModeTo')}
             </p>
             {open ? (
-                <form onSubmit={submission.submit} noValidate>
-                    <PublisherFields
-                        feed={feed}
-                        feedLoading={feedLoading}
-                        feedError={feedError}
-                        feedActionIndex={feedActionIndex}
-                        onFeedActionIndex={onFeedActionIndex}
-                        sourceLoading={sourceLoading}
-                        sourceError={sourceError}
-                        value={submission.value}
-                        onValue={submission.setValue}
-                    />
-                    <PublisherControls chainId={chainId} coinTicker={coinTicker} fee={fee} submission={submission} lastTxid={lastTxid} />
-                </form>
+                <PublisherFrame
+                    chainId={chainId}
+                    address={address}
+                    feed={feed}
+                    feedLoading={feedLoading}
+                    feedError={feedError}
+                    feedActionIndex={feedActionIndex}
+                    onFeedActionIndex={onFeedActionIndex}
+                    sourceLoading={sourceLoading}
+                    sourceError={sourceError}
+                    coinTicker={coinTicker}
+                    fee={fee}
+                    submission={submission}
+                    lastTxid={lastTxid}
+                />
             ) : null}
         </section>
     );
 }
 
+/**
+ * The publisher form on the Form Standard: From (the operator address,
+ * fixed by the dashboard, so no picker), the feed update (open), the
+ * Network fee section, the status slot, one Publish action.
+ */
+function PublisherFrame({
+    chainId, address, feed, feedLoading, feedError, feedActionIndex, onFeedActionIndex,
+    sourceLoading, sourceError, coinTicker, fee, submission, lastTxid,
+}) {
+    const sections = useFormSections({ from: false, feed: true, fee: false });
+    const busy = submission.submitting || submission.ownerLane.composing;
+    const summary = [feedActionIndex.trim() ? `#${feedActionIndex.trim()}` : null, submission.value.trim() || null]
+        .filter(Boolean).join(', ');
+    return (
+        <FormFrame
+            label={t('components.operatorPublisherMode.publisherMode')}
+            onSubmit={submission.submit}
+            noValidate
+            status={[
+                sourceLoading ? (
+                    <p key="source" className={dashStyles.entryDescription}>{t('components.operatorPublisherMode.loadingSourceAddress')}</p>
+                ) : null,
+                submission.ownerLane.isWatcherMode ? (
+                    <p key="watcher" className={dashStyles.entryDescription}>
+                        {t('components.operatorPublisherMode.watcherModeBuildsAnUnsigned')}
+                    </p>
+                ) : null,
+                submission.error ? <StatusMessage key="error" variant="error">{submission.error}</StatusMessage> : null,
+                lastTxid ? (
+                    <p key="last" className={dashStyles.entryDescription}>
+                        {t('components.operatorPublisherMode.lastPublishedTxid')} {String(lastTxid).slice(0, 16)}…
+                    </p>
+                ) : null,
+            ]}
+            action={(
+                <FormAction icon={<BroadcastIcon />} loading={busy} disabled={busy}>
+                    {submission.ownerLane.isWatcherMode ? t('components.placeOrderPanel.createUnsignedTransaction') : t('components.operatorPublisherMode.publishValue')}
+                </FormAction>
+            )}
+            from={(
+                <FromSection
+                    {...sections.bind('from')}
+                    chainId={chainId}
+                    chainRegistry={chainRegistry}
+                    lockNetwork
+                    networkHelp={t('components.operatorPublisherMode.networkHelp')}
+                    // Null while the lookup runs, so a slow read does not open From for good.
+                    address={sourceError ? null : address}
+                    addressHelp={t('components.operatorPublisherMode.fromHelp')}
+                    missing={!sourceLoading && sourceError ? <StatusMessage variant="error">{sourceError}</StatusMessage> : null}
+                />
+            )}
+            fee={fee.tiers ? (
+                <FeeSection
+                    {...sections.bind('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    tiers={fee.tiers}
+                    value={fee.pick}
+                    onChange={fee.setPick}
+                    customEstimate={fee.customEstimate}
+                    revealKey={submission.error && fee.reviewStop && submission.error === fee.reviewStop.formError ? `fee-${submission.error}` : 0}
+                />
+            ) : null}
+        >
+            <FormSection
+                id="feed"
+                title={t('components.operatorPublisherMode.feedUpdate')}
+                icon={BroadcastIcon}
+                main
+                {...sections.bind('feed')}
+                summary={summary || t('components.operatorPublisherMode.noValueYet')}
+            >
+                <PublisherFields
+                    feed={feed}
+                    feedLoading={feedLoading}
+                    feedError={feedError}
+                    feedActionIndex={feedActionIndex}
+                    onFeedActionIndex={onFeedActionIndex}
+                    value={submission.value}
+                    onValue={submission.setValue}
+                />
+            </FormSection>
+        </FormFrame>
+    );
+}
+
 function PublisherFields({
-    feed, feedLoading, feedError, feedActionIndex, onFeedActionIndex,
-    sourceLoading, sourceError, value, onValue,
+    feed, feedLoading, feedError, feedActionIndex, onFeedActionIndex, value, onValue,
 }) {
     return (
         <>
             <Input
                 label={t('components.operatorPublisherMode.feedReferenceNumber')}
+                help={t('components.operatorPublisherMode.feedReferenceHelp')}
                 hint={feedLoading
                     ? t('components.operatorPublisherMode.loadingFeed')
                     : feed
@@ -332,47 +439,6 @@ function PublisherFields({
             {feedError ? (
                 <StatusMessage variant="error">{feedError}</StatusMessage>
             ) : null}
-            {sourceLoading ? <p className={dashStyles.entryDescription}>{t('components.operatorPublisherMode.loadingSourceAddress')}</p> : null}
-            {!sourceLoading && sourceError ? (
-                <StatusMessage variant="error">{sourceError}</StatusMessage>
-            ) : null}
-        </>
-    );
-}
-
-function PublisherControls({ chainId, coinTicker, fee, submission, lastTxid }) {
-    const busy = submission.submitting || submission.ownerLane.composing;
-    return (
-        <>
-            {fee.tiers ? (
-                <FeeSelector
-                    chainId={chainId}
-                    label={t('send.networkFee')}
-                    coinTicker={coinTicker}
-                    tiers={fee.tiers}
-                    value={fee.pick}
-                    onChange={fee.setPick}
-                    customEstimate={fee.pick.mode === 'custom' ? fee.customEstimate : null}
-                />
-            ) : null}
-            {submission.ownerLane.isWatcherMode ? (
-                <p className={dashStyles.entryDescription}>
-                    {t('components.operatorPublisherMode.watcherModeBuildsAnUnsigned')}
-                </p>
-            ) : null}
-            {submission.error ? (
-                <StatusMessage variant="error">{submission.error}</StatusMessage>
-            ) : null}
-            {lastTxid ? (
-                <p className={dashStyles.entryDescription}>
-                    {t('components.operatorPublisherMode.lastPublishedTxid')} {String(lastTxid).slice(0, 16)}…
-                </p>
-            ) : null}
-            <div className={formStyles.actions}>
-                <Button type="submit" variant="primary" loading={busy} disabled={busy}>
-                    {submission.ownerLane.isWatcherMode ? t('components.placeOrderPanel.createUnsignedTransaction') : t('components.operatorPublisherMode.publishValue')}
-                </Button>
-            </div>
         </>
     );
 }

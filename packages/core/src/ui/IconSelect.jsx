@@ -37,6 +37,7 @@ import '../i18n/locales/en/ui.js';
  * @param {string} [props.placeholder]
  * @param {boolean} [props.disabled]
  * @param {'sm' | 'md' | 'lg'} [props.size]
+ * @param {string} [props['aria-label']]  names a select that has no visible label
  */
 export function IconSelect({
     label,
@@ -47,6 +48,7 @@ export function IconSelect({
     placeholder = t('ui.iconSelect.select'),
     disabled,
     size = 'md',
+    'aria-label': ariaLabel,
 }) {
     const [open, setOpen] = useState(false);
     const listboxId = useId();
@@ -110,9 +112,10 @@ export function IconSelect({
 
     // The visual label is a span, so the accessible name pairs the field label
     // with its current selection. An unlabelled select keeps its visible text as
-    // its name.
-    const accessibleName = label
-        ? `${label}: ${selected ? selected.label : placeholder}`
+    // its name, unless the caller names it with aria-label (no visible label).
+    const fieldName = label || ariaLabel;
+    const accessibleName = fieldName
+        ? `${fieldName}: ${selected ? selected.label : placeholder}`
         : undefined;
     const hasHelp = Boolean(label && help);
 
@@ -169,7 +172,7 @@ export function IconSelect({
                     id={listboxId}
                     className={styles.popover}
                     role="listbox"
-                    aria-label={label || t('ui.iconSelect.options')}
+                    aria-label={fieldName || t('ui.iconSelect.options')}
                     onKeyDown={onListboxKeyDown}
                 >
                     <ul className={styles.list}>

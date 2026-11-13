@@ -28,10 +28,15 @@ import { useMessaging } from '../useMessaging.js';
 import { normalizeOrderbook } from '../../market/orderbook.js';
 import { sampleOrderbookFor } from '../../market/sampleMarketData.js';
 import {
+    compareDecimalStrings,
     divideDecimalStrings,
     formatWithThousands,
+    multiplyDecimalStrings,
+    subtractDecimalStrings,
     trimAmountTail,
 } from '../utils/amountFormat.js';
+// The split book's last-trade line reads the tidied price.
+import { tidyQuotePrice } from './marketTradeParts.jsx';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { useReportLoadFailure } from './pageLoadFailures.jsx';
 import tableStyles from './DataTable.module.css';
@@ -48,9 +53,12 @@ const POLL_INTERVAL_MS = 5000;
  * @param {string} props.tick1
  * @param {string} props.tick2
  * @param {boolean} [props.demo]   demo wallet: render a sample book when the live book is empty
- * @param {(price: string) => void} [props.onPickPrice]
+ * @param {(price: string, side: 'bid' | 'ask') => void} [props.onPickPrice]
+ * @param {'columns' | 'split'} [props.layout]   'split' puts bids and asks side by side in one table
+ * @param {string | null} [props.lastPrice]      The split book's last-trade line under the levels
+ * @param {'positive' | 'negative' | 'neutral'} [props.lastDirection]
  */
-export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPrice }) {
+export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPrice, layout = 'columns', lastPrice = null, lastDirection = 'neutral' }) {
     const { messaging } = useMessaging();
     const [book, setBook] = useState(/** @type {any} */ ({ bids: [], asks: [], maxCumulative: '0' }));
     const [loading, setLoading] = useState(true);
@@ -112,8 +120,25 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
                 padding: 'var(--xc-card-pad)',
             }}
         >
-            <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>{t('components.orderbookPanel.orderBook')}</p>
-            {hasLevels ? (
+            {layout === 'split' ? (
+                /* The title line carries the spread on its right. */
+                <div className={styles.splitHead}>
+                    <p className={styles.splitTitle}>{t('components.orderbookPanel.orderBook')}</p>
+                    {spreadText(book) ? <span className={styles.splitSpread}>{spreadText(book)}</span> : null}
+                </div>
+            ) : (
+                <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>{t('components.orderbookPanel.orderBook')}</p>
+            )}
+            {hasLevels && layout === 'split' ? (
+                <SplitBook
+                    book={book}
+                    onPickPrice={onPickPrice}
+                    tick2={tick2}
+                    lastPrice={lastPrice}
+                    lastDirection={lastDirection}
+                />
+            ) : null}
+            {hasLevels && layout !== 'split' ? (
                 <div className={styles.orderBookGrid}>
                     <LevelsColumn
                         title={t('components.orderbookPanel.buyBids')}
@@ -236,6 +261,112 @@ function LevelRow({ level, maxCumulative, side, onPick }) {
                 {formatBookNumber(level.cumulative)}
             </td>
         </tr>
+    );
+}
+
+// The spread between the best ask and the best bid, with its share
+// of the ask, for the split book's title line. Null when either side is empty.
+function spreadText(book) {
+    const bid = book.bids[0]?.displayPrice;
+    const ask = book.asks[0]?.displayPrice;
+    if (!bid || !ask) return null;
+    const spread = subtractDecimalStrings(ask, bid);
+    if (spread === null || compareDecimalStrings(spread, '0') === -1) return null;
+    const pct = divideDecimalStrings(multiplyDecimalStrings(spread, '100'), ask, 2);
+    return `Spread ${formatBookNumber(spread)}${pct !== null ? ` (${trimAmountTail(pct)}%)` : ''}`;
+}
+
+/**
+ * Bids and asks side by side in one table (bids left, best first;
+ * asks right, best first), so a phone sees both sides at once. The size and
+ * price cells on each side share one depth bar, drawn outwards from the
+ * middle. A price is a button that opens a trade at that price.
+ */
+function SplitBook({ book, onPickPrice, tick2, lastPrice, lastDirection }) {
+    const rows = Math.max(book.bids.length, book.asks.length);
+    // The price cell is 60% of its half and the size cell 40%, so a bar that
+    // covers `f` of the half fills the price cell first, then the size cell.
+    const depth = (level) => {
+        const ratio = level ? divideDecimalStrings(level.cumulative, book.maxCumulative, 8) : null;
+        const f = ratio === null ? 0 : Math.min(1, Math.max(0, Number(ratio)));
+        return {
+            price: Math.min(100, (f / 0.6) * 100),
+            size: Math.max(0, ((f - 0.6) / 0.4) * 100),
+        };
+    };
+    const bar = (pct, side) => {
+        const color = side === 'bid' ? 'var(--xc-book-bid-depth, rgba(38, 166, 154, 0.18))' : 'var(--xc-book-ask-depth, rgba(239, 83, 80, 0.18))';
+        return pct > 0
+            ? { background: `linear-gradient(to ${side === 'bid' ? 'left' : 'right'}, ${color} ${pct}%, transparent ${pct}%)` }
+            : undefined;
+    };
+    const priceCell = (level, side) => {
+        if (!level) return null;
+        const text = formatBookNumber(level.displayPrice);
+        return onPickPrice ? (
+            <button
+                type="button"
+                onClick={() => onPickPrice(level.displayPrice, side)}
+                aria-label={t('components.orderbookPanel.pickPrice', { value: side === 'bid' ? 'buy bid' : 'sell ask', displayPrice: level.displayPrice })}
+                className={`${tableStyles.cellButton} ${styles.splitPick}`}
+            >
+                {text}
+            </button>
+        ) : text;
+    };
+    return (
+        <>
+            <table className={styles.splitTable}>
+                <caption className={styles.splitCaption}>{t('components.orderbookPanel.buyBids')} / {t('components.orderbookPanel.sellAsks')}</caption>
+                <colgroup>
+                    <col className={styles.splitSizeCol} />
+                    <col className={styles.splitPriceCol} />
+                    <col className={styles.splitPriceCol} />
+                    <col className={styles.splitSizeCol} />
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th scope="col" className={styles.splitSizeBid}>{t('components.orderbookPanel.size')}</th>
+                        <th scope="col" className={styles.splitPriceBid}>{t('components.orderbookPanel.bidHeader', { tick2 })}</th>
+                        <th scope="col" className={styles.splitPriceAsk}>{t('components.orderbookPanel.askHeader', { tick2 })}</th>
+                        <th scope="col" className={styles.splitSizeAsk}>{t('components.orderbookPanel.size')}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {Array.from({ length: rows }, (_, i) => {
+                        const bid = book.bids[i];
+                        const ask = book.asks[i];
+                        const bidDepth = depth(bid);
+                        const askDepth = depth(ask);
+                        return (
+                            <tr key={`${bid?.displayPrice ?? '-'}:${ask?.displayPrice ?? '-'}:${i}`}>
+                                <td className={styles.splitSizeBid} style={bar(bidDepth.size, 'bid')} title={bid?.displaySize}>
+                                    {bid ? formatBookNumber(bid.displaySize) : ''}
+                                </td>
+                                <td className={styles.splitPriceBid} style={bar(bidDepth.price, 'bid')} title={bid?.displayPrice}>
+                                    {priceCell(bid, 'bid')}
+                                </td>
+                                <td className={styles.splitPriceAsk} style={bar(askDepth.price, 'ask')} title={ask?.displayPrice}>
+                                    {priceCell(ask, 'ask')}
+                                </td>
+                                <td className={styles.splitSizeAsk} style={bar(askDepth.size, 'ask')} title={ask?.displaySize}>
+                                    {ask ? formatBookNumber(ask.displaySize) : ''}
+                                </td>
+                            </tr>
+                        );
+                    })}
+                </tbody>
+            </table>
+            {lastPrice ? (
+                <p className={styles.splitLast}>
+                    <span className={lastDirection === 'positive' ? styles.splitLastUp : lastDirection === 'negative' ? styles.splitLastDown : styles.splitLastFlat}>
+                        {formatBookNumber(tidyQuotePrice(lastPrice))}
+                        {lastDirection !== 'neutral' ? <span aria-hidden="true">{lastDirection === 'positive' ? ' ▲' : ' ▼'}</span> : null}
+                    </span>
+                    <span className={styles.splitLastLabel}>{t('components.orderbookPanel.lastTrade')}</span>
+                </p>
+            ) : null}
+        </>
     );
 }
 

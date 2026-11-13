@@ -4,7 +4,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useId } from 'react';
+import { InfoTip } from './InfoTip.jsx';
+import { fieldHelpName } from './fieldRequirement.js';
 import styles from './Switch.module.css';
+import { t } from '../i18n/index.js';
+import '../i18n/locales/en/ui.js';
 
 /**
  * An independent on/off setting with a visible label and optional description.
@@ -12,6 +16,7 @@ import styles from './Switch.module.css';
  * @param {object} props
  * @param {import('react').ReactNode} props.label
  * @param {import('react').ReactNode} [props.description]
+ * @param {import('react').ReactNode} [props.help] help for this setting on this form, shown from an InfoTip beside the label text
  * @param {boolean} props.checked
  * @param {(event: import('react').ChangeEvent<HTMLInputElement>) => void} props.onChange
  * @param {boolean} [props.disabled]
@@ -21,6 +26,7 @@ import styles from './Switch.module.css';
 export function Switch({
     label,
     description,
+    help,
     checked,
     onChange,
     disabled = false,
@@ -35,6 +41,7 @@ export function Switch({
     const inputId = id || `switch-${generatedId}`;
     const labelId = `${inputId}-label`;
     const descriptionId = description != null ? `${inputId}-description` : undefined;
+    const hasHelp = Boolean(label && help);
     const describedBy = [ariaDescribedBy, descriptionId].filter(Boolean).join(' ') || undefined;
     const rootClassName = [styles.root, disabled ? styles.disabled : null, className]
         .filter(Boolean)
@@ -46,7 +53,21 @@ export function Switch({
     return (
         <label className={rootClassName} htmlFor={inputId}>
             <span className={styles.copy}>
-                <span id={labelId} className={styles.label}>{label}</span>
+                {hasHelp ? (
+                    // The tip sits outside the labelled span, so the switch's name
+                    // stays the label text; a click on the tip button does not
+                    // flip the switch, since a label ignores clicks on interactive content.
+                    <span className={styles.labelLine}>
+                        <span id={labelId} className={styles.label}>{label}</span>
+                        <InfoTip
+                            className={styles.labelHelp}
+                            label={help}
+                            aria={t('ui.field.about', { label: fieldHelpName(label, ariaLabel) })}
+                        />
+                    </span>
+                ) : (
+                    <span id={labelId} className={styles.label}>{label}</span>
+                )}
                 {description != null ? (
                     <span id={descriptionId} className={styles.description}>{description}</span>
                 ) : null}

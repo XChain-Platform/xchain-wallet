@@ -14,60 +14,39 @@ import { Button, Icon } from '../../ui/index.js';
 import { HeaderActionMenu } from './HeaderActionMenu.jsx';
 import { WatchOnlyBadge } from './WatchOnlyBadge.jsx';
 import { NavSurfaceContext } from './navSurface.js';
-import { isNativeShell } from '../nativeShell.js';
 import styles from './AppHeader.module.css';
 import { t } from '../../i18n/index.js';
 
-function supportsPopOut() {
-    if (typeof window === 'undefined' || isNativeShell() || globalThis.xchainWalletWindow) return false;
-    const protocol = window.location?.protocol;
-    return protocol === 'http:'
-        || protocol === 'https:'
-        || (protocol === 'chrome-extension:' && Number(window.innerWidth) <= 600);
-}
-
-function automaticPopOut() {
-    const protocol = window.location?.protocol;
-    if (protocol === 'chrome-extension:' && Number(window.innerWidth) <= 600) {
-        const createTab = globalThis.chrome?.tabs?.create;
-        if (typeof createTab !== 'function') return null;
-        return async () => {
-            try {
-                await createTab({ url: window.location.href });
-                window.close?.();
-            } catch {
-                // The popup stays open when the browser rejects tab creation.
-            }
-        };
-    }
-    if (protocol !== 'http:' && protocol !== 'https:') return null;
-    return () => window.open(window.location.href, '_blank', 'noopener,noreferrer');
-}
+// Open in new window is a wallet menu row (G03), not a header button; the
+// header holds only the logo, the bell and the menu.
 
 /**
  * @param {object} props
  * @param {() => void} [props.onMenuToggle]
  * @param {boolean} [props.menuOpen]
  * @param {() => void} [props.onLock]
+ * @param {() => void} [props.onNotifications]  renders the Notifications bell in Lock's place; Lock stays in the menu
+ * @param {number} [props.notificationsUnread]  unread count the bell's badge shows
  * @param {boolean} [props.locking]
  * @param {boolean} [props.isWatcherMode]
  * @param {{ id: string, name: string } | null} [props.activeWallet]
- * @param {() => void} [props.onPopOut]
  */
 export function AppHeader({
     onMenuToggle,
     menuOpen = false,
     onLock,
+    onNotifications,
+    notificationsUnread = 0,
     locking,
     isWatcherMode = false,
     activeWallet = null,
-    onPopOut,
 }) {
     const navSurface = useContext(NavSurfaceContext);
-    const showLock = Boolean(onLock) && navSurface !== 'sidebar';
-    const popOut = supportsPopOut()
-        ? (typeof onPopOut === 'function' ? onPopOut : automaticPopOut())
-        : null;
+    // The Notifications bell takes Lock's place on every surface; Lock stays
+    // one tap away in the menu (and the sidebar's own Lock row).
+    const showLock = Boolean(onLock) && navSurface !== 'sidebar' && typeof onNotifications !== 'function';
+    const unread = Math.max(0, Number(notificationsUnread) || 0);
+    const bellLabel = unread > 0 ? t('shell.header.notificationsUnread', { count: unread }) : t('shell.header.notifications');
 
     return (
         <div
@@ -81,14 +60,24 @@ export function AppHeader({
                     alt={branding.PRODUCT_NAME}
                     className={styles.logo}
                 />
-                {activeWallet ? (
-                    <span className={styles.walletName} title={activeWallet.name}>
-                        {activeWallet.name}
-                    </span>
-                ) : null}
                 <WatchOnlyBadge visible={isWatcherMode} />
             </div>
             <div className={styles.right}>
+                {typeof onNotifications === 'function' ? (
+                    <span className={styles.bellWrap}>
+                        <Button
+                            variant="secondary"
+                            icon={<Icon.BellIcon />}
+                            onClick={onNotifications}
+                            aria-label={bellLabel}
+                            title={bellLabel}
+                            data-header-control
+                            data-unread={unread > 0 ? String(unread) : undefined}
+                            className={unread > 0 ? styles.bellUnread : undefined}
+                        />
+                        {unread > 0 ? <span className={styles.bellBadge} aria-hidden="true">{unread > 99 ? '99+' : unread}</span> : null}
+                    </span>
+                ) : null}
                 {showLock ? (
                     <Button
                         variant="secondary"
@@ -97,17 +86,6 @@ export function AppHeader({
                         disabled={locking}
                         aria-label={t('home.lockWallet')}
                         title={t('home.lockWallet')}
-                        data-header-control
-                    />
-                ) : null}
-                {popOut ? (
-                    <Button
-                        className={styles.popOut}
-                        variant="secondary"
-                        icon={<Icon.ExternalLinkIcon />}
-                        onClick={popOut}
-                        aria-label={t('history.detail.openNewWindow')}
-                        title={t('history.detail.openNewWindow')}
                         data-header-control
                     />
                 ) : null}

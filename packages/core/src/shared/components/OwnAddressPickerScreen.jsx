@@ -22,10 +22,14 @@ import '../../i18n/locales/en/routes.js';
  * immediate selection.
  *
  * The network dropdown is seeded to the calling form's chain so the
- * relevant addresses show first. A form bound to one chain (a contract,
- * a dispenser, a multisig record) passes `lockNetwork`: the list stays on
- * that chain and the switch to other networks is hidden, so no pick can
- * move the form off its chain.
+ * relevant addresses show first. When the user widens it and picks an
+ * address on another chain, `onChainChange` runs first so the form moves its
+ * Network to that chain before the address fills in. A form bound to one
+ * chain (a contract, a dispenser, a multisig record) passes `lockNetwork`:
+ * the list stays on that chain and the switch to other networks is hidden,
+ * so no pick can move the form off its chain. A form that passes no
+ * `onChainChange` cannot follow a pick to another chain, so it is locked the
+ * same way rather than handed an address its Network does not match.
  *
  * @param {object} props
  * @param {string} props.walletId
@@ -69,7 +73,7 @@ export function OwnAddressPickerScreen({
             pickerActions={pickerActions}
             addressUsageByKey={addressUsageByKey}
             networkFilter={chainId ? coinFromChainId(chainId) : 'all'}
-            networkLocked={Boolean(lockNetwork && chainId)}
+            networkLocked={Boolean((lockNetwork || typeof onChainChange !== 'function') && chainId)}
             pickerUnavailableReason={unavailableReason}
         />
     );

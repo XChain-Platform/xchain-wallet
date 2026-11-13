@@ -9,11 +9,21 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
-import { Button, Icon, RadioGroup } from '@xchain-wallet/core/ui';
+import { useFilterPanelTop } from './useFilterPanelTop.js';
+import { Button, Icon, IconSelect } from '@xchain-wallet/core/ui';
 import { HomeFilterBar } from './HomeFilterBar.jsx';
 import styles from './HomeListFilterMenu.module.css';
 import { t } from '../../i18n/index.js';
-import '../../i18n/locales/en/walletDetails.js';
+
+// The search box names the tab it filters, as [placeholder, label]. Each
+// key is a literal t() call so the key audits can see it.
+const SEARCH_COPY = {
+    coins: () => [t('home.filter.searchCoins'), t('home.filter.searchCoinsByName')],
+    tokens: () => [t('home.filter.searchTokens'), t('home.filter.searchTokensByName')],
+    nfts: () => [t('home.filter.searchNfts'), t('home.filter.searchNftsByName')],
+    defi: () => [t('home.filter.searchDefi'), t('home.filter.searchDefiByName')],
+    activity: () => [t('home.filter.searchActivity'), t('home.filter.searchActivityByName')],
+};
 
 /**
  * Keeps Home list sorting and filtering behind one compact header control.
@@ -29,13 +39,19 @@ export function HomeListFilterMenu({
     onNetworkFilterChange,
     tokenQuery,
     onTokenQueryChange,
+    tab = 'tokens',
+    showSort = true,
 }) {
     const [open, setOpen] = useState(false);
     const wrapRef = useRef(null);
     const triggerRef = useRef(null);
+    const panelTop = useFilterPanelTop(open, triggerRef);
     const canFilter = typeof onNetworkFilterChange === 'function'
         && typeof onTokenQueryChange === 'function';
     const filterActive = Boolean(tokenQuery?.trim()) || networkFilter !== 'all';
+    // How many filters (search text, a network) narrow the list, shown as a
+    // blue bubble on the button so a short list explains itself.
+    const activeFilterCount = (tokenQuery?.trim() ? 1 : 0) + (networkFilter && networkFilter !== 'all' ? 1 : 0);
 
     useEffect(() => {
         if (!open) return undefined;
@@ -62,10 +78,24 @@ export function HomeListFilterMenu({
     }, [open]);
 
     useEffect(() => {
-        if (open) wrapRef.current?.querySelector('input[type="radio"]:checked')?.focus();
+        if (open) wrapRef.current?.querySelector('input, select')?.focus();
     }, [open]);
 
     const label = t('home.filter.filterAndSort');
+    const [searchPlaceholder, searchLabel] = (SEARCH_COPY[tab] || SEARCH_COPY.tokens)();
+    // Activity is ordered by time, so it offers no sort that would do nothing.
+    const sortSelect = showSort ? (
+        <IconSelect
+            size="md"
+            aria-label={t('home.filter.sort')}
+            value={sortBy}
+            onChange={(value) => onSortChange(value)}
+            options={[
+                { value: 'name', label: t('home.filter.sortByName'), icon: <Icon.TokenListIcon /> },
+                { value: 'value', label: t('home.filter.sortByValue'), icon: <Icon.DollarIcon /> },
+            ]}
+        />
+    ) : null;
     return (
         <div ref={wrapRef} className={styles.wrap}>
             <Button
@@ -83,18 +113,10 @@ export function HomeListFilterMenu({
             >
                 {null}
             </Button>
+            {activeFilterCount > 0 ? <span className={styles.filterBadge} aria-hidden="true" /> : null}
             {open ? (
-                <div className={styles.panel} role="dialog" aria-label={label}>
-                    <RadioGroup
-                        className={styles.sortGroup}
-                        legend={t('home.filter.sort')}
-                        value={sortBy}
-                        onChange={onSortChange}
-                        options={[
-                            { value: 'name', label: t('walletDetails.name') },
-                            { value: 'value', label: t('home.tabs.value') },
-                        ]}
-                    />
+                <div className={styles.panel} role="dialog" aria-label={label} style={panelTop == null ? undefined : { '--xc-filter-panel-top': `${panelTop}px` }}>
+                    {canFilter ? null : sortSelect}
                     {canFilter ? (
                         <HomeFilterBar
                             variant="menu"
@@ -104,6 +126,9 @@ export function HomeListFilterMenu({
                             onNetworkFilterChange={onNetworkFilterChange}
                             tokenQuery={tokenQuery}
                             onTokenQueryChange={onTokenQueryChange}
+                            searchPlaceholder={searchPlaceholder}
+                            searchLabel={searchLabel}
+                            middle={sortSelect}
                         />
                     ) : null}
                 </div>

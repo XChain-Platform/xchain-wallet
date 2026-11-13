@@ -156,7 +156,8 @@
 }
 
 .labelText {
-    font-weight: 600;
+    /* Normal weight, matching the network filter dropdown. */
+    font-weight: 400;
     font-size: inherit;
     color: var(--xc-text);
     overflow: hidden;

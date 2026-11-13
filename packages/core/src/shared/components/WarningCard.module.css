@@ -1,0 +1,48 @@
+/* One start-aligned paragraph style for explanation and warning text: full
+   contrast and never justified, because justified text opens wide gaps
+   between words on a narrow phone. It inherits its size, so a container
+   (a warning card, the license terms) sets one size for all its lines. */
+.paragraph {
+    margin: 0 0 var(--xc-space-2);
+    max-width: none;
+    color: var(--xc-text);
+    line-height: 1.5;
+    text-align: start;
+    hyphens: none;
+}
+
+.paragraph:last-child {
+    margin-bottom: 0;
+}
+
+/* A line the reader must not miss: a red-edged callout inside the card. */
+.critical {
+    composes: paragraph;
+    font-weight: 600;
+    background: var(--xc-danger-bg);
+    /* Keep the critical-copy marker heavier than a hairline without adding a token. */
+    border-inline-start: 3px solid var(--xc-danger);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border-radius: 0;
+    border-start-end-radius: var(--xc-radius-sm);
+    border-end-end-radius: var(--xc-radius-sm);
+    margin: var(--xc-space-2) 0;
+}
+
+/* An explanation page's paragraph, at body size, with a little more room
+   between paragraphs than lines in a card. */
+.body {
+    composes: paragraph;
+    font-size: var(--xc-text-md);
+    line-height: 1.55;
+    margin-bottom: var(--xc-space-3);
+}
+
+/* The padded card that holds a warning's lines, at body size. */
+.card {
+    composes: card from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    font-size: var(--xc-text-md);
+    color: var(--xc-text);
+}

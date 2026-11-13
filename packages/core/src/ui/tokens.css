@@ -47,15 +47,20 @@
     --xc-section-gap: var(--xc-space-4);
     --xc-settings-row-gap: var(--xc-space-2);
     --xc-section-header-gap: var(--xc-space-2);
-    --xc-list-row-padding: var(--xc-space-3);
+    --xc-list-row-padding: var(--xc-space-2); /* 8px everywhere */
 
     /* Screen owns page-edge spacing so route content stays geometry-free. */
-    --xc-page-gutter: var(--xc-space-3); /* 12px below 640px; the media queries after this block step it up */
-    --xc-page-top: var(--xc-space-3);
+    --xc-page-gutter: var(--xc-space-2); /* 8px at every width, so the top bar has 8px around its buttons and every row lines up */
+    --xc-page-top: var(--xc-space-2); /* 8px everywhere */
+    /* The XChain logo's own blue and purple, for brand surfaces
+       (the balance card) and brand accents (tabs, action icons). */
+    --xc-brand-blue: #0089D0;
+    --xc-brand-purple: #8A288F;
+    --xc-brand-gradient: linear-gradient(135deg, var(--xc-brand-blue) 0%, #3C5CB4 55%, var(--xc-brand-purple) 100%);
 
     /* Every card (ui/Card.module.css) shares one border, fill, inset and
        radius across content types, and a wide form card one width. */
-    --xc-card-pad: var(--xc-space-4);
+    --xc-card-pad: var(--xc-space-2); /* 8px everywhere */
     --xc-card-radius: var(--xc-radius-md);
     --xc-card-border: 1px solid var(--xc-border);
     --xc-card-bg: var(--xc-surface-raised);
@@ -262,7 +267,7 @@
      * (--xc-success-bg over --xc-bg-muted, not pure white), just under
      * 4.5:1, so it is darkened one more step here. */
     --xc-success: #146F34;
-    /* Main action fill: the brighter green the operator picked on 2026-11-10. */
+    /* Main action fill: a brighter green than --xc-success. */
     --xc-success-fill: #16A34A;
     --xc-badge-multisig-classic-bg: #FEF3C7;
     --xc-badge-multisig-classic-fg: #78350F;
@@ -295,6 +300,12 @@
     --xc-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
     --xc-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
     --xc-shadow-modal: 0 16px 40px rgba(0, 0, 0, 0.35);
+    /* Text drawn over a chart on the brand card keeps this soft shadow. */
+    --xc-shadow-text-on-brand: 0 1px 3px rgba(0, 0, 0, 0.35);
+    /* Gain and loss figures on the brand card, which is blue in every theme,
+       so these stay bright on its dark pill instead of following the theme. */
+    --xc-brand-card-gain: #00E676;
+    --xc-brand-card-loss: #FF5A5A;
     /* Semantic aliases keep surface intent readable while sharing recipes. */
     --xc-shadow-header-menu: var(--xc-shadow-md);
     --xc-shadow-toast: var(--xc-shadow-md);
@@ -332,18 +343,19 @@
     --xc-viewport-h: calc(100vh - env(safe-area-inset-top, 0px));
 }
 
-/* The page gutter is tiered by viewport width: 12px below 640px (compact,
- * including the extension popup and side panel), 16px from 640px (rail),
- * 24px from 900px (full). The tier edges match the layout tiers. */
+/* The page gutter is tiered by viewport width at the layout tier edges (640px
+ * rail, 900px full), but every tier uses the same 8px value as compact. */
 @media (min-width: 640px) {
     :root {
-        --xc-page-gutter: var(--xc-space-4);
+        --xc-page-gutter: var(--xc-space-2);
     }
 }
 
+/* The full layout keeps the same 8px gutter as phones, so the top bar has 8px
+   around its buttons on every side and every window's bars are one height. */
 @media (min-width: 900px) {
     :root {
-        --xc-page-gutter: var(--xc-space-6);
+        --xc-page-gutter: var(--xc-space-2);
     }
 }
 
@@ -439,7 +451,7 @@
  * property accepts any tokens, so the later declaration always wins the
  * cascade, and an engine without dvh (Chromium below 108) then finds the
  * value invalid at the point of USE and drops the height it was meant to
- * set. Measured on an LG K51's stock WebView 102 (2026-10-12): the shell lost
+ * set. Measured on an LG K51's stock WebView 102: the shell lost
  * its height and the bottom tab bar floated mid-screen under short pages. */
 @supports (height: 100dvh) {
     :root {
@@ -449,7 +461,7 @@
 
 @media (max-width: 480px) {
     :root {
-        --xc-card-pad: var(--xc-space-3);
+        --xc-card-pad: var(--xc-space-2);
     }
 }
 
@@ -933,7 +945,7 @@ body {
 /* A fieldset's UA default is `min-inline-size: min-content`, so it refuses
  * to shrink below its widest child. One long <option> then pushes the whole
  * group, and the form around it, past the screen edge: Create multisig's
- * cosigner card ran 67px off a 411px phone (2026-10-12). Let fieldsets
+ * cosigner card ran 67px off a 411px phone. Let fieldsets
  * shrink like any other block. */
 fieldset {
     min-inline-size: 0;

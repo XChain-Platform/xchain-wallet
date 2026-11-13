@@ -94,6 +94,8 @@ export function ThisWalletSection({
     onOpenAccountPicker,
     onWalletRemoved,
     onBusyChange,
+    // Render one part only (password, xpub or remove), for pages that host a single part.
+    only = null,
 }) {
     const { messaging } = useMessaging();
     const [exportStage, setExportStage] = useState(
@@ -202,6 +204,32 @@ export function ThisWalletSection({
         setExportError(null);
         setExportedKeys([]);
     };
+
+    const xpubPart = activeWallet.format === 'wif-only' ? (
+        <Row label={t('settings.thisWallet.extendedPublicKeys')} hint={t('settings.thisWallet.notAvailableForAPrivate')} />
+    ) : exportStage === 'idle' ? (
+        <Row
+            label={t('settings.thisWallet.extendedPublicKeys')}
+            hint={t('settings.thisWallet.exportAccountLevelPublicKeys')}
+            actionLabel={t('history.export.open')}
+            actionIcon={<Icon.DownloadIcon />}
+            onClick={() => { setExportStage('password'); setExportError(null); }}
+        />
+    ) : (
+        <PublicKeyExport stage={exportStage} accountName={activeAccount?.name} password={exportPassword} busy={exporting} error={exportError} entries={exportedKeys} onPasswordChange={setExportPassword} onSubmit={onExportPublicKeys} onClose={closePublicKeyExport} />
+    );
+    const removePart = confirmingRemove ? (
+        <RemoveConfirm walletName={activeWallet.name} busy={removing} error={removeError} onCancel={() => { setConfirmingRemove(false); setRemoveError(null); }} onConfirm={onConfirmRemove} />
+    ) : (
+        <SettingsActionRow label={t('settings.thisWallet.removeWallet')} hint={t('settings.thisWallet.deletesTheWalletAndAll')}>
+            <Button variant="danger" size="sm" icon={<Icon.TrashIcon />} onClick={() => { setConfirmingRemove(true); setRemoveError(null); }}>
+                {t('settings.thisWallet.remove')}
+            </Button>
+        </SettingsActionRow>
+    );
+    if (only === 'password') return <div className={styles.stack}><ChangePasswordRow walletId={activeWallet.id} disabled={removing} /></div>;
+    if (only === 'xpub') return <div className={styles.stack}>{xpubPart}</div>;
+    if (only === 'remove') return <div className={styles.stack}>{removePart}</div>;
 
     return (
         <div className={styles.stack}>
@@ -649,7 +677,7 @@ function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
                         onClick={onConfirm}
                         disabled={!matches || busy}
                     >
-                        {busy ? t('settings.thisWallet.removing') : t('settings.thisWallet.removeWallet')}
+                        {busy ? t('settings.thisWallet.removing') : t('settings.thisWallet.removeWalletAction')}
                     </Button>
                 </div>
             </FormSection>

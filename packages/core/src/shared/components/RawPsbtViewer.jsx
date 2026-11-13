@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
-import { Button, Textarea } from '@xchain-wallet/core/ui';
+import { Button, Icon, Textarea } from '@xchain-wallet/core/ui';
 import { copyText } from '../clipboard.js';
 import styles from './RawPsbtViewer.module.css';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
@@ -109,7 +109,7 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
 
     function copyLabel(target, label) {
         if (copyState.target !== target || copyState.status === 'idle') return `Copy ${label}`;
-        return copyState.status === 'copied' ? 'Copied' : 'Copy failed: clipboard unavailable';
+        return copyState.status === 'copied' ? 'Copied' : 'Copy Failed: Clipboard Unavailable';
     }
 
     return (
@@ -134,12 +134,12 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
                             type="button"
                             variant="secondary"
                             size="sm"
-                            icon={null}
+                            icon={<Icon.CopyIcon />}
                             className={styles.copyBtn}
                             onClick={() => handleCopy('psbt', psbtHex)}
                             aria-live="polite"
                         >
-                            {copyLabel('psbt', 'unsigned transaction code')}
+                            {copyLabel('psbt', 'Unsigned Transaction Code')}
                         </Button>
                     </section>
                 ) : null}
@@ -152,12 +152,12 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
                             type="button"
                             variant="secondary"
                             size="sm"
-                            icon={null}
+                            icon={<Icon.CopyIcon />}
                             className={styles.copyBtn}
                             onClick={() => handleCopy('fields', fieldsJson)}
                             aria-live="polite"
                         >
-                            {copyLabel('fields', 'action fields')}
+                            {copyLabel('fields', 'Action Fields')}
                         </Button>
                     </section>
                 ) : null}

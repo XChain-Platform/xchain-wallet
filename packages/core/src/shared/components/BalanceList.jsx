@@ -342,6 +342,9 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
             <ListRow
                 className={`${styles.rowContent} ${clickable ? styles.rowClickable : ''}`}
                 onClick={handleClick}
+                /* A right chevron the size of the page header's Back chevron says
+                   the row opens its coin or token page; Back answers it at the same size. */
+                chevron={clickable ? <span className={styles.rowChevron}><Icon.ForwardIcon /></span> : false}
                 aria-label={clickable ? rowAccessibleLabel : undefined}
                 tabIndex={roving ? getTabIndex(row) : undefined}
                 data-balance-option={roving ? pinKey : undefined}

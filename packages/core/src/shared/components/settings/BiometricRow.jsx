@@ -216,7 +216,7 @@ export function BiometricRow() {
                 </div>
                 <div style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
                     <Button type="button" size="sm" variant="ghost" icon={<Icon.RefreshIcon />} onClick={() => { setEnrolAction('reenrol'); setError(null); }}>
-                        {t('settings.biometric.reEnrol')}
+                        {t('settings.biometric.reEnrolAction')}
                     </Button>
                     <Button type="button" size="sm" variant="ghost" icon={<Icon.XIcon />} onClick={handleDisable} disabled={busy}>
                         {busy ? t('settings.biometric.disabling') : t('settings.biometric.disable')}

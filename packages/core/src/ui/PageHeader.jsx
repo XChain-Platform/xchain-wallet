@@ -47,6 +47,8 @@ import { t } from '../i18n/index.js';
  * @param {import('react').ReactNode} props.title     centered title text.
  * @param {string} [props.titleId]                    id for naming the screen body.
  * @param {import('react').Ref<HTMLHeadingElement>} [props.titleRef] ref for moving focus to the screen heading.
+ * @param {import('react').ReactNode} [props.subtitle]  One small muted line
+ *                                                    under the title (a wizard's step).
  * @param {import('react').ReactNode} [props.trailing]    right-side slot for
  *   page-scoped actions (filter buttons, scan, etc.). Omit to render an
  *   empty spacer for symmetry.
@@ -59,6 +61,7 @@ export function PageHeader({
     title,
     titleId,
     titleRef,
+    subtitle = null,
     trailing = null,
 }) {
     useBackHandler(onBack, backDisabled, 'route');
@@ -100,7 +103,7 @@ export function PageHeader({
             ) : (
                 <span className={styles.spacer} />
             )}
-            <span className={styles.titleGroup}>
+            <span className={subtitle ? `${styles.titleGroup} ${styles.titleGroupStacked}` : styles.titleGroup}>
                 {/* The screen's title is its one top-level heading, so a
                     screen reader can jump to it and announce where the user is. */}
                 <h1
@@ -112,6 +115,7 @@ export function PageHeader({
                 >
                     {title}
                 </h1>
+                {subtitle ? <span className={styles.subtitle}>{subtitle}</span> : null}
             </span>
             {trailing ? (
                 <span className={styles.trailing}>{trailing}</span>

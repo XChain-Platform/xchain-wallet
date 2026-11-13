@@ -230,6 +230,9 @@ export function NetworkFilter({
                 <div
                     ref={popoverRef}
                     className={styles.popover}
+                    // Lets a filter panel lay this popover into its own flow
+                    // (HomeListFilterMenu.module.css) without :has().
+                    data-listbox-popover=""
                     onKeyDown={onPopoverKeyDown}
                 >
                     {entries.length > 6 ? (

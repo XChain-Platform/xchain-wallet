@@ -1,0 +1,56 @@
+/* Same search field as Home's filter panel (HomeFilterBar.module.css). */
+.searchWrap {
+    position: relative;
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+}
+
+.searchWrap > div {
+    flex: 1 1 0;
+    width: 100%;
+}
+
+.searchIcon {
+    position: absolute;
+    inset-inline-start: 10px;
+    z-index: calc(var(--xc-z-base) + 1);
+    display: inline-flex;
+    align-items: center;
+    color: var(--xc-text-muted);
+    pointer-events: none;
+}
+
+.search {
+    appearance: none;
+    width: 100%;
+    box-sizing: border-box;
+    padding-block: var(--xc-space-2);
+    padding-inline: var(--xc-space-8) var(--xc-space-3);
+    border: 1px solid var(--xc-border-strong);
+    /* The kit Input md owns the height and radius so the network filter
+       beside it can match them. */
+    background: var(--xc-bg);
+    color: var(--xc-text);
+    font-family: inherit;
+}
+
+/* The kit Input rule outranks a bare class and resets the inline padding, so
+   the start padding that clears the icon is set through the wrapper. */
+.searchWrap input.search {
+    padding-inline-start: var(--xc-space-8);
+}
+
+.search:focus,
+.search:focus-visible {
+    outline: none;
+}
+
+@media (forced-colors: active) {
+    .search:focus,
+    .search:focus-visible {
+        outline: 2px solid Highlight;
+        outline-offset: 2px;
+    }
+}

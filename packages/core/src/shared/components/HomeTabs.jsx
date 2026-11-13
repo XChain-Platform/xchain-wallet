@@ -25,15 +25,22 @@ import { TotalBalanceHero as TotalBalanceHeroBase } from './TotalBalanceHero.jsx
 import { PortfolioChart as PortfolioChartBase } from './PortfolioChart.jsx';
 import { RouteErrorBoundary } from './RouteErrorBoundary.jsx';
 import { HomeListFilterMenu } from './HomeListFilterMenu.jsx';
-import { BalancesUncheckedState } from './BalancesUncheckedState.jsx';
 import { activityRowAmount, activityRowAmountQualifier, activityRowTick } from '../utils/activityAmount.js';
 import { ActivityRow as SharedActivityRow, actionIconForAction } from './ActivityRow.jsx';
 import { isDemoWallet } from '@xchain-wallet/core/flows';
 import { synthesizeDemoNativePrices } from '../../flows/demoFixtures.js';
 import { classifyEntryAction, classifyEntryStatus } from '../utils/historyFilter.js';
 import { recentActivityEntries } from '../utils/historyRow.js';
-import { compareMergedEntries } from '../utils/pendingHistory.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import {
+    activityEntryLabel,
+    activityEntryMatchesQuery,
+    balanceRowMatchesQuery,
+    defiPositionMatchesQuery,
+    filterBalanceRowsByQuery,
+    normalizeHomeQuery,
+    sortDefiPositions,
+} from '../utils/homeListFilter.js';
 import { useCollectibleKeys } from '../hooks/useCollectibleKeys.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { useProofVerification } from '../hooks/useProofVerification.js';
@@ -132,11 +139,9 @@ export function sortBalanceRows(rows, sortBy) {
  *   History  - chronological transaction stream (placeholder)
  *   DeFi     - staking, dispensers, contracts (placeholder)
  *
- * The Tokens and NFTs descriptions above were stale until 2026-09-22 and
- * are the reason the tab read as arbitrary: they described a divisible /
- * indivisible split the code stopped implementing. NFTs is a subset of
- * Tokens, not its complement, and the rule is now stated on screen too
- * rather than left for the user to infer.
+ * NFTs is a subset of Tokens, not its complement (not a divisible /
+ * indivisible split), and the rule is stated on screen rather than left
+ * for the user to infer.
  *
  * Network filter applies across every tab so flipping `BTC` filters
  * all tabs to BTC at once. Filter state owned here so it persists
@@ -164,13 +169,13 @@ export function sortBalanceRows(rows, sortBy) {
  * @param {boolean} [props.hideSmallBalances]: `settings.privacy.hideSmallBalances`, forwarded to the Coins and Tokens lists so dust rows collapse into their own section
  * @param {() => void} [props.onRefresh]    manually refreshes portfolio balances and expired prices
  * @param {boolean} [props.refreshing]      whether a manual portfolio refresh is running
- * @param {boolean} [props.balancesUnchecked] balances could not be checked: an empty tab says that instead of "nothing yet"
- * @param {() => void} [props.onRecheckBalances] rechecks reachability and balances from that state
  * @param {boolean} [props.balanceNoticeShown] Home shows its own balance notice, so an empty tab shows no empty state
  */
-export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onBuy, hasAddresses = true, onAddAddress, onHistory, recentActivity = null, recentActivityFailed = false, onActivityOpen, defiPositions = null, defiPositionsFailed = false, onDefiOpen, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyProofsEnabled = false, hideSmallBalances = false, onRefresh, refreshing = false, onCommandPalette, onOpenSettings, onLockWallet, balancesUnchecked = false, onRecheckBalances, balanceNoticeShown = false }) {
+export const HomeTabs = memo(function HomeTabs({ walletName = '', chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onBuy, hasAddresses = true, onAddAddress, onHistory, recentActivity = null, recentActivityFailed = false, onActivityOpen, defiPositions = null, defiPositionsFailed = false, onDefiOpen, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyProofsEnabled = false, hideSmallBalances = false, onRefresh, refreshing = false, onCommandPalette, onOpenSettings, onLockWallet, balanceNoticeShown = false }) {
     const tabsId = useId();
     const [active, setActive] = useState('coins');
+    // The chart's change over the selected range, shown in the balance card.
+    const [rangeChange, setRangeChange] = useState(null);
     const [sortBy, setSortBy] = useState(() => readBalanceSort(walletId));
     const isDemo = isDemoWallet(walletId);
     const canFilter = typeof onNetworkFilterChange === 'function' && typeof onTokenQueryChange === 'function';
@@ -311,9 +316,13 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
         if (networkFilter === 'all') return allRows;
         return allRows.filter((r) => (r.coin || coinFromChainId(r.chainId)) === networkFilter);
     }, [allRows, networkFilter]);
+    // One query for every tab: each list keeps only rows whose visible text
+    // contains it, while the hero and chart keep the whole network's total.
+    const tokenQueryTrim = normalizeHomeQuery(tokenQuery);
+    const clearQuery = canFilter && tokenQueryTrim ? () => onTokenQueryChange('') : undefined;
     const coins = useMemo(
-        () => sortBalanceRows(filteredRows.filter((r) => r.kind === 'native'), sortBy),
-        [filteredRows, sortBy],
+        () => sortBalanceRows(filterBalanceRowsByQuery(filteredRows.filter((r) => r.kind === 'native'), tokenQueryTrim), sortBy),
+        [filteredRows, tokenQueryTrim, sortBy],
     );
     // Tokens = every non-native tick, regardless of divisibility or
     // imagery. The single canonical "what do I hold?" surface.
@@ -325,12 +334,13 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
             : [],
         [active, filteredRows, sortBy],
     );
-    const tokenQueryTrim = tokenQuery.trim().toLowerCase();
-    // Off for a demo wallet: its rows carry the wallet's real addresses, and
-    // a demo wallet's addresses never go to an explorer (issue #82).
+    // Read only to keep the wallet's own tokens out of the unknown-token
+    // filter. Off for a demo wallet: its rows carry the wallet's real
+    // addresses, and a demo wallet's addresses never go to an explorer
+    // (issue #82).
     const ownedTokens = useOwnedTokens(
         balances,
-        !isDemo && (active === 'tokens' || settings?.hideUnknownTokens === true),
+        !isDemo && settings?.hideUnknownTokens === true,
     );
     const automaticHiddenKeys = useMemo(
         () => settings?.hideUnknownTokens === true
@@ -356,29 +366,10 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
     const testCoinsOnly = !isDemoWallet(walletId)
         && chainRows.length > 0
         && chainRows.every((row) => !isMainnetChainId(row.chainId));
-    const issuedUnheld = useMemo(() => {
-        if (active !== 'tokens') return [];
-        const held = new Set(allRows.map((r) => `${r.chainId}:${r.tick}`));
-        const out = [];
-        for (const o of ownedTokens) {
-            if (held.has(`${o.chainId}:${o.tick}`)) continue;
-            const coin = chainRegistry.get(o.chainId)?.coin || coinFromChainId(o.chainId);
-            if (networkFilter !== 'all' && coin !== networkFilter) continue;
-            if (tokenQueryTrim && !o.tick.toLowerCase().includes(tokenQueryTrim)) continue;
-            const row = buildPlatformTokenRow(o.chainId, o.tick, null, chainRegistry);
-            if (!row) continue;
-            out.push(Number.isFinite(o.divisibility) ? { ...row, divisibility: o.divisibility } : row);
-        }
-        return sortBalanceRows(out, sortBy);
-    }, [active, ownedTokens, allRows, networkFilter, tokenQueryTrim, chainRegistry, sortBy]);
-    const filteredTokens = useMemo(() => {
-        if (!tokenQueryTrim) return tokens;
-        return tokens.filter((r) => {
-            const tick = String(r.tick || '').toLowerCase();
-            const name = String(r.displayName || '').toLowerCase();
-            return tick.includes(tokenQueryTrim) || name.includes(tokenQueryTrim);
-        });
-    }, [tokens, tokenQueryTrim]);
+    const filteredTokens = useMemo(
+        () => filterBalanceRowsByQuery(tokens, tokenQueryTrim),
+        [tokens, tokenQueryTrim],
+    );
     // An unavailable token price contributes zero to this display-only list,
     // matching native rows' three-column layout without changing the total.
     const listedTokens = useMemo(() => filteredTokens.map((row) => (
@@ -386,13 +377,8 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
             ? { ...row, fiatRate: 0 }
             : row
     )), [filteredTokens]);
-    const listedIssuedTokens = useMemo(() => issuedUnheld.map((row) => (
-        fiatValue(row.quantity, row.divisibility, row.fiatRate) === null
-            ? { ...row, fiatRate: 0 }
-            : row
-    )), [issuedUnheld]);
     const selectListedToken = useCallback((token) => {
-        const source = [...filteredTokens, ...issuedUnheld].find((row) => (
+        const source = filteredTokens.find((row) => (
             row.chainId === token.chainId && row.tick === token.tick
         ));
         onSelectToken({
@@ -400,35 +386,18 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
             fiatRate: source?.fiatRate ?? null,
             fiatRateSource: source?.fiatRateSource,
         });
-    }, [filteredTokens, issuedUnheld, onSelectToken]);
-    const pricesFetchedAt = useMemo(() => {
-        let oldest = null;
-        for (const row of filteredRows) {
-            if (!hasNonZeroQuantity(row) || fiatValue(row.quantity, row.divisibility, row.fiatRate) === null) continue;
-            const fetchedAt = Date.parse(row.fiatRateFetchedAt);
-            if (!Number.isFinite(fetchedAt)) continue;
-            oldest = oldest === null ? fetchedAt : Math.min(oldest, fetchedAt);
-        }
-        return oldest;
-    }, [filteredRows]);
+    }, [filteredTokens, onSelectToken]);
     // A row whose balance read failed may hold funds, so it never reads as
     // an empty wallet that needs its first funding.
     const hasHoldings = allRows.some((row) => hasNonZeroQuantity(row) || Boolean(row?.unavailable));
     const showFirstFunding = networkFilter === 'all' && !tokenQueryTrim && !hasHoldings;
-    // An empty tab while balances could not be checked proves nothing, so it
-    // says that once (and the shell's stale-balances notice steps aside).
     // While Home's own balance notice is up, that notice is the one message
     // and an empty tab stays quiet.
-    const quietEmpty = Boolean(balanceNoticeShown) && !isDemo;
-    const showUnchecked = !quietEmpty && balancesUnchecked && !isDemo && typeof onRecheckBalances === 'function';
-    const uncheckedState = showUnchecked ? (
-        <BalancesUncheckedState
-            plain={false}
-            onRetry={onRecheckBalances}
-            onReceive={hasAddresses ? onReceive : undefined}
-        />
-    ) : null;
+    const quietEmpty = Boolean(balanceNoticeShown);
     const showBalanceSort = active === 'coins' && !showFirstFunding && coins.length > 0;
+    // The first-funding state and the quiet empty tab speak only for an
+    // unfiltered list; a query that matches nothing reads as no matches.
+    const coinsEmptyNotice = !tokenQueryTrim && (showFirstFunding || coins.length === 0);
     // NFTs = tokens matching the canonical NFT pattern (NFT_Standard.md:
     // DECIMALS=0 AND LOCK_MAX_SUPPLY=1 (indivisible, supply can never
     // inflate). Classification, not decoration: a divisible token with a
@@ -440,35 +409,45 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
         () => active === 'nfts'
             ? sortBalanceRows(filteredRows.filter(
                 (r) => r.kind !== 'native'
-                    && collectibleKeys.has(`${r.chainId}:${r.tick}`),
+                    && collectibleKeys.has(`${r.chainId}:${r.tick}`)
+                    && balanceRowMatchesQuery(r, tokenQueryTrim),
             ), sortBy)
             : [],
-        [active, filteredRows, collectibleKeys, sortBy],
+        [active, filteredRows, collectibleKeys, tokenQueryTrim, sortBy],
     );
 
+    // Each tab label carries an icon. There is no Activity tab because History
+    // holds the same list.
+    const tabLabel = (IconGlyph, text) => (
+        <span className={styles.tabWithIcon}><span className={styles.tabIcon} aria-hidden="true"><IconGlyph /></span>{text}</span>
+    );
     const tabs = [
-        { id: 'coins',    label: t('home.tabs.coins')    },
-        { id: 'tokens',   label: t('home.tabs.tokens')   },
-        { id: 'nfts',     label: t('home.tabs.nfts')     },
-        { id: 'defi',     label: t('home.tabs.defi')     },
-        { id: 'activity', label: t('home.tabs.activity') },
+        { id: 'coins',  label: tabLabel(Icon.CoinsIcon, t('home.tabs.coins')) },
+        { id: 'tokens', label: tabLabel(Icon.TokenIcon, t('home.tabs.tokens')) },
+        { id: 'nfts',   label: tabLabel(Icon.ImageIcon, t('home.tabs.nfts')) },
+        { id: 'defi',   label: tabLabel(Icon.StakeIcon, t('home.tabs.defi')) },
     ];
+    // A view saved on the old Activity tab opens on Coins.
+    if (active === 'activity') setActive('coins');
 
     return (
         <div className={styles.wrap}>
             {/* Hero rolls up visible coins + tokens + NFTs. DeFi + Activity contribute
                 their own dollar amounts via separate flows once they
                 wire up; for now they're not in the sum. */}
+            {/* The balance card and its chart share one cell, the chart drawn
+                behind the balance on the card's app blue. */}
+            <div className={testCoinsOnly ? styles.heroStack : `${styles.heroStack} ${styles.heroStackWithChart}`}>
             <RouteErrorBoundary
                 variant="compact"
                 resetKey={`${walletId || ''}:${networkFilter}:price`}
             >
                 <TotalBalanceHero
+                    walletName={walletName}
+                    rangeChange={rangeChange}
                     rows={portfolioRows}
                     walletId={walletId}
                     networkFilter={networkFilter}
-                    lastSyncedAt={balancesFetchedAt}
-                    pricesFetchedAt={pricesFetchedAt}
                     onRefresh={onRefresh}
                     refreshing={refreshing}
                     onCommandPalette={onCommandPalette}
@@ -489,10 +468,14 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                         nativePriceMap={nativePriceMap}
                         nativePricesLoading={nativePricesLoading}
                         nativePricesError={nativePricesError}
+                        behind
+                        onRangeChange={setRangeChange}
                     />
                 ) : null}
             </RouteErrorBoundary>
+            </div>
 
+            {/* Home's Send / Receive / Exchange / More row (G52). */}
             {actions}
 
             <div className={canFilter || showBalanceSort ? `${styles.tabsRow} ${styles.tabsRowWithFilter}` : styles.tabsRow}>
@@ -515,6 +498,8 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                         onNetworkFilterChange={onNetworkFilterChange}
                         tokenQuery={tokenQuery}
                         onTokenQueryChange={onTokenQueryChange}
+                        tab={active}
+                        showSort={active !== 'activity'}
                     />
                 ) : null}
             </div>
@@ -525,9 +510,7 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                 role="tabpanel"
                 aria-labelledby={`${tabsId}-tab-${active}`}
             >
-                {active === 'coins' && showUnchecked && (showFirstFunding || coins.length === 0) ? uncheckedState : null}
-                {active === 'coins' && !(showUnchecked && (showFirstFunding || coins.length === 0))
-                    && !(quietEmpty && (showFirstFunding || coins.length === 0)) ? (
+                {active === 'coins' && !(quietEmpty && coinsEmptyNotice) ? (
                     showFirstFunding ? (
                         <EmptyState
                             title={t('home.tabs.fundYourWallet')}
@@ -547,11 +530,17 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                             fiatCurrency={settings?.fiatCurrency || 'USD'}
                             multisig={multisig}
                             multisigChainId={multisigChainId}
-                            emptyTitle={networkFilter === 'all' ? t('home.tabs.noCoinsYet') : t('home.tabs.noCoinsOnThisNetwork')}
-                            emptyBody={networkFilter === 'all'
-                                ? t('home.tabs.coinsAppearHereAfterYou')
-                                : t('home.tabs.coinsOnThisNetworkAppear')}
-                            onReceive={networkFilter === 'all' ? onReceive : undefined}
+                            emptyTitle={tokenQueryTrim
+                                ? t('home.tabs.noMatches')
+                                : (networkFilter === 'all' ? t('home.tabs.noCoinsYet') : t('home.tabs.noCoinsOnThisNetwork'))}
+                            emptyBody={tokenQueryTrim
+                                ? t('home.tabs.matchesAppearHereAfter')
+                                : (networkFilter === 'all'
+                                    ? t('home.tabs.coinsAppearHereAfterYou')
+                                    : t('home.tabs.coinsOnThisNetworkAppear'))}
+                            emptyActionLabel={clearQuery ? t('home.tabs.clearFilter') : undefined}
+                            onEmptyAction={clearQuery}
+                            onReceive={networkFilter === 'all' && !tokenQueryTrim ? onReceive : undefined}
                             onSelectToken={onSelectToken}
                             pinnedKeys={pinnedKeys}
                             onTogglePin={onTogglePin}
@@ -569,8 +558,7 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
 
                 {active === 'tokens' ? (
                     <>
-                    {filteredTokens.length === 0 && showUnchecked && !tokenQueryTrim ? uncheckedState : null}
-                    {filteredTokens.length === 0 && !(showUnchecked && !tokenQueryTrim) && !(quietEmpty && !tokenQueryTrim) ? (
+                    {filteredTokens.length === 0 && !(quietEmpty && !tokenQueryTrim) ? (
                         <BalanceList
                             rows={[]}
                             emptyTitle={tokenQueryTrim
@@ -603,25 +591,6 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                             showChain={networkFilter === 'all'}
                         />
                     ) : null}
-                    {listedIssuedTokens.length > 0 ? (
-                        <section aria-label={t('home.tabs.issuedByYou')} data-testid="issued-unheld">
-                            <p className={styles.tabNote}>{t('home.tabs.issuedByYou')}</p>
-                            <BalanceList
-                                rows={listedIssuedTokens}
-                                fiatCurrency={settings?.fiatCurrency || 'USD'}
-                                onSelectToken={onSelectToken ? selectListedToken : undefined}
-                                pinnedKeys={pinnedKeys}
-                                onTogglePin={onTogglePin}
-                                hiddenKeys={hiddenKeys}
-                                automaticHiddenKeys={automaticHiddenKeys}
-                                onToggleHide={onToggleHide}
-                                verifyMap={verifyMap}
-                                numberFormat={settings?.numberFormat}
-                                allowRemoteImages={allowRemoteImages}
-                                showChain={networkFilter === 'all'}
-                            />
-                        </section>
-                    ) : null}
                     </>
                 ) : null}
 
@@ -634,11 +603,17 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                             <CollectiblesView
                                 rows={nfts}
                                 demo={isDemo}
-                                emptyTitle={networkFilter === 'all' ? t('home.tabs.noCollectiblesYet') : t('home.tabs.noCollectiblesOnThisNetwork')}
-                                emptyBody={networkFilter === 'all'
-                                    ? t('home.tabs.collectiblesAppearHereAfterYou')
-                                    : t('home.tabs.collectiblesOnThisNetworkAppear')}
-                                onReceive={networkFilter === 'all' ? onReceive : undefined}
+                                emptyTitle={tokenQueryTrim
+                                    ? t('home.tabs.noMatches')
+                                    : (networkFilter === 'all' ? t('home.tabs.noCollectiblesYet') : t('home.tabs.noCollectiblesOnThisNetwork'))}
+                                emptyBody={tokenQueryTrim
+                                    ? t('home.tabs.matchesAppearHereAfter')
+                                    : (networkFilter === 'all'
+                                        ? t('home.tabs.collectiblesAppearHereAfterYou')
+                                        : t('home.tabs.collectiblesOnThisNetworkAppear'))}
+                                emptyActionLabel={clearQuery ? t('home.tabs.clearFilter') : undefined}
+                                onEmptyAction={clearQuery}
+                                onReceive={networkFilter === 'all' && !tokenQueryTrim ? onReceive : undefined}
                                 onSelectToken={onSelectToken}
                                 pinnedKeys={pinnedKeys}
                                 onTogglePin={onTogglePin}
@@ -657,6 +632,8 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                         failed={recentActivityFailed}
                         balances={balances}
                         networkFilter={networkFilter}
+                        query={tokenQueryTrim}
+                        onClearQuery={clearQuery}
                         onOpen={onActivityOpen}
                         onHistory={onHistory}
                         onSelectEntry={onSelectEntry}
@@ -669,6 +646,9 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                         positions={defiPositions}
                         failed={defiPositionsFailed}
                         networkFilter={networkFilter}
+                        query={tokenQueryTrim}
+                        sortBy={sortBy}
+                        onClearQuery={clearQuery}
                         balances={balances}
                         onOpen={onDefiOpen}
                         onSelectEntry={onSelectEntry}
@@ -830,7 +810,7 @@ function buildTokenLookup(balances) {
     return m;
 }
 
-const ActivityEntryRow = memo(function ActivityEntryRow({ entry, walletAddresses, assetLookup, chainTip, onSelectEntry, allowRemoteImages }) {
+export const ActivityEntryRow = memo(function ActivityEntryRow({ entry, walletAddresses, assetLookup, chainTip, onSelectEntry, allowRemoteImages }) {
     const [balancesHidden] = useBalancesHidden();
     const kind = classifyEntryAction(entry, walletAddresses);
     const status = classifyEntryStatus(entry);
@@ -844,12 +824,8 @@ const ActivityEntryRow = memo(function ActivityEntryRow({ entry, walletAddresses
         .replace('LITECOIN', 'LTC')
         .replace('DOGECOIN', 'DOGE');
     const isNative = tick === nativeTicker;
-    // 'other' is a filter bucket, not a name: a row in it (a contract call,
-    // a stake, any verb the buckets do not list) reads its own action, as
-    // History's rows do.
-    const label = actionDisplayLabel(kind === 'other' ? entry.action : kind)
-        || actionDisplayLabel(entry.action)
-        || 'Event';
+    // A row in the 'other' bucket reads its own action, as History's rows do.
+    const label = activityEntryLabel(entry, walletAddresses);
     const direction = kind === 'send' ? 'out' : kind === 'receive' ? 'in' : null;
     // One formatter with History: a SEND carries whole units, every other
     // action base units.
@@ -911,20 +887,22 @@ function SeeAllActivityButton({ onHistory }) {
 // The Activity tab's newest history rows in History's row layout, ending with
 // See all activity, which opens the complete feed. The host loads the rows
 // when the tab opens, so Home's first paint reads no history.
-function RecentActivityList({ entries, failed, balances, networkFilter, onOpen, onHistory, onSelectEntry, allowRemoteImages }) {
+function RecentActivityList({ entries, failed, balances, networkFilter, query = '', onClearQuery, onOpen, onHistory, onSelectEntry, allowRemoteImages }) {
     useEffect(() => {
         if (typeof onOpen === 'function') onOpen();
     }, [onOpen]);
     const assetLookup = useMemo(() => buildTokenLookup(balances), [balances]);
-    const rows = useMemo(() => {
-        const recent = recentActivityEntries(entries);
-        if (networkFilter === 'all') return recent;
-        return recent.filter((e) => coinFromChainId(e.chainId) === networkFilter);
-    }, [entries, networkFilter]);
     const walletAddresses = useMemo(
         () => new Set((entries || []).map((e) => e?.address).filter(Boolean)),
         [entries],
     );
+    const rows = useMemo(() => {
+        const recent = recentActivityEntries(entries);
+        const onNetwork = networkFilter === 'all'
+            ? recent
+            : recent.filter((e) => coinFromChainId(e.chainId) === networkFilter);
+        return query ? onNetwork.filter((e) => activityEntryMatchesQuery(e, query, walletAddresses)) : onNetwork;
+    }, [entries, networkFilter, query, walletAddresses]);
     if (entries === null && !failed) {
         return (
             <>
@@ -934,6 +912,19 @@ function RecentActivityList({ entries, failed, balances, networkFilter, onOpen, 
         );
     }
     if (rows.length === 0) {
+        if (query && !failed) {
+            return (
+                <>
+                    <EmptyState
+                        title={t('home.tabs.noMatches')}
+                        body={t('home.tabs.matchesAppearHereAfter')}
+                        actionLabel={onClearQuery ? t('home.tabs.clearFilter') : undefined}
+                        onAction={onClearQuery}
+                    />
+                    <SeeAllActivityButton onHistory={onHistory} />
+                </>
+            );
+        }
         if (failed) {
             return (
                 <>
@@ -995,24 +986,35 @@ function defiPositionToEntry(position, idx) {
     };
 }
 
-function DefiList({ positions, failed, networkFilter, balances, onOpen, onSelectEntry, allowRemoteImages }) {
+function DefiList({ positions, failed, networkFilter, query = '', sortBy = 'name', onClearQuery, balances, onOpen, onSelectEntry, allowRemoteImages }) {
     const [balancesHidden] = useBalancesHidden();
     useEffect(() => {
         if (typeof onOpen === 'function') onOpen();
     }, [onOpen]);
     const rows = useMemo(() => {
         const all = Array.isArray(positions) ? positions : [];
-        const filtered = networkFilter === 'all'
+        const onNetwork = networkFilter === 'all'
             ? all
             : all.filter((p) => coinFromChainId(p.chainId) === networkFilter);
-        return [...filtered].sort(compareMergedEntries);
-    }, [positions, networkFilter]);
+        const matching = query ? onNetwork.filter((p) => defiPositionMatchesQuery(p, query)) : onNetwork;
+        return sortDefiPositions(matching, sortBy);
+    }, [positions, networkFilter, query, sortBy]);
     const assetLookup = useMemo(() => buildTokenLookup(balances), [balances]);
 
     if (positions === null && !failed && typeof onOpen === 'function') {
         return <p className={styles.tabNote} role="status">{t('home.tabs.loadingDefiPositions')}</p>;
     }
     if (rows.length === 0) {
+        if (query && !failed) {
+            return (
+                <EmptyState
+                    title={t('home.tabs.noMatches')}
+                    body={t('home.tabs.matchesAppearHereAfter')}
+                    actionLabel={onClearQuery ? t('home.tabs.clearFilter') : undefined}
+                    onAction={onClearQuery}
+                />
+            );
+        }
         if (failed) {
             return (
                 <EmptyState
@@ -1060,14 +1062,20 @@ function DefiList({ positions, failed, networkFilter, balances, onOpen, onSelect
                             label={actionDisplayLabel(p.action)}
                             actionIcon={actionIconForAction(p.action)}
                             amount={balancesHidden ? '•••••' : p.primary}
+                            /* Two lines, the height of a Coins or Tokens row: the status
+                               badge beside the action, the date beside the amount, and no
+                               block number. */
+                            className={styles.defiRow}
                             status={p.status}
                             timestamp={p.timestamp}
-                            block={p.blockIndex
-                                ? t('history.row.block', { block: formatDecimalAmount(p.blockIndex) })
-                                : null}
+                            block={null}
                             onClick={typeof onSelectEntry === 'function'
                                 ? () => onSelectEntry(defiPositionToEntry(p, idx))
                                 : undefined}
+                            /* The Back-sized chevron the Coins and Tokens rows carry. */
+                            trailing={typeof onSelectEntry === 'function'
+                                ? <span className={styles.rowChevron}><Icon.ForwardIcon /></span>
+                                : null}
                             data-activity-row
                         />
                     </li>

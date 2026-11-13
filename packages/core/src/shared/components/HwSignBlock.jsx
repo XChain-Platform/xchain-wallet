@@ -155,7 +155,7 @@ export function statusCopy(status, signerKind, chainId, detail) {
                 ? `Device not detected. ${userFacingMessage(detail, 'Check its connection, unlock it, and try again.')}`
                 : 'Device not detected. Check its connection, unlock it, and try again.';
         case 'not-connected':
-            return `This ${signerKind === 'trezor' ? 'Trezor' : 'Ledger'} is not connected in this session. Connect it again with Pair hardware signer, then try again.`;
+            return `This ${signerKind === 'trezor' ? 'Trezor' : 'Ledger'} is not connected in this session. Connect it again with Pair hardware wallet, then try again.`;
         case 'cancelled':
             return 'Signing was cancelled on your device. Nothing was signed. Review the details and try again when you are ready.';
         case 'error':

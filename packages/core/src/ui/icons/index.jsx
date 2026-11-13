@@ -21,10 +21,13 @@
 import {
     ArrowDownLeft as LucideArrowDownLeft,
     QrCode as LucideQrCode,
+    Wallet as LucideWallet,
+    Palette as LucidePalette,
     ScanLine as LucideScanLine,
     Menu as LucideMenu,
     Send as LucideSend,
     DollarSign as LucideDollarSign,
+    Zap as LucideZap,
     MoreHorizontal as LucideMoreHorizontal,
     Filter as LucideFilter,
     BookOpen as LucideBookOpen,
@@ -38,6 +41,7 @@ import {
     ArrowUpToLine as LucideArrowUpToLine,
     Minus as LucideMinus,
     LayoutGrid as LucideLayoutGrid,
+    ArrowRight as LucideArrowRight,
 } from 'lucide-react';
 
 // The rendered size comes from the svg[data-xc-icon] rule in tokens.css
@@ -219,6 +223,29 @@ export function LockIcon() {
     );
 }
 
+/** A stack of two coins, for the Home Coins tab. */
+export function CoinsIcon() {
+    return (
+        <svg {...STROKE_PROPS}>
+            <circle cx="8" cy="8" r="6" />
+            <path d="M18.09 10.37A6 6 0 1 1 10.34 18" />
+            <path d="M7 6h1v4" />
+            <path d="m16.71 13.88.7.71-2.82 2.82" />
+        </svg>
+    );
+}
+
+/** A framed picture, for the Home NFTs tab. */
+export function ImageIcon() {
+    return (
+        <svg {...STROKE_PROPS}>
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <circle cx="9" cy="9" r="2" />
+            <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+        </svg>
+    );
+}
+
 export function TokenIcon() {
     return (
         <svg {...STROKE_PROPS}>
@@ -329,6 +356,11 @@ export function HandshakeIcon() {
 
 export function VerifyIcon() {
     return <LucideShieldCheck {...LUCIDE_PROPS} />;
+}
+
+// A before -> after change reads in the text direction, so the arrow turns with it.
+export function ArrowRightIcon() {
+    return <LucideArrowRight {...LUCIDE_PROPS} data-xc-directional="" />;
 }
 
 /* ------------------------------------------------------------------ *
@@ -714,6 +746,11 @@ export function InfoIcon() {
     );
 }
 
+/** A lightning bolt, for the coin and token page's Actions tab. */
+export function ZapIcon() {
+    return <LucideZap {...LUCIDE_PROPS} />;
+}
+
 export function DollarIcon() {
     return <LucideDollarSign {...LUCIDE_PROPS} />;
 }
@@ -784,4 +821,14 @@ export function BellIcon() {
             <path d="M13.73 21a2 2 0 0 1-3.46 0" />
         </svg>
     );
+}
+
+// A wallet, for the Settings Wallets group.
+export function WalletIcon() {
+    return <LucideWallet {...LUCIDE_PROPS} />;
+}
+
+// A palette, for the Settings Appearance group.
+export function PaletteIcon() {
+    return <LucidePalette {...LUCIDE_PROPS} />;
 }

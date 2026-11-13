@@ -283,6 +283,12 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
         return (
             <ActionConfirmScreen
                 {...cancelLane.confirmProps}
+                summary={{
+                    verb: t('components.openOrdersPanel.cancelOrder2'),
+                    chainId,
+                    direction: 'none',
+                    address: confirmOwner?.address,
+                }}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
                 signerReady={signerReady}

@@ -133,7 +133,10 @@ function publishStepFailure(err, chainId) {
  * @param {() => void} [props.onExportInTab]   set in the extension's toolbar popup, which closes when
  *   a download or dialog takes focus: the export runs in a full extension tab instead
  */
-export function BackupSection({ activeWallet, onExportInTab }) {
+// `only` renders one action (export, phrase, test, publish or
+// restore) on its own Settings page; null renders every action.
+export function BackupSection({ activeWallet, onExportInTab, only = null }) {
+    const show = (part) => !only || only === part;
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(activeWallet?.id);
     const actionConfirm = useActionConfirmFlow({ messaging, walletId: activeWallet?.id || '' });
@@ -230,6 +233,8 @@ export function BackupSection({ activeWallet, onExportInTab }) {
     const [autoSync, setAutoSync] = useState(/** @type {any} */ (null));
     useEffect(() => {
         if (typeof messaging?.labelSyncStatusRequest !== 'function') return undefined;
+        // Only the publish page (or the whole section) shows the notice.
+        if (only && only !== 'publish') return undefined;
         let live = true;
         const poll = () => {
             messaging.labelSyncStatusRequest()
@@ -239,7 +244,7 @@ export function BackupSection({ activeWallet, onExportInTab }) {
         poll();
         const id = setInterval(poll, AUTO_SYNC_POLL_MS);
         return () => { live = false; clearInterval(id); };
-    }, [messaging]);
+    }, [messaging, only]);
 
     const autoSyncDue = Boolean(autoSync?.due) && publishStage === 'idle';
 
@@ -551,6 +556,12 @@ export function BackupSection({ activeWallet, onExportInTab }) {
                 </div>
                 <ActionConfirmScreen
                     confirmAction={actionConfirm.confirmAction}
+                    summary={{
+                        verb: t('settings.help.backup.publishLabels'),
+                        direction: 'none',
+                        chainId: publishPreparation?.chainId,
+                        address: publishPreparation?.from?.address,
+                    }}
                     screenVariant={screenVariantFor(shell)}
                     chainLabel={chainDisplayName(publishPreparation?.chainId)}
                     signerReady={signerReady}
@@ -568,7 +579,7 @@ export function BackupSection({ activeWallet, onExportInTab }) {
 
     return (
         <div className={styles.rows} style={STACK}>
-            {exportResult && !exportResult.confirmed ? (
+            {!show('export') ? null : exportResult && !exportResult.confirmed ? (
                 <BackupDownloadConfirm
                     fileName={exportResult.fileName}
                     onConfirm={confirmDownloadedBackup}
@@ -604,7 +615,7 @@ export function BackupSection({ activeWallet, onExportInTab }) {
                 />
             )}
 
-            {revealStage === 'password' ? (
+            {!show('phrase') ? null : revealStage === 'password' ? (
                 <UnlockPrompt
                     label={t('settings.backup.revealRecoveryPhrase')}
                     hint={t('settings.backup.enterYourWalletPasswordMake', { RECOVERY_PHRASE_WARNING })}
@@ -633,7 +644,7 @@ export function BackupSection({ activeWallet, onExportInTab }) {
                     onClick={() => { setRevealStage('password'); setRevealError(null); }}
                 />
             )}
-            {dryRunStage === 'form' || dryRunStage === 'running' ? (
+            {!show('test') ? null : dryRunStage === 'form' || dryRunStage === 'running' ? (
                 <DryRunForm
                     busy={dryRunStage === 'running'}
                     error={dryRunError}
@@ -657,7 +668,7 @@ export function BackupSection({ activeWallet, onExportInTab }) {
                     onClick={() => { setDryRunStage('form'); setDryRunError(null); }}
                 />
             )}
-            {autoSyncDue ? (
+            {show('publish') && autoSyncDue ? (
                 <LabelSyncDueNotice
                     changeCount={autoSync?.batch?.changeCount ?? autoSync?.changeCount ?? 0}
                     disabled={!activeWallet}
@@ -665,7 +676,7 @@ export function BackupSection({ activeWallet, onExportInTab }) {
                     onDismiss={dismissAutoSync}
                 />
             ) : null}
-            {publishStage === 'form' || publishStage === 'running' ? (
+            {!show('publish') ? null : publishStage === 'form' || publishStage === 'running' ? (
                 <PublishLabelsForm
                     walletId={activeWallet?.id}
                     busy={publishStage === 'running'}
@@ -693,7 +704,7 @@ export function BackupSection({ activeWallet, onExportInTab }) {
                     onClick={() => { setPublishStage('form'); setPublishError(null); }}
                 />
             )}
-            {restoreStage === 'form' || restoreStage === 'running' ? (
+            {!show('restore') ? null : restoreStage === 'form' || restoreStage === 'running' ? (
                 <RestoreLabelsForm
                     walletId={activeWallet?.id}
                     busy={restoreStage === 'running'}
@@ -1453,7 +1464,7 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
                         onClick={() => onSubmit({ chainId, password })}
                         disabled={!canSubmit}
                     >
-                        {busy ? t('settings.backup.publishing') : loadingChains ? t('settings.backup.loadingChains') : t('settings.help.backup.publishLabels')}
+                        {busy ? t('settings.backup.publishing') : loadingChains ? t('settings.backup.loadingChainsBusy') : t('settings.help.backup.publishLabels')}
                     </Button>
                 </div>
             </FormSection>

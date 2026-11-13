@@ -10,9 +10,13 @@
  * contact legal@dankest.llc.
  */
 
+/* 8px around the fees: between the fee speed picker and the card, and
+   between the card and the field above it (the form's own gap is taken
+   back down to 8px here). */
 .root {
     display: grid;
-    gap: var(--xc-space-3);
+    gap: var(--xc-space-2);
+    margin-block-start: calc(var(--xc-space-2) - var(--xc-form-gap, var(--xc-space-4)));
 }
 
 .selector {
@@ -26,7 +30,8 @@
 
 .row {
     display: grid;
-    padding-block: var(--xc-space-3);
+    /* 8px above and below each fee line, so the card is compact. */
+    padding-block: var(--xc-space-2);
     border-block-end: 1px solid var(--xc-border);
 }
 
@@ -48,7 +53,9 @@
 }
 
 .rowMainWithControl {
-    --xc-fees-control-size: 44px;
+    /* The protocol fee line holds its help and switch at 32px, not the 44px
+       tap size, which is still comfortable to tap. */
+    --xc-fees-control-size: 32px;
     grid-template-areas: 'label figures control';
     grid-template-columns: minmax(0, 1fr) minmax(0, auto) auto;
     align-items: center;
@@ -135,4 +142,27 @@
         justify-content: flex-start;
         text-align: start;
     }
+}
+
+/* The pay-in-coin switch keeps its 28px track without holding the line at
+   44px; its tap area spills past the line. */
+.rowMainWithControl .control,
+.rowMainWithControl .control > label {
+    min-block-size: 0;
+    block-size: var(--xc-fees-control-size);
+}
+
+.rowMainWithControl .control > label > span:last-child {
+    block-size: var(--xc-fees-control-size);
+    overflow: visible;
+}
+
+/* The fee lines (Network fee, Protocol fee, Total) keep their own rounded
+   card at every width. Wide shells flatten cards nested in a framed form;
+   the fees card opts out so it reads the same on a phone and a desktop. */
+.root > .card.card.card {
+    padding: var(--xc-card-pad);
+    background: var(--xc-card-bg);
+    border: var(--xc-card-border);
+    border-radius: var(--xc-card-radius);
 }

@@ -36,6 +36,10 @@ import '../i18n/locales/en/ui.js';
  * @param {() => void} [props.onOpenPicker]
  * @param {boolean} [props.allOption]             offer the all-networks sentinel
  * @param {import('react').ReactNode} [props.help] help for this field on this form, shown from the label-row InfoTip as Input and Select do
+ * @param {boolean} [props.notSource]             this network is data (the chain to verify on, a linked
+ *                                                action's chain, a bridge destination), not the form's source
+ *                                                network, so the Form Standard's From rule skips it
+ *                                                (data-form-network-exempt)
  */
 export function NetworkField({
     value,
@@ -48,6 +52,7 @@ export function NetworkField({
     onOpenPicker,
     allOption = false,
     help,
+    notSource = false,
 }) {
     const [open, setOpen] = useState(false);
     const triggerRef = useRef(null);
@@ -58,7 +63,10 @@ export function NetworkField({
         : (selected?.displayName || value || '');
     const iconUrl = !allSelected && value ? branding.chainIconSmallUrl(value) : null;
     const accessibleName = label ? `${label}: ${selectionText}` : selectionText;
-    const hasHelp = Boolean(label && help);
+    // Every Network field carries the ? help; a form without its own
+    // wording gets the general explanation.
+    const fieldHelp = help || "The blockchain this runs on. The address, the network fee and the coin it is paid in all belong to this network.";
+    const hasHelp = Boolean(label && fieldHelp);
 
     const closePicker = useCallback(() => {
         setOpen(false);
@@ -75,13 +83,16 @@ export function NetworkField({
         : triggerRef.current?.closest('#xc-main')?.parentElement || document.body;
 
     return (
-        <div className={`${styles.wrap} ${styles[size] || ''}`.trim()}>
+        <div
+            className={`${styles.wrap} ${styles[size] || ''}`.trim()}
+            data-form-network-exempt={notSource ? '' : undefined}
+        >
             {hasHelp ? (
                 <div className={styles.labelRow}>
                     <span className={styles.label}>{label}</span>
                     <InfoTip
                         className={styles.labelHelp}
-                        label={help}
+                        label={fieldHelp}
                         aria={t('ui.field.about', { label: fieldHelpName(label) })}
                     />
                 </div>

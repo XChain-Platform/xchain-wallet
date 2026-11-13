@@ -32,6 +32,7 @@ import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/routes.js';
 import '../../i18n/locales/en/send.js';
 import '../../i18n/locales/en/settings.js';
+import '../../i18n/locales/en/shell.js';
 
 /** Native mainnet coins that have a price source. */
 const MAINNET_PRICE_CHAINS = COINGECKO_SUPPORTED_CHAINS.filter((c) => c.endsWith('-mainnet'));
@@ -179,7 +180,8 @@ export function PriceAlertForm({
             walletId={walletId}
             chainIdFilter={chainId}
             kindFilter="all"
-            title={t('components.priceAlertForm.chooseAsset')}
+            // The coin can be alerted as well as a token, so the picker is the Choose Asset page.
+            title={t('shell.markets.selectAsset')}
             onSelect={(selection) => {
                 const selectedChainId = String(selection.chainId || chainId);
                 const selectedDescriptor = chainRegistry.get(selectedChainId);
@@ -233,7 +235,7 @@ export function PriceAlertForm({
                             <TokenField
                                 label=""
                                 value={tick ? { chainId, tick } : null}
-                                placeholder={t('components.priceAlertForm.chooseHeldToken')}
+                                placeholder={t('send.selectAsset')}
                                 onOpenPicker={() => {
                                     setTokenPickerOpen(true);
                                     onTokenPickerScreenChange?.(tokenPickerScreen);

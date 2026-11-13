@@ -32,7 +32,7 @@
 // is queued is the §5.3.4 double-broadcast trap.
 
 import { useEffect, useState } from 'react';
-import { Button, StatusMessage } from '../../ui/index.js';
+import { Button, Icon, StatusMessage } from '../../ui/index.js';
 import {
     clearQueuedResultHandoff,
     readQueuedResultHandoff,
@@ -59,10 +59,10 @@ function ActionRow({ doneLabel, onDone, secondaryLabel, onSecondary }) {
     return (
         <div className={styles.actions}>
             {onSecondary ? (
-                <Button variant="secondary" onClick={onSecondary}>{secondaryLabel}</Button>
+                <Button variant="secondary" icon={<Icon.PlusIcon />} onClick={onSecondary}>{secondaryLabel}</Button>
             ) : null}
             {onDone ? (
-                <Button variant="primary" onClick={onDone}>{doneLabel}</Button>
+                <Button variant="primary" icon={<Icon.CheckIcon />} onClick={onDone}>{doneLabel}</Button>
             ) : null}
         </div>
     );

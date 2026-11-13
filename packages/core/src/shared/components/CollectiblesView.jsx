@@ -56,6 +56,8 @@ export function CollectiblesView({
     emptyTitle = t('home.tabs.noCollectiblesYet'),
     emptyBody = t('components.collectiblesView.collectiblesAppearHereAfterThis'),
     onReceive,
+    emptyActionLabel,
+    onEmptyAction,
     onSelectToken,
     pinnedKeys,
     onTogglePin,
@@ -67,6 +69,11 @@ export function CollectiblesView({
     const [hiddenExpanded, setHiddenExpanded] = useState(false);
 
     if (!rows || rows.length === 0) {
+        // A caller's own empty action (clearing a filter) takes the button
+        // over from Receive.
+        if (emptyActionLabel && typeof onEmptyAction === 'function') {
+            return <EmptyState title={emptyTitle} body={emptyBody} actionLabel={emptyActionLabel} onAction={onEmptyAction} actionIcon={<Icon.RefreshIcon />} />;
+        }
         return (
             <EmptyState
                 title={emptyTitle}
@@ -113,7 +120,7 @@ export function CollectiblesView({
                     variant="ghost"
                     size="md"
                     block
-                    icon={null}
+                    icon={hiddenExpanded ? <Icon.EyeOffIcon /> : <Icon.EyeIcon />}
                     className={styles.hiddenToggle}
                     onClick={() => setHiddenExpanded((v) => !v)}
                     aria-expanded={hiddenExpanded}

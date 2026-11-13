@@ -259,3 +259,15 @@
         box-shadow: none;
     }
 }
+
+/* An empty notice slot takes no room, so the page's gap does not
+   push the first field down: the form starts 8px under the page header. */
+.status:empty {
+    display: none;
+}
+
+/* On every form the submit button sits 8px under the last field
+   (the fee picker or fees card on most), not the form's full gap. */
+.body + .actions {
+    margin-block-start: calc(var(--xc-space-2) - var(--xc-form-gap, var(--xc-space-4)));
+}

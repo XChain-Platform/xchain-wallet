@@ -25,6 +25,9 @@ import { t } from '../../i18n/index.js';
  * @param {(coin: string) => void} props.onNetworkFilterChange
  * @param {string} props.tokenQuery                         free-text token filter
  * @param {(query: string) => void} props.onTokenQueryChange
+ * @param {string} [props.searchPlaceholder]                names what the search covers on the current tab
+ * @param {string} [props.searchLabel]                      the search box's accessible name for that tab
+ * @param {import('react').ReactNode} [props.middle]        a control placed between the search and the network filter
  */
 export function HomeFilterBar({
     variant,
@@ -34,6 +37,9 @@ export function HomeFilterBar({
     onNetworkFilterChange,
     tokenQuery,
     onTokenQueryChange,
+    searchPlaceholder,
+    searchLabel,
+    middle = null,
 }) {
     return (
         <div className={`${styles.bar} ${variant === 'menu' ? styles.menu : ''}`}>
@@ -49,12 +55,13 @@ export function HomeFilterBar({
                     autoCorrect="off"
                     spellCheck={false}
                     className={styles.search}
-                    placeholder={t('home.filter.searchTokens')}
-                    aria-label={t('home.filter.searchTokensByName')}
+                    placeholder={searchPlaceholder || t('home.filter.searchTokens')}
+                    aria-label={searchLabel || t('home.filter.searchTokensByName')}
                     value={tokenQuery || ''}
                     onChange={(e) => onTokenQueryChange(e.target.value)}
                 />
             </div>
+            {middle}
             <div className={styles.networkWrap}>
                 <NetworkFilter
                     chainRegistry={chainRegistry}

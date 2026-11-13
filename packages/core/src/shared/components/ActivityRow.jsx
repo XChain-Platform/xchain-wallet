@@ -87,7 +87,8 @@ export function ActivityRow({
         <button
             type="button"
             onClick={onClick}
-            className={`${buttonStyles.btn} ${buttonStyles.ghost} ${buttonStyles.lg} ${styles.row} ${selected ? styles.selected : ''} ${className}`.trim()}
+            // noTrailing drops the empty trailing column (a class, not :has(), for Safari 16).
+            className={`${buttonStyles.btn} ${buttonStyles.ghost} ${buttonStyles.lg} ${styles.row} ${trailing ? '' : styles.noTrailing} ${selected ? styles.selected : ''} ${className}`.trim()}
             {...rest}
         >
             {decoration}
@@ -115,7 +116,7 @@ export function ActivityRow({
             ) : <span className={styles.status} />}
             {block ? <span className={styles.block}>{block}</span> : null}
             {timestamp ? <RelativeTime className={styles.time} timestamp={timestamp} /> : <span className={styles.time} />}
-            {trailing ? <span className={styles.trailing} aria-hidden="true">{trailing}</span> : <span className={styles.trailing} />}
+            {trailing ? <span className={styles.trailing} aria-hidden="true">{trailing}</span> : null}
         </button>
     );
 }

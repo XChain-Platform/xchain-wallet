@@ -110,6 +110,12 @@
     min-width: 0;
 }
 
+/* An unlocked software signer needs nothing here, so the empty region takes
+   no gap in the page stack. */
+.credentials:empty {
+    display: none;
+}
+
 /* Form-specific review details share this credentials region. Keep their
    value column shrinkable and preserve intentional memo line breaks. */
 .credentials dl {
@@ -193,9 +199,27 @@
     text-overflow: clip;
 }
 
+/* K6 action footer: an outlined Reject a third wide and a green Confirm,
+   side by side at every width (both labels are one short word). */
+.footerK6 > :first-child {
+    flex: 0 0 34%;
+}
+
 /* Phone viewports include page padding and a scrollbar gutter, so reflow
    before the usable content width drops below 400px. */
 @media (max-width: 480px) {
+    .footer.footerK6 {
+        flex-direction: row;
+    }
+
+    .footerK6 > :first-child {
+        flex: 0 0 34%;
+    }
+
+    .footerK6 > :last-child {
+        flex: 1 1 0;
+    }
+
     .credentials dl {
         grid-template-columns: minmax(0, 1fr);
         gap: var(--xc-space-1);

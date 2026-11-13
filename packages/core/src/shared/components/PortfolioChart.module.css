@@ -4,8 +4,9 @@
     flex-direction: column;
     /* The compact chart-stack gap has no spacing-token equivalent. */
     gap: 2px;
-    /* The halo overlap has no spacing-token equivalent. */
-    margin-top: -6px;
+    /* No overlap: the chart card sits the same 8px below the balance card as
+       every other Home block. */
+    margin-top: 0;
     min-width: 0;
     overflow: hidden;
 }
@@ -187,4 +188,102 @@
 
 .rangeActive:hover {
     color: var(--xc-on-accent);
+}
+
+/* The chart drawn behind the balance card. The plot fills the whole
+   card; only the range buttons take room, along the card's foot. */
+.wrap.behind {
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    border-radius: 0;
+    margin: 0;
+    padding: 0 var(--xc-card-pad) var(--xc-space-1);
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    overflow: visible;
+}
+
+.behind > [role='tabpanel'] {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.behind .change,
+.behind .missingNotice {
+    display: none;
+}
+
+.behind .slot,
+.behind .chart {
+    block-size: 100%;
+    min-block-size: 0;
+}
+
+.behind .slot > .slotMessage,
+.behind .placeholder {
+    display: none;
+}
+
+.behind .ranges {
+    position: relative;
+    z-index: 2;
+}
+
+.behind .range {
+    color: var(--xc-on-accent);
+}
+
+.behind .range:hover {
+    color: var(--xc-on-accent);
+}
+
+.behind .rangeSlot.rangeActive {
+    color: var(--xc-brand-purple);
+}
+
+.behind .rangeSlot.rangeActive .rangeLabel {
+    border-radius: var(--xc-radius-pill);
+}
+
+.behind .rangeSlot.rangeActive .rangeLabel::after {
+    background: var(--xc-on-accent);
+}
+
+.behind .range:focus-visible {
+    outline-color: var(--xc-on-accent);
+}
+
+/* Every range is a frosted pill like the card's other buttons, so
+   each one reads as a button over the chart; the selected one is white. */
+.behind .rangeSlot .rangeLabel {
+    border-radius: var(--xc-radius-pill);
+}
+
+.behind .rangeSlot .rangeLabel::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.behind .rangeSlot:hover .rangeLabel::after {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.behind .rangeSlot.rangeActive .rangeLabel::after,
+.behind .rangeSlot.rangeActive:hover .rangeLabel::after {
+    background: var(--xc-on-accent);
+}
+
+/* Privacy mode (balance hidden) shows no trend: the chart and its ranges
+   vanish but keep their room so the card does not change height. */
+.behindHidden > [role='tabpanel'],
+.behindHidden .ranges {
+    visibility: hidden;
 }

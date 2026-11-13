@@ -59,7 +59,11 @@ const PRIVACY_CONTROL_DEFAULTS = Object.freeze({
     formDraftTtlMs: FORM_DRAFT_TTL_DEFAULT,
 });
 
-export function PrivacySection() {
+// `only` renders one control (tor, changeAddress, blur, labels,
+// haptics, priceData, metadata, hardware, clipboard, formDraft or reset) on
+// its own Settings page; null renders every control.
+export function PrivacySection({ only = null } = {}) {
+    const show = (part) => !only || only === part;
     const { settings, loading, error, update } = useSettings({ reportsOwnError: true });
     const [saveError, setSaveError] = useState(/** @type {string | null} */ (null));
 
@@ -93,7 +97,7 @@ export function PrivacySection() {
         <div style={STACK}>
             {/* Only a host that can proxy wallet-owned traffic exposes the
                 live setting. Browser-based shells show the disabled row. */}
-            {shellCapabilities().socksProxy && (
+            {show('tor') && shellCapabilities().socksProxy && (
                 <>
                     <ToggleRow
                         label={t('settings.privacy.torRouting')}
@@ -106,7 +110,7 @@ export function PrivacySection() {
             )}
             {/* An unavailable shell always renders this switch off because
                 its stored desktop preference cannot affect local traffic. */}
-            {!shellCapabilities().socksProxy && (
+            {show('tor') && !shellCapabilities().socksProxy && (
                 <ToggleRow
                     label={t('settings.privacy.torRouting')}
                     hint={isNativeShell()
@@ -117,6 +121,8 @@ export function PrivacySection() {
                     onChange={() => {}}
                 />
             )}
+            {show('changeAddress') ? (
+            <>
             <ToggleRow
                 label={t('settings.privacy.changeAddressRotation')}
                 hint={t('settings.privacy.importedKeyAndWatchOnly')}
@@ -124,6 +130,10 @@ export function PrivacySection() {
                 onChange={(v) => onToggle('changeAddressRotation', v)}
             />
             <PrivacySaveError visible={saveError === 'changeAddressRotation'} />
+            </>
+            ) : null}
+            {show('blur') ? (
+            <>
             <ToggleRow
                 label={t('settings.privacy.blurSensitiveDataOnBlur')}
                 hint={t('settings.privacy.blurTheEntireWalletDisplay')}
@@ -131,6 +141,10 @@ export function PrivacySection() {
                 onChange={(v) => onToggle('blurOnBlur', v)}
             />
             <PrivacySaveError visible={saveError === 'blurOnBlur'} />
+            </>
+            ) : null}
+            {show('labels') ? (
+            <>
             <ToggleRow
                 label={t('settings.privacy.labelsSurviveRestore')}
                 hint={t('settings.privacy.inTheBrowserExtensionBatch')}
@@ -138,6 +152,10 @@ export function PrivacySection() {
                 onChange={(v) => onToggle('labelsSurviveRestore', v)}
             />
             <PrivacySaveError visible={saveError === 'labelsSurviveRestore'} />
+            </>
+            ) : null}
+            {show('haptics') ? (
+            <>
             <ToggleRow
                 label={t('settings.privacy.hapticFeedback')}
                 hint={t('settings.privacy.allowVibrationForTapSuccess')}
@@ -145,6 +163,10 @@ export function PrivacySection() {
                 onChange={(v) => onToggle('hapticsEnabled', v)}
             />
             <PrivacySaveError visible={saveError === 'hapticsEnabled'} />
+            </>
+            ) : null}
+            {show('priceData') ? (
+            <>
             <ToggleRow
                 label={t('settings.notifications.nativeCoinPriceData')}
                 hint={t('settings.privacy.allowCoingeckoRequestsForNative')}
@@ -152,6 +174,10 @@ export function PrivacySection() {
                 onChange={(v) => onToggle('priceDataEnabled', v)}
             />
             <PrivacySaveError visible={saveError === 'priceDataEnabled'} />
+            </>
+            ) : null}
+            {show('metadata') ? (
+            <>
             <ToggleRow
                 label={t('settings.privacy.fetchTokenMetadata')}
                 hint={t('settings.privacy.fetchTokenInformationStandardTis')}
@@ -159,6 +185,10 @@ export function PrivacySection() {
                 onChange={(v) => onToggle('metadataFetchEnabled', v)}
             />
             <PrivacySaveError visible={saveError === 'metadataFetchEnabled'} />
+            </>
+            ) : null}
+            {show('hardware') ? (
+            <>
             <ToggleRow
                 label={t('settings.privacy.alwaysRequireHardwareCrossCheck')}
                 hint={t('settings.privacy.requireTheIVeVerified')}
@@ -166,8 +196,11 @@ export function PrivacySection() {
                 onChange={(v) => onToggle('alwaysRequireHwExplicitConfirm', v)}
             />
             <PrivacySaveError visible={saveError === 'alwaysRequireHwExplicitConfirm'} />
-            <ClipboardAutoClearRow settings={settings} update={update} />
-            <FormDraftTtlRow settings={settings} update={update} />
+            </>
+            ) : null}
+            {show('clipboard') ? <ClipboardAutoClearRow settings={settings} update={update} /> : null}
+            {show('formDraft') ? <FormDraftTtlRow settings={settings} update={update} /> : null}
+            {show('reset') ? (
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={ROW_VALUE}>{t('settings.privacy.resetPrivacySettings')}</span>
@@ -178,6 +211,7 @@ export function PrivacySection() {
                     {t('settings.display.resetToDefaults')}
                 </Button>
             </div>
+            ) : null}
         </div>
     );
 }

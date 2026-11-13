@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Button, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { Button, Icon, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { fetchTokenInfo } from '../hooks/useTokenInfo.js';
 import { tickLookupVerdict } from '../utils/listTickItems.js';
@@ -280,29 +280,26 @@ export function TickItemsEditor({
                                         variant="ghost"
                                         disabled={index === 0}
                                         aria-label={t('components.tickItemsEditor.moveUp', { accessibleItem })}
+                                        icon={<Icon.ChevronDownIcon style={{ transform: 'rotate(180deg)' }} />}
                                         onClick={() => moveItem(index, -1)}
-                                    >
-                                        ↑
-                                    </Button>
+                                    />
                                     <Button
                                         type="button"
                                         size="sm"
                                         variant="ghost"
                                         disabled={index === memberTicks.length - 1}
                                         aria-label={t('components.tickItemsEditor.moveDown', { accessibleItem })}
+                                        icon={<Icon.ChevronDownIcon />}
                                         onClick={() => moveItem(index, 1)}
-                                    >
-                                        ↓
-                                    </Button>
+                                    />
                                     <Button
                                         type="button"
                                         size="sm"
                                         variant="ghost"
                                         aria-label={t('components.tickItemsEditor.remove', { accessibleItem })}
+                                        icon={<Icon.XIcon />}
                                         onClick={() => removeItem(index)}
-                                    >
-                                        ×
-                                    </Button>
+                                    />
                                 </div>
                             </li>
                         );

@@ -86,7 +86,6 @@ export const Select = /* @__PURE__ */ forwardRef(function Select(
                     <label htmlFor={selectId} className={styles.label}>
                         {requirement.label}
                     </label>
-                    {requirement.isOptional ? <OptionalPill id={optionalPillId} /> : null}
                     {hasHelp ? (
                         <InfoTip
                             className={styles.labelHelp}
@@ -94,6 +93,8 @@ export const Select = /* @__PURE__ */ forwardRef(function Select(
                             aria={t('ui.field.about', { label: fieldHelpName(requirement.label, rest['aria-label']) })}
                         />
                     ) : null}
+                    {/* The ? help comes first, then the Optional tag. */}
+                    {requirement.isOptional ? <OptionalPill id={optionalPillId} /> : null}
                 </div>
             ) : label ? (
                 <label htmlFor={selectId} className={styles.label}>{requirement.label}</label>

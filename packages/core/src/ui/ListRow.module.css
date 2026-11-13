@@ -104,7 +104,18 @@
     text-align: end;
 }
 
+/* Drawn at the page header Back chevron's size (a 32px icon box) so a row that
+   opens a page matches the Back that returns. The glyph fills only the middle
+   third of the box and the rest is clipped, so it adds no width. */
 .chevron {
-    --xc-icon-size: var(--xc-icon-sm);
+    --xc-icon-size: 32px;
+    width: calc(var(--xc-icon-size) / 3);
+    overflow: hidden;
     color: var(--xc-text-muted);
+}
+
+.chevron svg {
+    flex: 0 0 auto;
+    width: var(--xc-icon-size);
+    height: var(--xc-icon-size);
 }

@@ -1,0 +1,165 @@
+/* The Wallet Form Standard frame: the section card, header and body, and what
+   the standard adds around them. */
+
+/* The section card. Overflow stays visible so a dropdown list inside a
+   section opens over the page instead of being cut off at the section's
+   edge; the header keeps the rounded corners itself. */
+.optionalSection {
+    composes: flush from '../../../ui/Card.module.css';
+    min-width: 0;
+    overflow: visible;
+}
+
+/* A section that follows another, or a field, sits 8px under it, taking the
+   form's larger gap back down. */
+.optionalSection + .optionalSection,
+* + .optionalSection {
+    margin-block-start: calc(var(--xc-space-2) - var(--xc-form-gap, var(--xc-space-4)));
+}
+
+/* Whatever follows the last section (the fee picker) sits 8px under it. */
+.optionalSection + * {
+    margin-block-start: calc(var(--xc-space-2) - var(--xc-form-gap, var(--xc-space-4)));
+}
+
+.sectionHeader {
+    border-radius: inherit;
+    width: 100%;
+    min-width: 0;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    color: var(--xc-text);
+    text-align: start;
+    justify-content: flex-start;
+}
+
+.sectionHeader > span {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+    gap: var(--xc-space-2);
+    justify-content: flex-start;
+}
+
+.sectionIcon {
+    --xc-icon-size: 1rem;
+    display: inline-flex;
+    flex: 0 0 auto;
+    color: var(--xc-accent-text);
+}
+
+/* The title holds one line; the closed summary takes the ellipsis. */
+.sectionTitle {
+    flex: 0 0 auto;
+    min-width: 0;
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.sectionBody {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-form-gap);
+    min-width: 0;
+    padding: var(--xc-space-3);
+    border-top: 1px solid var(--xc-border);
+}
+
+.sectionBody[hidden] {
+    display: none;
+}
+
+/* The sections stack 8px apart inside the form's own 16px gap. */
+.sections {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+/* The sibling margins above pull a section up by (form gap - 8px), to make
+   8px inside a 16px stack. This stack is already 8px, so those margins are
+   reset; tripled to outrank them. */
+.sections.sections.sections > * {
+    margin-block: 0;
+}
+
+/* The Optional tag sits right after the title. */
+.optionalTag {
+    flex: 0 0 auto;
+}
+
+/* A second tag after Optional (Irreversible); the host's own tag
+   element brings its colours, this only keeps it on the title line. */
+.tag {
+    display: inline-flex;
+    flex: 0 0 auto;
+}
+
+/* The open section's count (characters, items) at the trailing
+   edge before the chevron, in the summary's muted style. */
+.count {
+    flex: 0 0 auto;
+    margin-inline-start: auto;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 400;
+    white-space: nowrap;
+}
+
+.count + .chevron {
+    margin-inline-start: 0;
+}
+
+/* The one-line summary of a closed section, pushed to the right. */
+.summary {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-inline-start: auto;
+    overflow: hidden;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 500;
+    text-align: end;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Chevron right while closed, down while open, always at the trailing edge. */
+.chevron {
+    --xc-icon-size: 1rem;
+    display: inline-flex;
+    flex: 0 0 auto;
+    margin-inline-start: auto;
+    color: var(--xc-text-muted);
+    transform: rotate(-90deg);
+    transition: transform var(--xc-transition);
+}
+
+.summary + .chevron {
+    margin-inline-start: 0;
+}
+
+.chevronOpen {
+    transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .chevron {
+        transition: none;
+    }
+}
+
+/* A muted line under a field (the From address's balance). It sits 4px under
+   the field rather than a full form gap away. */
+.fieldNote {
+    margin: calc(var(--xc-space-1) - var(--xc-form-gap, var(--xc-space-4))) 0 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+}
+
+/* The status slot is empty most of the time; it takes no gap then. */
+.slotEmpty {
+    display: none;
+}

@@ -21,7 +21,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
-import { useDropZone } from '../../hooks/useDropZone.js';
+import { FileField } from '../FileField.jsx';
 import { useConfirmModal } from '../../hooks/useConfirmModal.js';
 import { contactsFromCsv, contactsToCsv } from '../../utils/contactsCsv.js';
 import { detectAddressCoin, isValidAddressAnyNetwork } from '../../utils/addressValidation.js';
@@ -53,6 +53,13 @@ const CONTACT_ACTION_BUTTON = {
     whiteSpace: 'nowrap',
 };
 
+// The import field spans the row under the export actions.
+const CONTACT_IMPORT_FIELD = {
+    flex: '1 1 100%',
+    minWidth: 0,
+};
+const CONTACT_IMPORT_ACCEPT = ['application/json', 'text/csv', '.json', '.csv'];
+
 const MAX_CONTACT_IMPORT_BYTES = 2 * 1024 * 1024;
 const CONTACT_FIELDS = new Set([
     'schemaVersion', 'id', 'name', 'notes', 'entries', 'avatarSeed', 'createdAt', 'updatedAt',
@@ -69,7 +76,6 @@ export function ContactsSection() {
         /** @type {{ imported: number, duplicates: number, failures: Array<{ subject: string, message: string }> } | null} */
         (null),
     );
-    const fileInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const reloadRequestRef = useRef(0);
 
     const reload = useCallback(async () => {
@@ -101,7 +107,6 @@ export function ContactsSection() {
             duplicates: 0,
             failures: [{ subject, message }],
         });
-        if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
     const onExport = async () => {
@@ -198,15 +203,18 @@ export function ContactsSection() {
                 err instanceof Error ? err.message : String(err),
                 fileName || 'Import file',
             );
-        } finally {
-            // Reset the input so re-importing the same file fires onChange again.
-            if (fileInputRef.current) fileInputRef.current.value = '';
         }
     };
 
+    // The dialog filters to JSON and CSV but a dropped file is not filtered,
+    // so a file that names another type is refused before it is read.
     const onImportFile = async (file) => {
         if (!file) return;
         try {
+            if (!isContactsImportFile(file)) {
+                reportImportFailure(t('settings.contacts.importTypeRefused'), file.name || 'Import file');
+                return;
+            }
             if (Number.isFinite(file.size) && file.size > MAX_CONTACT_IMPORT_BYTES) {
                 reportImportFailure(importSizeMessage(file.size), file.name || 'Import file');
                 return;
@@ -221,18 +229,6 @@ export function ContactsSection() {
         }
     };
 
-    const importDrop = useDropZone({
-        accept: ['.json', '.csv', 'application/json', 'text/csv'],
-        maxBytes: MAX_CONTACT_IMPORT_BYTES,
-        readAs: 'text',
-        onError: (message) => reportImportFailure(message),
-        onFile: ({ file, content }) => importFromText(
-            typeof content === 'string' ? content : '',
-            file.name,
-            file.size,
-        ),
-    });
-
     return (
         <div style={STACK}>
             <div style={ROW}>
@@ -243,28 +239,13 @@ export function ContactsSection() {
                     </span>
                 </div>
             </div>
-            <div
-                {...importDrop.rootProps}
-                style={{
-                    ...ROW,
-                    border: importDrop.isDragOver ? '2px dashed var(--xc-accent)' : ROW.border,
-                    transition: 'border-color 120ms ease',
-                }}
-            >
+            <div style={ROW}>
                 <div style={ROW_COPY}>
                     <span style={ROW_VALUE}>{t('settings.contacts.exportAndImport')}</span>
                     <span style={ROW_HINT}>
                         {t('settings.contacts.savesOrReadsPlainJson')}
                     </span>
                 </div>
-                <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="application/json,text/csv,.json,.csv"
-                    onChange={(e) => onImportFile(e.target.files?.[0])}
-                    aria-label={t('settings.contacts.importContactsJson')}
-                    style={{ display: 'none' }}
-                />
                 <div style={CONTACT_ACTIONS}>
                     <Button
                         type="button"
@@ -286,15 +267,19 @@ export function ContactsSection() {
                     >
                         {t('settings.contacts.exportCsv')}
                     </Button>
-                    <Button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        size="sm"
-                        variant="secondary"
-                        style={CONTACT_ACTION_BUTTON}
-                    >
-                        {t('settings.contacts.import')}
-                    </Button>
+                </div>
+                {/* Import takes the standard file field; a file chosen in its
+                    dialog or dropped on it is imported at once, behind the
+                    replace confirmation. */}
+                <div style={CONTACT_IMPORT_FIELD}>
+                    <FileField
+                        label={t('settings.contacts.importFileLabel')}
+                        help={t('settings.contacts.importFileHelp')}
+                        inputLabel={t('settings.contacts.importContactsJson')}
+                        placeholder={t('settings.contacts.importFilePlaceholder')}
+                        accept={CONTACT_IMPORT_ACCEPT}
+                        onFile={onImportFile}
+                    />
                 </div>
             </div>
             {importResult ? (
@@ -407,6 +392,20 @@ function entryKey(entry) {
 
 function isDuplicateFailure(message) {
     return /already exists|already saved|appears more than once/i.test(message);
+}
+
+/**
+ * True for a JSON or CSV contacts file by name or type. A file that states
+ * neither (no name, no type) is let through to the content check.
+ *
+ * @param {{ name?: string, type?: string }} file
+ */
+function isContactsImportFile(file) {
+    const name = String(file?.name || '').toLowerCase();
+    const type = String(file?.type || '').toLowerCase();
+    if (!name && !type) return true;
+    return name.endsWith('.json') || name.endsWith('.csv')
+        || type === 'application/json' || type === 'text/csv';
 }
 
 function importSizeMessage(bytes) {

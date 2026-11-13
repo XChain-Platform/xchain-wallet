@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useId, useMemo, useState } from 'react';
+import { useId, useMemo, useState, useEffect } from 'react';
 import { Button } from '../../ui/Button.jsx';
 import { useProtectedScreen } from '../utils/screenGuard.js';
 import styles from './MnemonicGrid.module.css';
@@ -30,7 +30,7 @@ import '../../i18n/locales/en/settings.js';
  * @param {string} props.mnemonic
  * @param {'small' | 'full'} [props.variant]
  */
-export function MnemonicGrid({ mnemonic, variant = 'full' }) {
+export function MnemonicGrid({ mnemonic, variant = 'full', startRevealed = false, onRevealedChange }) {
     // A recovery phrase on screen is a copy of the wallet: hold the screen
     // guard for as long as the grid is mounted, whatever screen hosts it.
     useProtectedScreen();
@@ -39,7 +39,11 @@ export function MnemonicGrid({ mnemonic, variant = 'full' }) {
     const contentId = useId();
     const words = mnemonic.trim().split(/\s+/);
     const gridClass = variant === 'small' ? styles.gridPopup : styles.gridFull;
-    const revealed = revealedKey === mnemonicKey;
+    // startRevealed shows the words at once (the page already took the password).
+    const revealed = startRevealed || revealedKey === mnemonicKey;
+    // Tells the host when the words are on screen, so it can hold its
+    // "I wrote it down" step until then.
+    useEffect(() => { if (typeof onRevealedChange === 'function') onRevealedChange(revealed); }, [revealed, onRevealedChange]);
 
     return (
         <div className={styles.card} data-mnemonic-card="">
@@ -71,7 +75,7 @@ export function MnemonicGrid({ mnemonic, variant = 'full' }) {
                             aria-expanded="false"
                             onClick={() => setRevealedKey(mnemonicKey)}
                         >
-                            {t('settings.backup.revealRecoveryPhrase')}
+                            {t('settings.backup.revealRecoveryPhraseAction')}
                         </Button>
                     </div>
                 </>

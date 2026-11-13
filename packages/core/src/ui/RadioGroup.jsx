@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useId } from 'react';
+import { isValidElement, useId } from 'react';
 import { InfoTip } from './InfoTip.jsx';
 import { fieldHelpName } from './fieldRequirement.js';
 import styles from './RadioGroup.module.css';
@@ -18,7 +18,10 @@ import '../i18n/locales/en/ui.js';
  * @param {string} [props.name]
  * @param {string} props.value
  * @param {(value: string, event: import('react').ChangeEvent<HTMLInputElement>) => void} props.onChange
- * @param {Array<{ value: string, label: import('react').ReactNode, description?: import('react').ReactNode, disabled?: boolean }>} props.options
+ * @param {Array<{ value: string, label: import('react').ReactNode, description?: import('react').ReactNode, disabled?: boolean, icon?: import('react').ComponentType<any> | import('react').ReactElement }>} props.options
+ *   `icon` (a component or an element) shows before the label; it is
+ *   hidden from the option's accessible name. The Form Standard gives every
+ *   option of a choice an icon.
  * @param {import('react').ReactNode} [props.help]   contextual help shown from an InfoTip beside the legend
  * @param {import('react').ReactNode} [props.hint]
  * @param {import('react').ReactNode} [props.error]
@@ -89,6 +92,9 @@ export function RadioGroup({
                         styles.option,
                         option.disabled ? styles.disabled : null,
                     ].filter(Boolean).join(' ');
+                    const OptionIcon = option.icon;
+                    const iconNode = !OptionIcon ? null
+                        : isValidElement(OptionIcon) ? OptionIcon : <OptionIcon />;
 
                     return (
                         <label className={optionClassName} key={option.value}>
@@ -106,7 +112,15 @@ export function RadioGroup({
                                 onChange={(event) => onChange(option.value, event)}
                             />
                             <span className={styles.copy}>
-                                <span className={styles.label} id={labelId}>{option.label}</span>
+                                {iconNode ? (
+                                    // Outside the label span, so the option's accessible name stays its text.
+                                    <span className={styles.labelRow}>
+                                        <span className={styles.optionIcon} aria-hidden="true" data-form-toggle-icon="">{iconNode}</span>
+                                        <span className={styles.label} id={labelId}>{option.label}</span>
+                                    </span>
+                                ) : (
+                                    <span className={styles.label} id={labelId}>{option.label}</span>
+                                )}
                                 {option.description ? (
                                     <span className={styles.description} id={descriptionId}>
                                         {option.description}

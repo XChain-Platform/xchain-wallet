@@ -6,8 +6,9 @@
 
 .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(9rem, 100%), 1fr));
-    gap: var(--xc-space-3);
+    /* Three tiles per row on a 360px phone, more on wider screens. */
+    grid-template-columns: repeat(auto-fill, minmax(min(5.75rem, 100%), 1fr));
+    gap: var(--xc-space-2);
     align-items: stretch;
 }
 
@@ -38,13 +39,14 @@
     flex-direction: column;
     align-items: normal;
     justify-content: normal;
-    gap: var(--xc-space-2);
+    gap: var(--xc-space-1);
     width: 100%;
     min-width: 0;
     max-width: none;
     height: 100%;
     min-height: 0;
-    padding: var(--xc-card-pad);
+    /* The same inset as the gap between tiles. */
+    padding: var(--xc-space-2);
     border: 0;
     border-radius: inherit;
     background: transparent;
@@ -229,6 +231,6 @@
 
 @media (min-width: 48rem) {
     .grid {
-        grid-template-columns: repeat(auto-fill, minmax(10rem, 12rem));
+        grid-template-columns: repeat(auto-fill, minmax(7.5rem, 9rem));
     }
 }
