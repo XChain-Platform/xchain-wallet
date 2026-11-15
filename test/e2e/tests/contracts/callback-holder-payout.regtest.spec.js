@@ -68,10 +68,10 @@ async function newDevice(browser) {
 async function approveAndReadTxid(page, what, { typedCallback = false } = {}) {
     await expectConfirmModal(page, what, 90_000);
     if (typedCallback) {
-        const typed = page.getByLabel('Type "CALLBACK" to confirm');
-        await expect(typed, 'the CALLBACK confirmation field is missing')
+        const typed = page.getByLabel('Type "RECALL" to confirm');
+        await expect(typed, 'the RECALL confirmation field is missing')
             .toBeVisible({ timeout: 30_000 });
-        await typed.fill('CALLBACK');
+        await typed.fill('RECALL');
     }
     const password = page.getByLabel('Password', { exact: true });
     if (await password.count() > 0 && await password.isVisible().catch(() => false)) {
@@ -109,7 +109,7 @@ async function openExecuteCallbackWhenConfigured(page, timeoutMs = 180_000) {
         const more = main.getByRole('button', { name: 'More', exact: true });
         await expect(more).toBeVisible({ timeout: 30_000 });
         await more.click();
-        const execute = main.getByRole('menuitem', { name: 'Execute callback', exact: true });
+        const execute = main.getByRole('menuitem', { name: 'Recall tokens', exact: true });
         if (await execute.isVisible()) {
             await execute.click();
             return main;
@@ -118,7 +118,7 @@ async function openExecuteCallbackWhenConfigured(page, timeoutMs = 180_000) {
         await nudgeChain();
         await new Promise((resolve) => setTimeout(resolve, 5_000));
     }
-    throw new Error(`Manage Token did not offer "Execute callback" within ${timeoutMs} ms`);
+    throw new Error(`Manage Token did not offer "Recall tokens" within ${timeoutMs} ms`);
 }
 
 async function readCurrentHeight(main) {
@@ -333,7 +333,7 @@ test.describe(`holder-payout callback on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(holdersToPay).toHaveText('1', { timeout: 60_000 });
             await expect(totalPayout).toHaveText(`${expectedHolderPayout} ${PAYOUT_TICK}`);
 
-            const execute = main.getByRole('button', { name: 'Execute callback', exact: true });
+            const execute = main.getByRole('button', { name: 'Recall tokens', exact: true });
             await expect(execute).toBeEnabled({ timeout: 60_000 });
             await execute.click();
             const txid = await approveAndReadTxid(ownerPage, 'the holder-payout callback', {

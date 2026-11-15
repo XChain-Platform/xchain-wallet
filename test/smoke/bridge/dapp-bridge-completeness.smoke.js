@@ -24,13 +24,6 @@ const wsRoot = join(here, '..', '..', '..');
 const ext = join(wsRoot, 'packages', 'extension');
 const web = join(wsRoot, 'packages', 'web');
 
-// Escapes every regex metacharacter (not just '.') so a literal string can
-// be embedded in `new RegExp()` without a stray backslash in the input
-// changing how the following character is interpreted.
-function escapeRegExp(s) {
-    return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 // --- 1. Provider exposes every §43.2 method (G126, G128, G129) ---------
 
 const providerPath = join(ext, 'src', 'inject', 'xchainProvider.js');
@@ -68,33 +61,13 @@ assert.ok(/listeners/.test(provider), 'xchainProvider keeps a listeners map');
 assert.ok(/xchain-inject-event/.test(provider),
     'xchainProvider listens for xchain-inject-event postMessages');
 
-// --- 2. Background handlers register every bridge route (G126, G128) ---
+// --- 2. Background permission gates (G126, G128) -----------------------
+
+// Route completeness is derived from XChainProvider in
+// provider-spec-conformance.test.jsx, including the reverse direction.
 
 const handlersPath = join(ext, 'src', 'bridge', 'handlers.js');
 const handlers = readFileSync(handlersPath, 'utf8');
-for (const route of [
-    'bridge.connect',
-    'bridge.disconnect',
-    'bridge.getAccounts',
-    'bridge.getAddresses',
-    'bridge.getBalances',
-    'bridge.getSupportedChains',
-    'bridge.getActiveChains',
-    'bridge.signMessage',
-    'bridge.signAction',
-    'bridge.signPsbt',
-    'bridge.coSign',
-    'bridge.signIn',
-    'bridge.parallel',
-]) {
-    // v0.290.0 / Cluster Q FOLLOWUP 4: handlers.js shadows host.register
-    // with a local register() that wraps every channel in entry/exit
-    // logging. Either form satisfies "background registers <route>".
-    const escaped = escapeRegExp(route);
-    const wrapped = new RegExp(`\\bregister\\(\\s*['"]${escaped}['"]`).test(handlers);
-    const bare = new RegExp(`host\\.register\\(\\s*['"]${escaped}['"]`).test(handlers);
-    assert.ok(wrapped || bare, `background registers ${route}`);
-}
 // Permission gating must run on the read methods: getAddresses /
 // getBalances / getActiveChains all sit behind requireSite.
 assert.ok(/requireSite/.test(handlers),

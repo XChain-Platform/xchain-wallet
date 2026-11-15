@@ -37,7 +37,7 @@ import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { useReportLoadFailure } from './pageLoadFailures.jsx';
 import { describeChartSeries } from './Sparkline.jsx';
 import { withRequestTimeout } from '../utils/requestTimeout.js';
-import { t } from '../../i18n/index.js';
+import { getFormatLocale, t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
 
 /**
@@ -77,11 +77,14 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
     }, [rawRows, tick1, tick2, period]);
     const chartLabel = points.length > 0
         ? describeChartSeries(points.map((point) => point.value), {
-            label: `${tick1}/${tick2} price chart`,
+            label: t('components.marketChart.priceChart', { tick1, tick2 }),
             rangeLabel: period.label,
-            formatValue: (value) => `${formatChartPrice(value)} ${tick2}`,
+            formatValue: (value) => t('components.marketChart.chartValue', {
+                price: formatChartPrice(value),
+                unit: tick2,
+            }),
         })
-        : `${tick1}/${tick2} price chart. No price trend available for the ${period.label} range.`;
+        : t('components.marketChart.noPriceTrend', { tick1, tick2, range: period.label });
     // Lazy-init the chart once the container is mounted.
 
     useEffect(() => {
@@ -386,7 +389,7 @@ function extractRows(resp) {
 }
 
 function formatChartPrice(value) {
-    return new Intl.NumberFormat('en-US', { maximumSignificantDigits: 8 }).format(value);
+    return new Intl.NumberFormat(getFormatLocale(), { maximumSignificantDigits: 8 }).format(value);
 }
 
 // The price scale and its last-value tag show a price below 1 to four

@@ -22,6 +22,7 @@ vi.mock('../../../packages/core/src/crypto/index.js', async (importOriginal) => 
     ...await importOriginal(),
     deriveMasterKeyAsync: mocks.deriveMasterKeyAsync,
     decrypt: mocks.decrypt,
+    decryptWalletSeed: mocks.decryptWalletSeed,
     base64ToBytes: () => new Uint8Array([1, 2]),
 }));
 
@@ -313,6 +314,7 @@ describe('exportPrivateKey refusal and cleanup edges', () => {
         });
         mocks.deriveMasterKeyAsync.mockResolvedValue(masterKey);
         mocks.decrypt.mockRejectedValue(new AeadAuthError(new Error('bad tag')));
+        mocks.decryptWalletSeed.mockRejectedValue(new AeadAuthError(new Error('bad tag')));
 
         await expect(exportPrivateKey({
             vault: fixture.vault,

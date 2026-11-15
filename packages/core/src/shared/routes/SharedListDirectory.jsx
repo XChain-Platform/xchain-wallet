@@ -24,6 +24,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import {
     bindLabel,
     orderSharedLists,
@@ -127,7 +128,7 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
                 });
             })
             .catch((error) => {
-                if (!cancelled) setLoadError(error?.message || 'Failed to load shared lists.');
+                if (!cancelled) setLoadError(userFacingMessage(error, 'Failed to load shared lists.'));
             });
         return () => { cancelled = true; };
     }, [chainId, messaging, walletId, directoryReload]);

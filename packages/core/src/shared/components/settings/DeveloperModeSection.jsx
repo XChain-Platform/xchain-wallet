@@ -42,6 +42,7 @@
 //     record and the in-memory registry entry.
 //   - Logs and diagnostics console (§48.5 / G150).
 //
+import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import { useEffect, useState } from 'react';
 import { registry as registryLib, schemas } from '@xchain-wallet/core';
 import { DEFAULT_MINER_URL } from '../../../branding/branding.js';
@@ -707,7 +708,7 @@ function CustomChainsRow({ developerMode }) {
             setChains(Array.isArray(r?.descriptors) ? r.descriptors : []);
             setLoadError(null);
         } catch (err) {
-            setLoadError(err?.message || 'Failed to load custom networks.');
+            setLoadError(userFacingMessage(err, 'Failed to load custom networks.'));
         } finally {
             setLoading(false);
         }
@@ -728,7 +729,7 @@ function CustomChainsRow({ developerMode }) {
             })
             .catch((err) => {
                 if (cancelled) return;
-                setLoadError(err?.message || 'Failed to load custom networks.');
+                setLoadError(userFacingMessage(err, 'Failed to load custom networks.'));
             })
             .finally(() => {
                 if (!cancelled) setLoading(false);

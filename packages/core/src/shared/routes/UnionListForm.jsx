@@ -41,13 +41,19 @@ import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
+import {
+    listActionCheckFailedMessage,
+    listActionUnavailableMessage,
+} from '../utils/listActionAvailability.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 const FROM_HELP = 'The address that publishes the union list and pays its network fee. It becomes the list\'s owner.';
 const MEMO_HELP = 'A public note saved on the blockchain with this union list. It cannot contain | or ;.';
-const ESTIMATE_HELP = "This count is an estimate because the indexer judges the merged membership at the create's block.";
-const SDK_REASON = "This wallet's SDK cannot build a union list yet; it arrives with the next SDK update.";
+const ESTIMATE_HELP = 'This is an estimate. The final count is worked out by the network when your union list is recorded.';
+const UNAVAILABLE_REASON = listActionUnavailableMessage('union');
+const SUPPORT_CHECK_FAILED_REASON = listActionCheckFailedMessage('union');
 
 function responseRows(response) {
     if (Array.isArray(response)) return response;
@@ -195,7 +201,7 @@ function UnionListFormScreen({ walletId, chainId: initialChainId, activeAccountI
                 settings,
             }));
         }).catch((error) => {
-            if (!cancelled) setLoadError(error?.message || 'Failed to load addresses.');
+            if (!cancelled) setLoadError(userFacingMessage(error, 'Failed to load addresses.'));
         });
         return () => { cancelled = true; };
     }, [walletId, activeAccountId, initialChainId, messaging]);
@@ -209,7 +215,7 @@ function UnionListFormScreen({ walletId, chainId: initialChainId, activeAccountI
         readCandidates({ messaging, chainId, addresses: addressesByChain[chainId] || [] })
             .then((rows) => { if (!cancelled) setCandidates(rows); })
             .catch((error) => {
-                if (!cancelled) setLoadError(error?.message || 'Failed to load lists.');
+                if (!cancelled) setLoadError(userFacingMessage(error, 'Failed to load lists.'));
             });
         return () => { cancelled = true; };
     }, [addressesByChain, chainId, messaging]);
@@ -225,7 +231,7 @@ function UnionListFormScreen({ walletId, chainId: initialChainId, activeAccountI
         };
         Promise.resolve().then(() => listFormatSupport({ sdkRegistry, chainId }))
             .then((support) => { if (!cancelled) setSdkSupported(support?.union === true); })
-            .catch(() => { if (!cancelled) setSdkSupported(false); });
+            .catch(() => { if (!cancelled) setSdkSupported('error'); });
         return () => { cancelled = true; };
     }, [chainId, messaging]);
 
@@ -271,7 +277,10 @@ function UnionListFormScreen({ walletId, chainId: initialChainId, activeAccountI
     async function handleReview(event) {
         event.preventDefault();
         const trimmedMemo = memo.trim();
-        if (sdkSupported !== true) { setFormError(SDK_REASON); return; }
+        if (sdkSupported !== true) {
+            setFormError(sdkSupported === 'error' ? SUPPORT_CHECK_FAILED_REASON : UNAVAILABLE_REASON);
+            return;
+        }
         if (!fromAddress) { setFormError('No signing address available on this network.'); return; }
         if (!pickState.canReview) {
             setFormError(pickState.overLimit
@@ -391,12 +400,13 @@ function UnionListFormScreen({ walletId, chainId: initialChainId, activeAccountI
             label="Create union list"
             onSubmit={handleReview}
             sectioned
-            status={(pickState.overLimit || sdkSupported === false || formError) ? (
+            status={(pickState.overLimit || sdkSupported === false || sdkSupported === 'error' || formError) ? (
                 <>
                     {pickState.overLimit ? (
                         <StatusMessage variant="error">The estimated merged membership is over 10,000.</StatusMessage>
                     ) : null}
-                    {sdkSupported === false ? <StatusMessage variant="error">{SDK_REASON}</StatusMessage> : null}
+                    {sdkSupported === false ? <StatusMessage variant="error">{UNAVAILABLE_REASON}</StatusMessage> : null}
+                    {sdkSupported === 'error' ? <StatusMessage variant="error">{SUPPORT_CHECK_FAILED_REASON}</StatusMessage> : null}
                     {formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
                 </>
             ) : null}

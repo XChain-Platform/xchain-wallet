@@ -42,7 +42,7 @@ assert.match(sectionSrc, /dryRunStage/, 'tracks dry-run stage');
 assert.match(sectionSrc, /'idle' \| 'form' \| 'running' \| 'result'/, 'four dry-run stages');
 assert.match(sectionSrc, /<DryRunForm/, 'inline form component');
 assert.match(sectionSrc, /<DryRunReport/, 'comparison report component');
-assert.match(sectionSrc, /Run test/, 'submit copy');
+assert.match(sectionSrc, /Run test|settings\.backup\.runTest/, 'submit copy');
 assert.match(
     sectionSrc,
     /Backup matches this wallet/,
@@ -57,15 +57,17 @@ assert.match(sectionSrc, /matchedCount/, 'shows matched counts');
 assert.match(sectionSrc, /divergentCount/, 'shows divergent counts');
 assert.match(sectionSrc, /missingCount/, 'shows missing counts');
 
-// Format selector covers both kinds.
-assert.match(sectionSrc, /value="bip39"/, 'BIP39 option');
-assert.match(sectionSrc, /value="counterwallet-legacy"/, 'Counterwallet option');
+// Stored format is displayed without an editable override.
+assert.match(sectionSrc, /isKnownFormat/, 'recognizes stored recovery phrase formats');
+assert.match(sectionSrc, /styles\.readOnlyFormat/, 'shows the stored format as text');
+assert.doesNotMatch(sectionSrc, /aria-label=\{t\('settings\.backup\.phraseFormat'\)\}/,
+    'does not render the phrase format selector');
 
 // Counterwallet branch hides BIP39 passphrase input.
 assert.match(
     sectionSrc,
-    /format === 'bip39' \?[\s\S]{0,200}Extra passphrase/,
-    'passphrase input is gated behind format === bip39',
+    /!isLegacy \?[\s\S]{0,500}(?:Extra passphrase|importWallet\.passphrase\.label)/,
+    'passphrase input is hidden for the stored legacy format',
 );
 
 // --- host handler -----------------------------------------------------

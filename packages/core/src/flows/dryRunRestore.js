@@ -18,11 +18,11 @@
 //   - Test a newly generated seed before deleting the old wallet.
 //   - Sanity-check a restore before committing.
 //
-// This flow is FORMAT-AWARE (BIP39 vs Counterwallet). The caller picks
-// a format up-front (matching how the user entered their words on the
-// "Test your backup" screen); we do NOT auto-detect, because the same
-// 12 words can be valid BIP39 AND valid Counterwallet in pathological
-// cases and silently choosing one would mask a mismatch.
+// This flow is FORMAT-AWARE (BIP39 vs Counterwallet). The stored wallet
+// format is authoritative: an omitted format uses it, while a supplied
+// format must match it. We do NOT auto-detect because the same 12 words
+// can be valid in both formats and silently choosing one would mask a
+// mismatch.
 
 import {
     bip39MnemonicToSeed,
@@ -70,7 +70,7 @@ export const DEFAULT_DRY_RUN_GAP = 10;
  * @property {import('../storage/Vault.js').Vault} vault
  * @property {string} walletId                    current wallet whose addresses we compare against
  * @property {string} mnemonic
- * @property {'bip39' | 'counterwallet-legacy'} [format]   defaults to the stored wallet format
+ * @property {'bip39' | 'counterwallet-legacy'} [format]   optional, but must match the stored wallet format
  * @property {string} [bip39Passphrase]           ignored for counterwallet-legacy
  * @property {string[]} [activeChainIds]          default: every descriptor in the registry
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry

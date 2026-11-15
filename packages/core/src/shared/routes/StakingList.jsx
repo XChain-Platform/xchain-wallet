@@ -59,6 +59,19 @@ const chainRegistry = registryLib.defaultRegistry();
 // that lane off Bitcoin instead of relying on it to return nothing.
 const VALIDATOR_COIN = 'bitcoin';
 
+const STAKING_STATUS_LABELS = Object.freeze({
+    active: 'Active',
+    cooldown: 'Releasing',
+    locked: 'Locked',
+    pending: 'Pending',
+});
+
+export function stakingStatusLabel(status) {
+    return Object.prototype.hasOwnProperty.call(STAKING_STATUS_LABELS, status)
+        ? STAKING_STATUS_LABELS[status]
+        : 'Unknown';
+}
+
 /**
  * Staking root (§42.7.4, redesigned): a unified list of the wallet's
  * staking positions across chains, following the My-dispensers list
@@ -604,7 +617,7 @@ function StakeRow({ row, period, hideSecondLine = false, onSelect }) {
                 </div>
                 <div className={local.trailing}>
                     <span className={`${local.status} ${local[`status_${row.status}`] || ''}`}>
-                        {row.status}
+                        {stakingStatusLabel(row.status)}
                     </span>
                     <span className={local.amount}>{row.amountLabel}</span>
                     {period ? <span className={local.duration}>{period}</span> : null}

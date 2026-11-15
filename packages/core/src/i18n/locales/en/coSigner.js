@@ -17,6 +17,11 @@ import { addEnglish } from '../../store.js';
 const messages = {
     // --- agent account review -----------------------------------
     'coSigner.provision.noLimit': 'No limit',
+    'coSigner.provision.perActionAny': '{action}: up to {amount} of any token per action',
+    'coSigner.provision.perActionToken': '{action}: up to {amount} {tick} per action',
+    'coSigner.provision.rollingActions': 'At most {count} actions every {hours} hours',
+    'coSigner.provision.rollingToken': 'Up to {amount} {tick} every {hours} hours',
+    'coSigner.provision.confirmThreshold': 'Flag requests over {amount} {tick} as large',
 };
 
 addEnglish(messages);

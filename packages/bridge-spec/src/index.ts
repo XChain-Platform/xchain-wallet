@@ -183,8 +183,9 @@ export interface ConnectOpts {
     // Wallet presents these pre-selected; the user may narrow the set.
     // Unknown ids are not offered. Omit to show all supported chains.
     requestedChains?: ChainId[];
-    // Minimum bridge-spec semver range the dApp requires (e.g. '^1.2.0').
-    // Wallet warns the user if the installed wallet's bridge falls outside.
+    // Semver range the dApp requires (e.g. '^1.2.0'). If no supported
+    // version satisfies it, connect() fails with BRIDGE_VERSION_MISMATCH.
+    // Omit to skip negotiation.
     requiredBridgeVersion?: string;
 }
 
@@ -241,8 +242,9 @@ export interface SendActionParams {
     memo?: string;
 }
 
-// Params for a SWEEP action (Phase 1) - empty a source of all of one asset,
-// or all assets if asset is omitted.
+// Params for a SWEEP action (Phase 1). SWEEP empties the source by category.
+// `asset` is reserved for future per-asset support; current wallets reject it
+// with INVALID_PARAMS rather than widening it into a whole-address sweep.
 export interface SweepActionParams {
     fromAddress: string;
     toAddress: string;

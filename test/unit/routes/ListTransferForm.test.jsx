@@ -81,9 +81,11 @@ function makeMessaging({ walletMode = 'full', listError = null } = {}) {
 }
 
 function mount({
-    support = { share: true, transfer: true, union: true }, actionIndex = '2700', ...options
+    support = { share: true, transfer: true, union: true }, supportError = false,
+    actionIndex = '2700', ...options
 } = {}) {
-    listFormatSupport.mockResolvedValue(support);
+    if (supportError) listFormatSupport.mockRejectedValue(new Error('support lookup failed'));
+    else listFormatSupport.mockResolvedValue(support);
     const messaging = makeMessaging(options);
     render(
         <MessagingProvider shell="web" messaging={messaging}>
@@ -218,7 +220,7 @@ describe('ListTransferForm', () => {
     ])('renders disabled with the SDK reason when transfer support is %s', async (_case, support) => {
         const messaging = mount({ support });
 
-        expect(await screen.findByText(/SDK cannot build a list transfer yet/)).toBeTruthy();
+        expect(await screen.findByText("Transferring lists isn't available in this version of the wallet yet.")).toBeTruthy();
         expect(listFormatSupport).toHaveBeenCalledWith({
             sdkRegistry: expect.objectContaining({ get: expect.any(Function) }),
             chainId: CHAIN,
@@ -226,6 +228,16 @@ describe('ListTransferForm', () => {
         expect(messaging.getActionFormats).not.toHaveBeenCalled();
         expect(screen.getByLabelText('New owner').disabled).toBe(true);
         expect(screen.getByLabelText('Type TRANSFER to confirm').disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Transfer list' }).disabled).toBe(true);
+    });
+
+    it('separates a failed support check from an unavailable action', async () => {
+        mount({ supportError: true });
+
+        expect(await screen.findByText(
+            "Couldn't check whether transferring lists is available right now. Reopen this page to try again.",
+        )).toBeTruthy();
+        expect(screen.queryByText(/isn't available in this version/)).toBeNull();
         expect(screen.getByRole('button', { name: 'Transfer list' }).disabled).toBe(true);
     });
 

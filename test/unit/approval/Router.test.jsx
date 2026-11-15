@@ -119,6 +119,17 @@ describe('approval Router', () => {
         expect(screen.getByRole('alert').textContent).toBe('Approval request expired');
     });
 
+    it('replaces developer load details with a useful next step', async () => {
+        mocks.fetchApproval.mockRejectedValue(new Error('approval.fetch: broker lookup failed'));
+
+        await renderRoute();
+
+        expect(screen.getByRole('alert').textContent).toBe(
+            "We couldn't load this request. Close this window and try again from the site.",
+        );
+        expect(screen.queryByText(/approval\.fetch/)).toBeNull();
+    });
+
     it('refuses a broker response for a different approval id', async () => {
         mocks.fetchApproval.mockResolvedValue({
             id: 'another-request',

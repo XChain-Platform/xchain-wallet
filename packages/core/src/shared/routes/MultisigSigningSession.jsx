@@ -61,6 +61,9 @@ const CONTRIBUTION_LABELS = {
 };
 const contributionLabel = (k) => CONTRIBUTION_LABELS[k] || 'Signature';
 
+export const COLLECTOR_ERROR_MESSAGE =
+    "Could not read that cosigner reply. Select Clear received reply, then scan again or paste the whole code your cosigner's wallet shows.";
+
 function outputAddress(script, chainId) {
     const coin = String(chainId || '').split('-')[0];
     const network = String(chainId || '').includes('mainnet')
@@ -488,6 +491,8 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
         setCollectorState(createXcwCollector());
         setPasteInput('');
         setPasteResult(null);
+        setError(null);
+        retryRef.current = null;
     }
 
     // Camera scanner frame handler: each detected QR string goes
@@ -497,13 +502,17 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
     // identical.
     const handleScannerFrame = useCallback(async (text) => {
         if (!active || busy) return;
+        const alreadyErrored = Boolean(collectorState.error);
         let next = addChunkToCollector(collectorState, text);
         if (next === collectorState) {
             // addChunkToCollector mutates the same object; re-check.
             next = { ...collectorState };
         }
         if (next.error) {
-            fail(next.error, null);
+            if (!alreadyErrored) {
+                console.error('Multisig scan: reply frame rejected:', next.error); // eslint-disable-line no-console
+            }
+            fail(COLLECTOR_ERROR_MESSAGE, null);
             setCollectorState(next);
             return;
         }
@@ -555,8 +564,12 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
             setPasteInput('');
         } catch (err) {
             console.error('Multisig scanned contribution failed:', err); // eslint-disable-line no-console
-            const recheck = REFUSED_REPLY_CODES.has(err?.code) ? null : await recheckReply(envelope, active.id);
-            fail(recheck || userFacingMessage(err, 'Failed to apply scanned contribution.'), null);
+            const refused = REFUSED_REPLY_CODES.has(err?.code);
+            const recheck = refused ? null : await recheckReply(envelope, active.id);
+            const fallback = refused
+                ? 'That cosigner reply did not pass the signature check. Ask your cosigner to make a new reply, then scan it.'
+                : 'Could not add that cosigner reply. Ask your cosigner to show their code again, then scan it.';
+            fail(recheck || userFacingMessage(err, fallback), null);
         } finally {
             setBusy(false);
         }
@@ -579,7 +592,7 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
             await refreshAfterAction(active.id);
         } catch (err) {
             console.error('Multisig local signing failed:', err); // eslint-disable-line no-console
-            fail(userFacingMessage(err, 'Local-signing failed.'), handleSignLocally);
+            fail(userFacingMessage(err, 'Could not sign on this device. Check your password and try again.'), handleSignLocally);
         } finally {
             setBusy(false);
         }
@@ -601,7 +614,8 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
         for (const line of lines) {
             state = addChunkToCollector(state, line);
             if (state.error) {
-                fail(state.error, null);
+                console.error('Multisig paste: reply frame rejected:', state.error); // eslint-disable-line no-console
+                fail(COLLECTOR_ERROR_MESSAGE, null);
                 setCollectorState(state);
                 setBusy(false);
                 return;
@@ -618,7 +632,10 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
             envelope = decodeMultisigEnvelope(state.psbt);
         } catch (e) {
             console.error('Multisig envelope decode failed:', e); // eslint-disable-line no-console
-            fail(userFacingMessage(e, 'Failed to parse envelope.'), null);
+            fail(userFacingMessage(
+                e,
+                'Could not read that cosigner reply. Ask your cosigner to show their code again, then paste it.',
+            ), null);
             setBusy(false);
             return;
         }
@@ -664,13 +681,16 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
             console.error('Multisig contribution apply failed:', err); // eslint-disable-line no-console
             if (REFUSED_REPLY_CODES.has(err?.code)) {
                 // Submitting the same reply again cannot pass the reply check.
-                fail(userFacingMessage(err, 'Failed to apply contribution.'), null);
+                fail(userFacingMessage(
+                    err,
+                    'That cosigner reply did not pass the signature check. Ask your cosigner to make a new reply, then paste it.',
+                ), null);
             } else {
                 const recheck = await recheckReply(envelope, active.id);
                 if (recheck) {
                     fail(recheck, null);
                 } else {
-                    fail(userFacingMessage(err, 'Failed to apply contribution.'), handlePasteSubmit);
+                    fail(userFacingMessage(err, 'Could not add that cosigner reply. Try again.'), handlePasteSubmit);
                 }
             }
         } finally {

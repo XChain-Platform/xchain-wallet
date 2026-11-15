@@ -25,6 +25,9 @@ import tableStyles from '../components/DataTable.module.css';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { revealHiddenText } from '../utils/textHardening.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/routes.js';
+import '../../i18n/locales/en/send.js';
 import styles from './ActionsMenu.module.css';
 
 /**
@@ -466,15 +469,15 @@ function StateTable({ state }) {
             <caption className={tableStyles.visuallyHiddenCaption}>Contract state</caption>
             <thead>
                 <tr>
-                    <th className={tableStyles.headerCell} scope="col">Key</th>
-                    <th className={tableStyles.headerCell} scope="col">Value</th>
+                    <th className={tableStyles.headerCell} scope="col">{t('routes.contractDetail.key')}</th>
+                    <th className={tableStyles.headerCell} scope="col">{t('home.tabs.value')}</th>
                 </tr>
             </thead>
             <tbody>
                 {entries.map(([k, v]) => (
                     <tr key={k}>
-                        <td className={`${tableStyles.cell} ${tableStyles.mono}`} data-label="Key" style={{ verticalAlign: 'top' }}>{revealHiddenText(k, { keepLayout: true })}</td>
-                        <td className={`${tableStyles.cell} ${tableStyles.mono}`} data-label="Value">{renderStateValue(v)}</td>
+                        <td className={`${tableStyles.cell} ${tableStyles.mono}`} data-label={t('routes.contractDetail.key')} style={{ verticalAlign: 'top' }}>{revealHiddenText(k, { keepLayout: true })}</td>
+                        <td className={`${tableStyles.cell} ${tableStyles.mono}`} data-label={t('home.tabs.value')}>{renderStateValue(v)}</td>
                     </tr>
                 ))}
             </tbody>
@@ -492,15 +495,15 @@ function BalancesTable({ balances }) {
             <caption className={tableStyles.visuallyHiddenCaption}>Contract token balances</caption>
             <thead>
                 <tr>
-                    <th className={tableStyles.headerCell} scope="col">Token</th>
-                    <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Amount</th>
+                    <th className={tableStyles.headerCell} scope="col">{t('send.fields.token')}</th>
+                    <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">{t('send.fields.amount')}</th>
                 </tr>
             </thead>
             <tbody>
                 {rows.map((r, i) => (
                     <tr key={String(r.tick) + ':' + i}>
-                        <td className={`${tableStyles.cell} ${tableStyles.mono}`} data-label="Token">{r.tick}</td>
-                        <td className={`${tableStyles.cell} ${tableStyles.mono} ${tableStyles.numeric}`} data-label="Amount">{String(r.quantity)}</td>
+                        <td className={`${tableStyles.cell} ${tableStyles.mono}`} data-label={t('send.fields.token')}>{r.tick}</td>
+                        <td className={`${tableStyles.cell} ${tableStyles.mono} ${tableStyles.numeric}`} data-label={t('send.fields.amount')}>{String(r.quantity)}</td>
                     </tr>
                 ))}
             </tbody>

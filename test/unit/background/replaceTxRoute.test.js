@@ -422,3 +422,54 @@ describe('tx.replace under a freeze armed while the signer waits', () => {
         }
     });
 });
+
+describe('tx.replace when the vault refuses a write after the send', () => {
+    // Every vault write after the bytes went out is refused until `heal` runs.
+    function refusingAfterSend(h) {
+        const state = { refuse: false };
+        h.broadcastTx.mockImplementation(async () => {
+            state.refuse = true;
+            return { txid: REPLACEMENT };
+        });
+        h.put.mockImplementation(async (row) => {
+            if (state.refuse) throw new Error('VaultStateError: vault is closed');
+            h.rows.set(row.id, row);
+            return row;
+        });
+        return { heal: () => { state.refuse = false; } };
+    }
+
+    it('reports the landed replacement and owes its settlement instead of throwing', async () => {
+        const h = harness();
+        refusingAfterSend(h);
+        const response = await call(h.host, {});
+
+        expect(response.ok, JSON.stringify(response.error)).toBe(true);
+        expect(response.result.replacementTxHash).toBe(REPLACEMENT);
+        expect(h.rows.get('pending-aaaa')).toMatchObject({ status: 'broadcast', rbfReplacement: null });
+        expect([...h.rows.values()].find((row) => row.txid === REPLACEMENT)).toMatchObject({ status: 'broadcasting' });
+    });
+
+    it('settles the owed replacement and is not blocked by it once the vault recovers', async () => {
+        const h = harness();
+        const { heal } = refusingAfterSend(h);
+        await call(h.host, {});
+        heal();
+
+        const again = await call(h.host, {});
+        expect(again.error?.message ?? '').not.toMatch(/already waiting in the queued-transactions banner/);
+        expect([...h.rows.values()].find((row) => row.txid === REPLACEMENT)).toMatchObject({ status: 'broadcast' });
+    });
+
+    it('still raises the missing-txid error when the failed marker is refused', async () => {
+        const h = harness();
+        h.broadcastTx.mockImplementation(async () => {
+            h.put.mockImplementation(async () => { throw new Error('VaultStateError: vault is closed'); });
+            return {};
+        });
+        const response = await call(h.host, {});
+
+        expect(response.ok).toBe(false);
+        expect(response.error.message).toMatch(/did not return a txid/);
+    });
+});

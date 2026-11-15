@@ -442,6 +442,26 @@ assert.equal(concurrencyCancel.verdict, VERDICT.NO_VERDICT);
 assert.equal(stateOf(classifyRun({ id: 0, jobs: [{ name: 'e2e', status: 'completed', conclusion: 'timed_out', steps: [] }] }), 'e2e'),
     JOB_STATE.NOT_STARTED, 'a job with no steps ran nothing, whatever its conclusion');
 
+// A job whose real work an `if:` turned off concludes success with that step skipped. It stays
+// PASSED (a skipped step states no assertion) but its detail must name the skipped step and must
+// not count it as passed, so the line cannot contradict a summary that says the gate did not run.
+{
+    const step = (name, conclusion) => ({ name, status: 'completed', conclusion });
+    const detailOf = (steps) => classifyRun({
+        id: 0, jobs: [{ name: 'e2e-regtest', status: 'completed', conclusion: 'success', steps }],
+    }).jobs[0];
+    const ran = detailOf([step('Set up job', 'success'), step('Run the suite', 'success')]);
+    assert.equal(ran.state, JOB_STATE.PASSED);
+    assert.equal(ran.detail, '2 step(s) passed', 'a job with no skipped step keeps its plain detail');
+    const off = detailOf([
+        step('Set up job', 'success'), step('Open the regtest tunnel', 'skipped'),
+        step('Run the suite', 'skipped'), step('Complete job', 'success'),
+    ]);
+    assert.equal(off.state, JOB_STATE.PASSED, 'a skipped step states no assertion, so the state is unchanged');
+    assert.equal(off.detail, '2 step(s) passed, 2 skipped: Open the regtest tunnel, Run the suite',
+        'skipped steps must be counted apart from passed ones and named');
+}
+
 // Drive the CLI against a local stub API: a refused annotation must leave the
 // verdict and exit code exactly as the offline form gives them, and a refused
 // jobs call must still exit 2, because without jobs there is nothing to classify.

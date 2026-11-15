@@ -305,7 +305,7 @@ async function prepareGatedPublish(opts, caller) {
  * shared confirm page. The prepared action accompanies the
  * envelope so approval can sign it without generating a second key or cipher.
  *
- * @param {GatedPublishOpts & { ownAddresses?: string[], change?: string, confirmEncoderOpts?: object }} opts
+ * @param {GatedPublishOpts & { ownAddresses?: string[], change?: string, confirmEncoderOpts?: object, envelopeSigner?: object|null }} opts
  * @returns {Promise<import('./composeActionForConfirm.js').HostComposeEnvelope & { gatedPublish: { actionData: object, keyHash: string, ciphertextLength: number } }>}
  */
 export async function composeGatedPublishForConfirm(opts) {
@@ -324,6 +324,7 @@ export async function composeGatedPublishForConfirm(opts) {
         encoderOpts,
         source: prepared.source.address,
         ownAddresses: opts.ownAddresses,
+        signer: opts.envelopeSigner ?? null,
     });
     rememberGeneratedKey(prepared.generatedKey);
     return {

@@ -315,7 +315,7 @@ export const EntryRow = memo(function EntryRow({ entry, selected, opensDetail = 
                 actionIcon={actionIconForAction(
                     actionKind === 'send' || actionKind === 'receive' ? actionKind : entry.action,
                 )}
-                context={(
+                subtitle={(
                     <>
                         {linkedTo ? <span role="img" aria-label={linkedTo} title={linkedTo}>🔗</span> : null}
                         {verify ? (

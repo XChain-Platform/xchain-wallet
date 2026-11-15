@@ -297,3 +297,85 @@ describe('owed settlement fold', () => {
         expect(store.queues.get(W)).toEqual([]);
     });
 });
+
+describe('owed reveal folded onto a stored reveal', () => {
+    const REVEAL = { txid: 'reveal-txid', commitTxid: 'commit-txid' };
+    const LANDED = { status: 'broadcast', txid: 'reveal-txid', error: null };
+    const storedReveal = () => ({ id: 's-old', walletId: W, pendingTxId: P, op: 'reveal', reveal: REVEAL, recordedAt: 1 });
+    const tick = () => new Promise((done) => setTimeout(done, 0));
+
+    function revealVault() {
+        const made = memVault();
+        Object.assign(made.records.get(P), { revealTxHex: REVEAL_HEX, revealTxid: 'reveal-txid' });
+        return made;
+    }
+
+    it('keeps the landed patch a dormant tab recorded after its reveal record was stored', async () => {
+        const { store, engine } = boot(memStorage());
+        await engine.ensureQueueLoaded();
+        engine.recordOwedSettlement(W, P, 'reveal', REVEAL);
+        await tick();
+        store.dormant = true;
+        engine.recordOwedSettlement(W, P, 'patch', LANDED);
+        expect(store.owed[0]).toMatchObject({ op: 'reveal', patch: LANDED });
+
+        expect(await refreshBroadcastQueueStore(store)).toBe(true);
+        expect(store.owed).toHaveLength(1);
+        expect(store.owed[0]).toMatchObject({ op: 'reveal', patch: LANDED });
+
+        const { vault, records } = revealVault();
+        await engine.flushOwedSettlements(vault);
+        expect(store.owed).toHaveLength(0);
+        expect(records.get(P)).toMatchObject({ status: 'broadcast', txid: 'reveal-txid', commitLanded: true });
+    });
+
+    it('keeps the discard a dormant tab recorded after its reveal record was stored', async () => {
+        const { store, engine } = boot(memStorage());
+        await engine.ensureQueueLoaded();
+        engine.recordOwedSettlement(W, P, 'reveal', REVEAL);
+        await tick();
+        store.dormant = true;
+        engine.recordOwedSettlement(W, P, 'discard');
+
+        expect(await refreshBroadcastQueueStore(store)).toBe(true);
+        expect(store.owed).toHaveLength(1);
+        expect(store.owed[0]).toMatchObject({ op: 'reveal', discard: true });
+
+        const { vault, records } = revealVault();
+        await engine.flushOwedSettlements(vault);
+        expect(records.get(P)).toMatchObject({ status: 'broadcast', txid: 'commit-txid', commitLanded: true });
+    });
+
+    it('keeps the landed patch recorded before the first load over a stored reveal record', async () => {
+        const { store, engine } = boot(memStorage([storedReveal()]));
+        engine.recordOwedSettlement(W, P, 'reveal', REVEAL);
+        engine.recordOwedSettlement(W, P, 'patch', LANDED);
+        await engine.ensureQueueLoaded();
+        expect(store.owed).toHaveLength(1);
+        expect(store.owed[0]).toMatchObject({ op: 'reveal', patch: LANDED });
+
+        const { vault, records } = revealVault();
+        await engine.flushOwedSettlements(vault);
+        expect(records.get(P)).toMatchObject({ status: 'broadcast', txid: 'reveal-txid', commitLanded: true });
+    });
+
+    it('folds a reveal record carrying a write into a new record and drops a bare one', () => {
+        const prior = storedReveal();
+        const bare = { id: 'n1', pendingTxId: P, op: 'reveal', reveal: REVEAL };
+        const patched = { ...bare, id: 'n2', patch: LANDED };
+        const discarded = { ...bare, id: 'n3', discard: true };
+
+        expect(foldOwedSettlement(prior, bare)).toBe(prior);
+        const withPatch = foldOwedSettlement(prior, patched);
+        expect(withPatch).not.toBe(prior);
+        expect(withPatch).not.toBe(patched);
+        expect(withPatch).toMatchObject({ id: 'n2', op: 'reveal', reveal: REVEAL, patch: LANDED });
+        expect(foldOwedSettlement(prior, discarded)).toMatchObject({ id: 'n3', op: 'reveal', discard: true });
+    });
+
+    it('lets a terminal patch on the stored reveal record close it against a later reveal', () => {
+        const prior = { ...storedReveal(), patch: LANDED };
+        const later = { id: 'n1', pendingTxId: P, op: 'reveal', reveal: REVEAL, patch: TRANSIENT };
+        expect(foldOwedSettlement(prior, later)).toBe(prior);
+    });
+});

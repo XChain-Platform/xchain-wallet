@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, Checkbox, FeeSelector, FormNotice, FormPage, Icon, InfoTip, Input, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
@@ -201,7 +202,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 }
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+                if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load addresses.'));
             });
         return () => { cancelled = true; };
     }, [walletId, chainId, messaging]);
@@ -700,7 +701,8 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     }
 
     // The token's information document: minimal TIS JSON (same shape as
-    // sdk.nft.tisDocument; Token_Information_Standard.md On-Chain Format):
+    // sdk.nft.tisDocument; see
+    // xchain-documentation/protocol/token-information-standard.md#on-chain-format-action-index):
     // NFT intent + the artwork referenced by its on-chain action index.
     const tisJson = useMemo(() => {
         if (!fileMeta || !fileActionIndex) return null;

@@ -219,7 +219,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             setContacts(loaded);
         } catch (err) {
             if (!isCurrent()) return null;
-            setLoadError(err?.message || 'Failed to load contacts.');
+            setLoadError(userFacingMessage(err, 'Failed to load contacts.'));
         }
         // Every mutation on this screen ends in a reload, so this is the one
         // place the unpublished count needs refreshing.

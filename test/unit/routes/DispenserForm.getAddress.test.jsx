@@ -73,10 +73,12 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
-function recordingMessaging() {
+function recordingMessaging({ generationError, addressLoadError } = {}) {
     const calls = [];
     const target = {
-        getAddressesByChain: () => Promise.resolve({ [CHAIN]: [SOURCE, REUSABLE] }),
+        getAddressesByChain: () => addressLoadError
+            ? Promise.reject(addressLoadError)
+            : Promise.resolve({ [CHAIN]: [SOURCE, REUSABLE] }),
         getActiveAddresses: () => Promise.resolve({ [CHAIN]: { id: SOURCE.id, address: SOURCE.address } }),
         signerReady: () => Promise.resolve({ ready: true }),
         getSettings: () => Promise.resolve({ walletMode: 'full' }),
@@ -84,6 +86,7 @@ function recordingMessaging() {
         getWalletBalances: () => Promise.resolve({ [CHAIN]: [] }),
         generateDispenserAddress: (args) => {
             calls.push({ method: 'generateDispenserAddress', args });
+            if (generationError) return Promise.reject(generationError);
             return Promise.resolve({ ...DERIVED });
         },
         composeForConfirm: (args) => {
@@ -119,8 +122,8 @@ const setValue = (utils, label, value) => {
  * Mount a locked-token DispenserForm, run the optional picker steps, fill
  * the amounts, press Create, then Approve on the confirm page.
  */
-async function driveCreate({ steps = [], pricingSteps = [] } = {}) {
-    const { messaging, calls } = recordingMessaging();
+async function driveCreate({ steps = [], pricingSteps = [], generationError, walletId = 'w' } = {}) {
+    const { messaging, calls } = recordingMessaging({ generationError });
     let utils;
     await domAct(async () => {
         utils = render(
@@ -128,7 +131,7 @@ async function driveCreate({ steps = [], pricingSteps = [] } = {}) {
                 MessagingProvider,
                 { shell: 'web', messaging },
                 React.createElement(DispenserForm, {
-                    walletId: 'w', initialChainId: CHAIN, initialTick: 'JDOG', onBack() {},
+                    walletId, initialChainId: CHAIN, initialTick: 'JDOG', onBack() {},
                 }),
             ),
         );
@@ -154,11 +157,30 @@ async function driveCreate({ steps = [], pricingSteps = [] } = {}) {
         fireEvent.click(create);
         await drainMicrotasks();
     });
+    if (generationError) return { calls, utils };
     await domAct(async () => {
         const approve = utils.getAllByRole('button')
             .find((b) => /approve/i.test(b.textContent || '') && !b.disabled);
         if (!approve) throw new Error('no enabled Approve button on the confirm page');
         fireEvent.click(approve);
+        await drainMicrotasks();
+    });
+    return { calls, utils };
+}
+
+async function renderForm({ generationError, addressLoadError, walletId = 'w' } = {}) {
+    const { messaging, calls } = recordingMessaging({ generationError, addressLoadError });
+    let utils;
+    await domAct(async () => {
+        utils = render(
+            React.createElement(
+                MessagingProvider,
+                { shell: 'web', messaging },
+                React.createElement(DispenserForm, {
+                    walletId, initialChainId: CHAIN, initialTick: 'JDOG', onBack() {},
+                }),
+            ),
+        );
         await drainMicrotasks();
     });
     return { calls, utils };
@@ -180,6 +202,47 @@ function composeAndSubmitParams(calls) {
 }
 
 describe('DispenserForm GET_ADDRESS by address mode', () => {
+    it('filters a function-prefixed address derivation error', async () => {
+        const raw = 'dispenserAddress: either `signer` or `password` is required';
+        const { utils } = await driveCreate({ generationError: new Error(raw), walletId: 'w-prefixed-error' });
+
+        expect(utils.getByText('Could not derive a dispenser address.')).toBeTruthy();
+        expect(utils.queryByText(raw)).toBeNull();
+    });
+
+    it('keeps address derivation copy written for the user', async () => {
+        const copy = 'Unlock this wallet to create a dispenser address.';
+        const { utils } = await driveCreate({ generationError: new Error(copy), walletId: 'w-user-copy-error' });
+
+        expect(utils.getByText(copy)).toBeTruthy();
+    });
+
+    it('does not expose a function-prefixed error when the address picker returns', async () => {
+        const raw = 'dispenserAddress: either `signer` or `password` is required';
+        const { calls, utils } = await renderForm({ generationError: new Error(raw), walletId: 'w-picker-error' });
+
+        await domAct(async () => {
+            openDispenserAddressPicker(utils);
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: /New dispenser address/ }));
+            await drainMicrotasks();
+        });
+
+        expect(calls.some((call) => call.method === 'generateDispenserAddress')).toBe(true);
+        expect(utils.getByRole('form', { name: 'Create dispenser' })).toBeTruthy();
+        expect(utils.queryByText(raw)).toBeNull();
+    });
+
+    it('filters a function-prefixed address load error', async () => {
+        const raw = 'addresses.byChain: account "a1" does not belong to wallet "w1"';
+        const { utils } = await renderForm({ addressLoadError: new Error(raw), walletId: 'w-load-error' });
+
+        expect(utils.getByText('Failed to load addresses.')).toBeTruthy();
+        expect(utils.queryByText(raw)).toBeNull();
+    });
+
     it('mode new: the FIRST submit composes and signs with the freshly derived address', async () => {
         const { calls } = await driveCreate();
 

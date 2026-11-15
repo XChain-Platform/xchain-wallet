@@ -11,6 +11,7 @@
 // WalletModeSection: §20 wallet-mode selector. A mode change affects every
 // signing surface, so the choice stays pending until the user confirms it.
 
+import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import { useState } from 'react';
 import { RadioGroup } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
@@ -74,7 +75,7 @@ export function WalletModeSection() {
             await update({ walletMode: pending });
             setPending(null);
         } catch (err) {
-            setSaveError(err?.message || 'Could not save the wallet mode.');
+            setSaveError(userFacingMessage(err, 'Could not save the wallet mode.'));
             // eslint-disable-next-line no-console
             console.error('walletMode update failed:', err);
         } finally {

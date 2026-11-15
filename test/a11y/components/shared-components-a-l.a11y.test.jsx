@@ -128,7 +128,7 @@ const fixtures = [
                     tick="BTC"
                     isNative
                     label="Sent"
-                    context="bc1qexampleexampleexampleexampleexample0"
+                    subtitle="bc1qexampleexampleexampleexampleexample0"
                     amount="-0.01 BTC"
                     status="confirmed"
                     block="Block 123,456"

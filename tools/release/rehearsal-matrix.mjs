@@ -178,7 +178,9 @@ export const LANES = [
         arch: 'x64',
         format: 'AppImage',
         device: 'linux-x86_64 CI runner (Ubuntu 24.04)',
-        note: 'Shares stable-linux.yml with the x64 deb, so format selection is load-bearing.',
+        note: 'Shares stable-linux.yml with the x64 deb, so format selection is load-bearing. '
+            + 'The named device is a runner, which cannot witness a swap: `coverage` reports this lane '
+            + 'blocked and `attest` refuses it until an x64 desktop is named here.',
     },
     {
         id: 'linux-arm64-appimage',
@@ -195,18 +197,34 @@ export const LANES = [
         format: 'deb',
         device: 'linux-x86_64 CI runner (Ubuntu 24.04)',
         note: 'DebUpdater. The only shipped update path that ends in a root install '
-            + '(pkexec dpkg -i), and therefore the one that least deserved to be unrehearsed.',
+            + '(pkexec dpkg -i), and therefore the one that least deserved to be unrehearsed. '
+            + 'The named device is a runner, which cannot answer the pkexec prompt or witness a swap: '
+            + '`coverage` reports this lane blocked and `attest` refuses it until an x64 desktop is named here.',
     },
     {
         id: 'linux-arm64-deb',
         os: 'linux',
         arch: 'arm64',
         format: 'deb',
-        device: 'linux-arm64 CI runner (Ubuntu 24.04)',
-        note: 'DebUpdater on arm64. Same pointer as the arm64 AppImage. The swap itself '
-            + 'has been observed once, in a container, by drills/deb-update-swap.mjs.',
+        device: 'Ubuntu 24.04 arm64 Parallels VM on the Mac Studio (GNOME desktop, clean profile)',
+        note: 'DebUpdater on arm64. Same pointer as the arm64 AppImage, and the same desktop VM: '
+            + 'the pkexec prompt of the root install needs a desktop session to be answered in. '
+            + 'The swap itself has been observed once, in a container, by drills/deb-update-swap.mjs.',
     },
 ];
+
+/**
+ * Whether a device string names a CI or hosted runner. A runner has no person at it, so it can
+ * never be where a swap is watched; `attest` and `coverage` refuse such a device rather than let a
+ * record say a person watched a swap on one.
+ *
+ * @param {string|null|undefined} device
+ * @returns {boolean}
+ */
+export function deviceNamesCiRunner(device) {
+    return /\b(?:ci|hosted|github[- ]hosted|github[- ]actions?)\s+runner\b|\bgithub[- ]actions?\b/i
+        .test(String(device ?? ''));
+}
 
 /**
  * @typedef {Object} DirectLane

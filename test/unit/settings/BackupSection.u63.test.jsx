@@ -19,7 +19,7 @@ function mount() {
     };
     render(
         <MessagingProvider shell="web" messaging={messaging}>
-            <BackupSection activeWallet={{ id: 'wallet-1', name: 'Wallet' }} />
+            <BackupSection activeWallet={{ id: 'wallet-1', name: 'Wallet', format: 'bip39' }} />
         </MessagingProvider>,
     );
 }

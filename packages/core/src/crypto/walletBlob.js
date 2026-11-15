@@ -12,10 +12,13 @@
 // Wallet schema's kdfParams + encryptedSeed fields (§11.3.1, §11.4).
 //
 // The plaintext protected here is the user's BIP39 seed. Imported WIFs
-// use the same master key but are stored under Wallet.importedKeys with
-// per-entry ciphertext (see §15.5 and the TODO at the bottom of this
-// file). The optional BIP39 passphrase (§15.6) is a third plaintext,
-// sealed under the same master key but with its own AAD.
+// (§15.5) use the same master key and live as one ciphertext per
+// `Wallet.importedKeys[].encryptedWif`. Their seal and open sites call raw
+// `encrypt` and `decrypt` with no AAD, so the field, not the cryptography,
+// distinguishes a WIF blob from a seed blob. The vault document also uses
+// this key without AAD on fresh creates; codec.js documents that format.
+// The optional BIP39 passphrase (§15.6) is different: it is sealed under the
+// same master key with PASSPHRASE_AAD.
 
 import { decrypt, encrypt } from './aead.js';
 import {
@@ -26,7 +29,7 @@ import {
     base64ToBytes,
 } from './kdf.js';
 
-// Domain-separate the passphrase blob from the seed blob, which carries no AAD.
+// Domain-separate the passphrase from the no-AAD document, seed and WIF blobs.
 // Route every seed seal and open through the helpers below to keep that rule fixed.
 export const PASSPHRASE_AAD = new TextEncoder().encode('xchain-wallet:bip39-passphrase:v1');
 

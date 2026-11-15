@@ -32,12 +32,12 @@ Electron main
 preload.cjs
   contextBridge.exposeInMainWorld(
     'xchainWalletBridge',
-    { sendMessage(message) { … } },
+    { sendMessage(message) { … }, wipeStorage(), saveBackupFile(request) },
   )
   … and the other worlds pinned in BRIDGE_WORLDS
     (xchainWalletWindow, xchainWalletUpdater,
      xchainWalletRegistry, xchainWalletSignerBridge,
-     xchainWalletDeepLink)
+     xchainWalletDeepLink, xchainWalletTrezorBridge)
 
 Electron renderer
   messaging.js (popup/web parity helpers)
@@ -60,10 +60,11 @@ Electron renderer
 - `preload.cjs` - exposes exactly the function-only worlds pinned in
   `BRIDGE_WORLDS`
   (`test/integration/shells/desktop-preload-contract.test.js`) and nothing
-  else: `xchainWalletBridge` (`sendMessage`, `wipeStorage`),
-  `xchainWalletWindow`, `xchainWalletUpdater`, `xchainWalletRegistry`,
-  `xchainWalletSignerBridge`, `xchainWalletDeepLink` (`onUri`,
-  `takePending`).
+  else: `xchainWalletBridge` (`sendMessage`, `wipeStorage`,
+  `saveBackupFile`), `xchainWalletWindow`, `xchainWalletUpdater`,
+  `xchainWalletRegistry`, `xchainWalletSignerBridge`, `xchainWalletDeepLink`
+  (`onUri`, `takePending`), `xchainWalletTrezorBridge` (`call`, `close`).
+  The header of `preload.cjs` is the per-method reference.
 - `renderer/main.jsx` + `renderer/App.jsx` - mounts the shared React
   app under `shell="desktop"`. Every route from popup/web renders
   unchanged.

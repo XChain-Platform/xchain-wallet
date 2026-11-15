@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { userFacingMessage } from '@xchain-wallet/core/shared/utils/userFacingMessage.js';
 import { useCallback, useEffect, useState } from 'react';
 import { i18n } from '@xchain-wallet/core';
 import '@xchain-wallet/core/i18n/locales/en/extension.js';
@@ -75,7 +76,9 @@ function ApprovalRoute() {
                 setData(request);
             })
             .catch((err) => {
-                if (!cancelled) setError(err?.message || 'Failed to load request.');
+                if (!cancelled) {
+                    setError(userFacingMessage(err, t('extension.approval.loadFailed')));
+                }
             });
         return () => { cancelled = true; };
     }, [id]);

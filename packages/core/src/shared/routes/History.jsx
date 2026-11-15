@@ -2251,7 +2251,7 @@ function GroupCard({ item, expanded, onToggle }) {
             isNative={tick === nativeTick}
             label={groupBadgeLabel(item.subkind)}
             actionIcon={actionIconForAction(item.leader.action)}
-            context={isLinkPair ? 'Linked' : `${item.members.length}`}
+            subtitle={isLinkPair ? t('history.group.linked') : `${item.members.length}`}
             amount={displaySummary}
             status={classifyEntryStatus(item.leader)}
             statusLabels={{

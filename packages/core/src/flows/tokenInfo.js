@@ -42,9 +42,13 @@ import { fetchWithRetry } from '../shared/utils/fetchWithRetry.js';
 
 /**
  * @typedef {Object} TisMediaEntry
- * @property {string} url                                full https URL after scheme rewrite
+ * @property {string | null} url                         full https URL after scheme rewrite
+ * @property {string | null} dataRef                     on-chain FILE action reference
  * @property {string | null} type                        extension or TIS-supplied type ("png" / "icon" / "mp4" / …)
  * @property {string | null} name                        human-readable label when the TIS document provides one
+ * @property {boolean} locked                            whether the referenced FILE contains gated ciphertext
+ * @property {string | null} packId                      TIS pack metadata key
+ * @property {string | null} title                       display title supplied by the TIS document
  */
 
 /**
@@ -57,9 +61,13 @@ import { fetchWithRetry } from '../shared/utils/fetchWithRetry.js';
 
 /**
  * @typedef {Object} TisFileEntry
- * @property {string} url
+ * @property {string | null} url
+ * @property {string | null} dataRef
  * @property {string | null} name
  * @property {string | null} type
+ * @property {boolean} locked
+ * @property {string | null} packId
+ * @property {string | null} title
  */
 
 /**
@@ -615,21 +623,26 @@ function classifyByExtension(url) {
 
 function tisEntryToMedia(entry) {
     if (!entry) return null;
-    const data = typeof entry === 'string' ? entry : entry.data;
+    const objectEntry = entry && typeof entry === 'object' ? entry : null;
+    const data = typeof entry === 'string' ? entry : objectEntry?.data;
     // On-chain media reference: "action:<index>" of a FILE action,
     // preferred over `data` when both are present (TIS File Entry
-    // Fields). Carried as `dataRef`; tokenInfoFor resolves it to the
-    // configured explorer's raw FILE URL.
-    const dataRef = (entry && typeof entry === 'object'
-        && typeof entry.data_ref === 'string' && entry.data_ref)
-        ? entry.data_ref : null;
-    const url = dataRef ? null : normalizeMediaUrl(data);
-    if (!url && !dataRef) return null;
+    // Fields). Carried as `dataRef`; tokenInfoFor resolves unlocked entries
+    // to the configured explorer's raw FILE URL.
+    const dataRef = (objectEntry
+        && typeof objectEntry.data_ref === 'string' && objectEntry.data_ref)
+        ? objectEntry.data_ref : null;
+    const normalizedUrl = dataRef ? null : normalizeMediaUrl(data);
+    if (!normalizedUrl && !dataRef) return null;
+    const locked = Boolean(objectEntry?.locked);
     return {
-        url,
+        url: locked ? null : normalizedUrl,
         dataRef,
-        type: (entry && typeof entry === 'object' && entry.type) ? String(entry.type) : null,
-        name: (entry && typeof entry === 'object' && entry.name) ? String(entry.name) : null,
+        type: objectEntry?.type ? String(objectEntry.type) : null,
+        name: objectEntry?.name ? String(objectEntry.name) : null,
+        locked,
+        packId: objectEntry?.pack_id ? String(objectEntry.pack_id) : null,
+        title: objectEntry?.title ? String(objectEntry.title) : null,
     };
 }
 
@@ -702,26 +715,31 @@ export function tisToMediaBundle(doc) {
             if (typeof f === 'string') {
                 const url = normalizeMediaUrl(f);
                 if (!url) return null;
-                return { url, name: null, type: null, dataRef: null, locked: false, packId: null };
+                return {
+                    url, name: null, type: null, dataRef: null,
+                    locked: false, packId: null, title: null,
+                };
             }
             // Object form supports: { data: <url>, data_ref: 'action:<index>',
             // name, type, locked, pack_id }. data_ref takes precedence over data
             // when both are present (on-chain reference wins over off-chain URL).
             const dataRef = typeof f.data_ref === 'string' && f.data_ref ? f.data_ref : null;
-            const url = dataRef ? null : normalizeMediaUrl(f.data);
-            if (!dataRef && !url) return null;
+            const normalizedUrl = dataRef ? null : normalizeMediaUrl(f.data);
+            if (!dataRef && !normalizedUrl) return null;
+            const locked = Boolean(f.locked);
             return {
-                url,
+                url: locked ? null : normalizedUrl,
                 dataRef,
                 name: (f.name) ? String(f.name) : null,
                 type: (f.type) ? String(f.type) : null,
-                locked: Boolean(f.locked),
+                locked,
                 packId: (f.pack_id) ? String(f.pack_id) : null,
+                title: (f.title) ? String(f.title) : null,
             };
         })
         .filter(Boolean);
     // Top-level `packs` map for display metadata of token-gated content packs.
-    // See xchain-documentation/protocol/Token_Information_Standard.md.
+    // See xchain-documentation/protocol/token-information-standard.md#json-field-definitions.
     const packs = {};
     const packsRaw = doc.packs && typeof doc.packs === 'object' ? doc.packs : {};
     for (const id of Object.keys(packsRaw)) {
@@ -824,7 +842,10 @@ function extractMediaUrlsFromText(text) {
         if (!cls) continue;
         const url = normalizeMediaUrl(raw);
         if (!url) continue;
-        const entry = { url, type: cls.ext, name: null };
+        const entry = {
+            url, type: cls.ext, name: null, dataRef: null,
+            locked: false, packId: null, title: null,
+        };
         if (cls.kind === 'image') out.images.push(entry);
         else if (cls.kind === 'audio') out.audio.push(entry);
         else if (cls.kind === 'video') out.video.push(entry);
@@ -968,7 +989,7 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null, options
     const pgpsig = tisBundle?.pgpsig || null;
     const dns = tisBundle?.dns || [];
     const imageUrl = allowRemoteMedia
-        ? ((images.length > 0 && images[0]?.url) || extractImageUrl(onChainDescription))
+        ? (images.find((image) => !image?.locked && image?.url)?.url || extractImageUrl(onChainDescription))
         : null;
     return {
         chainId,
@@ -1060,8 +1081,9 @@ export async function fetchTisBundle({ description, fetch: fetchImpl, signal }) 
 // On-chain TIS document pointer: DESCRIPTION = "action:<index>" (same
 // chain) or "action:<COIN>:<index>" (sibling chain, base ticker, network
 // tier implied by the token's network) naming a FILE action whose raw
-// bytes are the TIS JSON (Token_Information_Standard.md, On-Chain
-// Format). Same syntax as a file entry's `data_ref`, one level up.
+// bytes are the TIS JSON
+// (xchain-documentation/protocol/token-information-standard.md#on-chain-format-action-index).
+// Same syntax as a file entry's `data_ref`, one level up.
 // Match groups: [1] = optional base coin, [2] = action index.
 export const TIS_ACTION_REF_RE = /^action:(?:(BTC|LTC|DOGE):)?([0-9]+)$/i;
 
@@ -1192,14 +1214,15 @@ export async function tokenInfoFor({
 
 // Resolve on-chain media references (dataRef = "action:<index>") across a
 // bundle's media arrays to the configured explorer's raw FILE URL so the
-// renderers get a plain `src`. Entries stay dataRef-annotated either way.
+// renderers get a plain `src`. Locked entries remain unresolved because their
+// raw FILE bytes are ciphertext. Entries stay dataRef-annotated either way.
 export function resolveMediaDataRefs(bundle, sdk) {
     if (!bundle || typeof sdk?.fileRawUrl !== 'function') return bundle;
     for (const key of ['images', 'audio', 'video', 'files']) {
         const arr = bundle[key];
         if (!Array.isArray(arr)) continue;
         for (const entry of arr) {
-            if (!entry || entry.url || !(entry.dataRef)) continue;
+            if (!entry || entry.locked || entry.url || !(entry.dataRef)) continue;
             const m = String(entry.dataRef).match(TIS_ACTION_REF_RE);
             if (!m) continue;
             try { entry.url = sdk.fileRawUrl(m[2], m[1] || null); } catch { /* leave unresolved */ }

@@ -8,12 +8,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const cryptoMocks = vi.hoisted(() => ({
     deriveMasterKeyAsync: vi.fn(async () => new Uint8Array(32).fill(7)),
     decrypt: vi.fn(async () => new TextEncoder().encode('confirmed-private-key')),
+    decryptWalletSeed: vi.fn(),
 }));
 
 vi.mock('../../../packages/core/src/crypto/index.js', async (importOriginal) => ({
     ...await importOriginal(),
     deriveMasterKeyAsync: cryptoMocks.deriveMasterKeyAsync,
     decrypt: cryptoMocks.decrypt,
+    decryptWalletSeed: cryptoMocks.decryptWalletSeed,
 }));
 
 import { exportPrivateKey } from '../../../packages/core/src/flows/exportPrivateKey.js';
@@ -44,6 +46,7 @@ beforeEach(() => {
     cryptoMocks.decrypt.mockReset();
     cryptoMocks.decrypt.mockImplementation(async () =>
         new TextEncoder().encode('confirmed-private-key'));
+    cryptoMocks.decryptWalletSeed.mockReset();
 });
 
 describe('exportPrivateKey password confirmation', () => {
@@ -123,9 +126,8 @@ describe('exportPrivateKey password confirmation', () => {
     it('clears decrypted seed probe bytes before returning an imported key', async () => {
         const seedBytes = new TextEncoder().encode('seed words');
         const wifBytes = new TextEncoder().encode('private-key');
-        cryptoMocks.decrypt
-            .mockResolvedValueOnce(seedBytes)
-            .mockResolvedValueOnce(wifBytes);
+        cryptoMocks.decryptWalletSeed.mockResolvedValueOnce(seedBytes);
+        cryptoMocks.decrypt.mockResolvedValueOnce(wifBytes);
         const seedWallet = {
             ...wallet,
             format: 'bip39',
@@ -145,6 +147,13 @@ describe('exportPrivateKey password confirmation', () => {
         });
 
         expect(result.wif).toBe('private-key');
+        expect(cryptoMocks.decryptWalletSeed).toHaveBeenCalledOnce();
+        expect(cryptoMocks.decryptWalletSeed).toHaveBeenCalledWith(expect.objectContaining({
+            encryptedSeed: 'AA==',
+            kdfParams: seedWallet.kdfParams,
+            masterKey: expect.any(Uint8Array),
+        }));
+        expect(cryptoMocks.decrypt).toHaveBeenCalledOnce();
         expect([...seedBytes]).toEqual(new Array(seedBytes.length).fill(0));
         expect([...wifBytes]).toEqual(new Array(wifBytes.length).fill(0));
     });

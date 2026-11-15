@@ -35,9 +35,9 @@ const messages = {
     'common.typedConfirmationHint': 'Type {word} exactly in capitals with no spaces.',
     'common.typedConfirmationAdvancedHint': "This can't be undone. Type {word} exactly in capitals with no spaces.",
     'common.typedConfirmationCallbackHint':
-        "This recalls every unit of the token from all holders and pays them the amount above. It can't be undone. Type CALLBACK exactly in capitals with no spaces.",
+        "This recalls every unit of the token from all holders and pays them the amount above. It can't be undone. Type RECALL exactly in capitals with no spaces.",
     'common.typedConfirmationCallbackReviewHint':
-        'Recalls all supply and pays holders. Irreversible. Type CALLBACK exactly in capitals with no spaces.',
+        'Recalls all supply and pays holders. Irreversible. Type RECALL exactly in capitals with no spaces.',
     'common.typedConfirmationDestroyHint':
         "This burns the amount above and can't be undone. Type DESTROY exactly in capitals with no spaces.",
     'common.typedConfirmationDestroyReviewHint':

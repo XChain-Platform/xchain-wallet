@@ -177,7 +177,7 @@ export function ActivityRowsSection() {
             </Markup>
             <LiveExample label="ActivityRow: confirmed and pending">
                 <PartsExampleProvider>
-                    <ActivityRow chainId={PART_CHAIN_ID} tick="BTC" isNative label="Sent" actionIcon={actionIconForAction('send')} context="To Savings" amount="-0.01 BTC" status="confirmed" block="Block 123,456" timestamp={FIVE_MINUTES_AGO()} onClick={noop} />
+                    <ActivityRow chainId={PART_CHAIN_ID} tick="BTC" isNative label="Sent" actionIcon={actionIconForAction('send')} subtitle="To Savings" amount="-0.01 BTC" status="confirmed" block="Block 123,456" timestamp={FIVE_MINUTES_AGO()} onClick={noop} />
                     <ActivityRow chainId={PART_CHAIN_ID} tick="BTC" isNative label="Received" actionIcon={actionIconForAction('receive')} amount="+0.002 BTC" status="pending" timestamp={FIVE_MINUTES_AGO()} onClick={noop} />
                 </PartsExampleProvider>
             </LiveExample>

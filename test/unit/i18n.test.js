@@ -489,6 +489,10 @@ describe('translations', () => {
             ['governance.title', 'settings.notifications.governancePolls'],
             // The History status filter header and the parallel composer's status-pill label prefix.
             ['history.filters.statusHeader', 'parallelComposer.statusPrefix'],
+            // The History status chip and the timeline stage heading for a confirmed transaction.
+            ['history.status.confirmed', 'txTimeline.confirmed.label'],
+            // The History status chip and the timeline label for a transaction that failed.
+            ['history.status.failed', 'txTimeline.mempool.failedLabel'],
             // The wallet menu reuses the label the same destination carries elsewhere.
             ['history.title', 'walletMenu.row.history'],
             // The wallet menu reuses the label the same destination carries elsewhere.
@@ -524,10 +528,14 @@ describe('translations', () => {
             ['palette.createPublishFile.title', 'walletMenu.row.publishFile'],
             ['palette.createToken.title', 'walletMenu.row.createToken'],
             ['palette.navBetting.title', 'walletMenu.row.betting'],
+            // The pending detail headline for a transaction replaced elsewhere and the timeline label for one the user replaced.
+            ['pending.detail.replacedElsewhere', 'txTimeline.mempool.replacedLabel'],
             // The wallet menu reuses the label the same destination carries elsewhere.
             ['routes.addressList.dispensers', 'walletMenu.row.dispensers'],
             // The menu's Actions group and the token page's actions heading.
             ['routes.manageToken.actions', 'walletMenu.group.actions'],
+            // The token page broadcast action verb and the timeline stage name for the broadcast step.
+            ['routes.manageToken.broadcast', 'txTimeline.broadcast.label'],
             // The wallet menu reuses the label the same destination carries elsewhere.
             ['scan.title', 'walletMenu.row.scan'],
             // The Send form's network field and the Settings network row.

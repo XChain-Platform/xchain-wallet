@@ -127,7 +127,7 @@ describe('regression/multisig-reply-refusal-reason', () => {
 
         expect(await screen.findByText(/signed by a key that is not one of this multisig's cosigners/i)).toBeTruthy();
         expect(messaging.contributeMultisigSignature).not.toHaveBeenCalled();
-        expect(screen.queryByText('Failed to apply contribution.')).toBeNull();
+        expect(screen.queryByText('Could not add that cosigner reply. Try again.')).toBeNull();
         expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
     });
 
@@ -152,5 +152,15 @@ describe('regression/multisig-reply-refusal-reason', () => {
             pubkey: PK_B,
             signatureHex: DER,
         }));
+    });
+
+    it('shows a plain fallback and retry when the host gives only developer text', async () => {
+        await importReply(session({
+            signatures: [{ pubkey: PK_A, sig: DER, contributedAt: NOW }],
+        }), PK_B);
+
+        expect(await screen.findByText('Could not add that cosigner reply. Try again.')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+        expect(screen.queryByText(/multisigSigning/)).toBeNull();
     });
 });

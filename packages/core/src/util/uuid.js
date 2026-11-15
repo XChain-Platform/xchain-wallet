@@ -8,12 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// `crypto.randomUUID()` is gated on a secure context, so a wallet
-// loaded over plain HTTP throws `crypto.randomUUID is not a function`
-// from any schema factory that mints an entity id. This helper uses
-// `crypto.randomUUID()` when available and falls back to a manual
-// UUIDv4 built from `crypto.getRandomValues()` (which works in every
-// context, secure or not).
+// `crypto.randomUUID()` is not available in every JavaScript runtime. This
+// helper uses it when available and falls back to a manual UUIDv4 built from
+// `crypto.getRandomValues()`, which has wider runtime support.
 //
 // Output format: 8-4-4-4-12 lowercase hex with the standard v4 +
 // variant bits set (digit 13 = '4', digit 17 ∈ {'8','9','a','b'}).
@@ -36,7 +33,7 @@ function fallback() {
 
 /**
  * Returns a UUIDv4 string. Drop-in replacement for `crypto.randomUUID()`
- * that works in non-secure contexts.
+ * that works in runtimes without `crypto.randomUUID()`.
  *
  * @returns {string}
  */

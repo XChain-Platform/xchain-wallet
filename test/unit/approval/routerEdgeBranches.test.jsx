@@ -81,7 +81,9 @@ describe('approval Router edge branches', () => {
         render(<Router />);
         await flush();
 
-        expect(screen.getByRole('alert')).toHaveTextContent('Failed to load request.');
+        expect(screen.getByRole('alert')).toHaveTextContent(
+            "We couldn't load this request. Close this window and try again from the site.",
+        );
     });
 
     it('closes after rejection even when the broker connection is lost', async () => {

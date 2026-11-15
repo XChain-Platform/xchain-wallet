@@ -214,11 +214,18 @@ export function checkPointers({ pointers, manifestText, tag, channel, lanesText,
         }
         for (const file of info.files) {
             const listed = normalizeName(file.url);
-            if (!entries.has(basename(listed))) {
+            // The client compares this whole string with the bare name it
+            // downloaded and with the manifest's keys, so a path never matches.
+            if (listed.includes('/')) {
+                problems.push(`${name}: names ${listed}, a path; the desktop client matches the bare file name, `
+                    + 'so every client would refuse it');
+                continue;
+            }
+            if (!entries.has(listed)) {
                 problems.push(`${name}: names ${listed}, which this release's signed manifest does not cover`);
             }
             const claimed = normalizeSha512(file.sha512);
-            const staged = stagedSha512 instanceof Map ? stagedSha512.get(basename(listed)) : undefined;
+            const staged = stagedSha512 instanceof Map ? stagedSha512.get(listed) : undefined;
             if (!claimed) {
                 problems.push(`${name}: carries no sha512 for ${listed}, which the desktop client refuses`);
             } else if (staged === undefined) {

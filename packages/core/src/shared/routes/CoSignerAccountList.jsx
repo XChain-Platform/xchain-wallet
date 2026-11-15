@@ -14,6 +14,7 @@
 // point to create a new account (the provision wizard) or open one for
 // detail / policy edit / enable-disable.
 
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useEffect, useState } from 'react';
 import {
     Screen,
@@ -55,7 +56,7 @@ export function CoSignerAccountList({ walletId, onBack, onProvision, onOpen }) {
         Promise.resolve()
             .then(() => messaging.listCoSignerAccounts({ walletId }))
             .then((list) => { if (!cancelled) setAccounts(Array.isArray(list) ? list : []); })
-            .catch((err) => { if (!cancelled) setError(err?.message || 'Failed to load agent accounts.'); });
+            .catch((err) => { if (!cancelled) setError(userFacingMessage(err, 'Failed to load agent accounts.')); });
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 

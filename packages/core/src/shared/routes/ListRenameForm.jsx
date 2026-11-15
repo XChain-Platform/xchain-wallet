@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     AddressField,
@@ -47,11 +48,16 @@ import { findListOwner, recheckListOwner } from '../../flows/listMembership.js';
 import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
+import {
+    listActionCheckFailedMessage,
+    listActionUnavailableMessage,
+} from '../utils/listActionAvailability.js';
 import { explorerReadFailure } from '../../sdk/explorerErrors.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
-const SDK_REASON = "This wallet's SDK cannot build a list rename yet; it arrives with the next SDK update.";
+const UNAVAILABLE_REASON = listActionUnavailableMessage('rename');
+const SUPPORT_CHECK_FAILED_REASON = listActionCheckFailedMessage('rename');
 const TICKER_BY_COIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 const META_ERROR_TEXT = {
     pipe: 'Cannot contain the | character.',
@@ -123,7 +129,7 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     const [detail, setDetail] = useState(/** @type {any | null} */ (null));
     const [owner, setOwner] = useState(/** @type {string | null | undefined} */ (undefined));
     const [sharedRows, setSharedRows] = useState(/** @type {any[] | null} */ (null));
-    const [sdkSupported, setSdkSupported] = useState(/** @type {boolean | null} */ (null));
+    const [sdkSupported, setSdkSupported] = useState(/** @type {boolean | 'error' | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
@@ -148,7 +154,7 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                 setLoadError('No address on this network yet. Use Receive to generate one first.');
             }
         }).catch((err) => {
-            if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+            if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load addresses.'));
         });
         return () => { cancelled = true; };
     }, [walletId, chainId, messaging]);
@@ -190,7 +196,7 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
             .then((supported) => {
                 if (!cancelled) setSdkSupported(supported === true);
             })
-            .catch(() => { if (!cancelled) setSdkSupported(false); });
+            .catch(() => { if (!cancelled) setSdkSupported('error'); });
         return () => { cancelled = true; };
     }, [chainId, messaging]);
 
@@ -258,7 +264,10 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
 
     function validate() {
         if (!listActionIndexValid) { setFormError('List reference must be a positive whole number.'); return false; }
-        if (sdkSupported !== true) { setFormError(SDK_REASON); return false; }
+        if (sdkSupported !== true) {
+            setFormError(sdkSupported === 'error' ? SUPPORT_CHECK_FAILED_REASON : UNAVAILABLE_REASON);
+            return false;
+        }
         if (!fromAddress) { setFormError('No signing address available on this network.'); return false; }
         if (nameError || descriptionError) {
             setFormError('Fix the list name and description first.');
@@ -420,9 +429,10 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
             demoGuard={demoGuard}
             label="Rename list"
             onSubmit={handleReview}
-            status={(sdkSupported === false || formError) ? (
+            status={(sdkSupported === false || sdkSupported === 'error' || formError) ? (
                 <>
-                    {sdkSupported === false ? <StatusMessage variant="error">{SDK_REASON}</StatusMessage> : null}
+                    {sdkSupported === false ? <StatusMessage variant="error">{UNAVAILABLE_REASON}</StatusMessage> : null}
+                    {sdkSupported === 'error' ? <StatusMessage variant="error">{SUPPORT_CHECK_FAILED_REASON}</StatusMessage> : null}
                     {formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
                 </>
             ) : null}

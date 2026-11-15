@@ -41,9 +41,9 @@
 // This keeps the flow composable across the "dry-run restore" (§19.6)
 // and "real restore" paths.
 //
-// Multiple address types: only the descriptor's `defaultAddressType`
-// by default. Opt-in to scanning every supported type via
-// `addressTypes: 'all'`. Users who had BIP49 addresses from an older
+// Multiple address types: only the wallet format's default type is scanned
+// by default (p2pkh for counterwallet-legacy). Opt in to every supported type
+// via `addressTypes: 'all'`. Users who had BIP49 addresses from an older
 // FreeWallet flow, for example, supply `addressTypes: 'all'` during
 // their first migration scan. Legacy formats count one gap across all
 // requested encodings because those encodings share the same key index.

@@ -20,6 +20,7 @@
 // Sparkline and daily history are opt-in. Cheap pages that just want the
 // spot price omit them; chart panels request only the tier they need.
 
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useEffect, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
 
@@ -97,7 +98,7 @@ export function useNativePrice(chainId, opts = {}) {
             })
             .catch((err) => {
                 if (cancelled) return;
-                setError(err?.message || 'Price fetch failed');
+                setError(userFacingMessage(err, 'Price fetch failed'));
                 setEntry(null);
             })
             .finally(() => {

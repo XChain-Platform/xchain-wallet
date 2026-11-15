@@ -69,7 +69,7 @@ export function ActivityRow({
     isNative = false,
     label,
     actionIcon = null,
-    context = null,
+    subtitle = null,
     amount,
     status,
     statusLabels = STATUS_LABELS,
@@ -105,7 +105,7 @@ export function ActivityRow({
                     ) : null}
                     <span className={styles.label}>{label}</span>
                 </span>
-                {context ? <span className={styles.context}>{context}</span> : null}
+                {subtitle ? <span className={styles.context}>{subtitle}</span> : null}
             </span>
             <span className={styles.primary}>{amount}</span>
             {statusLabel ? (

@@ -1568,6 +1568,7 @@ export async function importMnemonicLocal(req) {
         origin,
         format,
         chainId,
+        addressType,
         activeNetwork,
     } = req;
     if (importingWif && (typeof chainId !== 'string' || chainId.length === 0)) {
@@ -1616,6 +1617,7 @@ export async function importMnemonicLocal(req) {
                 password,
                 wif: wif.trim(),
                 chainId,
+                addressType,
                 vault: v,
                 chainRegistry,
                 sdkRegistry,

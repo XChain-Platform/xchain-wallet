@@ -14,6 +14,7 @@
 // surface `supported: false` so the UI degrades to a "not available" note
 // rather than throwing.
 
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
 import { PRICE_ALERTS_CHANGED_EVENT } from '../../flows/priceAlerts.js';
@@ -66,7 +67,7 @@ export function usePriceAlerts(walletId) {
             setError(null);
         } catch (err) {
             if (!isCurrent()) return;
-            setError(err?.message || 'Could not load price alerts');
+            setError(userFacingMessage(err, 'Could not load price alerts'));
             setAlerts([]);
         } finally {
             if (isCurrent()) setLoading(false);

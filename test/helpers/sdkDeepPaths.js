@@ -52,6 +52,7 @@ export const SDK_DEEP_PATHS = {
     explorerClient: ['src/clients/explorer.js'],
     gatedFile: ['src/gatedFile.js'],
     musig2: ['src/musig2.js'],
+    policyEvaluator: ['src/cosigner/policy_evaluator.js'],
     networks: ['src/networks.js'],
     preflightConstants: ['src/preflight/constants.js'],
     preflightTier1Findings: ['src/preflight/index/tier1_findings.js'],

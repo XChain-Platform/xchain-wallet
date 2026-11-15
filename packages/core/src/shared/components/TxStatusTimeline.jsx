@@ -30,31 +30,31 @@ const TICK_MS = 30_000;
 // sitting muted at the bottom of the list where an unreached stage sits.
 const MEMPOOL_STAGE_COPY = {
     seen: {
-        label: 'Held by the network',
+        get label() { return t('txTimeline.mempool.seenLabel'); },
         done: true,
-        sub: 'A node is holding it, waiting for a miner to include it in a block',
+        get sub() { return t('txTimeline.mempool.seenSub'); },
     },
     'awaiting-network': {
-        label: 'Broadcast, awaiting network',
+        get label() { return t('pending.detail.awaitingNetwork'); },
         done: false,
-        sub: 'Sent. No node has reported holding it yet, which can take a minute',
+        get sub() { return t('txTimeline.mempool.awaitingNetworkSub'); },
     },
     'not-seen': {
-        label: 'Not seen by the network',
+        get label() { return t('pending.detail.notSeen'); },
         done: false,
         warn: true,
-        sub: 'No node has reported holding this transaction. It may not have reached the network',
+        get sub() { return t('txTimeline.mempool.notSeenSub'); },
     },
     dropped: {
-        label: 'Failed',
+        get label() { return t('txTimeline.mempool.failedLabel'); },
         done: false,
         warn: true,
-        sub: 'The network stopped reporting this transaction and it did not confirm',
+        get sub() { return t('txTimeline.mempool.droppedSub'); },
     },
     replaced: {
-        label: 'Replaced',
+        get label() { return t('txTimeline.mempool.replacedLabel'); },
         done: false,
-        sub: 'You replaced this transaction with a higher-fee version',
+        get sub() { return t('txTimeline.mempool.replacedSub'); },
     },
     'replaced-elsewhere': {
         get label() { return t('pending.detail.replacedElsewhere'); },
@@ -65,10 +65,10 @@ const MEMPOOL_STAGE_COPY = {
     // The wallet's own verdict, not the network's: it gave up before the
     // network took the send. The detail panel carries the recorded reason.
     failed: {
-        label: 'Failed',
+        get label() { return t('txTimeline.mempool.failedLabel'); },
         done: false,
         error: true,
-        sub: "This send did not reach the network. Review the failure reason in this transaction's details, correct the problem, and try again",
+        get sub() { return t('txTimeline.mempool.localFailureSub'); },
     },
 };
 
@@ -166,10 +166,10 @@ export function TxStatusTimeline({
     // with no hash never got that far, and "waiting for you" would be a lie.
     const signed = signedAt > 0 || txHash.length > 0;
     const signedSub = signedAt > 0
-        ? (formatRelativeTime(signedAt, nowMs) || 'Approved and signed')
+        ? (formatRelativeTime(signedAt, nowMs) || t('txTimeline.signed.approved'))
         : (signed
-            ? 'Approved and signed'
-            : (failed ? 'Not reached: the send failed first' : 'Waiting for you to approve and sign'));
+            ? t('txTimeline.signed.approved')
+            : (failed ? t('txTimeline.signed.notReached') : t('txTimeline.signed.waiting')));
 
     // Indexed: the indexer has caught up to (or past) this action's block.
     // A supplied watermark decides it; without one, a confirmed row is
@@ -181,15 +181,15 @@ export function TxStatusTimeline({
     const indexed = confirmed && (watermark > 0 && blockIndex > 0 ? watermark >= blockIndex : true);
     const indexedSub = chainConfirmed
         ? (indexed
-            ? 'The service records no action for this transaction'
-            : 'The service is still catching up to this block')
+            ? t('txTimeline.processed.noAction')
+            : t('txTimeline.processed.catchingUp'))
         : indexed
             ? (watermark > 0
                 ? t('txTimeline.fullyProcessedAtBlock', { block: watermark })
-                : 'Fully processed and searchable')
+                : t('txTimeline.processed.searchable'))
             : (confirmed
-                ? 'The service is still catching up to this block'
-                : 'Waiting to confirm before it can be processed');
+                ? t('txTimeline.processed.catchingUp')
+                : t('txTimeline.processed.waitingToConfirm'));
     const confirmedSubBase = confirmed && timestamp > 0
         ? formatRelativeTime(timestamp, nowMs)
         : '';
@@ -204,21 +204,21 @@ export function TxStatusTimeline({
     const mempoolStage = pendingState
         ? (MEMPOOL_STAGE_COPY[pendingState] || MEMPOOL_STAGE_COPY['awaiting-network'])
         : confirmed
-            ? { label: 'Accepted', done: true, sub: 'Picked up when the block was mined' }
-            : { label: 'Pending broadcast', done: false, sub: '' };
+            ? { label: t('txTimeline.mempool.acceptedLabel'), done: true, sub: t('txTimeline.mempool.acceptedSub') }
+            : { label: t('txTimeline.mempool.pendingBroadcastLabel'), done: false, sub: '' };
 
     const stages = [
         {
             key: 'signed',
-            label: 'Signed',
+            label: t('txTimeline.signed.label'),
             done: signed,
             sub: signedSub,
         },
         {
             key: 'broadcast',
-            label: 'Broadcast',
+            label: t('txTimeline.broadcast.label'),
             done: txHash.length > 0,
-            sub: txHash || (failed ? 'Never sent' : 'Not sent yet'),
+            sub: txHash || (failed ? t('txTimeline.broadcast.neverSent') : t('txTimeline.broadcast.notSentYet')),
         },
         {
             key: 'mempool',
@@ -226,13 +226,15 @@ export function TxStatusTimeline({
         },
         {
             key: 'confirmed',
-            label: confirmed && blockIndex > 0 ? t('txTimeline.confirmedAtBlock', { block: blockIndex }) : 'Confirmed',
+            label: confirmed && blockIndex > 0
+                ? t('txTimeline.confirmedAtBlock', { block: blockIndex })
+                : t('txTimeline.confirmed.label'),
             done: confirmed,
             sub: confirmedSub,
         },
         {
             key: 'indexed',
-            label: 'Processed',
+            label: t('txTimeline.processed.label'),
             done: indexed,
             sub: indexedSub,
         },
@@ -250,10 +252,12 @@ export function TxStatusTimeline({
                 {stages.map((s, i) => {
                     const current = i === currentStageIndex;
                     const stateLabel = s.done
-                        ? 'Complete'
+                        ? t('txTimeline.state.complete')
                         : current
-                            ? (pendingState === 'failed' ? 'Current stage: Failed' : 'Current stage')
-                            : 'Not started';
+                            ? (pendingState === 'failed'
+                                ? t('txTimeline.state.currentFailed')
+                                : t('txTimeline.state.current'))
+                            : t('txTimeline.state.notStarted');
                     return (
                         <li
                             key={s.key}

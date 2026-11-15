@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, EmptyState, Icon, ListPage, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
@@ -685,7 +686,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                 }
                 if (!activeWalletIdProp && !activeWalletIdLocal) setActiveWalletIdLocal(list[0].id);
             } catch (err) {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load wallets.');
+                if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load wallets.'));
             }
         })();
         return () => { cancelled = true; };

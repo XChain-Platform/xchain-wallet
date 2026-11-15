@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, ChainBadge, Checkbox, EmptyState, FeeSelector, FieldNote, FormNotice, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib, airdrop as airdropLib } from '@xchain-wallet/core';
@@ -171,7 +172,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 if (!chainId && picked) setChainId(picked);
                 if (Object.keys(byChain || {}).length === 0) setLoadError('No addresses on any network yet. Use Receive to generate one first.');
             })
-            .catch((err) => { if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.'); });
+            .catch((err) => { if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load addresses.')); });
         return () => { cancelled = true; };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [walletId, messaging]);
@@ -1006,7 +1007,7 @@ function ContactAddressPickerScreen({ variant, messaging, chainCoin, onAdd, onBa
         let cancelled = false;
         messaging.listContacts()
             .then((rows) => { if (!cancelled) setContacts(Array.isArray(rows) ? rows : []); })
-            .catch((err) => { if (!cancelled) setLoadError(err?.message || 'Failed to load contacts.'); });
+            .catch((err) => { if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load contacts.')); });
         return () => { cancelled = true; };
     }, [messaging]);
 

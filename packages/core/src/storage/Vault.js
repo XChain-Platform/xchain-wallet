@@ -25,8 +25,10 @@
 //   - Reads migrate records forward via the schema migration harness and
 //     cache the result. The on-disk record stays at its stored version until
 //     the next write.
-//   - AAD is optional; when supplied it's passed through to AEAD
-//     unchanged on both save and load.
+//   - AAD is optional; production shells currently omit it. Supplying AAD for
+//     an existing vault is a format change because a no-AAD blob cannot open
+//     with AAD. It requires a read-old/write-new migration or document-version
+//     change. See the shared-key format note in codec.js.
 
 import {
     DOCUMENT_VERSION,
@@ -172,7 +174,7 @@ export class VaultValidationError extends Error {
  * @typedef {Object} VaultOpts
  * @property {import('./backend.js').StorageBackend} backend
  * @property {Uint8Array} masterKey               32 bytes; caller retains lifetime
- * @property {Uint8Array} [aad]
+ * @property {Uint8Array} [aad]                     optional format parameter; production shells omit it
  * @property {boolean} [autoSave]                 default true
  */
 
@@ -449,6 +451,39 @@ export class Vault {
         await this._mutate((document) => ({
             document: steps.reduce((next, apply) => apply(next), document),
         }));
+    }
+
+    /**
+     * Build and store several records from the current document in one write
+     * queue slot. The builder may refuse by throwing; in that case no record
+     * is changed. This is for read-derive-write flows whose precondition must
+     * still hold at the instant the write is built.
+     *
+     * @param {(document: import('./codec.js').VaultDocument) => Array<{ store: { _prepare: Function }, record: object }>} buildEntries
+     * @returns {Promise<void>}
+     */
+    async putManyGuarded(buildEntries) {
+        this._assertOpen();
+        if (typeof buildEntries !== 'function') {
+            throw new TypeError('Vault.putManyGuarded: builder must be a function');
+        }
+        await this._mutate((document) => {
+            const entries = buildEntries(document);
+            if (!Array.isArray(entries)) {
+                throw new TypeError('Vault.putManyGuarded: builder must return an array');
+            }
+            const steps = entries.map((entry) => {
+                const store = entry?.store;
+                if (!store || store._vault !== this || typeof store._prepare !== 'function') {
+                    throw new TypeError('Vault.putManyGuarded: every entry needs a store from this vault');
+                }
+                return store._prepare(entry.record);
+            });
+            return {
+                document: steps.reduce((next, apply) => apply(next), document),
+                persist: steps.length > 0,
+            };
+        });
     }
 
     /**

@@ -98,7 +98,8 @@ async function probeIndexFunding({
  * @property {string} chainId
  * @property {string} [accountId]               preferred, pick the Account by id
  * @property {number} [accountIndex]            fallback, pick by BIP44 index (default 0). Ignored when `accountId` is supplied.
- * @property {string} [addressType]             defaults to descriptor.defaultAddressType
+ * @property {string} [addressType]             defaults by wallet format via
+ *                                              defaultAddressTypeForWallet (p2pkh for counterwallet-legacy)
  * @property {string} [label]                   defaults to "<TICKER> Dispenser #N+1" (e.g. "BTC Dispenser #2")
  */
 

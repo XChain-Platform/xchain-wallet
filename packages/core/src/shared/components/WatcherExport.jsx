@@ -21,6 +21,7 @@ import { AnimatedQrFrames, RadioGroup, StatusMessage } from '../../ui/index.js';
 import { CopyButton, Textarea } from '../../ui/index.js';
 import { AddressText } from '../../ui/index.js';
 import { encodeXcwChunks } from '../../uri/psbtQr.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { encodeBbqrPsbtFrames } from '../../uri/bbqrPsbt.js';
 import styles from './WatcherExport.module.css';
 import { t } from '../../i18n/index.js';
@@ -41,7 +42,7 @@ export function WatcherExport({ result }) {
                 ? encodeBbqrPsbtFrames(psbtHex)
                 : encodeXcwChunks(psbtHex);
         } catch (e) {
-            return { error: e?.message || String(e) };
+            return { error: userFacingMessage(e, 'Could not build the QR codes for this transaction.') };
         }
     }, [psbtHex, qrFormat]);
     const formatLabel = qrFormat === 'bbqr' ? 'BBQr (hex)' : 'XCW chunks';

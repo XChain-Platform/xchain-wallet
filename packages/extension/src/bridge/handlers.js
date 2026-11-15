@@ -216,10 +216,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         // Cluster F FOLLOWUP 3: version negotiation. Reject the
         // connect cleanly when the dApp asks for a bridge version
         // we don't implement, instead of accepting and failing later
-        // when a version-specific method gets called. The spec's own comment
-        // on requiredBridgeVersion says "warns the user"; the hard reject is
-        // the deliberate conservative reading and stays until product says
-        // otherwise.
+        // when a version-specific method gets called.
         if (!isBridgeVersionSupported(requiredBridgeVersion)) {
             throw bridgeError(
                 'BRIDGE_VERSION_MISMATCH',
@@ -911,6 +908,7 @@ export function registerBridgeHandlers(host, opts = {}) {
             chainId,
             path: addr.derivationPath ?? undefined,
             addressId: addr.derivationPath ? undefined : addr.id,
+            addressType: addr.addressType,
             message: challenge,
         });
         // chainId and challengeParts are declared on SignInSuccess and were
@@ -988,6 +986,7 @@ async function executeSignAction(req, deps, ctx) {
     // request carrying a signing-divergence key must never reach the user, because
     // the screen it would render is the wrong description of what would be signed.
     assertNoSigningDivergenceParams(params);
+    assertSupportedSweepParams(actionName, params);
     const toAddress = params.toAddress ?? params.to;
     const sendTick = params.asset ?? params.tick;
     // One of the published gaps is a UNIT gap, not a name gap: `amountRaw` is
@@ -1157,10 +1156,8 @@ async function executeSignAction(req, deps, ctx) {
         return finish(submitted);
     }
     if (actionName === 'SWEEP') {
-        // SweepActionParams' optional single-asset `asset` has no consumer:
-        // sweepToken empties by category flags (balances / ownerships / ...),
-        // not per-asset. Mapping from/to restores the action; per-asset sweep
-        // needs a core change and is deliberately left unwired here.
+        // Per-asset requests were refused before approval. sweepToken empties
+        // the source by category flags, so forwarding one would widen intent.
         const submitted = await sweepToken({
             ...pickFlowParams(actionName, params),
             from: fromSource,
@@ -1187,12 +1184,9 @@ async function executeSignAction(req, deps, ctx) {
 // from the trusted, pre-approval values right after the spread, and a page key
 // under the same name would be overwritten anyway.
 //
-// Everything else the page sent is dropped. The published shapes
-// (bridge-spec SendActionParams / SweepActionParams) carry only
-// fromAddress / toAddress / asset / amountRaw / memo, so nothing spec-compliant
-// is lost, while `fee` / `feePerKb` / `rbf` (which sendToken and sweepToken DO
-// honour, and which no approval screen renders) can no longer be chosen by the
-// page.
+// Everything else the page sent is dropped after action-specific shape checks.
+// `fee` / `feePerKb` / `rbf` (which sendToken and sweepToken DO honour, and
+// which no approval screen renders) can no longer be chosen by the page.
 // `memo` is on BOTH entries, and that is load-bearing rather than tidy:
 // approvalPayload puts MEMO in `common`, which the SWEEP branch spreads, so the
 // approval screen renders a memo for a sweep and sweepToken then signs it
@@ -1229,6 +1223,15 @@ function assertNoSigningDivergenceParams(params) {
             );
         }
     }
+}
+
+function assertSupportedSweepParams(actionName, params) {
+    if (actionName !== 'SWEEP') return;
+    if (params?.asset === undefined && params?.tick === undefined) return;
+    throw bridgeError(
+        'INVALID_PARAMS',
+        'per-asset SWEEP is not supported; use SEND to move a single asset',
+    );
 }
 
 // The allowlisted subset of a page's params for `actionName`. Absent keys stay
@@ -1844,6 +1847,7 @@ async function invokeSignMessage(deps, req) {
         chainId: req.chainId,
         path: addr.derivationPath ?? undefined,
         addressId: addr.derivationPath ? undefined : addr.id,
+        addressType: addr.addressType,
         message: req.message,
     });
 }

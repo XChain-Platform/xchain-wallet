@@ -194,10 +194,10 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
 
-    // Typed-confirmation gate (CALLBACK force-recalls everything; rides the
+    // Typed-confirmation gate (the recall takes everything; it rides the
     // same typed-word rail as DESTROY / SWEEP).
     const [typedConfirm, setTypedConfirm] = useState('');
-    const typedConfirmOk = isExactTypedConfirmation(typedConfirm, 'CALLBACK');
+    const typedConfirmOk = isExactTypedConfirmation(typedConfirm, 'RECALL');
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
@@ -748,7 +748,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                 ? () => { setSubmitError(null); setStage('form'); }
                 : onBack}
             backDisabled={stage === 'submitting' || refreshing}
-            title={stage === 'review' || stage === 'submitting' ? 'Review callback' : 'Execute callback'}
+            title={stage === 'review' || stage === 'submitting' ? 'Review token recall' : 'Recall tokens'}
         />
     );
     const wrap = (children) => (
@@ -776,12 +776,12 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         // confirming and no holder is being paid yet.
         if (result?.queued) {
             return wrap(
-                <ResultScreen state="signed-not-broadcast" onDone={onBack} what="callback" unsaved={result?.unsaved} />,
+                <ResultScreen state="signed-not-broadcast" onDone={onBack} what="token recall" unsaved={result?.unsaved} />,
             );
         }
         return wrap(
             <>
-                <h2 className={styles.successTitle}>Callback broadcast</h2>
+                <h2 className={styles.successTitle}>Token recall broadcast</h2>
                 {txid ? (
                     <>
                         <p className={styles.successLabel}>Transaction ID</p>
@@ -805,7 +805,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         return wrapForm(
             <FormPage
                 demoGuard={demoGuard}
-                label="Review callback"
+                label="Review token recall"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
                     <StatusMessage variant="error">{submitError}</StatusMessage>
@@ -828,7 +828,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                             ? 'Create unsigned transaction'
                             : isHwSource
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : 'Call back'}
+                                : 'Recall tokens'}
                     </Button>
                 )}
             >
@@ -874,7 +874,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                     />
                 )}
                 <Input
-                    label="Type CALLBACK to confirm"
+                    label="Type RECALL to confirm"
                     help={t('common.typedConfirmationCallbackHint')}
                     value={typedConfirm}
                     onChange={(e) => setTypedConfirm(e.target.value)}
@@ -905,7 +905,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                     <>
                         {previewBlock}
                         <Input
-                            label='Type "CALLBACK" to confirm'
+                            label='Type "RECALL" to confirm'
                             help={t('common.typedConfirmationCallbackReviewHint')}
                             value={typedConfirm}
                             onChange={(e) => setTypedConfirm(e.target.value)}
@@ -964,7 +964,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
     return wrapForm(
         <FormPage
             demoGuard={demoGuard}
-            label="Execute callback"
+            label="Recall tokens"
             onSubmit={handleReview}
             status={formError || issuerEligibility.error ? (
                 <StatusMessage variant="error">{formError || issuerEligibility.error}</StatusMessage>
@@ -983,7 +983,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                         || refreshing
                         || confirmAction.composing}
                 >
-                    Execute callback
+                    Recall tokens
                 </Button>
             )}
         >

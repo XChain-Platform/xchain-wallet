@@ -246,9 +246,14 @@ export function CoSignerAccountDetail({ accountId, walletId, onBack }) {
         }
     }
 
+    // Only entries inside the rolling limit now in force count: the stored list
+    // can hold older ones, and holds the old entries of a limit since removed.
     const windowCount = useMemo(() => {
         const entries = account?.window?.entries;
-        return Array.isArray(entries) ? entries.length : 0;
+        const hours = account?.policy?.maxPerWindow?.hours;
+        if (!Array.isArray(entries) || !(hours > 0)) return 0;
+        const cutoff = Date.now() - hours * 3600 * 1000;
+        return entries.filter((e) => e.t >= cutoff).length;
     }, [account]);
 
     const header = <PageHeader onBack={onBack} title="Agent account" />;

@@ -107,6 +107,10 @@ function existingHarness(walletOverrides = {}, argsOverrides = {}) {
             delete: vi.fn(async () => true),
         },
     };
+    vault.putManyGuarded = vi.fn(async (buildEntries) => {
+        const entries = buildEntries({ wallets: [wallet], addresses: [] });
+        for (const entry of entries) await entry.store.put(entry.record);
+    });
     return {
         wallet,
         vault,
@@ -255,10 +259,11 @@ describe('importWif error and rollback edges', () => {
 
     it('aggregates a failed final write with both failed rollback operations', async () => {
         const { args, vault } = existingHarness();
-        vault.wallets.put
-            .mockRejectedValueOnce(new Error('updated wallet write failed'))
-            .mockRejectedValueOnce(new Error('wallet restore failed'));
-        vault.addresses.delete.mockRejectedValue(new Error('address rollback failed'));
+        vault.putManyGuarded.mockRejectedValue(new AggregateError([
+            new Error('updated wallet write failed'),
+            new Error('wallet restore failed'),
+            new Error('address rollback failed'),
+        ], 'importWif: persistence and rollback failed'));
 
         const error = await importWif(args).catch((caught) => caught);
 

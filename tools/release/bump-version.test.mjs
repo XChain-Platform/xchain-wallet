@@ -1,3 +1,12 @@
+// Copyright © 2025–2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC – https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of XChain Platform. Licensed under the GNU Affero
+// General Public License v3.0 or later; see LICENSE.md. A commercial
+// license (without AGPL source-disclosure terms) is available -
+// contact legal@dankest.llc.
 import assert from 'node:assert/strict';
 import {
     copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync,
@@ -9,6 +18,7 @@ import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 
 const SOURCE = fileURLToPath(new URL('./bump-version.mjs', import.meta.url));
+const DERIVER = fileURLToPath(new URL('../../packages/core/scripts/derive-extension-version.js', import.meta.url));
 const CURRENT = '1.2.3';
 const PACKAGES = ['core', 'extension', 'future-shell'];
 
@@ -17,6 +27,9 @@ function fixture() {
     const toolDir = path.join(root, 'tools', 'release');
     mkdirSync(toolDir, { recursive: true });
     copyFileSync(SOURCE, path.join(toolDir, 'bump-version.mjs'));
+    const scriptsDir = path.join(root, 'packages', 'core', 'scripts');
+    mkdirSync(scriptsDir, { recursive: true });
+    copyFileSync(DERIVER, path.join(scriptsDir, 'derive-extension-version.js'));
     writeFileSync(path.join(root, 'package.json'), `${JSON.stringify({
         name: 'fixture', version: CURRENT,
     }, null, 4)}\n`);

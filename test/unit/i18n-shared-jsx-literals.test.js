@@ -128,6 +128,7 @@ const PARTIAL_COPY_FILES = [
     '/routes/BroadcastForm.jsx',
     '/routes/CallbackForm.jsx',
     '/routes/CoinpayForm.jsx',
+    '/routes/ContractDetail.jsx',
     '/routes/ContractFundsForm.jsx',
     '/routes/ContractStakeForm.jsx',
     '/routes/ControllerBindForm.jsx',

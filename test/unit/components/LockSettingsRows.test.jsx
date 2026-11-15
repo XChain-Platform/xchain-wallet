@@ -141,6 +141,20 @@ describe('BiometricRow', () => {
         expect(messaging.unlockWallet).toHaveBeenCalledTimes(2);
     });
 
+    it('hides biometric provider details behind enrolment copy', async () => {
+        biometric.register.mockRejectedValueOnce(
+            new Error('biometricUnlock: PRF extension did not return a result'),
+        );
+        render(<BiometricRow />);
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Enable' }));
+        fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'correct' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Enable biometric unlock' }));
+
+        expect(await screen.findByText('Biometric enrolment failed.')).toBeTruthy();
+        expect(screen.queryByText(/PRF extension/)).toBeNull();
+    });
+
     it('offers re-enrolment and reports a disable that did not clear the credential', async () => {
         biometric.registered = true;
         biometric.clear.mockImplementation(() => {});
@@ -202,6 +216,17 @@ describe('DuressPassphraseRow', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Save passphrase' }));
         expect(await screen.findByText(/Configured\. Entering this passphrase/)).toBeTruthy();
         expect(duress.set).toHaveBeenCalledWith('emergency-only');
+    });
+
+    it('hides duress storage details behind save copy', async () => {
+        duress.set.mockImplementationOnce(() => {
+            throw new Error('setDuressPassphrase: local storage write failed');
+        });
+        render(<DuressPassphraseRow />);
+        openAndFill({ current: 'wallet-secret', pass: 'emergency-only' });
+
+        expect(await screen.findByText('Could not save the duress passphrase.')).toBeTruthy();
+        expect(screen.queryByText(/setDuressPassphrase/)).toBeNull();
     });
 });
 

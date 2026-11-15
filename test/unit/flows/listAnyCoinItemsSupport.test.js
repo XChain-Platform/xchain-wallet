@@ -13,6 +13,13 @@ import {
     anyCoinItemCoins,
     listAnyCoinItemsSupport,
 } from '../../../packages/core/src/flows/listAnyCoinItemsSupport.js';
+import { tickerForCoin } from '../../../packages/core/src/registry/coinTicker.js';
+
+// Quoted from xchain-indexer/src/config/currencies.js (config['COINS']): the
+// coins its list-item check accepts once the gate is open. If the indexer's set
+// changes, WALLET_COINS and this quote change with it.
+const INDEXER_COINS = ['BTC', 'LTC', 'DOGE'];
+const REGTEST_BTC = { coin: 'bitcoin', networkKind: 'regtest' };
 
 const TESTNET_BTC = { coin: 'bitcoin', networkKind: 'testnet' };
 
@@ -27,8 +34,32 @@ describe('anyCoinItemCoins', () => {
     });
 
     it('never widens to a coin the status only lists on another network', () => {
+        // Flags for other networks never change the answer; the set is the fixed one.
         const status = { list_any_coin_items: { TBTC: true, RLTC: true, LTC: false } };
-        expect(anyCoinItemCoins(status, TESTNET_BTC)).toEqual(['bitcoin']);
+        expect(anyCoinItemCoins(status, TESTNET_BTC)).toEqual(['bitcoin', 'litecoin', 'dogecoin']);
+    });
+
+    it('does not depend on which other coins the explorer measures', () => {
+        const status = { list_any_coin_items: { RBTC: true, BTC: false } };
+        expect(anyCoinItemCoins(status, REGTEST_BTC)).toEqual(['bitcoin', 'litecoin', 'dogecoin']);
+        expect(anyCoinItemCoins({ list_any_coin_items: { TBTC: true } }, TESTNET_BTC))
+            .toEqual(['bitcoin', 'litecoin', 'dogecoin']);
+    });
+
+    it('matches the coin set the indexer accepts', () => {
+        const coins = anyCoinItemCoins({ list_any_coin_items: { TBTC: true } }, TESTNET_BTC);
+        expect(coins.map(tickerForCoin)).toEqual(INDEXER_COINS);
+    });
+
+    it('hands back a copy, so a caller cannot change the shared set', () => {
+        const status = { list_any_coin_items: { TBTC: true } };
+        anyCoinItemCoins(status, TESTNET_BTC).push('monero');
+        expect(anyCoinItemCoins(status, TESTNET_BTC)).toEqual(['bitcoin', 'litecoin', 'dogecoin']);
+    });
+
+    it('keeps the empty answer on a regtest chain whose own flag is not true', () => {
+        const status = { list_any_coin_items: { RBTC: false, RLTC: true } };
+        expect(anyCoinItemCoins(status, REGTEST_BTC)).toEqual([]);
     });
 
     it.each([
@@ -48,7 +79,7 @@ describe('listAnyCoinItemsSupport', () => {
         const coins = await listAnyCoinItemsSupport({
             sdkRegistry: registryWith(getStatus), chainId: 'bitcoin-testnet', ...TESTNET_BTC,
         });
-        expect(coins).toEqual(['bitcoin', 'dogecoin']);
+        expect(coins).toEqual(['bitcoin', 'litecoin', 'dogecoin']);
         expect(getStatus).toHaveBeenCalledOnce();
     });
 

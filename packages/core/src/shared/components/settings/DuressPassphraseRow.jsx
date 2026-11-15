@@ -35,6 +35,7 @@
 // Setup verifies the current wallet password so a duress passphrase cannot
 // equal it. Disable remains available to the unlocked session.
 
+import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import { useEffect, useRef, useState } from 'react';
 import { Button, FormPage, FormSection, Icon, Input } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
@@ -111,7 +112,7 @@ export function DuressPassphraseRow() {
                 setError('Current wallet password is incorrect.');
             } else {
                 retryRef.current = attemptSet;
-                setError(err?.message || 'Could not save the duress passphrase.');
+                setError(userFacingMessage(err, 'Could not save the duress passphrase.'));
             }
         } finally {
             setBusy(false);

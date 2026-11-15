@@ -33,6 +33,7 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
 const TOOL = join(root, 'tools', 'release', 'bump-version.mjs');
+const DERIVER = join(root, 'packages', 'core', 'scripts', 'derive-extension-version.js');
 
 const CHANGELOG_WITH_ENTRIES = `# Changelog
 
@@ -65,6 +66,8 @@ function scaffold(changelog) {
     const dir = mkdtempSync(join(tmpdir(), 'xchain-bump-'));
     mkdirSync(join(dir, 'tools', 'release'), { recursive: true });
     copyFileSync(TOOL, join(dir, 'tools', 'release', 'bump-version.mjs'));
+    mkdirSync(join(dir, 'packages', 'core', 'scripts'), { recursive: true });
+    copyFileSync(DERIVER, join(dir, 'packages', 'core', 'scripts', 'derive-extension-version.js'));
 
     writeFileSync(join(dir, 'package.json'), `${JSON.stringify({ name: 'scaffold', version: '0.100.0' }, null, 4)}\n`);
     for (const name of PACKAGES) {

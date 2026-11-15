@@ -63,6 +63,12 @@ export async function updateSettings(vault, patch) {
     if (patch === null || typeof patch !== 'object') {
         throw new Error('updateSettings: patch must be an object');
     }
+    // Custom chains are written by the add and remove routes, which validate
+    // each descriptor, cap its size, and keep the live registry and endpoint
+    // overrides in step with the stored list. A patch would skip all of that.
+    if (patch.customChains !== undefined) {
+        throw new Error('updateSettings: customChains is written through addCustomChain and removeCustomChain');
+    }
     // A patch is read, merged and written back. Two patches in flight would
     // both read the same record and the later write would drop the earlier
     // one's keys, so each vault takes its patches one at a time.

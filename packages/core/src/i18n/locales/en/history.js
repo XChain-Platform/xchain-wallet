@@ -118,6 +118,7 @@ const messages = {
         '{count, plural, one {# Confirmation} other {# Confirmations}}',
     'history.row.receivedAt': 'Received at {label}',
     'history.group.latest': 'Latest {when}',
+    'history.group.linked': 'Linked',
     'history.status.confirmed': 'Confirmed',
     'history.status.failed': 'Failed',
     'history.status.pending': 'Pending',

@@ -54,6 +54,7 @@ import {
     FormPage,
     FormSection,
     Icon,
+    InfoTip,
     Input,
     PageNotice as Status,
     SectionHeader,
@@ -91,6 +92,7 @@ import '../../../i18n/locales/en/history.js';
 import '../../../i18n/locales/en/importWallet.js';
 import '../../../i18n/locales/en/send.js';
 import '../../../i18n/locales/en/settings.js';
+import '../../../i18n/locales/en/ui.js';
 
 /** How often the Backup panel asks the background whether a batched publish came due. */
 const AUTO_SYNC_POLL_MS = 15_000;
@@ -394,7 +396,7 @@ export function BackupSection({ activeWallet, onExportInTab }) {
 
     useBackHandler(revealStage !== 'idle' ? handleHideMnemonic : undefined);
 
-    async function runDryRun({ mnemonic: candidate, format, bip39Passphrase, gapLimit }) {
+    async function runDryRun({ mnemonic: candidate, bip39Passphrase, gapLimit }) {
         if (typeof messaging?.dryRunRestoreRequest !== 'function') {
             setDryRunError('Dry-run restore is not wired in this shell yet.');
             return;
@@ -409,7 +411,6 @@ export function BackupSection({ activeWallet, onExportInTab }) {
             const r = await messaging.dryRunRestoreRequest({
                 walletId: activeWallet.id,
                 mnemonic: candidate,
-                format,
                 bip39Passphrase,
                 gapLimit,
             });
@@ -418,7 +419,7 @@ export function BackupSection({ activeWallet, onExportInTab }) {
         } catch (err) {
             // Say what to fix for a mistyped phrase; filter any other flow error to plain copy.
             setDryRunError(err?.name === 'InvalidMnemonicError'
-                ? "That recovery phrase isn't valid. Check each word and its order against your backup, and that the format selected matches it."
+                ? "That recovery phrase isn't valid. Check each word and its order against this wallet's backup."
                 : userFacingMessage(err, 'Dry-run restore failed.'));
             setDryRunStage('form');
         }
@@ -952,8 +953,8 @@ function RevealedMnemonic({
 }
 
 /**
- * Dry-run restore form: paste mnemonic, pick format / passphrase /
- * gap limit, fire the comparison.
+ * Dry-run restore form: paste mnemonic and pick passphrase / gap limit,
+ * then fire the comparison against the wallet's stored format.
  */
 function DryRunForm({ busy, error, walletFormat, onCancel, onSubmit }) {
     // The form takes a whole recovery phrase in clear text, so it is
@@ -961,10 +962,8 @@ function DryRunForm({ busy, error, walletFormat, onCancel, onSubmit }) {
     // recents thumbnail, for as long as the field is on screen.
     useProtectedScreen();
     const [mn, setMn] = useState('');
-    const initialFormat = walletFormat === 'counterwallet-legacy'
-        ? 'counterwallet-legacy'
-        : 'bip39';
-    const [format, setFormat] = useState(initialFormat);
+    const isLegacy = walletFormat === 'counterwallet-legacy';
+    const isKnownFormat = walletFormat === 'bip39' || isLegacy;
     const [passphrase, setPassphrase] = useState('');
     const [gapLimit, setGapLimit] = useState('10');
 
@@ -978,8 +977,7 @@ function DryRunForm({ busy, error, walletFormat, onCancel, onSubmit }) {
         if (!canSubmit) return;
         onSubmit({
             mnemonic: mn.trim(),
-            format,
-            bip39Passphrase: format === 'bip39' ? passphrase : '',
+            bip39Passphrase: isLegacy ? '' : passphrase,
             gapLimit: gapLimitNumber,
         });
     };
@@ -1008,17 +1006,20 @@ function DryRunForm({ busy, error, walletFormat, onCancel, onSubmit }) {
                         className={styles.mnemonicInput}
                     />
                     <div className={styles.fieldRow}>
-                        <Select
-                            label={t('settings.backup.format')}
-                                help={t('settings.help.backup.testFormat')}
-                                value={format}
-                                onChange={(e) => setFormat(/** @type {any} */ (e.target.value))}
-                                aria-label={t('settings.backup.phraseFormat')}
-                        >
-                                {/* Native options are the required children of the style guide Select. */}
-                                <option value="bip39">{t('settings.backup.standardBip39')}</option>
-                                <option value="counterwallet-legacy">{t('settings.backup.counterwalletLegacy')}</option>
-                        </Select>
+                        {isKnownFormat ? (
+                            <div className={styles.readOnlyFormat}>
+                                <span>
+                                    {t('settings.backup.format')}{' '}
+                                    <InfoTip
+                                        aria={t('ui.field.about', { label: t('settings.backup.format') })}
+                                        label={t('settings.help.backup.testFormat')}
+                                    />
+                                </span>
+                                <strong>{t(isLegacy
+                                    ? 'settings.backup.counterwalletLegacy'
+                                    : 'settings.backup.standardBip39')}</strong>
+                            </div>
+                        ) : null}
                         <Input
                                 label={t('settings.backup.addressesToCheck2')}
                                 help={t('settings.help.backup.testGap')}
@@ -1036,7 +1037,7 @@ function DryRunForm({ busy, error, walletFormat, onCancel, onSubmit }) {
                                 className={styles.gapLimitInput}
                             />
                     </div>
-                    {format === 'bip39' ? (
+                    {!isLegacy ? (
                         <Input
                             type="password"
                             revealable
@@ -1392,7 +1393,7 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
             .catch((err) => {
                 if (cancelled) return;
                 setChains([]);
-                setChainsError(err?.message || 'Failed to load networks.');
+                setChainsError(userFacingMessage(err, 'Failed to load networks.'));
             });
         return () => { cancelled = true; };
     }, [walletId, messaging]);
@@ -1539,7 +1540,7 @@ function RestoreLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
             .catch((err) => {
                 if (cancelled) return;
                 setChains([]);
-                setChainsError(err?.message || 'Failed to load networks.');
+                setChainsError(userFacingMessage(err, 'Failed to load networks.'));
             });
         return () => { cancelled = true; };
     }, [walletId, messaging]);

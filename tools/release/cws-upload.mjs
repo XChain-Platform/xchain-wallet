@@ -64,6 +64,7 @@ import { fileURLToPath } from 'node:url';
 // bash half and release-resign-tag.smoke.js drives both spellings over one
 // table, so importing it is what stops a third spelling appearing here.
 import { releaseTagOf } from './feed-sweep.mjs';
+import { classifyPinnedSignature } from './gpg-signature-status.mjs';
 
 // The one value in this repo that only an observed signing run can write
 // (verify-release-key.sh drove the real pipeline to set it). It is not a
@@ -255,8 +256,9 @@ export function headerField(manifestText, field) {
  * Reads gpg's machine-readable status, never its exit code and never its
  * human text: gpg exits 0 for a good signature from an UNTRUSTED key, which
  * is exactly what an attacker signing with their own key produces. VALIDSIG
- * carries the fingerprint that actually signed, so it is the only line that
- * answers "was this the release key".
+ * identifies the key, but is also emitted for revoked and expired keys. A
+ * matching GOODSIG and the absence of per-signature failure statuses are
+ * therefore part of the same decision.
  *
  * Matches the PRIMARY key as well as the signing one, because they are
  * different fingerprints and the world only ever sees one of them: K1 signs
@@ -282,7 +284,7 @@ export function headerField(manifestText, field) {
  * @param {object} opts
  * @param {string} opts.manifestPath  locates the detached signature only
  * @param {string} opts.manifestText  the document that is verified
- * @returns {'ok'|'no-gpg'|'bad'|'wrong-key'}
+ * @returns {'ok'|'no-gpg'|'bad'|'wrong-key'|'key-invalid'}
  */
 export function attributeSignature({ manifestPath, manifestText, fingerprint, runImpl = spawnSync }) {
     if (typeof manifestText !== 'string') return 'bad';
@@ -291,14 +293,7 @@ export function attributeSignature({ manifestPath, manifestText, fingerprint, ru
     if (result.error && result.error.code === 'ENOENT') return 'no-gpg';
     if (result.error || typeof result.stdout !== 'string') return 'bad';
 
-    const validsig = /^\[GNUPG:\] VALIDSIG (.+)$/m.exec(result.stdout);
-    if (!validsig) return 'bad';
-    const fields = validsig[1].trim().split(/\s+/);
-    const want = fingerprint.replace(/\s+/g, '').toUpperCase();
-    const matches = (fpr) => /^[0-9A-F]{40}$/.test(fpr.toUpperCase()) && fpr.toUpperCase() === want;
-    const signing = fields[0] || '';
-    const primary = fields.length > 1 ? fields[fields.length - 1] : '';
-    return matches(signing) || matches(primary) ? 'ok' : 'wrong-key';
+    return classifyPinnedSignature(result.stdout, fingerprint);
 }
 
 /**
@@ -409,6 +404,11 @@ export async function checkProvenance({
                     + '  in your keyring signed the manifest, never whether the release key did. Do not\n'
                     + '  upload this zip. If the release key was rotated, name the new fingerprint in\n'
                     + '  XCHAIN_VERIFY_KEY.';
+            } else if (verdict === 'key-invalid') {
+                signature = 'signature from the pinned key, but that key is revoked or expired';
+                why = `the signature on ${basename(manifest)} is from the pinned release key, but\n`
+                    + '  gpg reports that the key or signature is revoked or expired. Do not upload\n'
+                    + '  this zip. Renew or rotate the release key before continuing.';
             } else {
                 signature = 'signature did not verify';
                 why = `the signature on ${basename(manifest)} did not verify.\n`

@@ -93,12 +93,12 @@ function mount(messaging) {
 }
 
 async function openConfirm() {
-    const execute = await screen.findByRole('button', { name: 'Execute callback' });
+    const execute = await screen.findByRole('button', { name: 'Recall tokens' });
     await waitFor(() => expect(execute).toBeEnabled());
     expect(screen.queryByText(/Callback recalls everything/i)).toBeNull();
     await act(async () => { fireEvent.click(execute); });
     await screen.findByRole('button', { name: 'Approve' });
-    fireEvent.change(screen.getByLabelText('Type "CALLBACK" to confirm'), { target: { value: 'CALLBACK' } });
+    fireEvent.change(screen.getByLabelText('Type "RECALL" to confirm'), { target: { value: 'RECALL' } });
 }
 
 async function approve() {
@@ -133,7 +133,7 @@ describe('Execute callback with more holders than one summary page', () => {
     it('refuses Review when the payout is only a floor over a capped holder page', async () => {
         const { messaging, target } = confirmMessaging({ ...PARTIAL });
         mount(messaging);
-        const execute = await screen.findByRole('button', { name: 'Execute callback' });
+        const execute = await screen.findByRole('button', { name: 'Recall tokens' });
         await waitFor(() => expect(execute).toBeEnabled());
         await act(async () => { fireEvent.click(execute); });
         expect(await screen.findByText(FLOOR_REFUSAL)).toBeInTheDocument();

@@ -11,6 +11,14 @@
 // Vault-document codec. Serializes the in-memory document shape to a
 // ciphertext blob using AES-256-GCM under the master key.
 //
+// Production shells currently seal the document without AAD. On fresh create
+// they also reuse this master key for seed and imported-WIF ciphertexts, which
+// likewise carry no AAD; backup files carry copies of those sealed fields.
+// Only the optional BIP39 passphrase has its own AAD. A same-key seed or WIF
+// blob placed in the vault slot therefore passes authentication and fails as
+// a JSON or codec error. Any new plaintext under this key needs a purpose AAD
+// such as `xchain-wallet:<purpose>:v1`.
+//
 // Document layout (post-decrypt JSON):
 //   {
 //     documentVersion: 1,             // codec-level version, not schema

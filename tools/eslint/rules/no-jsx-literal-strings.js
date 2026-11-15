@@ -38,9 +38,10 @@
 //     error, recovery, feeText, totalText, emptyActionLabel, warningNoun,
 //     message, description, lead, legend, closeLabel, searchLabel, subtitle,
 //     chainLabel, accessibleLabel, visibleLabel, labelPrefix,
-//     unavailableMessage, intro (the USER_FACING_ATTRS set below is the authority;
-//     keep this list in step with it). The last forty-five are component
-//     props rather than DOM attributes: shipping components
+//     unavailableMessage, intro, secondaryActionLabel, secondaryLabel,
+//     doneLabel (the USER_FACING_ATTRS set below is the authority; keep this
+//     list in step with it). The names from `heading` on are component props
+//     rather than DOM attributes: shipping components
 //     render copy through them, so a DOM-only set left that copy out of the
 //     translator index.
 //   - Destructured prop defaults  function C({ label = 'Copy' })  → flagged
@@ -104,6 +105,8 @@
 //     renders <DetailRow label="x" value="Default window" /> as text.
 //     `value` stays unchecked because CopyButton and form controls carry
 //     data under it; give a copy-rendering prop a name in the set instead.
+//   - Other `data-*` attributes that a stylesheet exposes as text through
+//     CSS `attr()`. Add any such copy-bearing name to USER_FACING_ATTRS.
 //
 // What the rule allows:
 //
@@ -117,7 +120,8 @@
 //     flagged; the smoke test pins those three.
 //   - Specific allow-listed values via the rule option `allow: [...]`.
 //   - Technical attributes that never render to humans: `className`,
-//     `style`, `id`, `key`, `role`, `type`, `htmlFor`, `name`, `data-*`,
+//     `style`, `id`, `key`, `role`, `type`, `htmlFor`, `name`, `data-*`
+//     except `data-label`,
 //     `on*`, and every `aria-*` outside USER_FACING_ATTRS (so
 //     `aria-label`, `aria-description`, `aria-roledescription` and
 //     `aria-valuetext` stay checked while `aria-labelledby`,
@@ -162,6 +166,9 @@ const USER_FACING_ATTRS = new Set([
     'help',
     'caption',
     'tooltip',
+    // DataTable.module.css exposes this value on screen through
+    // `content: attr(data-label)` at narrow viewports.
+    'data-label',
     // Component props, not DOM attributes. Shipping components render copy
     // through these (SideEditor heading, ChainGroup emptyText, the settings
     // and empty-state rows' actionLabel, PageHeader backLabel), and a
@@ -334,6 +341,12 @@ const USER_FACING_ATTRS = new Set([
     // above their content. Every JSX `intro=` is copy, a JSX element or a
     // runtime value, and no gate reports the last two.
     'intro',
+    // EmptyState renders `secondaryActionLabel` as its outline button text.
+    // ResultScreen renders `secondaryLabel` and `doneLabel` as button text.
+    // Across packages/*/src these names have no technical payload use.
+    'secondaryActionLabel',
+    'secondaryLabel',
+    'doneLabel',
 ]);
 
 // There is deliberately no technical-attribute deny-list here. Both

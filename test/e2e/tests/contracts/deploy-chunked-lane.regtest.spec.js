@@ -846,7 +846,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
             const text = (await banner.textContent()) || '';
             // eslint-disable-next-line no-console
             console.log(`[§11.3 resume] banner: ${JSON.stringify(text.trim().slice(0, 200))}`);
-            // that second half: the count must include a chunk known only by
+            // The count must include a chunk known only by
             // its txid. Counting action_indexes alone read "0 of 2" over a run
             // whose first chunk was on chain and paid for, which is the one
             // number a user reads to choose between finishing and starting over.

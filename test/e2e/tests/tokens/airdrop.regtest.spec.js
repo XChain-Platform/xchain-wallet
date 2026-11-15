@@ -62,7 +62,7 @@
 // differing ONLY in not being on the list, is the cheapest way to say that.
 //
 // AND THE LIST ITSELF IS READ BACK OFF THE CHAIN, not trusted from the screen.
-// that second half: the indexer marks a LIST valid while silently dropping
+// That is the read-back half of the fix: the indexer marks a LIST valid while silently dropping
 // items it rejects into `list_items_invalid`, so "the LIST action is valid" is
 // NOT "the membership is what was asked for". D-87 was exactly that - a mainnet
 // address counted among "3 valid addresses", printed on the review screen, given

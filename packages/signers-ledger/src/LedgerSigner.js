@@ -692,10 +692,9 @@ export async function deriveLedgerDeviceIdentifier(publicKeyHex) {
     if (typeof publicKeyHex !== 'string' || publicKeyHex.length === 0) {
         throw new Error('deriveLedgerDeviceIdentifier: publicKeyHex is required');
     }
-    // Pure-JS SHA-256 via `@noble/hashes` so this works on any
-    // origin. `crypto.subtle.digest` is gated on secure context, but
-    // a wallet served over plain HTTP from a LAN host should still be
-    // able to identify a paired Ledger.
+    // Pure-JS SHA-256 via `@noble/hashes` keeps device identification
+    // independent of SubtleCrypto availability. The web shell owns origin
+    // policy rather than coupling it to this primitive.
     const bytes = hexToBytes(publicKeyHex);
     const view = sha256(bytes);
     let out = '';

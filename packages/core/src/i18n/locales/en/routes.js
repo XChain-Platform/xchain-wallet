@@ -16,6 +16,7 @@ import { addEnglish } from '../../store.js';
 
 const messages = {
     // Copy moved out of JSX literals by the i18n sweep.
+    'routes.contractDetail.key': 'Key',
     'routes.marketsList.loading': 'Loading markets',
     'routes.myLists.loading': 'Loading lists',
     'routes.addressList.generateAtIndex': 'Generate at index',
@@ -96,7 +97,7 @@ const messages = {
     'routes.manageToken.transfer': 'Transfer',
     'routes.manageToken.controller': 'Controller',
     'routes.manageToken.callbackSettings': 'Callback settings',
-    'routes.manageToken.executeCallback': 'Execute callback',
+    'routes.manageToken.executeCallback': 'Recall tokens',
     'routes.manageToken.accessLists': 'Access lists',
     'routes.manageToken.sharedBlockList': 'Shared block list',
     'routes.manageToken.bridge': 'Bridge',
@@ -107,7 +108,7 @@ const messages = {
     'routes.manageToken.mintLocked': 'Minting is permanently locked for this token.',
     'routes.manageToken.allLocksSet': 'Every token setting is permanently locked.',
     'routes.manageToken.descriptionLocked': "The description is permanently locked and can't be updated.",
-    'routes.manageToken.callbackNotConfigured': 'Set callback details before executing a callback.',
+    'routes.manageToken.callbackNotConfigured': 'Set callback details before recalling tokens.',
     'routes.manageToken.bridgeLocked': 'Bridge settings are frozen for this token and can never change.',
     'routes.manageToken.tokenDetails': 'Token details',
     'routes.manageToken.owner': 'Owner',

@@ -87,11 +87,12 @@ if (!container) {
 //
 // Before, not after, and not inside a component: everything the app does
 // from its first render - reading the vault, deriving a key, drawing an
-// unlock screen - assumes crypto.subtle and IndexedDB are there. An engine
-// missing one of them does not fail cleanly at the point of use; it gets far
-// enough to ask for a password and then breaks somewhere the user reads as
-// "my wallet is gone". This is the only screen such a device should see, and
-// it is deliberately plain HTML: the failure might be in the very primitives
+// unlock screen - assumes a secure context, crypto.getRandomValues and
+// IndexedDB are there. An engine missing one of them does not fail cleanly at
+// the point of use; it gets far enough to ask for a password and then breaks
+// somewhere the user reads as "my wallet is gone". This is the only screen
+// such a device should see, and it is deliberately plain HTML: the failure
+// might be in the very primitives
 // the app needs to render anything richer.
 /** The one screen a device that must not open the wallet ever sees. */
 function renderBlockingPanel(heading, message) {

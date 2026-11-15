@@ -11,13 +11,11 @@
 // Unit: the P2SH/P2WSH chunk lane refuses a signer that cannot sign the
 // reveal BEFORE phase 1 is signed or broadcast.
 //
-// The reveal is dispatched after the phase-1 commit is on chain, and the
-// hardware/remote signers drop the `reveal` flag and fail inside their vendor
-// format layer, so a refusal at the signer would complete the commit and never
-// the reveal: coin spent into a script nothing can open. Signer.js says the
-// guard has to be a pre-dispatch capability check in submitWithSigner; these
-// pin that it is there, that it fires before any signing, and that the software
-// lane is untouched.
+// The reveal is signed after the phase-1 commit and before anything is
+// broadcast, and the hardware/remote signers drop the `reveal` flag and fail
+// inside their vendor format layer. Signer.js says the guard is a pre-dispatch
+// capability check in submitWithSigner; these pin that it is there, that it
+// fires before any signing, and that the software lane is untouched.
 
 import { describe, it, expect, vi } from 'vitest';
 import { submitWithSigner, HardwareChunkLaneError } from '../../../packages/core/src/sdk/submitWithSigner.js';

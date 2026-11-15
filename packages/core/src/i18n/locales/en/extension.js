@@ -19,6 +19,8 @@ const messages = {
     'extension.approval.loading': 'Loading approval request…',
     'extension.approval.interrupted':
         'This approval was interrupted. Return to the site and try again.',
+    'extension.approval.loadFailed':
+        "We couldn't load this request. Close this window and try again from the site.",
     'extension.approval.unsupported': 'Unsupported approval request type.',
     'extension.popup.checkingPage': 'Checking page availability…',
     'extension.popup.unsupportedPage': "XChain Wallet can't connect to this page.",

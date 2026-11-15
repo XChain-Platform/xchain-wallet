@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useEffect, useState } from 'react';
 import { Button, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { isDemoWallet, getDemoWalletExpiry } from '@xchain-wallet/core/flows';
@@ -78,7 +79,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
             await messaging.discoverAddresses({ walletId });
             setDiscoveryRun((n) => n + 1);
         } catch (err) {
-            setDiscoveryError(err?.message || String(err));
+            setDiscoveryError(userFacingMessage(err, 'Could not check for used addresses. Try again.'));
         } finally {
             setDiscoveryStarting(false);
         }
@@ -109,7 +110,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
             setExitConfirmOpen(false);
             if (typeof onExited === 'function') onExited();
         } catch (err) {
-            setExitError(err?.message || 'Could not exit demo mode.');
+            setExitError(userFacingMessage(err, 'Could not exit demo mode.'));
         } finally {
             setExitBusy(false);
         }
@@ -141,7 +142,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                     setWalletLoad({
                         walletId,
                         wallet: null,
-                        error: err?.message || 'Failed to load wallet.',
+                        error: userFacingMessage(err, 'Failed to load wallet.'),
                     });
                 }
             });

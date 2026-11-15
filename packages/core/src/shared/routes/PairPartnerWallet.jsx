@@ -17,6 +17,7 @@ import {
 import { flows as flowsLib } from '@xchain-wallet/core';
 import { useProtectedScreen } from '../utils/screenGuard.js';
 import { DURESS_PASSWORD_COLLISION_MESSAGE, walletPasswordCollidesWithDuress } from '../../flows/duressPassphrase.js';
+import { normalizeRecoveryPhrase } from '../../crypto/recoveryPhrase.js';
 import {
     encodeXcwChunks,
     createXcwCollector,
@@ -161,7 +162,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                 );
                 setError(null);
             } catch (err) {
-                if (!cancelled) setError(err?.message || 'Could not build this wallet\'s pairing code.');
+                if (!cancelled) setError(userFacingMessage(err, 'Could not build this wallet\'s pairing code.'));
             } finally {
                 if (!cancelled) setBusy(false);
             }
@@ -244,8 +245,8 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
     async function handleSeedSubmit(event) {
         event.preventDefault();
         if (busy) return;
-        const trimmed = mnemonic.trim().replace(/\s+/g, ' ');
-        if (trimmed.length === 0) {
+        const normalized = normalizeRecoveryPhrase(mnemonic);
+        if (normalized.length === 0) {
             setError('Recovery phrase is required.');
             return;
         }
@@ -260,16 +261,16 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
             setError(`Wallet name must be ${NAME_MAX_LENGTH} characters or fewer.`);
             return;
         }
-        const wordCount = trimmed.split(' ').length;
+        const wordCount = normalized.split(' ').length;
         if (!ACCEPTED_WORD_COUNTS.includes(wordCount)) {
             // Copy stays inline until this screen moves to the dictionary; the
             // list still reads "12, 15, 18, 21, or 24" like the import screen.
             setError(`Expected ${formatOrList(ACCEPTED_WORD_COUNTS)} words, got ${wordCount}.`);
             return;
         }
-        const acceptedFormat = importPhraseFormat(trimmed, false);
+        const acceptedFormat = importPhraseFormat(normalized, false);
         if (!acceptedFormat) {
-            setError(importPhraseRefusal(trimmed, false));
+            setError(importPhraseRefusal(normalized, false));
             return;
         }
         if (password.length < MIN_PASSWORD_LENGTH) {
@@ -293,7 +294,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
         try {
             const formatArg = importPhraseFormatArg(acceptedFormat, false);
             const r = await messaging.importMnemonic({
-                password, mnemonic: trimmed, name: walletName, ...formatArg,
+                password, mnemonic: normalized, name: walletName, ...formatArg,
             });
             const id = r?.wallet?.id || r?.walletId || r?.id || null;
             if (!id) {
@@ -333,7 +334,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
         try {
             normalizedPartnerCode = normalizePartnerCodeInput(partnerCode);
         } catch (err) {
-            setPartnerCodeError(err?.message || INVALID_PARTNER_CODE);
+            setPartnerCodeError(userFacingMessage(err, INVALID_PARTNER_CODE));
             return;
         }
         if (typeof messaging.pairPartnerRequest !== 'function') {
@@ -355,7 +356,10 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
             setStage('done');
         } catch (err) {
             // The flow prefixes its refusals with its own name; the reason after it is the copy.
-            setError(String(err?.message || '').replace(/^pairPartner:\s*/, '') || 'The two wallets could not be paired.');
+            setError(userFacingMessage(
+                String(err?.message || '').replace(/^pairPartner:\s*/, ''),
+                'The two wallets could not be paired.',
+            ));
         } finally {
             setBusy(false);
         }

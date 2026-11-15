@@ -437,27 +437,21 @@ export class SoftwareSigner extends Signer {
      * Sign a message via `sdk.auth.signMessage`. Key identified by
      * either `path` (HD) or `addressId` (imported-WIF).
      *
-     * For HD keys the signature format must match the address's script
-     * type, so we route `segwitNative` / `segwitRedeemScript` from the
-     * BIP44 purpose number in the path (44 = p2pkh, 49 = p2sh-p2wpkh,
-     * 84 = p2wpkh). p2tr (86) is not supported by the SDK's
-     * bitcoinjs-message-based signer.
-     *
-     * For imported-WIF keys the script type is recorded on the Address
-     * record rather than a path; the caller wiring (signMessageFlow)
-     * resolves this by passing `addressType` through a separate path
-     * if needed, but for v1 we default to plain p2pkh (matches how
-     * WIFs imported without path context were typically used.
+     * The Address record's `addressType` is authoritative when supplied.
+     * Purpose inference remains a compatibility fallback for callers with
+     * standard BIP44 paths. Legacy m/0' paths do not encode a script type.
      *
      * @param {import('./Signer.js').SignMessageParams} params
      * @returns {Promise<import('./Signer.js').SignMessageReturn>}
      */
-    async signMessage({ message, chainId, path, addressId }) {
+    async signMessage({ message, chainId, path, addressId, addressType }) {
         this._assertUnlocked();
         this._assertSdkRegistry('signMessage');
         const entry = { path, addressId };
         assertEntryShape(entry, 'signMessage');
-        const sigOpts = path ? signMessageOptsFromPath(path) : {};
+        const sigOpts = addressType
+            ? signMessageOptsFromAddressType(addressType)
+            : (path ? signMessageOptsFromPath(path) : {});
         const wif = this._resolveWifForEntry(chainId, entry);
         const sdk = this._sdkRegistry.get(chainId);
         const result = sdk.auth.signMessage(message, wif, sigOpts);
@@ -979,9 +973,19 @@ function assertEntryShape(entry, method) {
     }
 }
 
-// Map BIP44 purpose number → SDK signMessage opts. Paths outside the
-// standard purposes (44/49/84) default to plain p2pkh signing; the
-// SDK's behavior when no opts are supplied.
+function signMessageOptsFromAddressType(addressType) {
+    if (addressType === 'p2pkh') return {};
+    if (addressType === 'p2sh-p2wpkh') return { segwitRedeemScript: true };
+    if (addressType === 'p2wpkh') return { segwitNative: true };
+    if (addressType === 'p2tr') {
+        throw new Error('SoftwareSigner.signMessage: p2tr message signing not supported');
+    }
+    throw new Error(`SoftwareSigner.signMessage: unsupported address type "${addressType}"`);
+}
+
+// Compatibility fallback: map BIP44 purpose number to SDK signMessage opts.
+// Paths outside the standard purposes (44/49/84) default to plain p2pkh
+// signing, the SDK's behavior when no opts are supplied.
 function signMessageOptsFromPath(path) {
     const m = /^m\/(\d+)'/.exec(path);
     const purpose = m?.[1];

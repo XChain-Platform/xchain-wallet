@@ -19,6 +19,7 @@
 // did not touch. The local review shows all three values and marks changes;
 // the shared confirm then dry-runs and signs the exact composed transaction.
 
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { AddressField, AddressText, Button, Checkbox, FeeSelector, FieldNote, FormPage, FormSection, Icon, InfoTip, Input, ListPage, NetworkField, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
@@ -164,7 +165,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                     setDispPref(Number(prefs.dispenserPreference) === 2 ? '2' : '1');
                 }
             })
-            .catch((err) => { if (!cancelled) setCurrentError(err?.message || 'Could not load current preferences.'); });
+            .catch((err) => { if (!cancelled) setCurrentError(userFacingMessage(err, 'Could not load current preferences.')); });
         return () => { cancelled = true; };
     }, [messaging, chainId, editedAddress, demoGuard.blocked]);
 

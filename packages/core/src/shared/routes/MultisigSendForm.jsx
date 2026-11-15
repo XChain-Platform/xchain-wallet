@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useEffect, useMemo, useState } from 'react';
 import { AddressField, Button, FeeSelector, FormNotice, FormPage, Icon, Input } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
@@ -64,7 +65,7 @@ export function MultisigSendForm({
             .then((rows) => {
                 if (!cancelled) setResolved((rows || []).find((row) => row.multisigConfigId === multisigConfigId) || null);
             })
-            .catch((err) => { if (!cancelled) setError(err?.message || 'Could not load this multisig.'); });
+            .catch((err) => { if (!cancelled) setError(userFacingMessage(err, 'Could not load this multisig.')); });
         return () => { cancelled = true; };
     }, [walletId, chainId, multisigConfigId, multisig, messaging]);
 
@@ -100,7 +101,7 @@ export function MultisigSendForm({
             });
             onSessionStarted?.(session?.id);
         } catch (err) {
-            setError(err?.message || 'Could not start the signing session.');
+            setError(userFacingMessage(err, 'Could not start the signing session.'));
         } finally {
             setBusy(false);
         }

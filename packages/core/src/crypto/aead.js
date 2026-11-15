@@ -10,14 +10,10 @@
 
 // AES-256-GCM via `@noble/ciphers/aes` (§11.4 step 2).
 //
-// We deliberately do NOT use `crypto.subtle.encrypt` here: SubtleCrypto
-// is only exposed in secure contexts (HTTPS or `localhost`), so a wallet
-// loaded over plain HTTP from a LAN host would crash at unlock /
-// onboarding with `Cannot read properties of undefined (reading
-// 'importKey')`. `@noble/ciphers` is a pure-JS implementation that
-// works in every JavaScript runtime regardless of secure-context.
-// `crypto.getRandomValues` (used for IV generation below) is part of
-// the Web Crypto API but is available in every context.
+// We deliberately do NOT use `crypto.subtle.encrypt` here. SubtleCrypto
+// availability varies by browser context and runtime; `@noble/ciphers` keeps
+// the core primitive portable while the web shell enforces origin policy.
+// `crypto.getRandomValues` supplies IVs and remains a hard capability.
 //
 // Ciphertext format (binary concatenation):
 //   [12-byte IV | ciphertext || 16-byte auth tag]

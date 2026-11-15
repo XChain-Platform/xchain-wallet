@@ -117,7 +117,7 @@ describe('ManageToken approved design', () => {
             'Destroy', 'Dispenser', 'Sell name',
             'Description', 'Artwork', 'Gated content',
             'Official list', 'Broadcast', 'Transfer',
-            'Controller', 'Callback settings', 'Execute callback',
+            'Controller', 'Callback settings', 'Recall tokens',
             'Access lists', 'Shared block list', 'Bridge', 'Pause token',
         ]);
         fireEvent.click(screen.getByRole('button', { name: 'Issue subtoken' }));

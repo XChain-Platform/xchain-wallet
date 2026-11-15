@@ -19,6 +19,7 @@ import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
 import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { listLabel } from '../utils/listLabel.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { listStatusText } from '../utils/listItemStatusText.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/routes.js';
@@ -117,7 +118,7 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
             Promise.all(addrs.map((addr) =>
                 messaging.getListsForSource({ chainId: cid, address: addr })
                     .then((resp) => ({ addr, rows: extractRows(resp) }))
-                    .catch((err) => ({ addr, error: err?.message || String(err) }))
+                    .catch((err) => ({ addr, error: userFacingMessage(err, 'Failed to load lists.') }))
             )).then((results) => {
                 if (cancelled) return;
                 /** @type {any[]} */

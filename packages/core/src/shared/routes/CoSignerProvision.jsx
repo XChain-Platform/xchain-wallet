@@ -47,7 +47,12 @@ import {
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { addressValidationError } from '../utils/addressValidation.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
-import { policyNoLimitText } from '../utils/coSignerPolicyLimit.js';
+import {
+    confirmationThresholdSummary,
+    perActionLimitSummary,
+    policyNoLimitText,
+    rollingLimitSummary,
+} from '../utils/coSignerPolicyLimit.js';
 import styles from './IssueTokenForm.module.css';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 
@@ -78,6 +83,12 @@ function exactValue(value) {
 // A policy field left unset is unrestricted; the review says so in words.
 function limitValue(value) {
     return policyNoLimitText(value) ?? <code>{exactValue(value)}</code>;
+}
+
+function policyLimitValue(value, summary) {
+    const noLimit = policyNoLimitText(value);
+    if (noLimit) return noLimit;
+    return <>{summary.join('; ')}{' '}<code>{exactValue(value)}</code></>;
 }
 
 /**
@@ -373,11 +384,26 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
                     <dt className={styles.detailsLabel}>Allowed recipients</dt>
                     <dd className={styles.detailsValue}>{limitValue(reviewedPolicy.allowedDestinations)}</dd>
                     <dt className={styles.detailsLabel}>Per-action limits</dt>
-                    <dd className={styles.detailsValue}>{limitValue(reviewedPolicy.maxPerAction)}</dd>
+                    <dd className={styles.detailsValue}>
+                        {policyLimitValue(
+                            reviewedPolicy.maxPerAction,
+                            perActionLimitSummary(reviewedPolicy.maxPerAction),
+                        )}
+                    </dd>
                     <dt className={styles.detailsLabel}>Rolling limit</dt>
-                    <dd className={styles.detailsValue}>{limitValue(reviewedPolicy.maxPerWindow)}</dd>
+                    <dd className={styles.detailsValue}>
+                        {policyLimitValue(
+                            reviewedPolicy.maxPerWindow,
+                            rollingLimitSummary(reviewedPolicy.maxPerWindow),
+                        )}
+                    </dd>
                     <dt className={styles.detailsLabel}>Confirmation thresholds</dt>
-                    <dd className={styles.detailsValue}>{limitValue(reviewedPolicy.confirmAbove)}</dd>
+                    <dd className={styles.detailsValue}>
+                        {policyLimitValue(
+                            reviewedPolicy.confirmAbove,
+                            confirmationThresholdSummary(reviewedPolicy.confirmAbove),
+                        )}
+                    </dd>
                     <dt className={styles.detailsLabel}>Allowed transaction outputs</dt>
                     <dd className={styles.detailsValue}><code>{exactValue(reviewPayload.allowedOutputs)}</code></dd>
                 </dl>

@@ -24,6 +24,7 @@ import { BalancesUncheckedState, useBalancesUnchecked } from '../components/Bala
 import { bridgeDisplayTick } from './BridgeTick.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { loadBalancesByChain } from '../utils/chainBalanceLoader.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useSettings } from '../hooks/useSettings.js';
 import {
     pinnedTokensForWallet,
@@ -261,7 +262,7 @@ export function TokenPicker({
                             // screen and offers one retry for the whole read.
                             patch((prev) => ({
                                 ...prev,
-                                error: prev.error || err.message || 'Failed to load balances.',
+                                error: prev.error || userFacingMessage(err, 'Failed to load balances.'),
                                 slowChainIds: prev.slowChainIds.filter((id) => id !== chainId),
                                 pendingCount: Math.max(0, prev.pendingCount - 1),
                             }));
@@ -297,7 +298,7 @@ export function TokenPicker({
                 if (!cancelled) {
                     setBalanceLoad({
                         ...pendingLoad,
-                        error: err?.message || 'Failed to load balances.',
+                        error: userFacingMessage(err, 'Failed to load balances.'),
                     });
                 }
             }

@@ -22,6 +22,7 @@ import { coinFromChainId, isAssetImageSourceAllowed, tickerColor } from '../comp
 import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { dispenserRateLabel } from '../utils/dispenserPricing.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import {
     CHAIN_TIME_REFRESH_MS, chainClockFromTipRead, dispenserCancelTimestamp, dispenserCloseEta,
 } from '../utils/dispenserCloseWindow.js';
@@ -183,7 +184,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
             Promise.all(addrs.map((addr) =>
                 messaging.getDispensersForSource({ chainId: cid, address: addr })
                     .then((resp) => ({ addr, rows: extractRows(resp) }))
-                    .catch((err) => ({ addr, error: err?.message || String(err) }))
+                    .catch((err) => ({ addr, error: userFacingMessage(err, 'Failed to load dispensers.') }))
             )).then((results) => {
                 if (cancelled) return;
                 /** @type {any[]} */

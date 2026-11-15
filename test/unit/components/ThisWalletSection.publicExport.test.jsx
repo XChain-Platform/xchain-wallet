@@ -113,6 +113,22 @@ describe('ThisWalletSection password change', () => {
         expect(await screen.findByText('Current wallet password is incorrect.')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Change password' })).toBeEnabled();
     });
+
+    it('hides password service details behind change failure copy', async () => {
+        const messaging = {
+            changePassword: vi.fn(async () => {
+                throw new Error('changePassword: walletId is required');
+            }),
+        };
+        mount(messaging);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Change…' }));
+        fill();
+        fireEvent.click(screen.getByRole('button', { name: 'Change password' }));
+
+        expect(await screen.findByText('Could not change the wallet password.')).toBeInTheDocument();
+        expect(screen.queryByText(/changePassword:/)).not.toBeInTheDocument();
+    });
 });
 
 describe('ThisWalletSection extended public key export', () => {
@@ -191,6 +207,22 @@ describe('ThisWalletSection extended public key export', () => {
 
         expect(await screen.findByText('Incorrect password.')).toBeInTheDocument();
         expect(screen.getByLabelText('Confirm wallet password')).toHaveValue('');
+    });
+
+    it('hides pairing route details behind export failure copy', async () => {
+        const messaging = {
+            pairingPayloadRequest: vi.fn(async () => {
+                throw new Error('pairing.payload: this wallet has no extended public keys to export');
+            }),
+        };
+        mount(messaging);
+
+        await submitPassword();
+
+        expect(await screen.findByText(
+            "Could not export this wallet's extended public keys.",
+        )).toBeInTheDocument();
+        expect(screen.queryByText(/pairing\.payload/)).not.toBeInTheDocument();
     });
 
     it('refuses a private extended key returned by the host', async () => {

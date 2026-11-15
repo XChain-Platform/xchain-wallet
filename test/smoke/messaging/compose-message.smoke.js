@@ -100,7 +100,7 @@ assert.ok(/FeeSelector/.test(src) && /feePick/.test(src),
     'ComposeMessage includes the network-fee tier selector');
 assert.ok(/isValidAddressAnyNetwork/.test(src) && /addressInvalid/.test(src),
     'ComposeMessage validates the recipient address (any network) before review');
-assert.ok(/Request encrypted session/.test(src),
+assert.ok(/Request encrypted session|composeMessage\.requestSession/.test(src),
     'ComposeMessage offers a key-exchange handshake when the recipient pubkey is unknown');
 assert.ok(
     /useOwnerActionLane\(\{[\s\S]*?software: 'sendHandshake',[\s\S]*?hardware: 'sendHandshakeHw',[\s\S]*?\}\)/.test(src),
@@ -165,7 +165,7 @@ assert.ok(!/messaging\.messageAction(Hw)?\s*\(/.test(reviewBody),
     'handleReview does not directly sign or broadcast a message');
 assert.ok(/estimateNativeSendFee\s*\(/.test(src),
     'ComposeMessage review estimates the network fee (recipient + cost shown)');
-assert.ok(/Review message/.test(src),
+assert.ok(/Review message|composeMessage\.reviewTitle/.test(src),
     'ComposeMessage retitles the header to "Review message" on the review stage');
 
 // --- 3. Background handlers -------------------------------------------

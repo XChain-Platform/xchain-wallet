@@ -14,6 +14,7 @@
 // Items whose underlying artifact isn't yet published render with a
 // muted "not yet published" hint instead of an inert link.
 
+import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import { useEffect, useRef, useState } from 'react';
 import { Button, Icon, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
@@ -135,7 +136,7 @@ export function AboutSection({ balancesFetchedAt = null } = {}) {
             haptic.tap();
         } catch (err) {
             retryRef.current = handleCopyDiagnostics;
-            setError(err?.message || 'Could not copy diagnostics.');
+            setError(userFacingMessage(err, 'Could not copy diagnostics.'));
             haptic.error();
         } finally {
             setBusy(false);
@@ -160,7 +161,7 @@ export function AboutSection({ balancesFetchedAt = null } = {}) {
             setPreviewOpen(true);
         } catch (err) {
             retryRef.current = handleTogglePreview;
-            setError(err?.message || 'Could not load diagnostics preview.');
+            setError(userFacingMessage(err, 'Could not load diagnostics preview.'));
         } finally {
             setPreviewBusy(false);
         }
@@ -173,7 +174,7 @@ export function AboutSection({ balancesFetchedAt = null } = {}) {
             globalThis.open?.(PROBLEM_REPORT_URL, '_blank', 'noopener,noreferrer');
         } catch (err) {
             retryRef.current = handleReportProblem;
-            setError(err?.message || 'Could not open the problem report.');
+            setError(userFacingMessage(err, 'Could not open the problem report.'));
             haptic.error();
         }
     }

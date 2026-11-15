@@ -161,9 +161,10 @@
         // `bridge.*` surface. Refuse to relay privileged extension-internal
         // types (wallet.*, action.*, settings.*, sites.*, ...) so a hostile
         // page can't drive the popup-only handler set (which signs with the
-        // pre-unlocked pool and no password). Mirrors publicSurface.isPublicBridgeType;
-        // the background re-checks the sender so this is defence-in-depth, not
-        // the sole gate.
+        // pre-unlocked pool and no password). Its list is a copy of
+        // publicSurface.PUBLIC_BRIDGE_TYPES, pinned equal by a unit test; the
+        // background re-checks the sender against that list, so this is
+        // defence-in-depth, not the sole gate.
         if (!data.type.startsWith('bridge.') || !PUBLIC_TYPES.has(data.type)) {
             // `code` is a published BridgeErrorCode, like every other failure
             // the page can see. Precise refusal detail stays in `message`.

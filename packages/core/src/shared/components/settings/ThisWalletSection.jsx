@@ -190,7 +190,7 @@ export function ThisWalletSection({
             setExportPassword('');
             setExportError(isWrongPasswordError(err)
                 ? 'Incorrect password.'
-                : (err?.message || String(err)));
+                : userFacingMessage(err, 'Could not export this wallet\'s extended public keys.'));
         } finally {
             setExporting(false);
         }
@@ -362,7 +362,7 @@ function ChangePasswordRow({ walletId, disabled }) {
             return;
         }
         if (typeof messaging?.changePassword !== 'function') {
-            setError('Password changes are not wired in this shell yet.');
+            setError('Changing the password is not available in this version of the app.');
             return;
         }
 
@@ -373,7 +373,7 @@ function ChangePasswordRow({ walletId, disabled }) {
             result = await messaging.changePassword({ walletId, currentPassword, newPassword });
         } catch (err) {
             if (isWrongPasswordError(err)) setError('Current wallet password is incorrect.', 'current');
-            else setError(err?.message || 'Could not change the wallet password.');
+            else setError(userFacingMessage(err, 'Could not change the wallet password.'));
             setBusy(false);
             return;
         }

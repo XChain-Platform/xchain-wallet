@@ -54,7 +54,7 @@ assert.ok(!isTrivialString('Sign in to continue'), 'sentence is non-trivial');
 assert.ok(isTrivialString('Hello', ['Hello']), 'allow-listed sentence is trivial');
 
 // USER_FACING_ATTRS set covers the documented attribute list.
-// The last forty-five are component props: copy shipped through them
+// The names from `heading` on are component props: copy shipped through them
 // escaped the translator index while the set held DOM attribute names
 // only.
 // Every documented name is listed here, and the size assertion below
@@ -63,7 +63,7 @@ assert.ok(isTrivialString('Hello', ['Hello']), 'allow-listed sentence is trivial
 // the smoke green and the header's claim of coverage silently false.
 const DOCUMENTED_USER_FACING_ATTRS = [
     'aria-label', 'aria-description', 'aria-roledescription', 'aria-valuetext',
-    'alt', 'title', 'placeholder', 'label', 'hint', 'help', 'caption', 'tooltip',
+    'alt', 'title', 'placeholder', 'label', 'hint', 'help', 'caption', 'tooltip', 'data-label',
     'heading', 'emptyText', 'actionLabel', 'backLabel',
     'text', 'body', 'ariaLabel', 'iconLabel', 'aria',
     'headline', 'statusLabel', 'allLabel', 'summaryNoun',
@@ -73,6 +73,7 @@ const DOCUMENTED_USER_FACING_ATTRS = [
     'feeText', 'totalText', 'emptyActionLabel', 'warningNoun', 'message', 'description',
     'lead', 'legend', 'closeLabel', 'searchLabel', 'subtitle', 'chainLabel',
     'accessibleLabel', 'visibleLabel', 'labelPrefix', 'unavailableMessage', 'intro',
+    'secondaryActionLabel', 'secondaryLabel', 'doneLabel',
 ];
 for (const attr of DOCUMENTED_USER_FACING_ATTRS) {
     assert.ok(USER_FACING_ATTRS.has(attr), `${attr} is in USER_FACING_ATTRS`);
@@ -127,9 +128,15 @@ assert.match(v[0].message, /aria-label/);
 v = findViolations(jsxAttr('className', literal('btn btn--primary')));
 assert.strictEqual(v.length, 0, 'allows className literal');
 
-// 5. data-* literal is NOT flagged (technical).
+// 5. Technical data-* literals stay silent, while DataTable's visible label
+// is checked in both literal and template forms.
 v = findViolations(jsxAttr('data-testid', literal('login-button')));
 assert.strictEqual(v.length, 0, 'allows data-* literal');
+v = findViolations(jsxAttr('data-label', literal('Price')));
+assert.strictEqual(v.length, 1, 'flags a visible data-label literal');
+assert.match(v[0].message, /data-label/);
+v = findViolations(jsxAttr('data-label', jsxExpr(template('Size (', ')'))));
+assert.strictEqual(v.length, 1, 'flags static copy inside a data-label template');
 
 // 6. Allowlist suppresses a specific value.
 v = findViolations(
@@ -456,6 +463,17 @@ assert.strictEqual(v.length, 1, 'flags a literal reason in an unavailableMessage
 assert.match(v[0].message, /unavailableMessage/);
 v = findViolations(jsxAttr('unavailableMessage', jsxExpr({ type: 'CallExpression', callee: identifier('t'), arguments: [literal('k')] })));
 assert.strictEqual(v.length, 0, 'a translated unavailableMessage stays silent');
+
+// Button-label props rendered by EmptyState and ResultScreen stay in the
+// translator index at both call sites and destructured defaults.
+v = findViolations(jsxAttr('secondaryLabel', literal('Try again')));
+assert.strictEqual(v.length, 1, 'flags a secondaryLabel literal');
+assert.match(v[0].message, /secondaryLabel/);
+v = findViolations(jsxAttr('secondaryActionLabel', jsxExpr(conditional(literal('Buy'), identifier('undefined')))));
+assert.strictEqual(v.length, 1, 'flags secondaryActionLabel branch copy');
+v = findViolations(fn([objectPattern(defaulted('doneLabel', literal('Finish')))]));
+assert.strictEqual(v.length, 1, 'flags a doneLabel prop default');
+assert.match(v[0].message, /doneLabel/);
 
 // 19f. Dialog and section copy. ConfirmModal renders `message` as its body
 // and SectionHeader renders `description` under its title, so literals,

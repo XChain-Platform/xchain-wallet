@@ -16,6 +16,7 @@ import { describe, it, expect } from 'vitest';
 import {
     userFacingMessage,
     isDeveloperMessage,
+    isShowableRefusal,
     protocolRefusalReason,
     unsupportedAddressTypeMessage,
 } from '../../../packages/core/src/shared/utils/userFacingMessage.js';
@@ -50,6 +51,18 @@ describe('userFacingMessage', () => {
             .toBe(FALLBACK);
     });
 
+    it('replaces kebab-case producer prefixes', () => {
+        for (const raw of [
+            'multisig-envelope: contribution.sig must be 32-byte hex',
+            'xcw-qr: chunk 2 of 3 is malformed',
+            'wallet.multi-sig: bad state',
+        ]) {
+            expect(userFacingMessage(new Error(raw), FALLBACK)).toBe(FALLBACK);
+            expect(isDeveloperMessage(raw)).toBe(true);
+        }
+        expect(isShowableRefusal('multisig-envelope: unknown envelope kind "x"')).toBe(false);
+    });
+
     it('replaces a bare library internal with no prefix at all', () => {
         expect(userFacingMessage(new Error('Non-base58 character'), FALLBACK)).toBe(FALLBACK);
         expect(userFacingMessage(new TypeError('Cannot read properties of undefined'), FALLBACK))
@@ -81,6 +94,8 @@ describe('userFacingMessage', () => {
         expect(userFacingMessage(new Error(note), FALLBACK)).toBe(note);
         const two = 'One address, two records: the balance was counted twice.';
         expect(userFacingMessage(new Error(two), FALLBACK)).toBe(two);
+        const resync = 'Re-sync: your wallet is catching up.';
+        expect(userFacingMessage(new Error(resync), FALLBACK)).toBe(resync);
     });
 
     it('accepts a plain string as well as an Error', () => {

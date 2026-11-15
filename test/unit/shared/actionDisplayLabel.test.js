@@ -41,7 +41,8 @@ describe('shared/actionDisplayLabel', () => {
     });
 
     it('maps ADDRESS, VOTE, and DEPLOY to humanized phrases (not the bare opcode)', () => {
-        expect(actionDisplayLabel('ADDRESS')).toBe('Messaging setup');
+        expect(actionDisplayLabel('ADDRESS')).toBe('Address settings');
+        expect(actionDisplayLabel('ADDRESS')).not.toMatch(/messag/i);
         expect(actionDisplayLabel('VOTE')).toBe('Vote');
         expect(actionDisplayLabel('DEPLOY')).toBe('Publish contract');
     });
@@ -135,6 +136,11 @@ describe('shared/psbtActionSummary', () => {
 
     it('summarizes a SLEEP action as a lock or pause', () => {
         expect(psbtActionSummary({ action: 'SLEEP', version: 1 })).toBe('Carries an XChain Lock, pause or resume action');
+    });
+
+    it('summarizes ADDRESS without describing a messaging action', () => {
+        expect(psbtActionSummary({ action: 'ADDRESS', version: 1 }))
+            .toBe('Carries an XChain Address settings action');
     });
 
     it('reads cleanly when the action name is missing', () => {

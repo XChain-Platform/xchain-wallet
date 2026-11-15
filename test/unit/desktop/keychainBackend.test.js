@@ -116,3 +116,28 @@ describe('KeychainSessionBackend', () => {
         expect(() => sessionKeyPathFor(path)).toThrow(/userDataDir is required/);
     });
 });
+
+describe('KeychainSessionBackend key encoding', () => {
+    it('hex-encodes a key that sits at an offset inside a larger buffer', async () => {
+        const storage = safeStorage();
+        const backend = new KeychainSessionBackend({ safeStorage: storage, filePath: '/profile/session.bin' });
+        const slab = new Uint8Array([9, 9, 1, 2, 3, 9]);
+
+        await backend.save(slab.subarray(2, 5));
+
+        expect(storage.encryptString).toHaveBeenCalledWith('010203');
+    });
+
+    it('encodes the key without copying it into a second buffer', async () => {
+        const storage = safeStorage();
+        const backend = new KeychainSessionBackend({ safeStorage: storage, filePath: '/profile/session.bin' });
+        const from = vi.spyOn(Buffer, 'from');
+        try {
+            await backend.save(new Uint8Array([1, 2, 3, 4]));
+            const copies = from.mock.calls.filter(([source]) => source instanceof Uint8Array);
+            expect(copies).toHaveLength(0);
+        } finally {
+            from.mockRestore();
+        }
+    });
+});

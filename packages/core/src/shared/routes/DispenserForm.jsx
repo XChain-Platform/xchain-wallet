@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     FieldNote,
@@ -511,7 +512,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 }
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+                if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load addresses.'));
             });
         return () => { cancelled = true; };
     }, [walletId, messaging, activeAccountId]);
@@ -1130,7 +1131,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             }
         } catch (err) {
             if (routeIdentity === routeIdentityRef.current && actionParams === actionParamsRef.current) {
-                setFormError(err?.message || 'Could not derive a dispenser address.');
+                setFormError(userFacingMessage(err, 'Could not derive a dispenser address.'));
             }
         } finally {
             setDerivingGetAddress(false);
@@ -1506,7 +1507,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                             setExistingAddressId(rec.id);
                             setAddressPickerOpen(false);
                         } catch (err) {
-                            setFormError(err?.message || 'Could not generate a dispenser address.');
+                            setFormError(userFacingMessage(err, 'Could not generate a dispenser address.'));
                             setAddressPickerOpen(false);
                         } finally {
                             setPickerGenerating(false);

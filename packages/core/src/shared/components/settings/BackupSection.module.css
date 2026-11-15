@@ -15,6 +15,19 @@
     align-items: end;
 }
 
+.readOnlyFormat {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-label-gap);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+}
+
+.readOnlyFormat strong {
+    color: var(--xc-text);
+    font-weight: 500;
+}
+
 .mnemonicInput {
     direction: ltr;
     unicode-bidi: isolate;

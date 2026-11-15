@@ -229,7 +229,8 @@ function noticeText(f) {
  * @property {string} message
  * @property {boolean} [overridable]          present only on errors
  * @property {string} [source]                'dryrun' or 'client'; absent on the wallet's own producers
- * @property {string} [_downgradedBy]         set when Tier-1 demoted a Tier-2 error to info
+ * @property {string} [_downgradedBy]         set when Tier-1 demoted a Tier-2 error: to info ('dryrun-valid')
+ *                                            or to warning ('dryrun-valid-local-delta')
  * @property {{ commandIndex?: number, subCommandCount?: number, accepted?: number,
  *              [key: string]: unknown }} [data]
  */

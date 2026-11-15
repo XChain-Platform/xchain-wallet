@@ -210,7 +210,11 @@ describe('bridge-native forwarding helpers', () => {
         await forwardSignMessage(msg);
         expect(provider.signMessage).toHaveBeenCalledWith(msg);
 
-        const act = { chainId: 'bitcoin-mainnet', action: { type: 'SEND' } };
+        const act = {
+            chainId: 'bitcoin-mainnet',
+            action: 'SEND',
+            params: { fromAddress: 'bc1qfrom', toAddress: 'bc1qto', asset: 'BTC', amountRaw: '10000' },
+        };
         await forwardSignAction(act);
         expect(provider.signAction).toHaveBeenCalledWith(act);
 

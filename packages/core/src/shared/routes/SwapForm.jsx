@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusNoticeOnAttempt } from '../hooks/useFocusNoticeOnAttempt.js';
 import { AddressField, AddressText, Button, ChainBadge, Checkbox, FeeSelector, FieldNote, FormNotice, FormPage, FormSection, Icon, InfoTip, Input, NetworkField, OptionalPill, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
@@ -220,7 +221,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 setChainId((c) => pickDefaultChainId(signingByChain, { explicitChainId: c, settings }));
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+                if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load addresses.'));
             });
         return () => { cancelled = true; };
     }, [walletId, messaging]);

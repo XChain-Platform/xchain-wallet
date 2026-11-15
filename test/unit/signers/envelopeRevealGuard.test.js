@@ -14,13 +14,11 @@
 // accident, in the wrong words, in one of three implementations.
 //
 // NOT covered here, deliberately: the P2SH/P2WSH `reveal: true` flag. It is
-// the other half of the original item and it is NOT guarded, because the two
-// flags sit on opposite sides of the first broadcast. `envelopeReveal` is
-// dispatched while nothing is on chain (submitWithSigner step 3b, before the
-// commit), so a refusal costs an error; `reveal` is dispatched AFTER phase 1
-// has been broadcast, so a refusal there completes the commit and never the
-// reveal, which is a stranded-funds event. The negative case below pins that
-// asymmetry so a later "let's guard both for symmetry" edit fails here first.
+// the other half of the original item and it is NOT guarded at the signer.
+// Both reveals are signed while nothing is on chain (submitWithSigner steps 3b
+// and 3c); `reveal` is kept off the device signers by the pre-dispatch
+// capability gate (signerSupportsChunkReveal) instead. The negative case below
+// pins that the signer-level guard stays envelope-only.
 
 import { describe, it, expect, vi } from 'vitest';
 import { assertCannotSignEnvelopeReveal, SignerStatusError }
@@ -45,7 +43,7 @@ describe('assertCannotSignEnvelopeReveal', () => {
         expect(() => assertCannotSignEnvelopeReveal('sig-1', undefined)).not.toThrow();
     });
 
-    // The asymmetry is the point, not an oversight: see the file header.
+    // The guard stays envelope-only on purpose: see the file header.
     it('does NOT refuse the post-broadcast P2SH/P2WSH reveal flag', () => {
         expect(() => assertCannotSignEnvelopeReveal('sig-1', { reveal: true })).not.toThrow();
     });

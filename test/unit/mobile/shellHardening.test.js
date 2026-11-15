@@ -52,6 +52,7 @@ afterEach(() => {
 
 function capableEnv(overrides = {}) {
     return {
+        isSecureContext: true,
         crypto: {
             subtle: { importKey() {}, encrypt() {}, decrypt() {}, deriveBits() {} },
             getRandomValues: () => {},
@@ -84,8 +85,7 @@ describe('WebView floor: hard tier', () => {
 
     it('refuses when a crypto primitive is missing', () => {
         for (const [name, env] of [
-            ['crypto.subtle', capableEnv({ crypto: { getRandomValues: () => {} } })],
-            ['crypto.getRandomValues', capableEnv({ crypto: { subtle: { importKey() {}, encrypt() {} } } })],
+            ['crypto.getRandomValues', capableEnv({ crypto: {} })],
             ['indexedDB', capableEnv({ indexedDB: undefined })],
             ['BigInt', capableEnv({ BigInt: undefined })],
         ]) {
@@ -95,15 +95,23 @@ describe('WebView floor: hard tier', () => {
         }
     });
 
-    it('refuses a subtle object whose methods are not there', () => {
-        // The shape some embedded engines ship: truthy `subtle`, no methods.
-        // A truthiness check passes it and the wallet dies at the first
-        // key derivation instead of at the door.
+    it('allows an otherwise capable engine without SubtleCrypto', () => {
+        // Some embedded engines ship no `subtle` at all. Key handling does not
+        // depend on it, so its absence alone must not strand a working wallet;
+        // only a missing random source stops the boot.
         const report = checkWebViewFloor(capableEnv({
-            crypto: { subtle: {}, getRandomValues: () => {} },
+            crypto: { getRandomValues: () => {} },
         }));
+        expect(report.usable).toBe(true);
+        expect(report.missing).toEqual([]);
+    });
+
+    it('refuses an insecure origin even when every crypto primitive is present', () => {
+        // A page outside a secure context cannot be trusted with secrets,
+        // however capable the engine looks, so the floor reports it by name.
+        const report = checkWebViewFloor(capableEnv({ isSecureContext: false }));
         expect(report.usable).toBe(false);
-        expect(report.missing).toContain('crypto.subtle');
+        expect(report.missing).toContain('secure context');
     });
 
     it('names what is missing and what to do, in the failure text', () => {

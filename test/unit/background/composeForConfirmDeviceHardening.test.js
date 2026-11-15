@@ -20,13 +20,21 @@
 
 import { describe, it, expect, vi } from 'vitest';
 
-const { sendTokenMock } = vi.hoisted(() => ({ sendTokenMock: vi.fn() }));
+const { sendTokenMock, gatedPublishComposeMock } = vi.hoisted(() => ({
+    sendTokenMock: vi.fn(),
+    gatedPublishComposeMock: vi.fn(),
+}));
 
 vi.mock('@xchain-wallet/core', async (importOriginal) => {
     const actual = await importOriginal();
+    gatedPublishComposeMock.mockImplementation(actual.flows.composeGatedPublishForConfirm);
     return {
         ...actual,
-        flows: { ...actual.flows, sendToken: sendTokenMock },
+        flows: {
+            ...actual.flows,
+            sendToken: sendTokenMock,
+            composeGatedPublishForConfirm: gatedPublishComposeMock,
+        },
     };
 });
 
@@ -156,7 +164,7 @@ function makeHost() {
         signThrottleStorage: null,
         logConsoleStorage: null,
     });
-    return { host, createTx };
+    return { host, createTx, vault };
 }
 
 function from(source) {
@@ -290,5 +298,41 @@ describe('every confirm-compose route excludes coins held by another send', () =
         });
         expect(res).toMatchObject({ ok: false, error: { name: 'CoinsHeldError' } });
         expect(createTx).not.toHaveBeenCalled();
+    });
+});
+
+describe('every per-action confirm-compose route refuses a chain off the active network', () => {
+    const GUARDED = [
+        'action.composeForConfirm',
+        'action.vote.composeForConfirm',
+        'action.bet.composeForConfirm',
+        'action.message.composeForConfirm',
+        'action.gatedPublish.composeForConfirm',
+    ];
+    for (const type of GUARDED) {
+        it(`${type} raises ActiveNetworkChangedError before composing`, async () => {
+            const { host, createTx, vault } = makeHost();
+            await vault.settings.put({ ...(await vault.settings.get()), activeNetwork: 'mainnet' });
+            const res = await host.handle({ type, request: ROUTES[type]('hd') });
+            expect(res).toMatchObject({ ok: false, error: { name: 'ActiveNetworkChangedError' } });
+            expect(createTx).not.toHaveBeenCalled();
+        });
+    }
+});
+
+describe('gated publish confirm envelope signer', () => {
+    it('uses the vault address record instead of a request claim', async () => {
+        gatedPublishComposeMock.mockClear();
+        const { host } = makeHost();
+        await drive(host, 'action.gatedPublish.composeForConfirm', {
+            ...ROUTES['action.gatedPublish.composeForConfirm']('ledger'),
+            envelopeSigner: { source: 'ledger', id: 'forged' },
+        });
+        expect(gatedPublishComposeMock).toHaveBeenCalledTimes(1);
+        expect(gatedPublishComposeMock.mock.calls[0][0].envelopeSigner).toMatchObject({
+            id: SOURCE_ROW.id,
+            address: SOURCE_ROW.address,
+            source: SOURCE_ROW.source,
+        });
     });
 });

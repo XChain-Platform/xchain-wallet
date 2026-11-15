@@ -11,8 +11,8 @@
 // Interop vector: does a Counterwallet-format import reproduce the
 // addresses a REAL Counterwallet server shows for the same phrase?
 //
-// This is the test whose absence let ship. Everything else about
-// the legacy lane was self-consistent - the wallet imported the phrase,
+// This is the test whose absence let the BIP84 legacy-import bug ship.
+// Everything else about the legacy lane was self-consistent - the wallet imported the phrase,
 // stamped the record `counterwallet-legacy`, derived addresses, and
 // round-tripped them - while deriving BIP84 addresses the user's own
 // wallet had never displayed. Only a comparison against ground truth
@@ -104,8 +104,9 @@ describe('crypto/counterwallet interop vector', () => {
     });
 
     it('does NOT match at the BIP84 path - the pre-fix behavior', () => {
-        // itself: the legacy seed fed into the chain descriptor's
-        // modern template. Kept as a test so the regression is named.
+        // The BIP84 legacy-import bug itself: the legacy seed fed into
+        // the chain descriptor's modern template. Kept as a test so the
+        // regression is named.
         const root = HDKey.fromMasterSeed(counterwalletMnemonicToSeedBytes(VECTOR.mnemonic));
         const pubkey = root.derive("m/84'/0'/0'/0/0").publicKey;
         expect(p2wpkhAddress(pubkey)).not.toBe(VECTOR.addresses[1].p2wpkh);

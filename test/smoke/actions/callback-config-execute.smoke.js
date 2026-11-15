@@ -45,8 +45,8 @@ assert.match(form, /submitMethods: \{ hw: 'callbackActionHw', software: 'callbac
     'three-way signer dispatch via useActionForm');
 assert.match(
     form,
-    /const typedConfirmOk = isExactTypedConfirmation\(typedConfirm, 'CALLBACK'\)/,
-    'typed-CALLBACK confirm uses the shared exact-match gate',
+    /const typedConfirmOk = isExactTypedConfirmation\(typedConfirm, 'RECALL'\)/,
+    'typed-RECALL confirm uses the shared exact-match gate',
 );
 assert.match(form, /tokenHolderSummary/, 'holder / payout preview wired');
 assert.match(form, /Total payout/, 'total payout shown');

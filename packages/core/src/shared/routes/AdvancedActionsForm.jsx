@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
@@ -256,7 +257,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 }));
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+                if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load addresses.'));
             });
         return () => { cancelled = true; };
     }, [walletId, messaging]);
@@ -285,7 +286,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 }
             })
             .catch((err) => {
-                if (!cancelled) setFormError(err?.message || 'Failed to load actions.');
+                if (!cancelled) setFormError(userFacingMessage(err, 'Failed to load actions.'));
             });
         return () => { cancelled = true; };
     }, [chainId, messaging, hasDexSurface]);
@@ -321,7 +322,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 setValidation(null);
             })
             .catch((err) => {
-                if (!cancelled) setFormError(err?.message || 'Failed to load action fields.');
+                if (!cancelled) setFormError(userFacingMessage(err, 'Failed to load action fields.'));
             });
         return () => { cancelled = true; };
     }, [chainId, action, messaging]);

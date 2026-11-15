@@ -113,7 +113,7 @@ export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenT
                             const key = `${String(row.action_index ?? row.tx_hash ?? 'trade')}-${index}`;
                             return (
                                 <tr key={key}>
-                                    <td className={`${tableStyles.cell} ${tableStyles.numeric}`} data-label="Time" style={{ color: 'var(--xc-fg-muted)' }}>
+                                    <td className={`${tableStyles.cell} ${tableStyles.numeric}`} data-label={t('components.tradeHistoryPanel.time')} style={{ color: 'var(--xc-fg-muted)' }}>
                                         {onOpenTx && row.tx_hash ? (
                                             <button
                                                 type="button"
@@ -127,15 +127,15 @@ export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenT
                                     </td>
                                     <td
                                         className={`${tableStyles.cell} ${tableStyles.numeric}`}
-                                        data-label="Price"
+                                        data-label={t('components.placeOrderPanel.price')}
                                         style={{ color: sideColor }}
                                     >
                                         {summary.price}
                                     </td>
-                                    <td className={`${tableStyles.cell} ${tableStyles.numeric}`} data-label={`Size (${tick1})`}>
+                                    <td className={`${tableStyles.cell} ${tableStyles.numeric}`} data-label={t('components.placeOrderPanel.size', { tick1 })}>
                                         {summary.size}
                                     </td>
-                                    <td className={tableStyles.cell} data-label="Side" style={{ color: sideColor, fontWeight: 600 }}>
+                                    <td className={tableStyles.cell} data-label={t('components.placeOrderPanel.side')} style={{ color: sideColor, fontWeight: 600 }}>
                                         {summary.side === 'buy' ? t('components.placeOrderPanel.buy') : t('components.placeOrderPanel.sell')}
                                     </td>
                                 </tr>

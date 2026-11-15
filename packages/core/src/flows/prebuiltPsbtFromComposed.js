@@ -11,8 +11,9 @@
 /**
  * Turn a composed confirm result into the PrebuiltPsbt the submit path signs.
  *
- * The one place this mapping is written: every form, the shared confirm hook
- * and the resume screen call it, so a field compose adds reaches them all.
+ * The one place this mapping is written: every form that confirms directly,
+ * the shared confirm hook and the chunked deploy call it, so a field compose
+ * adds reaches them all.
  *
  * @param {any} composed  the HostComposeWireEnvelope the confirm page previewed (see ./composeActionForConfirm.js)
  * @returns {import('../sdk/submitWithSigner.js').PrebuiltPsbt}

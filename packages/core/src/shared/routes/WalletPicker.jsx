@@ -55,13 +55,17 @@ export function WalletPicker({
     useEffect(() => {
         let cancelled = false;
         if (typeof messaging.listWallets !== 'function') {
-            setError('messaging.listWallets is not available in this shell.');
+            setError('Wallet switching is not available here.');
             return undefined;
         }
         Promise.resolve()
             .then(() => messaging.listWallets())
             .then((list) => { if (!cancelled) setWallets(Array.isArray(list) ? list : []); })
-            .catch((err) => { if (!cancelled) setError(err?.message || 'Failed to load wallets.'); });
+            .catch((err) => {
+                if (!cancelled) {
+                    setError(userFacingMessage(err, 'Could not load your wallets. Try again.'));
+                }
+            });
         return () => { cancelled = true; };
     }, [messaging]);
 

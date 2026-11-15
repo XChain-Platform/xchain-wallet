@@ -27,6 +27,16 @@ import { NAME_MAX_LENGTH, hasVisibleText, nameKey, nameLength } from '../util/di
 /** @type {WeakMap<object, Map<string, Promise<void>>>} */
 const CREATE_ACCOUNT_QUEUES = new WeakMap();
 
+export class LegacySingleAccountError extends Error {
+    constructor() {
+        super(
+            'This older FreeWallet recovery phrase supports one software account. '
+            + 'Upgrade to a standard recovery phrase to add another software account.',
+        );
+        this.name = 'LegacySingleAccountError';
+    }
+}
+
 /**
  * Serializes account index selection and persistence for each wallet.
  *
@@ -120,6 +130,10 @@ export async function createAccount({
         const existing = await vault.accounts.findBy('walletId', walletId);
         const maxIndex = existing.reduce((m, a) => (a.index > m ? a.index : m), -1);
         const nextIndex = maxIndex + 1;
+        const usesWalletSeed = !providedSigner || providedSigner.kind === 'software';
+        if (wallet.format === 'counterwallet-legacy' && usesWalletSeed && nextIndex !== 0) {
+            throw new LegacySingleAccountError();
+        }
         const requestedName = typeof name === 'string' ? name.trim() : '';
         if (name !== undefined && !hasVisibleText(requestedName)) {
             throw new Error('createAccount: name must be a non-empty string');

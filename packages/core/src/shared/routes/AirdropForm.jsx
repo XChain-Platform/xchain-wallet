@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { t } from '../../i18n/index.js';
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, CopyButton, EmptyState, FeeSelector, FieldNote, FormNotice, FormPage, Icon, Input, ListPage, ListRow, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
@@ -82,6 +83,9 @@ import { maxListItemsThatFit, splitListItems } from '../../airdrop/listSizeLimit
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
+// How long step 2 waits for the stored-list read-back before it treats the
+// read as failed, so a hung read cannot lock a paid-for airdrop.
+const RECONCILE_READ_CAP_MS = 15_000;
 const OWNED_LIST_REVALIDATE_MS = 16_000;
 const LIST_DETAIL_CONCURRENCY = 4;
 const UNION_LIST_UNSUPPORTED = 'This list combines other lists, so this wallet cannot count its recipients. '
@@ -260,6 +264,10 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         /** @type {{ storedCount: number, expectedCount: number, missing: string[], stored: unknown[] } | null} */
         (null),
     );
+    // The read-back key (chain, list, submitted addresses) whose read has
+    // settled: answered, failed or timed out. Step 2 signing holds until it
+    // matches the current key.
+    const [reconcileSettledFor, setReconcileSettledFor] = useState(/** @type {string | null} */ (null));
     const [airdropTxid, setAirdropTxid] = useState(/** @type {string | null} */ (null));
     const [waitElapsed, setWaitElapsed] = useState(0);
     const [indexReadError, setIndexReadError] = useState(/** @type {string | null} */ (null));
@@ -305,7 +313,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 }
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+                if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load addresses.'));
             });
         return () => { cancelled = true; };
     }, [walletId, messaging, resumeId]);
@@ -354,7 +362,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 setHydrated(true);
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load pending airdrop.');
+                if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load pending airdrop.'));
             });
         return () => { cancelled = true; };
     }, [resumeId, hydrated, addressesByChain, walletId, messaging]);
@@ -582,28 +590,45 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // AIRDROP cost for recipients that are not on the list. Deliberately runs
     // before step 2 is signed. 'existing' mode already reads its list through
     // existingListDetail, and 'holders' publishes ticks, not addresses.
+    // `reconcilePending` holds step 2 signing until the read settles; its
+    // conditions mirror the effect's early returns so no other mode is held.
     const submittedKey = recipients.valid.join('|');
+    const reconcileKey = `${chainId}:${listActionIndex}:${submittedKey}`;
+    const reconcilePending = sourceMode === 'paste' && !!listActionIndex && !!chainId
+        && submittedKey !== '' && typeof messaging.getListByActionIndex === 'function'
+        && reconcileSettledFor !== reconcileKey;
     useEffect(() => {
         if (sourceMode !== 'paste' || !listActionIndex || !chainId) return undefined;
         if (typeof messaging.getListByActionIndex !== 'function') return undefined;
         const submitted = submittedKey ? submittedKey.split('|') : [];
         if (submitted.length === 0) return undefined;
         let cancelled = false;
+        const settle = () => { if (!cancelled) setReconcileSettledFor(reconcileKey); };
+        const timer = setTimeout(settle, RECONCILE_READ_CAP_MS);
         messaging.getListByActionIndex({ chainId, actionIndex: listActionIndex })
             .then((row) => {
                 if (cancelled) return;
                 // Reconcile against what the airdrop will resolve the list to
-                const stored = currentListItems(row) || [];
-                // Keep the stored members too: the token's access lists are matched against them.
-                setListReconcile({ ...airdropLib.reconcileStoredList(submitted, stored), stored });
+                const stored = currentListItems(row);
+                // A row with no member array says nothing about membership, so it
+                // takes the failed-read path instead of reading as an empty list.
+                if (!stored) {
+                    setListReconcile(null);
+                } else {
+                    // Keep the stored members too: the token's access lists are matched against them.
+                    setListReconcile({ ...airdropLib.reconcileStoredList(submitted, stored), stored });
+                }
+                settle();
             })
             .catch(() => {
                 // Non-fatal: a failed read must not block a paid-for airdrop.
                 // Leaving it null keeps the pre-reconcile display.
-                if (!cancelled) setListReconcile(null);
+                if (cancelled) return;
+                setListReconcile(null);
+                settle();
             });
-        return () => { cancelled = true; };
-    }, [sourceMode, listActionIndex, chainId, submittedKey, messaging]);
+        return () => { cancelled = true; clearTimeout(timer); };
+    }, [sourceMode, listActionIndex, chainId, submittedKey, reconcileKey, messaging]);
 
     // Stage-4 polling: waits for the LIST to be indexed and resolves
     // its ACTION_INDEX. Pauses when the tab is hidden to avoid burning
@@ -1360,6 +1385,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             setSubmitError(existingListDetail.error);
             return;
         }
+        if (reconcilePending) return;
         if (singleEncode) { openAirdropConfirm(); return; }
         if (submitting) return;
         if (!hw && (!signerReady && password.length === 0)) return;
@@ -1720,6 +1746,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             loading={submitting || actionConfirm.composing}
                             disabled={
                                 !listActionIndex
+                                || reconcilePending
                                 || (sourceMode === 'existing' && existingListDetail?.unsupported)
                                 || (singleEncode
                                     ? actionConfirm.composing
@@ -1807,6 +1834,11 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     Say so here, on the screen that prices step 2, because the
                     LIST was already paid for at the larger count and the AIRDROP
                     will only pay (and only be charged for) what survived. */}
+                {reconcilePending ? (
+                    <FormNotice variant="info" role="status">
+                        {'Checking the published list against the addresses you submitted before you can sign.'}
+                    </FormNotice>
+                ) : null}
                 {listReconcile && listReconcile.missing.length > 0 ? (
                     <FormNotice variant="warning" role="alert">
                         {`The published list holds ${listReconcile.storedCount} of the ${listReconcile.expectedCount} addresses you submitted: `

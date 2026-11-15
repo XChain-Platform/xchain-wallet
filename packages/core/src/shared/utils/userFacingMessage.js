@@ -28,10 +28,10 @@
 
 import { t } from '../../i18n/index.js';
 
-// A leading `identifier:` or `some.namespaced.identifier:` segment. Anchored
-// on a lowercase first letter and no internal whitespace, so real copy
-// ("Note: keep a backup") is not mistaken for a function prefix.
-export const DEV_PREFIX = /^[a-z][A-Za-z0-9_$]*(?:\.[A-Za-z0-9_$]+)*:\s/;
+// A leading `identifier:` or `some.namespaced-identifier:` segment, including
+// kebab-case producer names such as `multisig-envelope:`. The lowercase first
+// letter and lack of whitespace keep sentence-case copy such as "Note: ...".
+export const DEV_PREFIX = /^[a-z][A-Za-z0-9_$-]*(?:\.[A-Za-z0-9_$-]+)*:\s/;
 
 // Library / runtime internals that carry no meaning for the person reading
 // them, whether or not they arrive with a function prefix.

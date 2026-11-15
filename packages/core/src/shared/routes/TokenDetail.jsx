@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AddressText, Button, ChainBadge, CopyButton, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
@@ -469,7 +470,7 @@ function TokenDetailContent({
     // show the right glyph in the header + balance hero.
     const headerIconUrl = useMemo(() => {
         const tisImages = Array.isArray(assetInfo?.images) ? assetInfo.images : [];
-        const webImages = tisImages.filter((i) => safeHttpUrl(i?.url));
+        const webImages = tisImages.filter((i) => !i?.locked && safeHttpUrl(i?.url));
         const iconHit = webImages.find((i) => String(i?.type || '').toLowerCase() === 'icon');
         const fromTis = iconHit?.url
             || webImages[0]?.url
@@ -1627,24 +1628,45 @@ function DnsBlock({ dns }) {
     );
 }
 
-function tokenMediaBuckets(assetInfo) {
+// A locked entry never carries a URL (its raw bytes are ciphertext), so it is
+// kept in the bucket for a lock card instead of being dropped by the URL test.
+export function tokenMediaBuckets(assetInfo) {
+    const keep = (entry) => entry?.locked === true || safeHttpUrl(entry?.url);
     const images = Array.isArray(assetInfo?.images)
         ? assetInfo.images.filter((i) => {
             const mediaType = String(i?.type || '').toLowerCase();
-            return safeHttpUrl(i?.url)
+            return keep(i)
                 && (mediaType === 'large' || mediaType === 'hires' || mediaType === 'hi-res' || mediaType === 'highres');
         })
         : [];
     const audio = Array.isArray(assetInfo?.audio)
-        ? assetInfo.audio.filter((entry) => safeHttpUrl(entry?.url))
+        ? assetInfo.audio.filter(keep)
         : [];
     const video = Array.isArray(assetInfo?.video)
-        ? assetInfo.video.filter((entry) => safeHttpUrl(entry?.url))
+        ? assetInfo.video.filter(keep)
         : [];
     const files = Array.isArray(assetInfo?.files)
-        ? assetInfo.files.filter((entry) => safeHttpUrl(entry?.url))
+        ? assetInfo.files.filter(keep)
         : [];
     return { images, audio, video, files };
+}
+
+// Placeholder for a gated media entry: names the entry and its pack and
+// points the holder at the unlock surface, never at the ciphertext.
+function LockedMediaCard({ entry, packs }) {
+    const pack = entry?.packId ? packs?.[entry.packId] : null;
+    const label = entry?.name || entry?.title || 'Token-gated media';
+    return (
+        <div className={styles.galleryMediaCard} role="group" aria-label={`Locked: ${label}`}>
+            <div className={styles.galleryMediaCaption}>
+                <span aria-hidden="true"><Icon.LockIcon /></span> {label}
+            </div>
+            {pack?.name ? <div className={styles.muted}>{pack.name}</div> : null}
+            <div className={styles.muted}>
+                Locked content. Holders unlock it in the Gated content section.
+            </div>
+        </div>
+    );
 }
 
 function hasPublishedMedia(assetInfo) {
@@ -1717,7 +1739,7 @@ function MediaPanel({ isNative, assetInfo, loading }) {
     }
     // Single media type. No need for a subtab strip; render directly.
     if (subtabs.length === 1) {
-        return <MediaSubpanel kind={subtabs[0].id} images={images} audio={audio} video={video} files={files} />;
+        return <MediaSubpanel kind={subtabs[0].id} images={images} audio={audio} video={video} files={files} packs={assetInfo?.packs} />;
     }
     return (
         <div className={styles.mediaPanel}>
@@ -1744,34 +1766,35 @@ function MediaPanel({ isNative, assetInfo, loading }) {
                 role="tabpanel"
                 aria-labelledby={`${tabsId}-tab-${selectedSubtab}`}
             >
-                <MediaSubpanel kind={selectedSubtab} images={images} audio={audio} video={video} files={files} />
+                <MediaSubpanel kind={selectedSubtab} images={images} audio={audio} video={video} files={files} packs={assetInfo?.packs} />
             </div>
         </div>
     );
 }
 
-function MediaSubpanel({ kind, images, audio, video, files }) {
+export function MediaSubpanel({ kind, images, audio, video, files, packs }) {
     if (kind === 'image') {
         // Dedup by URL so `large` and `hires` pointing at the same file
-        // don't render twice.
+        // don't render twice. Locked entries have no URL and always show.
         const seen = new Set();
         const dedup = images.filter((img) => {
+            if (img?.locked) return true;
             if (!img?.url || seen.has(img.url)) return false;
             seen.add(img.url);
             return true;
         });
         return (
             <div className={styles.gallery}>
-                {dedup.map((img, i) => (
-                    <ImageHero key={`img:${img.url}:${i}`} img={img} />
-                ))}
+                {dedup.map((img, i) => (img.locked
+                    ? <LockedMediaCard key={`img:locked:${i}`} entry={img} packs={packs} />
+                    : <ImageHero key={`img:${img.url}:${i}`} img={img} />))}
             </div>
         );
     }
     if (kind === 'video') {
         return (
             <div className={styles.gallery}>
-                {video.map((v, i) => (
+                {video.map((v, i) => (v.locked ? <LockedMediaCard key={`video:locked:${i}`} entry={v} packs={packs} /> : (
                     <div key={`${v.url}:${i}`} className={styles.galleryMediaCard}>
                         {v.name ? (
                             <div className={styles.galleryMediaCaption}>{v.name}</div>
@@ -1784,14 +1807,14 @@ function MediaSubpanel({ kind, images, audio, video, files }) {
                             playsInline
                         />
                     </div>
-                ))}
+                )))}
             </div>
         );
     }
     if (kind === 'audio') {
         return (
             <div className={styles.gallery}>
-                {audio.map((a, i) => (
+                {audio.map((a, i) => (a.locked ? <LockedMediaCard key={`audio:locked:${i}`} entry={a} packs={packs} /> : (
                     <div key={`${a.url}:${i}`} className={styles.galleryMediaCard}>
                         {a.name ? (
                             <div className={styles.galleryMediaCaption}>{a.name}</div>
@@ -1803,7 +1826,7 @@ function MediaSubpanel({ kind, images, audio, video, files }) {
                             preload="metadata"
                         />
                     </div>
-                ))}
+                )))}
             </div>
         );
     }
@@ -1811,7 +1834,11 @@ function MediaSubpanel({ kind, images, audio, video, files }) {
         return (
             // The kit has no file-list primitive, so native list semantics group these file links.
             <ul className={styles.filesList}>
-                {files.map((f, i) => (
+                {files.map((f, i) => (f.locked ? (
+                    <li key={`file:locked:${i}`}>
+                        <LockedMediaCard entry={f} packs={packs} />
+                    </li>
+                ) : (
                     <li key={`${f.url}:${i}`}>
                         <a
                             href={f.url}
@@ -1831,7 +1858,7 @@ function MediaSubpanel({ kind, images, audio, video, files }) {
                             <span aria-hidden="true">↗</span>
                         </a>
                     </li>
-                ))}
+                )))}
             </ul>
         );
     }
@@ -2208,7 +2235,7 @@ function GatedContentPanel({ walletId, chainId, tick, groups, loading, error, pa
                     setAddressesError('No unlockable addresses for this network. Holders need an HD or imported-WIF address that holds the token.');
                 }
             })
-            .catch((err) => setAddressesError(err?.message || 'Failed to load addresses.'))
+            .catch((err) => setAddressesError(userFacingMessage(err, 'Failed to load addresses.')))
             .finally(() => setAddressesLoading(false));
     }, [addresses, addressesLoading, messaging, walletId, chainId]);
 
@@ -2361,7 +2388,7 @@ function GatedGroupCard({
                 const target = results.get(String(file.actionIndex));
                 if (target) openFile(target, file);
             } catch (err) {
-                setAccessError(err?.message || 'Failed to unlock demo content.');
+                setAccessError(userFacingMessage(err, 'Failed to unlock demo content.'));
             } finally {
                 fileOpenBusyRef.current = false;
                 setSubmitting(false);
@@ -2525,7 +2552,7 @@ function GatedGroupCard({
             } else if (code === 'GATED_FILE_NOT_FOUND') {
                 setUnlockError('Ciphertext not available from the explorer yet. Try again in a moment.');
             } else {
-                setUnlockError(err?.message || 'Failed to unlock.');
+                setUnlockError(userFacingMessage(err, 'Failed to unlock.'));
             }
             passwordRef.current?.focus();
             passwordRef.current?.select();

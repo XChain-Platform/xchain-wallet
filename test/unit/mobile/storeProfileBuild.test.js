@@ -11,6 +11,7 @@
 // @vitest-environment node
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { HIDDEN_SURFACES } from '../../../packages/web/src/surfaces/registry.js';
 
 function surfaceAliases(config) {
@@ -72,5 +73,27 @@ describe('XCHAIN_BUILD_PROFILE in the resolved Vite config', () => {
         }
 
         expect(surfaceAliases(defaultConfig)).toEqual([]);
+    });
+});
+
+describe('the Trezor pairing switch in the resolved Vite config', () => {
+    const KEY = 'import.meta.env.XCHAIN_TREZOR_PAIRING';
+
+    it('compiles pairing out of a store build and keeps it in the default build', () => {
+        expect(storeConfig.define[KEY]).toBe('false');
+        expect(defaultConfig.define[KEY]).toBe('true');
+    });
+
+    it('is the key App.jsx reads, so a rename on either side fails here', () => {
+        const app = readFileSync(new URL('../../../packages/web/src/App.jsx', import.meta.url), 'utf8');
+        expect(app).toContain(KEY);
+        expect(app).toMatch(/TREZOR_PAIRING_ENABLED = import\.meta\.env\.XCHAIN_TREZOR_PAIRING !== false/);
+    });
+
+    it('applies the CSP plugin to builds only', () => {
+        for (const config of [defaultConfig, storeConfig]) {
+            const plugin = config.plugins.flat(Infinity).find(({ name }) => name === 'xchain-csp');
+            expect(plugin.apply).toBe('build');
+        }
     });
 });

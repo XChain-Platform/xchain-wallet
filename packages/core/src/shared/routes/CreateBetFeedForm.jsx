@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, Button, FormPage, Icon, Input, ListPage, NetworkField, OptionalPill, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
@@ -205,7 +206,7 @@ export function CreateBetFeedForm({
                 setLoadError(null);
                 setFromAddressId(sourceId);
             })
-            .catch((err) => { if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.'); });
+            .catch((err) => { if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load addresses.')); });
         return () => { cancelled = true; };
     }, [walletId, chainId, messaging]);
 

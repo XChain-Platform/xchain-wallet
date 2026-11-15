@@ -36,7 +36,7 @@
 import { strict as assert } from 'node:assert';
 import { createServer } from 'node:http';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -56,7 +56,7 @@ import {
     deviceInstalledArch,
     swapExercisesLane,
 } from '../../../tools/release/rehearse.mjs';
-import { LANES, ALL_OS_TRIGGER_PACKAGES } from '../../../tools/release/rehearsal-matrix.mjs';
+import { LANES, ALL_OS_TRIGGER_PACKAGES, deviceNamesCiRunner } from '../../../tools/release/rehearsal-matrix.mjs';
 import { pointerNameFor } from '../../../tools/release/update-info.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -632,6 +632,92 @@ const check = (over) => assertRecord({
         const written = JSON.parse(readFileSync(recordFile, 'utf8')).swaps;
         assert.equal(written.length, 1);
         assert.equal(written[0]['exercised-arch'], 'arm64', 'attest records the arch the swap exercised');
+    } finally {
+        rmSync(work, { recursive: true, force: true });
+    }
+}
+
+// ------------------------------------- a runner is never where a swap is watched
+
+{
+    assert.equal(deviceNamesCiRunner('linux-x86_64 CI runner (Ubuntu 24.04)'), true);
+    assert.equal(deviceNamesCiRunner('a GitHub-hosted runner'), true);
+    assert.equal(deviceNamesCiRunner('Ubuntu 24.04 arm64 Parallels VM on the Mac Studio (GNOME desktop)'), false);
+    assert.equal(deviceNamesCiRunner('MacBook Pro M3 Max (clean user profile, not the release machine)'), false);
+    assert.equal(deviceNamesCiRunner(null), false);
+    for (const lane of LANES.filter((l) => l.os === 'linux' && l.arch === 'arm64')) {
+        assert.equal(deviceNamesCiRunner(lane.device), false,
+            `${lane.id} must name a desktop a person can watch the swap on`);
+    }
+
+    // A record that says a person watched a swap on a runner contradicts itself, and the gate refuses it.
+    const onRunner = check({ swaps: [...baseRecord.swaps,
+        { lane: 'linux-x64-deb', device: 'linux-x86_64 CI runner (Ubuntu 24.04)', from: '0.333.0' }] });
+    assert.ok(!onRunner.ok, 'a swap recorded on a CI runner must not pass assert');
+    assert.match(onRunner.problems.join(' '), /linux-x64-deb names linux-x86_64 CI runner.*not a witnessed swap/);
+    assert.ok(check({ swaps: [...baseRecord.swaps,
+        { lane: 'linux-arm64-deb', device: 'Ubuntu 24.04 arm64 Parallels VM', from: '0.333.0' }] }).ok,
+    'the same lane on a desktop device passes');
+
+    const work = mkdtempSync(join(tmpdir(), 'rehearsal-runner-'));
+    try {
+        const recordFile = join(work, 'REHEARSAL-test.json');
+        writeFileSync(recordFile, JSON.stringify({ ...baseRecord, swaps: [] }));
+        const env = { ...process.env, GITHUB_ACTIONS: '', CI: '', BUILDKITE: '', GITLAB_CI: '' };
+        const rehearse = (args, opts = {}) => spawnSync(process.execPath,
+            [join(root, 'tools/release/rehearse.mjs'), ...args], { encoding: 'utf8', env, ...opts });
+
+        // Every lane whose named device is a runner is refused by attest and reported blocked by coverage.
+        for (const lane of LANES.filter((l) => deviceNamesCiRunner(l.device))) {
+            const refused = rehearse(['attest', '--record', recordFile, '--lane', lane.id,
+                '--from', '0.333.0', '--by', 'Test Person']);
+            assert.notEqual(refused.status, 0, `attest must refuse ${lane.id}: its device is a runner`);
+            assert.match(refused.stderr, /is a CI runner, which cannot be where a\s+person watches a swap/);
+            const cover = rehearse(['coverage', '--records', join(work, 'none')]);
+            assert.match(cover.stdout, new RegExp(`${lane.id}\\s+device .*BLOCKED, the named device is a CI runner`));
+            assert.match(cover.stdout, new RegExp(`never had an observed swap: .*${lane.id}`));
+        }
+        assert.equal(JSON.parse(readFileSync(recordFile, 'utf8')).swaps.length, 0, 'a refused attest writes nothing');
+
+        // A swap filed against a runner is not counted by coverage, so it cannot turn the lane green.
+        const lanes = LANES.filter((l) => deviceNamesCiRunner(l.device));
+        const recs = join(work, 'recs');
+        mkdirSync(recs);
+        writeFileSync(join(recs, 'REHEARSAL-v1.json'), JSON.stringify({ ...baseRecord, swaps: lanes
+            .map((l) => ({ lane: l.id, device: l.device, at: '2026-10-01T00:00:00Z' })) }));
+        const filed = rehearse(['coverage', '--records', recs]);
+        for (const lane of lanes) {
+            assert.doesNotMatch(filed.stdout, new RegExp(`✅ ${lane.id}\\b`),
+                `${lane.id} swap on a runner must not count as covered`);
+        }
+    } finally {
+        rmSync(work, { recursive: true, force: true });
+    }
+}
+
+// The default records directory is anchored at the wallet root like the lane list, never at the cwd, and
+// a missing records directory is said out loud instead of reading as every lane never rehearsed.
+{
+    const work = mkdtempSync(join(tmpdir(), 'rehearsal-cwd-'));
+    try {
+        const stray = join(work, 'release-artifacts');
+        mkdirSync(stray);
+        writeFileSync(join(stray, 'REHEARSAL-v1.json'), JSON.stringify({
+            ...baseRecord, swaps: [{ lane: 'mac-arm64', device: 'bench', at: '2026-10-01T00:00:00Z' }],
+        }));
+        const env = { ...process.env, GITHUB_ACTIONS: '', CI: '' };
+        const fromElsewhere = spawnSync(process.execPath, [join(root, 'tools/release/rehearse.mjs'), 'coverage'],
+            { encoding: 'utf8', env, cwd: work });
+        const fromRoot = spawnSync(process.execPath, [join(root, 'tools/release/rehearse.mjs'), 'coverage'],
+            { encoding: 'utf8', env, cwd: root });
+        assert.equal(fromElsewhere.stdout, fromRoot.stdout,
+            'coverage must answer the same from any cwd, the way --lanes-file already does');
+        assert.doesNotMatch(fromElsewhere.stdout, /✅ mac-arm64/,
+            'a release-artifacts directory under the cwd must not be read by default');
+        if (!existsSync(join(root, 'release-artifacts'))) {
+            assert.ok(fromElsewhere.stderr.includes(join(root, 'release-artifacts')),
+                `a missing records directory must be named by absolute path: ${fromElsewhere.stderr}`);
+        }
     } finally {
         rmSync(work, { recursive: true, force: true });
     }

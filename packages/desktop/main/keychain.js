@@ -211,8 +211,10 @@ function bytesToHex(bytes) {
     // must transit one immutable (un-zeroable) hex string here. Building it
     // incrementally would additionally leave a chain of partial-prefix key
     // strings resident in the heap until GC; one allocation minimizes that
-    // residue. This is the one place the key exists un-scrubbed.
-    return Buffer.from(bytes).toString('hex');
+    // residue. The buffer is read through a view of the caller's bytes, never
+    // a copy, so the hex string is the only un-scrubbed residue: a copy would
+    // sit in a shared pool slab that nothing can zero.
+    return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('hex');
 }
 
 function hexToBytes(s) {

@@ -13,15 +13,19 @@
 //
 // TWO TIERS, because the two failure modes deserve different answers:
 //
-//   HARD FAIL - a primitive the wallet cannot work without is missing.
-//   `crypto.subtle` is the KDF and the AEAD; `getRandomValues` is every key
-//   and nonce; IndexedDB is the web-shell vault. A wallet that boots without
-//   one of these does not degrade gracefully, it does something worse: it
+//   HARD FAIL - a required security boundary or primitive is missing.
+//   Requiring a secure context keeps the seed-holding page from booting over
+//   a replaceable network origin. `getRandomValues` supplies every key, IV
+//   and salt; IndexedDB is the web-shell vault; TextEncoder/TextDecoder and
+//   BigInt are required by the bundle. A wallet that boots without one of
+//   these does not degrade gracefully, it does something worse: it
 //   gets far enough to ask for a password and then fails somewhere the user
 //   reads as "my wallet is broken" rather than "this device cannot run it".
 //   Worst case, a missing `getRandomValues` with a fallback behind it
 //   generates a key from something predictable. There is no safe fallback,
 //   so there is no fallback.
+//   SubtleCrypto is deliberately not required: AEAD, KDF and hashing use
+//   pure-JavaScript noble packages. Origin policy is enforced directly.
 //
 //   SOFT WARN - the primitives are all there but the engine is old enough
 //   that we would rather the user updated. This is advice, not a gate:
@@ -57,12 +61,8 @@ export const SOFT_MIN_CHROMIUM = 108;
 export function checkWebViewFloor(env = globalThis) {
     const missing = [];
 
-    const subtle = env?.crypto?.subtle;
-    // Presence AND callability: some embedded engines expose a `subtle`
-    // object whose methods are absent, which passes a truthiness check and
-    // then throws at the first derive.
-    if (!subtle || typeof subtle.importKey !== 'function' || typeof subtle.encrypt !== 'function') {
-        missing.push('crypto.subtle');
+    if (env?.isSecureContext !== true) {
+        missing.push('secure context');
     }
     if (typeof env?.crypto?.getRandomValues !== 'function') {
         missing.push('crypto.getRandomValues');
@@ -121,8 +121,8 @@ export function floorFailureMessage(report) {
     const list = report.missing.join(', ');
     return [
         'XChain Wallet cannot run safely on this device.',
-        `The browser engine here is missing: ${list}.`,
-        'These are the parts that encrypt your wallet and generate your keys.',
+        `Required security capabilities are unavailable: ${list}.`,
+        'The wallet needs these capabilities to protect and access your wallet.',
         'Updating Android System WebView (or your system browser) usually fixes it.',
         'Your recovery phrase is unaffected: it can be imported on any device that does support them.',
     ].join(' ');

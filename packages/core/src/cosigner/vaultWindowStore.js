@@ -340,10 +340,11 @@ export class VaultWindowStore {
         this._markDirty();
     }
 
+    /** @returns {boolean} whether the persistence port takes the account lock on write */
+    get locksAccount() { return this._persistence.locksAccount === true; }
+
     /** @returns {boolean} whether there are unpersisted writes */
-    get dirty() {
-        return this._dirty;
-    }
+    get dirty() { return this._dirty; }
 
     /**
      * Persist the in-memory state through the port when dirty. The

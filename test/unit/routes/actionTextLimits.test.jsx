@@ -348,7 +348,7 @@ describe('CallbackForm memo limit', () => {
             initialFromAddress: SOURCE.address,
         });
         const memo = await screen.findByLabelText('Memo');
-        const submit = await screen.findByRole('button', { name: 'Execute callback' });
+        const submit = await screen.findByRole('button', { name: 'Recall tokens' });
 
         fireEvent.change(memo, { target: { value: AT_LIMIT } });
         expect(screen.getByText(`${MAX_TEXT_LENGTH} / ${MAX_TEXT_LENGTH}`)).toBeTruthy();
@@ -371,7 +371,7 @@ describe('CallbackForm memo limit', () => {
         fireEvent.change(memo, { target: { value: 'safe\u0000unsafe' } });
 
         expect(screen.getByText('Memo cannot contain control characters.')).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Execute callback' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Recall tokens' }).disabled).toBe(true);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 });

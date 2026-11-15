@@ -80,8 +80,9 @@ export const COMMON_ACTIONS = /** @type {const} */ ([
 //
 // COLLECT is the exception with no version split: it has a single
 // format that claims accrued VALIDATOR rewards out of the reward pool
-// (indexer collect.js -> getActiveStakeBySource / getUnclaimedRewardTotal
-// / createRewardClaim), contract stakes accrue nothing through it, and
+// (indexer actions/collect/validate.js: the coin gate, then
+// getActiveStakeBySource and getUnclaimedRewardTotal; actions/collect/index.js:
+// createRewardClaim), contract stakes accrue nothing through it, and
 // it is coin-gated unconditionally. So it is validator-lane by
 // definition and belongs here.
 //

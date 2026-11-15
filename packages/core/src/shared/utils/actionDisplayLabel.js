@@ -56,10 +56,10 @@ const DISPLAY_MAP = /** @type {Record<string, string>} */ ({
     STAKE: 'Stake',
     UNSTAKE: 'Unstake',
     WITHDRAW: 'Withdraw',
-    // ADDRESS publishes a messaging encryption key (plumbing emitted by the
-    // messaging flows); VOTE is an authorable governance action. Both are
-    // reachable in user History, so map them rather than lean on the fallback.
-    ADDRESS: 'Messaging setup',
+    // ADDRESS v0 sets fee and dispenser preferences; v1 binds or unbinds a
+    // controller. A History row cannot distinguish the versions by name, so
+    // use wording that is true of both. VOTE is an authorable governance action.
+    ADDRESS: 'Address settings',
     VOTE: 'Vote',
     // Validator and mirror-injected verbs the user never authors but the
     // indexer still returns for an address. The vendored action manifest

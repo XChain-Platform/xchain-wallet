@@ -61,7 +61,41 @@ describe('BackupSection Test backup: screen guard', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Test…' }));
 
-        expect(screen.getByLabelText('Phrase format')).toHaveValue('counterwallet-legacy');
+        expect(screen.queryByLabelText('Phrase format')).not.toBeInTheDocument();
+        expect(screen.getByText('Counterwallet legacy')).toBeInTheDocument();
         expect(screen.queryByLabelText('Extra passphrase')).not.toBeInTheDocument();
+    });
+
+    it('shows the stored standard format and its passphrase field', () => {
+        mount({ id: 'w1', name: 'Standard', format: 'bip39' });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Test…' }));
+
+        expect(screen.queryByLabelText('Phrase format')).not.toBeInTheDocument();
+        expect(screen.getByText('Standard (12 to 24 words)')).toBeInTheDocument();
+        expect(screen.getByLabelText('Extra passphrase')).toBeInTheDocument();
+    });
+
+    it('submits without an editable format override', () => {
+        const messaging = {
+            dryRunRestoreRequest: vi.fn(() => new Promise(() => {})),
+        };
+        render(
+            <MessagingProvider shell="popup" messaging={messaging}>
+                <BackupSection activeWallet={{
+                    id: 'w1', name: 'Legacy', format: 'counterwallet-legacy',
+                }} />
+            </MessagingProvider>,
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'Test…' }));
+        fireEvent.change(screen.getByLabelText('Recovery phrase to test'), {
+            target: { value: 'explode gaze wolf admit nice charm except three any guitar into color' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Run test' }));
+
+        expect(messaging.dryRunRestoreRequest).toHaveBeenCalledWith(expect.objectContaining({
+            bip39Passphrase: '',
+        }));
+        expect(messaging.dryRunRestoreRequest.mock.calls[0][0]).not.toHaveProperty('format');
     });
 });

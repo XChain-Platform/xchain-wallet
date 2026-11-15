@@ -294,6 +294,14 @@ describe('CoSignerPolicyEditor per-action limit actions', () => {
         expect(screen.getByRole('alert').textContent).toMatch(/won't apply/);
     });
 
+    it('shows the display label for a known action that is no longer allowed', () => {
+        render(<CoSignerPolicyEditor value={withLimit('SEND', 'DEPLOY')} onChange={() => {}} />);
+        const select = screen.getByLabelText('Action');
+        expect(select.value).toBe('DEPLOY');
+        expect(document.body.textContent).toContain('Publish contract (not in the allowed actions above)');
+        expect(document.body.textContent).not.toContain('DEPLOY (not in the allowed actions above)');
+    });
+
     it('writes the chosen protocol name back into the draft', () => {
         const onChange = vi.fn();
         render(<CoSignerPolicyEditor value={withLimit('SEND, ISSUE', '')} onChange={onChange} />);

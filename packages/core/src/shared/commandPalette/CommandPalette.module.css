@@ -479,10 +479,13 @@
 }
 
 /* The menu keeps equal margins on both sides, so it does not reserve the
-   shared scroll class's scrollbar lane; a scrollbar shows only on overflow. */
-.menuPanel .walletSurface,
-.menuPanel .walletGrid {
-    scrollbar-gutter: auto;
+   shared scroll class's scrollbar lane; a scrollbar shows only on overflow.
+   Safari 16 has no scrollbar-gutter and reserves no lane, so it needs none. */
+@supports (scrollbar-gutter: auto) {
+    .menuPanel .walletSurface,
+    .menuPanel .walletGrid {
+        scrollbar-gutter: auto;
+    }
 }
 
 /* Settings and Lock wallet share one row at every width, half each. */

@@ -303,7 +303,9 @@ describe('Litecoin history flow', () => {
                 action: 'SEND',
                 action_index: '91',
                 block_index: 1234,
-                timestamp: 1791900000,
+                // Recent on purpose: History opens on a rolling date window, so a
+                // fixed past timestamp ages out of the default view.
+                timestamp: Math.floor(Date.now() / 1000) - 3600,
                 tx_hash: 'a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff0',
                 details: {
                     source: external,

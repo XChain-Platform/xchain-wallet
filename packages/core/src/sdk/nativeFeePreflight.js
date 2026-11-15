@@ -40,7 +40,7 @@ import { nativeFeeOutputOf } from '../flows/nativeFeeLane.js';
 // Consensus fee destinations copied from the SDK coin registry. The remote quote may
 // confirm this address, but it never chooses it. Selecting by the SDK's local chain identity
 // keeps a reply from choosing both the network and the destination it wants us to pay.
-const FEE_DESTINATION_BY_CHAIN = Object.freeze({
+export const FEE_DESTINATION_BY_CHAIN = Object.freeze({
     'bitcoin-mainnet': '1FeesxM9LTEjBYVTkynK6jfDBgvksuh2WL',
     'bitcoin-testnet': 'mfees5QurRs5BHXofdGpTG5pXB6uC6R8RU',
     'bitcoin-regtest': 'mfeesX6rLE6V3WPg9tsbL2fHNS7E4rDAim',

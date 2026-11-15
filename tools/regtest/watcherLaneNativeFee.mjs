@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// Copyright © 2025-2026 Dankest, LLC; SPDX-License-Identifier: AGPL-3.0-or-later
 // tools/regtest/watcherLaneNativeFee.mjs - that on-chain residual.
 //
 // WHAT IS STILL OWED AFTER THE UNIT LANE
@@ -203,7 +204,6 @@ async function waitForAction(txid, timeoutMs = 420_000) {
     while (Date.now() < deadline) {
         const found = await actionFor(txid).catch(() => null);
         if (found) return found;
-
         const health = await venueHealth().catch(() => null);
         if (health && Number.isFinite(health.indexed)) {
             // Behind AND not moving is a wedge; behind and moving is just slow.
@@ -212,7 +212,6 @@ async function waitForAction(txid, timeoutMs = 420_000) {
             lastIndexed = health.indexed;
             if (stalledPasses >= 15) throw new Error(wedgeMessage(health));
         }
-
         await venue.nudgeChain();
         await sleep(3_000);
     }
@@ -220,10 +219,8 @@ async function waitForAction(txid, timeoutMs = 420_000) {
         + 'That is a venue state, not a verdict: check '
         + `${venue.EXPLORER_URL}/${cfg.regtestCoin}/api/status before reading anything into it.`);
 }
-
 async function main() {
     console.log(`chain: ${chainId} (${cfg.regtestCoin}), explorer ${venue.EXPLORER_URL}`);
-
     // Step 0: the venue has to be able to price a fee-bearing action, now and
     // still in several minutes' time, or every leg below fails on the oracle
     // and reads as a wallet defect.
@@ -233,11 +230,9 @@ async function main() {
     const health = await venueHealth();
     if (!(health.lag <= 3)) throw new Error(wedgeMessage(health));
     console.log(`venue: indexed block ${health.indexed}, lag ${health.lag}`);
-
     const priced = await venue.seedPrices();
     console.log(`price: ${priced.reason || (priced.seeded ? 'reseeded' : 'ok')}`
         + ` (${cfg.coinTicker}/USD ${priced.coinUsdPrice}, XCHAIN/USD ${priced.xchainUsdPrice})`);
-
     const chainRegistry = registryLib.defaultRegistry();
     if (!chainRegistry.get(chainId)) throw new Error(`no chain descriptor for ${chainId}`);
     const sdkRegistry = new SDKRegistry({
@@ -246,14 +241,12 @@ async function main() {
     });
     const sdk = sdkRegistry.get(chainId);
     await sdk.ready?.();
-
     // Throwaway regtest key: the vault's stand-in. Never printed.
     const kp = sdk.wallet.generateKeyPair();
     const wif = kp.wif;
     const publicKey = kp.publicKeyHex;
     const address = sdk.wallet.deriveAddress(kp.publicKey, { type: cfg.addressType });
     console.log(`source: ${address}`);
-
     /**
      * The watcher lane itself, called exactly the way the form calls it.
      *
@@ -271,19 +264,16 @@ async function main() {
         actionData,
         encoderOpts: nativeFee ? { payFeeInNativeCoin: true } : {},
     });
-
     /** Outputs of a composed PSBT that pay the venue's fee destination. */
     function feeOutputs(psbtHex, feeDestination) {
         const decomposed = sdk.wallet.decomposePsbt(psbtHex);
         return (decomposed.outputs || []).filter((o) => o.address === feeDestination);
     }
-
     async function signAndBroadcast(psbtHex) {
         const signed = sdk.wallet.signPsbt(psbtHex, wif);
         await sdk.encoder.broadcastTx(signed.txHex);
         return signed.txid;
     }
-
     // A name nobody has claimed. Ticks are claimed once on chain, so a fixed one
     // would make the second run of this driver fail on the ISSUE for a reason
     // that has nothing to do with fees.
@@ -314,7 +304,6 @@ async function main() {
             GET_AMOUNT: '10',
         },
     };
-
     // Fund for the quote rather than a flat amount: the fee scales with the
     // venue's oracle price, and a run that dies in the encoder on "insufficient
     // funds" reads exactly like a wallet defect and is not one.
@@ -341,7 +330,6 @@ async function main() {
     console.log(`fee destination: ${feeDestination}, ISSUE quoted ${feeCoins} ${cfg.coinTicker}`);
     console.log(`funding ${funding} ${cfg.coinTicker} ...`);
     await venue.fundAddress(address, funding);
-
     // ---------------------------------------------------------------- ISSUE
     console.log(`\nISSUE ${tick} through the watcher lane, fee flag ON`);
     const issueBuild = await compose(issueData, { nativeFee: true });
@@ -354,7 +342,6 @@ async function main() {
     check(String(issued.status) === 'valid',
         `the ISSUE of ${tick} indexed valid`, `status "${issued.status}"`);
     if (failures.length) return;   // no name to sell; the rest would be noise
-
     // ------------------------------------------------------------- NEGATIVE
     // The broken form's shape: everything the fixed lane does except the flag.
     console.log('\nORDER (sell the name) through the watcher lane, fee flag OFF - the regression');
@@ -372,7 +359,6 @@ async function main() {
     check(/fee/i.test(String(rejected.status)),
         'and rejected it for the FEE, not for something else',
         `status "${rejected.status}"`);
-
     // ------------------------------------------------------------- POSITIVE
     console.log('\nORDER (sell the name) through the watcher lane, fee flag ON - the fix');
     const saleBuild = await compose(saleData, { nativeFee: true });
@@ -398,7 +384,6 @@ async function main() {
     console.log(`\naction ${accepted.action_index}: ${accepted.action} ${accepted.status}`
         + ` | fee ${accepted.fee?.native_coin_amount} ${accepted.fee?.native_coin}`);
 }
-
 main()
     .then(() => {
         if (failures.length) {

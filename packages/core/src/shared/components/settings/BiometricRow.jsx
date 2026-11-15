@@ -35,6 +35,7 @@
 // state change so toggling between OS settings + the wallet stays in
 // sync without a refresh.
 
+import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import { useEffect, useRef, useState } from 'react';
 import { Button, FormPage, FormSection, Icon, Input, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
@@ -135,7 +136,7 @@ export function BiometricRow() {
                 setError('Incorrect wallet password.');
             } else {
                 retryRef.current = doEnable;
-                setError(err?.message || 'Biometric enrolment failed.');
+                setError(userFacingMessage(err, 'Biometric enrolment failed.'));
             }
         } finally {
             setBusy(false);
@@ -166,7 +167,7 @@ export function BiometricRow() {
             refreshRegistered();
         } catch (err) {
             retryRef.current = handleDisable;
-            setError(err?.message || 'Biometric unlock could not be disabled.');
+            setError(userFacingMessage(err, 'Biometric unlock could not be disabled.'));
         } finally {
             setBusy(false);
         }

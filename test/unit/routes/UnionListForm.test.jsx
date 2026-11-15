@@ -73,8 +73,9 @@ function makeMessaging({ owned, shared = [], details = {} } = {}) {
     });
 }
 
-function mount({ support = { share: true, transfer: true, union: true }, ...options } = {}) {
-    listFormatSupport.mockResolvedValue(support);
+function mount({ support = { share: true, transfer: true, union: true }, supportError = false, ...options } = {}) {
+    if (supportError) listFormatSupport.mockRejectedValue(new Error('support lookup failed'));
+    else listFormatSupport.mockResolvedValue(support);
     const messaging = makeMessaging(options);
     render(
         <MessagingProvider shell="web" messaging={messaging}>
@@ -140,7 +141,10 @@ describe('UnionListForm', () => {
         expect(mirror.disabled).toBe(false);
         fireEvent.click(mirror);
         expect(screen.getByText('Estimated merged membership: 2')).toBeTruthy();
-        expect(screen.getByText(/indexer judges the merged membership at the create's block/)).toBeTruthy();
+        expect(screen.getByText(
+            'This is an estimate. The final count is worked out by the network when your union list is recorded.',
+        )).toBeTruthy();
+        expect(screen.queryByText(/indexer|create's block/i)).toBeNull();
     });
 
     it('deduplicates known memberships in the displayed estimate', async () => {
@@ -197,7 +201,7 @@ describe('UnionListForm', () => {
     ])('disables the form with the SDK reason when union support is %s', async (_case, support) => {
         const messaging = mount({ support });
 
-        expect(await screen.findByText(/SDK cannot build a union list yet/)).toBeTruthy();
+        expect(await screen.findByText("Creating union lists isn't available in this version of the wallet yet.")).toBeTruthy();
         expect(listFormatSupport).toHaveBeenCalledWith({
             sdkRegistry: expect.objectContaining({ get: expect.any(Function) }),
             chainId: CHAIN,
@@ -205,6 +209,16 @@ describe('UnionListForm', () => {
         expect(messaging.getActionFormats).not.toHaveBeenCalled();
         expect(screen.getByRole('checkbox', { name: 'Token list #101' }).disabled).toBe(true);
         expect(screen.getByLabelText('Memo').disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Create union list' }).disabled).toBe(true);
+    });
+
+    it('separates a failed support check from an unavailable action', async () => {
+        mount({ supportError: true });
+
+        expect(await screen.findByText(
+            "Couldn't check whether creating union lists is available right now. Reopen this page to try again.",
+        )).toBeTruthy();
+        expect(screen.queryByText(/isn't available in this version/)).toBeNull();
         expect(screen.getByRole('button', { name: 'Create union list' }).disabled).toBe(true);
     });
 });

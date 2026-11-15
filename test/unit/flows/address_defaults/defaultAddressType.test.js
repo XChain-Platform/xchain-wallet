@@ -48,12 +48,33 @@ describe('defaultAddressTypeForWallet', () => {
         expect(get).not.toHaveBeenCalled();
     });
 
+    it('uses the descriptor default when a test vault has no wallet collection', async () => {
+        await expect(defaultAddressTypeForWallet({}, 'wallet-1', descriptor))
+            .resolves.toBe('p2wpkh');
+    });
+
     it('uses the descriptor default when the wallet lookup fails', async () => {
         const get = vi.fn().mockRejectedValue(new Error('unavailable'));
         const vault = { wallets: { get } };
 
         await expect(defaultAddressTypeForWallet(vault, 'wallet-1', descriptor))
-            .resolves.toBe('p2wpkh');
+            .rejects.toThrow('unavailable');
         expect(get).toHaveBeenCalledWith('wallet-1');
+    });
+
+    it('propagates a wallet-read failure instead of resolving a legacy wallet to the BIP39 default', async () => {
+        const get = vi.fn().mockRejectedValue(new Error('read failed'));
+        const vault = { wallets: { get } };
+
+        await expect(defaultAddressTypeForWallet(vault, 'wallet-1', descriptor))
+            .rejects.toThrow('read failed');
+    });
+
+    it('uses the descriptor default when the wallet record does not exist', async () => {
+        const get = vi.fn().mockResolvedValue(undefined);
+        const vault = { wallets: { get } };
+
+        await expect(defaultAddressTypeForWallet(vault, 'missing', descriptor))
+            .resolves.toBe('p2wpkh');
     });
 });

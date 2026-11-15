@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
@@ -166,7 +167,7 @@ export function LinkForm({ walletId, onBack }) {
                 setChain2Id(chains.find((cid) => cid !== chain1) || chain1);
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+                if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load addresses.'));
             });
         return () => { cancelled = true; };
     }, [walletId, messaging]);
@@ -220,7 +221,7 @@ export function LinkForm({ walletId, onBack }) {
                     // The explorer answers 404 for a number no action holds: that is a
                     // missing action, not a failed lookup.
                     const missing = explorerErrorCode(err) === 'EXPLORER_HTTP_404';
-                    setPreviewCache((p) => ({ ...p, [key]: { loading: false, action: null, error: missing ? null : (err?.message || String(err)) } }));
+                    setPreviewCache((p) => ({ ...p, [key]: { loading: false, action: null, error: missing ? null : userFacingMessage(err, 'Could not load this link.') } }));
                 });
         }, 350);
         return () => clearTimeout(t);
@@ -242,7 +243,7 @@ export function LinkForm({ walletId, onBack }) {
                     // The explorer answers 404 for a number no action holds: that is a
                     // missing action, not a failed lookup.
                     const missing = explorerErrorCode(err) === 'EXPLORER_HTTP_404';
-                    setPreviewCache((p) => ({ ...p, [key]: { loading: false, action: null, error: missing ? null : (err?.message || String(err)) } }));
+                    setPreviewCache((p) => ({ ...p, [key]: { loading: false, action: null, error: missing ? null : userFacingMessage(err, 'Could not load this link.') } }));
                 });
         }, 350);
         return () => clearTimeout(t);

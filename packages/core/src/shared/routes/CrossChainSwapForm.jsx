@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusNoticeOnAttempt } from '../hooks/useFocusNoticeOnAttempt.js';
 import { AddressField, AddressText, Button, ChainBadge, Checkbox, CopyButton, FeeSelector, FormPage, FormSection, Icon, Input, ListPage, NetworkField, PageHeader, RadioGroup, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
@@ -191,7 +192,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 setGetChainId(chains[1]);
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load wallet.');
+                if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load wallet.'));
             });
         return () => { cancelled = true; };
     }, [walletId, messaging]);

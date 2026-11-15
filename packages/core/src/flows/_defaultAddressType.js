@@ -34,9 +34,9 @@ export function defaultAddressTypeForFormat(descriptor, format) {
 }
 
 /**
- * Same, resolved from the persisted Wallet record. Falls back to the
- * descriptor default when the wallet cannot be read, which keeps every
- * caller's pre-existing behaviour for BIP39 wallets.
+ * Same, resolved from the persisted Wallet record. A wallet-read error
+ * propagates because falling back would silently apply the BIP39 default
+ * to a legacy wallet.
  *
  * @param {import('../storage/Vault.js').Vault} vault
  * @param {string} walletId
@@ -44,11 +44,9 @@ export function defaultAddressTypeForFormat(descriptor, format) {
  * @returns {Promise<string>}
  */
 export async function defaultAddressTypeForWallet(vault, walletId, descriptor) {
-    let wallet = null;
-    try {
-        wallet = walletId ? await vault.wallets.get(walletId) : null;
-    } catch {
-        wallet = null;
-    }
+    const getWallet = vault?.wallets?.get;
+    const wallet = walletId && typeof getWallet === 'function'
+        ? await getWallet.call(vault.wallets, walletId)
+        : null;
     return defaultAddressTypeForFormat(descriptor, wallet?.format);
 }

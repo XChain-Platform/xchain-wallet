@@ -274,3 +274,44 @@ describe('a blob a newer build wrote is never overwritten', () => {
         expect(values[BROADCAST_QUEUE_STORAGE_KEY]).toEqual(current({ w1: [ENTRY] }));
     });
 });
+
+describe('a newer blob is refused whatever shape its queues take', () => {
+    const ENTRY = { id: 'q-1', chainId: 'bitcoin-regtest', signedTxHex: 'hex-1', summary: 'Send 1', signedAt: 1, pendingTxId: 'p-1' };
+    const NEXT = BROADCAST_QUEUE_STORAGE_VERSION + 1;
+    const shapes = {
+        'an array of entries': () => ({ storageVersion: NEXT, queues: [ENTRY], settlements: [] }),
+        'a renamed queues field': () => ({ storageVersion: NEXT, wallets: { w1: [ENTRY] }, journal: [] }),
+        'entry arrays at the top level': () => ({ storageVersion: NEXT, w1: [ENTRY] }),
+        'a null queues field': () => ({ storageVersion: NEXT, queues: null }),
+    };
+
+    it.each(Object.keys(shapes))('keeps a newer blob with %s intact and refuses both saves', async (name) => {
+        const blob = shapes[name]();
+        const { set, values } = statefulChromeStorage({ value: blob });
+        const storage = createBroadcastQueueStorage();
+
+        await expect(storage.load()).resolves.toEqual({});
+        expect(set).not.toHaveBeenCalled();
+        await expect(storage.save({ w1: [ENTRY] })).rejects.toThrow(/newer/);
+        await expect(storage.saveSettlements([])).rejects.toThrow(/newer/);
+        expect(values[BROADCAST_QUEUE_STORAGE_KEY]).toEqual(blob);
+        expect(set).not.toHaveBeenCalled();
+    });
+
+    it('writes again after a clear of a newer blob with an array of entries', async () => {
+        const { values } = statefulChromeStorage({ value: shapes['an array of entries']() });
+        const storage = createBroadcastQueueStorage();
+        await storage.load();
+        await storage.clear();
+        await expect(storage.save({})).resolves.toBeUndefined();
+        expect(values[BROADCAST_QUEUE_STORAGE_KEY]).toEqual({
+            storageVersion: BROADCAST_QUEUE_STORAGE_VERSION, queues: {}, settlements: [],
+        });
+    });
+
+    it('still migrates an unversioned map whose wallet holds entries', async () => {
+        const { set } = statefulChromeStorage({ value: { w1: [ENTRY] } });
+        await expect(createBroadcastQueueStorage().load()).resolves.toEqual({ w1: [ENTRY] });
+        expect(set).toHaveBeenCalledTimes(1);
+    });
+});

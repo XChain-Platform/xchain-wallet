@@ -94,6 +94,7 @@ vi.mock('@xchain-wallet/core', async (importOriginal) => {
             ...actual.flows,
             createWallet: scripted('createWallet'),
             importMnemonic: scripted('importMnemonic'),
+            importSingleWif: scripted('importSingleWif'),
             importBackupFile: scripted('importBackupFile'),
             restoreLabelSyncAfterImport: scripted('restoreLabelSyncAfterImport'),
         },
@@ -303,5 +304,27 @@ describe('web mnemonic import lands on the network the caller asked for', () => 
         flowBehaviour.importMnemonic = importMnemonic;
         await importMnemonicLocal({ password: 'pw', mnemonic: PHRASE });
         expect(importMnemonic.mock.calls[0][0].activeNetwork).toBeUndefined();
+    });
+});
+
+describe('web WIF import lands on the address type the caller picked', () => {
+    const WIF = 'KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn';
+    const wifResult = async () => ({ wallet: { id: 'w1', name: 'Imported Wallet' } });
+
+    it('forwards addressType to the single-key import flow', async () => {
+        const importSingleWif = vi.fn(wifResult);
+        flowBehaviour.importSingleWif = importSingleWif;
+        await importMnemonicLocal({ password: 'pw', wif: WIF, chainId: 'bitcoin-mainnet', addressType: 'p2pkh' });
+        expect(importSingleWif).toHaveBeenCalledWith(expect.objectContaining({
+            chainId: 'bitcoin-mainnet',
+            addressType: 'p2pkh',
+        }));
+    });
+
+    it('leaves addressType unset when the caller names none', async () => {
+        const importSingleWif = vi.fn(wifResult);
+        flowBehaviour.importSingleWif = importSingleWif;
+        await importMnemonicLocal({ password: 'pw', wif: WIF, chainId: 'bitcoin-mainnet' });
+        expect(importSingleWif.mock.calls[0][0].addressType).toBeUndefined();
     });
 });

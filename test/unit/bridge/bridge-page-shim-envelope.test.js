@@ -11,22 +11,26 @@
 // Seen from the PAGE.
 //
 // The other bridge suites drive the MessageHost directly, which is one hop
-// short of the thing that was broken: what a dApp gets is whatever survives
+// short of what a dApp actually touches: what a dApp gets is whatever survives
 // the inject shim -> content-script relay -> background round trip, and the
-// envelope was being assembled and then taken apart again across those hops.
+// envelope is assembled and taken apart again across those hops.
 //
-// So this one runs the REAL `window.xchain` provider (the injected IIFE, in a
-// jsdom page) against the REAL bridge handlers on a real MessageHost, with a
+// So this suite runs the REAL `window.xchain` provider (the injected IIFE, in
+// a jsdom page) against the REAL bridge handlers on a real MessageHost, with a
 // relay standing in for the content script and doing exactly what it does:
 // stamp the page origin on the request and post the response envelope back.
 //
-// The three things checked are the three the fix has to deliver at the page:
+// The three things checked are the three the envelope must deliver at the page:
 //
 //   conn.ok             a successful connect is recognisable as one
 //   sendResult.ok       so is a signed action
 //   retryAfterMs        and a rate-limited call arrives as a RESOLVED
 //                       THROTTLED result carrying the wait, not as a throw
 //                       whose message a dApp would have to parse.
+//
+// Local input refusals, such as an empty parallel batch, are the exception:
+// they reject with a coded BridgeError (INVALID_PARAMS) because no wallet
+// round trip ran, and the provider has no envelope to return.
 
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 import providerSource from '../../../packages/extension/src/inject/xchainProvider.js?raw';
@@ -393,5 +397,14 @@ describe('what the reference dApp sees through the real provider', () => {
         // No connect happened, so getAccounts is refused. Its published type is
         // `Promise<Account[]>` with nowhere to put an ok flag.
         await expect(provider.getAccounts()).rejects.toThrow(/NOT_CONNECTED/);
+    });
+
+    it('codes local parallel input refusals as INVALID_PARAMS', async () => {
+        for (const input of [[], undefined, 'x']) {
+            await expect(provider.parallel(input)).rejects.toMatchObject({
+                name: 'BridgeError',
+                code: 'INVALID_PARAMS',
+            });
+        }
     });
 });

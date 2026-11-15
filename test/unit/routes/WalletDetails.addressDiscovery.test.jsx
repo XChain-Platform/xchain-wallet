@@ -10,7 +10,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { WalletDetails } from '../../../packages/core/src/shared/routes/WalletDetails.jsx';
-import { addressDiscoveryLine } from '../../../packages/core/src/shared/components/AddressDiscoveryNotice.jsx';
+import {
+    AddressDiscoveryNotice,
+    addressDiscoveryLine,
+} from '../../../packages/core/src/shared/components/AddressDiscoveryNotice.jsx';
 
 const wallet = { id: 'w-1', name: 'Restored', format: 'bip39', origin: 'imported-mnemonic', passphraseEnabled: false };
 
@@ -39,6 +42,24 @@ describe('address discovery status line', () => {
         expect(addressDiscoveryLine({ id: 1, status: 'done' })).toBeNull();
         expect(addressDiscoveryLine('done')).toBeNull();
     });
+
+    it('filters an internal error from the Try again path', async () => {
+        const messaging = {
+            addressDiscoveryStatus: vi.fn(async () => job({ failedChains: ['Bitcoin'] })),
+            discoverAddresses: vi.fn().mockRejectedValue(
+                new Error('The message port closed before a response was received.'),
+            ),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <AddressDiscoveryNotice />
+            </MessagingProvider>,
+        );
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
+        expect(await screen.findByText('Could not check for used addresses. Try again.')).toBeTruthy();
+        expect(screen.queryByText(/message port closed/i)).toBeNull();
+    });
 });
 
 describe('Wallet details used-address check', () => {
@@ -66,6 +87,27 @@ describe('Wallet details used-address check', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
         expect(await screen.findByText('Found 2 used addresses')).toBeInTheDocument();
         expect(messaging.discoverAddresses).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([
+        [new Error('The message port closed before a response was received.'), 'Could not check for used addresses. Try again.', /message port closed/i],
+        [new Error(''), 'Could not check for used addresses. Try again.', /^Error$/],
+        [new Error('Unlock the wallet, then check for used addresses again.'), 'Unlock the wallet, then check for used addresses again.', null],
+    ])('filters address-check start errors %#', async (error, expected, hidden) => {
+        const messaging = {
+            listWallets: vi.fn(async () => [wallet]),
+            listAccounts: vi.fn(async () => []),
+            discoverAddresses: vi.fn().mockRejectedValue(error),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <WalletDetails walletId={wallet.id} onBack={() => {}} />
+            </MessagingProvider>,
+        );
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Check for used addresses' }));
+        expect(await screen.findByText(expected)).toBeTruthy();
+        if (hidden) expect(screen.queryByText(hidden)).toBeNull();
     });
 
     it('is not offered on an imported-key wallet', async () => {

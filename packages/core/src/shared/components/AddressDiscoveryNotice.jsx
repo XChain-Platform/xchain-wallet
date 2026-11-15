@@ -12,6 +12,7 @@
 // after a restore or from Wallet details. One message per state: checking,
 // the count found, or the networks that could not be checked with Try again.
 
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useEffect, useRef, useState } from 'react';
 import { StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../useMessaging.js';
@@ -123,7 +124,7 @@ export function AddressDiscoveryNotice({ onFinished, dismissOnLeave = false }) {
             await messaging.discoverAddresses(walletIds.length === 1 ? { walletId: walletIds[0] } : {});
             setGeneration((g) => g + 1);
         } catch (err) {
-            setRetryError(err?.message || String(err));
+            setRetryError(userFacingMessage(err, 'Could not check for used addresses. Try again.'));
         }
     }
 

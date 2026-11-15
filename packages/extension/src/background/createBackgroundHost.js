@@ -3213,6 +3213,7 @@ export function createBackgroundHost(deps) {
         if (typeof chainId !== 'string' || !chainId) {
             throw new Error('action.vote.composeForConfirm: chainId is required');
         }
+        await assertActiveSendNetwork({ chainId, vault, chainRegistry }, REVIEW_ACTION_AGAIN);
         const builder = req?.builder;
         // Allow-listed: `builder` crosses the messaging boundary, so it must
         // never be able to name an arbitrary sdk.voting method.
@@ -3571,6 +3572,7 @@ export function createBackgroundHost(deps) {
             chainId,
             path: isHd ? address.derivationPath : undefined,
             addressId: isHd ? undefined : addressId,
+            addressType: address.addressType,
             message,
         });
     });
@@ -3605,6 +3607,7 @@ export function createBackgroundHost(deps) {
         reconcileRestoredEntries,
         enqueueOnBroadcastFailure,
         enqueueSignedBroadcast,
+        isWalletRemoved,
         pushQueueEntry,
         pendingTxIdsOf,
         settleQueuedPendingTx,
@@ -3688,6 +3691,13 @@ export function createBackgroundHost(deps) {
             txHex: signedTxHex,
             signerId: 'broadcast.queue.enqueue',
         });
+        // Asked after the verify await and in the same turn as the push: a
+        // wallet removed while that call was in flight, or one a stale window
+        // still names, must not get its signed bytes written under an id no
+        // route can list again.
+        if (isWalletRemoved(walletId)) {
+            throw new Error('broadcast.queue.enqueue: the wallet was removed');
+        }
         const stored = pushQueueEntry(walletId, {
             chainId,
             signedTxHex,
@@ -3743,6 +3753,8 @@ export function createBackgroundHost(deps) {
         const walletAddresses = addresses.filter((address) => (
             accountIds.has(address.accountId) || importedAddressIds.has(address.id)
         ));
+        // A replacement whose landed write was only journaled settles now, so the guard below reads it as sent.
+        await flushOwedSettlements(vault);
         const records = await vault.pendingTxs.list();
         const lowerHash = (value) => String(value || '').toLowerCase();
         const recordFor = (txid) => records.find((record) => (
@@ -3948,34 +3960,37 @@ export function createBackgroundHost(deps) {
             ? broadcast
             : (broadcast?.txid ?? broadcast?.tx_hash ?? null);
         if (typeof replacementTxHash !== 'string' || !replacementTxHash) {
-            await vault.pendingTxs.put({
-                ...pending,
+            await settleOrJournalPatch(vault, walletId, pending.id, {
                 status: 'failed',
                 error: 'SDK did not return a txid',
             });
+            await flushOwedSettlements(vault);
             throw new Error('tx.replace: SDK did not return a txid');
         }
         if (lowerHash(replacementTxHash) !== lowerHash(signed.txid)) {
-            await vault.pendingTxs.put({
-                ...pending,
+            await settleOrJournalPatch(vault, walletId, pending.id, {
                 status: 'failed',
                 error: 'broadcast txid did not match signed transaction',
             });
+            await flushOwedSettlements(vault);
             throw new Error('tx.replace: broadcast txid did not match signed transaction');
         }
 
         const broadcastedAt = new Date().toISOString();
-        await vault.pendingTxs.put({
-            ...pending,
+        // The bytes are on the network: a refused vault write is journaled, never thrown,
+        // so the replacement does not stay 'broadcasting' with nothing naming it.
+        await settleOrJournalPatch(vault, walletId, pending.id, {
             status: 'broadcast',
             txid: replacementTxHash,
             broadcastAt: broadcastedAt,
+            error: null,
         });
-        await vault.pendingTxs.put({
-            ...conflictRecord,
-            status: 'rbf-replaced',
-            rbfReplacement: replacementTxHash,
-        });
+        await settleReplacedOriginal(
+            vault,
+            { pendingTxId: pending.id, rbfReplacesPendingTxId: conflictRecord.id },
+            replacementTxHash,
+        );
+        await flushOwedSettlements(vault);
         return {
             replacementTxHash,
             broadcastedAt,
@@ -3990,6 +4005,12 @@ export function createBackgroundHost(deps) {
     // nested causes included, because that is all the encoder hands back.
     function saysAlreadyOnNetwork(err) {
         return flows.isAlreadyOnNetworkRejection(err);
+    }
+    // Write a patch to a PendingTx this route stamped, owing it through the journal when the vault refuses.
+    async function settleOrJournalPatch(vault, walletId, pendingTxId, patch) {
+        if (await settleQueuedPendingTx(vault, { pendingTxId }, patch) === 'unreachable') {
+            recordOwedSettlement(walletId, pendingTxId, 'patch', patch);
+        }
     }
     // Retire the original a queued fee-bump replacement evicted, the write tx.replace makes when its own send lands.
     // Best effort: a refused write leaves the original live, which nets its spend but never re-sends it.
@@ -5112,6 +5133,10 @@ export function createBackgroundHost(deps) {
         return gatedPublishAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
     host.register('action.gatedPublish.composeForConfirm', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        await assertActiveSendNetwork(
+            { chainId: req?.chainId, vault, chainRegistry },
+            REVIEW_ACTION_AGAIN,
+        );
         const source = normalizeSource(req?.from, 'action.gatedPublish.composeForConfirm');
         const { change, ownAddresses } = await confirmChangeAndOwnAddresses({
             req,
@@ -5131,6 +5156,7 @@ export function createBackgroundHost(deps) {
             change,
             ownAddresses,
             confirmEncoderOpts,
+            envelopeSigner: await envelopeSignerOf(vault, req),
         });
     });
     host.register('action.gatedPublish.psbt', async (req, { vault, chainRegistry, sdkRegistry }) => {
@@ -5210,6 +5236,11 @@ export function createBackgroundHost(deps) {
     // (`prebuiltParams`) because encryption is non-deterministic - re-encrypting
     // would yield a different action string than the one the user approved.
     host.register('action.message.composeForConfirm', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        // Checked before the params build, which exports the key and encrypts.
+        await assertActiveSendNetwork(
+            { chainId: req?.broadcastChainId || req?.chainId, vault, chainRegistry },
+            REVIEW_ACTION_AGAIN,
+        );
         const built = await buildMessageParams({
             ...req,
             signer: await sessionSigner(req, vault, signerPool),
@@ -5515,6 +5546,7 @@ export function createBackgroundHost(deps) {
         if (typeof chainId !== 'string' || !chainId) {
             throw new Error('action.bet.composeForConfirm: chainId is required');
         }
+        await assertActiveSendNetwork({ chainId, vault, chainRegistry }, REVIEW_ACTION_AGAIN);
         const builder = req?.builder;
         // Allow-listed: `builder` crosses the messaging boundary, so it must
         // never be able to name an arbitrary SDK method.

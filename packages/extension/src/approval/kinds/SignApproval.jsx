@@ -292,7 +292,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
             } catch (err) {
                 if (cancelled) return;
                 // Show the error but still let the user reject cleanly.
-                setError(err?.message || 'Failed to load wallets.');
+                setError(userFacingMessage(err, 'Failed to load wallets.'));
             } finally {
                 // Every answer, a match, no match or a failure, settles the
                 // list so the PSBT decode runs exactly once.
@@ -362,7 +362,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 if (cancelled) return;
                 setPreviewBalances({
                     loading: false,
-                    error: err?.message || 'balance fetch failed',
+                    error: userFacingMessage(err, 'Could not check your balance.'),
                     sdkShape: null,
                     fromAddress: address,
                 });

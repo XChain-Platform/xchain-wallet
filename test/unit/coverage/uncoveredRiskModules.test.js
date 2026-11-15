@@ -225,7 +225,10 @@ describe('test-dApp runtime modules', () => {
         });
 
         await provider.disconnect();
-        await expect(provider.getAccounts()).rejects.toThrow('not connected');
+        await expect(provider.getAccounts()).rejects.toMatchObject({
+            name: 'BridgeError',
+            code: 'NOT_CONNECTED',
+        });
     });
 
     it('models sign-only PSBT responses and required signing paths', async () => {
@@ -271,10 +274,11 @@ describe('test-dApp runtime modules', () => {
         });
 
         const rejecting = new MockXChainProvider({ rejectAll: true });
+        await rejecting.connect();
         await expect(rejecting.coSign(base))
             .resolves.toEqual({ ok: false, error: 'USER_REJECTED' });
         await expect(new MockXChainProvider().coSign(base))
-            .rejects.toThrow('not connected');
+            .resolves.toEqual({ ok: false, error: 'NOT_CONNECTED' });
     });
 
     it('grants requested chain ids and refuses coin-family ids', async () => {
@@ -303,7 +307,10 @@ describe('test-dApp runtime modules', () => {
                 signMessageOk: true,
                 issueRejectedAsUnsupported: true,
             });
-            await expect(provider.getAccounts()).rejects.toThrow('not connected');
+            await expect(provider.getAccounts()).rejects.toMatchObject({
+                name: 'BridgeError',
+                code: 'NOT_CONNECTED',
+            });
         } finally {
             uninstall();
         }

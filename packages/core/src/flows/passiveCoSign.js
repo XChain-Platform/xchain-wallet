@@ -52,13 +52,19 @@ import {
 // is exactly the case that needs serializing, so an identity-based lock would
 // never fire. The instance fallback covers direct passiveCoSign callers that
 // share one store and pass no key.
+//
+// Lock order: the account lock (cosigner/accountLock.js) is always taken BEFORE
+// this keyed slot. A caller that passes a lockKey therefore holds the account
+// lock already and builds its store with { accountLocked: true }, so flush()
+// never queues for the account lock while holding the keyed slot. The reverse
+// order can wedge both locks, so passiveCoSign refuses that combination.
 const KEYED_LOCKS = new Map();
 const STORE_LOCKS = new WeakMap();
 
 function lockSlot(lockKey, windowStore) {
     if (typeof lockKey === 'string' && lockKey.length > 0) {
         let slot = KEYED_LOCKS.get(lockKey);
-        if (!slot) { slot = { tail: Promise.resolve() }; KEYED_LOCKS.set(lockKey, slot); }
+        if (!slot) { slot = { tail: Promise.resolve(), key: lockKey }; KEYED_LOCKS.set(lockKey, slot); }
         return slot;
     }
     if (windowStore) {
@@ -70,12 +76,25 @@ function lockSlot(lockKey, windowStore) {
     return null;
 }
 
+/** @returns {number} keyed lock slots currently held (a drained account holds none) */
+export function keyedLockCount() {
+    return KEYED_LOCKS.size;
+}
+
 function runExclusive(slot, fn) {
     if (!slot) return fn();
     // Chain on both settle paths: a previous request that threw must not wedge
     // the queue behind it.
     const run = slot.tail.then(fn, fn);
-    slot.tail = run.then(() => {}, () => {});
+    const tail = run.then(() => {}, () => {});
+    slot.tail = tail;
+    // Release a keyed slot once nothing is queued behind it, so the map holds
+    // only accounts with a request in flight.
+    if (slot.key !== undefined) {
+        tail.then(() => {
+            if (slot.tail === tail && KEYED_LOCKS.get(slot.key) === slot) KEYED_LOCKS.delete(slot.key);
+        });
+    }
     return run;
 }
 
@@ -106,7 +125,9 @@ function runExclusive(slot, fn) {
  * @property {PassiveCoSignRequest} request      the inbound co-sign request
  * @property {number} [now]                      injectable clock (ms) for the panic-mode check
  * @property {string} [lockKey]                  serializes the load/decide/charge/persist bracket
- *           across concurrent requests for the same account (G4); pass the account id
+ *           across concurrent requests for the same account (G4); pass the account id. Needs a
+ *           store built with { accountLocked: true } inside withAccountLock of that same id; a
+ *           store whose write() takes the account lock itself is refused
  */
 
 /**
@@ -157,6 +178,10 @@ export async function passiveCoSign(opts = {}) {
     }
     if (!request || typeof request.psbt !== 'string' || request.psbt.length === 0) {
         throw new Error('passiveCoSign: request.psbt (hex) is required');
+    }
+    if (typeof lockKey === 'string' && lockKey.length > 0 && windowStore?.locksAccount === true) {
+        throw new Error('passiveCoSign: a lockKey needs a window store built with accountLocked: true '
+            + 'inside withAccountLock; this store takes the account lock itself and would deadlock');
     }
 
     // Wire collapse: the SDK daemon takes exactly ONE request shape (an `inputs`

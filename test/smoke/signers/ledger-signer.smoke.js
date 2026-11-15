@@ -23,8 +23,8 @@ import { fileURLToPath } from 'node:url';
 import { webcrypto } from 'node:crypto';
 import { scriptsFor, signedReplyFor, TEST_KEYS } from '../../helpers/hwSignedReply.js';
 
-// deriveLedgerDeviceIdentifier uses crypto.subtle.digest. Node 18
-// exposes WebCrypto only on globalThis.crypto, matching setup.js.
+// Device identifiers use noble sha256. Other imported wallet crypto expects
+// random bytes on globalThis.crypto, which Node 18 exposes through WebCrypto.
 if (!globalThis.crypto) {
     globalThis.crypto = webcrypto;
 }

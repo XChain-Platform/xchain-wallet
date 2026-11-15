@@ -52,6 +52,7 @@
 // news still publishes immediately: clearing a banner early is always safe.
 // So does an offline verdict whose every failure was an outright refusal.
 
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
 import { useSettings } from './useSettings.js';
@@ -322,7 +323,7 @@ export function useReachability(opts = {}) {
         } catch (err) {
             if (!isCurrent()) return;
             failuresRef.current += 1;
-            setError(err?.message || 'Reachability probe failed');
+            setError(userFacingMessage(err, 'Reachability probe failed'));
             if (failuresRef.current >= 2) {
                 // Two failed round-trips in a row: the wallet really cannot
                 // talk to anything.

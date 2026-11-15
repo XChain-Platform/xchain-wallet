@@ -31,6 +31,7 @@
 import {
     base64ToBytes,
     decrypt,
+    decryptWalletSeed,
     deriveMasterKeyAsync,
 } from '../crypto/index.js';
 import { unlockWalletRecord, WalletNotFoundError } from './unlockWallet.js';
@@ -239,7 +240,11 @@ export async function exportPrivateKey({
             } else {
                 let seedBytes;
                 try {
-                    seedBytes = await decrypt(masterKey, base64ToBytes(wallet.encryptedSeed));
+                    seedBytes = await decryptWalletSeed({
+                        encryptedSeed: wallet.encryptedSeed,
+                        kdfParams: wallet.kdfParams,
+                        masterKey,
+                    });
                 } catch (err) {
                     throw passwordProbeError(err);
                 } finally {

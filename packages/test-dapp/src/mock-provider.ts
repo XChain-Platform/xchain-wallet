@@ -20,6 +20,7 @@ import {
     SIGN_IN_DEFAULT_EXPIRY_MS,
     BRIDGE_SPEC_VERSION,
     BRIDGE_SUPPORTED_VERSIONS,
+    isBridgeVersionSupported,
     PROVIDER_READY_EVENT,
     type XChainProvider,
     type ConnectOpts,
@@ -58,9 +59,9 @@ export interface MockProviderOptions {
     // the error path.
     rejectAll?: boolean;
     // If true, every connect / sign* call returns BLOCKED_BY_USER -
-    // models the "user un-blocks in wallet Settings" flow (§12 / Cluster S
-    // FOLLOWUP 5). Higher priority than `rejectAll` so the dApp branch
-    // for "blocked, no retry" is reachable.
+    // models the "user un-blocks in wallet Settings" flow. Higher priority
+    // than `rejectAll` so the dApp branch for "blocked, no retry" is
+    // reachable.
     blockedSite?: boolean;
     // If set, every sign* call returns THROTTLED with the supplied
     // `retryAfterMs` (and optional `burst` / `windowMs`). Higher priority
@@ -89,6 +90,14 @@ const hexEncode = (s: string): string =>
     Array.from(s, (c) => c.charCodeAt(0).toString(16).padStart(2, '0')).join(
         '',
     );
+
+// Builds the error the production bridge throws: a BridgeError whose `code`
+// names the failure and whose extra hints (retryAfterMs and the like) ride along.
+function codedError(code: string, message: string, hints: object = {}): Error & { code: string } {
+    const error = Object.assign(new Error(message), hints, { code });
+    error.name = 'BridgeError';
+    return error;
+}
 
 const DEFAULT_ACCOUNT: Account = { id: 'acct-0', name: 'Main' };
 
@@ -159,15 +168,19 @@ export class MockXChainProvider implements XChainProvider {
         };
     }
 
-    // Priority: blockedSite > throttle > rejectAll. Returning the
-    // matching error result lets sign* methods short-circuit before
-    // doing any work - mirrors how the production wallet checks site
-    // status before opening an approval window.
-    private maybeBlockedOrThrottled(): { ok: false; error: 'BLOCKED_BY_USER' } | { ok: false; error: 'THROTTLED'; retryAfterMs: number; burst?: number; windowMs?: number } | null {
+    // Priority: blockedSite > not connected > throttle > rejectAll. Returning
+    // the matching error result lets sign* methods short-circuit before doing
+    // any work, which mirrors how the production wallet checks site status
+    // and the connection before it opens an approval window. connect() passes
+    // forConnect so only the blocked-site check applies to it.
+    private maybeBlockedOrThrottled(forConnect = false): { ok: false; error: 'BLOCKED_BY_USER' | 'NOT_CONNECTED' } | { ok: false; error: 'THROTTLED'; retryAfterMs: number; burst?: number; windowMs?: number } | null {
         if (this.opts.blockedSite) {
             return { ok: false, error: 'BLOCKED_BY_USER' };
         }
-        if (this.opts.throttle) {
+        if (!forConnect && !this.connected) {
+            return { ok: false, error: 'NOT_CONNECTED' };
+        }
+        if (!forConnect && this.opts.throttle) {
             const t = this.opts.throttle;
             const out: { ok: false; error: 'THROTTLED'; retryAfterMs: number; burst?: number; windowMs?: number } = {
                 ok: false,
@@ -196,8 +209,11 @@ export class MockXChainProvider implements XChainProvider {
     }
 
     async connect(opts: ConnectOpts = {}): Promise<ConnectResult> {
-        const blockedOrThrottled = this.maybeBlockedOrThrottled();
+        const blockedOrThrottled = this.maybeBlockedOrThrottled(true);
         if (blockedOrThrottled) return blockedOrThrottled;
+        if (!isBridgeVersionSupported(opts.requiredBridgeVersion)) {
+            return { ok: false, error: 'BRIDGE_VERSION_MISMATCH' };
+        }
         if (!this.opts.autoApprove) {
             return { ok: false, error: 'USER_REJECTED' };
         }
@@ -250,6 +266,7 @@ export class MockXChainProvider implements XChainProvider {
     }
 
     async getActiveChains(): Promise<ChainId[]> {
+        this.assertConnected();
         return this.opts.activeChains;
     }
 
@@ -257,7 +274,6 @@ export class MockXChainProvider implements XChainProvider {
         const blockedOrThrottled = this.maybeBlockedOrThrottled();
         if (blockedOrThrottled) return blockedOrThrottled;
         if (this.opts.rejectAll) return { ok: false, error: 'USER_REJECTED' };
-        this.assertConnected();
         return {
             ok: true,
             address: params.address,
@@ -272,7 +288,6 @@ export class MockXChainProvider implements XChainProvider {
         const blockedOrThrottled = this.maybeBlockedOrThrottled();
         if (blockedOrThrottled) return blockedOrThrottled;
         if (this.opts.rejectAll) return { ok: false, error: 'USER_REJECTED' };
-        this.assertConnected();
         if (!this.opts.supportedActions.includes(params.action)) {
             return {
                 ok: false,
@@ -295,7 +310,6 @@ export class MockXChainProvider implements XChainProvider {
     async signPsbt(params: SignPsbtParams): Promise<SignPsbtResult> {
         const blockedOrThrottled = this.maybeBlockedOrThrottled();
         if (blockedOrThrottled) return blockedOrThrottled;
-        this.assertConnected();
         const shapeError = signingPathsError(params.signingPaths);
         if (shapeError) return { ok: false, error: 'INVALID_PARAMS', message: shapeError };
         if (params.broadcast !== undefined && typeof params.broadcast !== 'boolean') {
@@ -313,7 +327,6 @@ export class MockXChainProvider implements XChainProvider {
         const blockedOrThrottled = this.maybeBlockedOrThrottled();
         if (blockedOrThrottled) return blockedOrThrottled;
         if (this.opts.rejectAll) return { ok: false, error: 'USER_REJECTED' };
-        this.assertConnected();
         return approvedCoSign(params);
     }
 
@@ -321,7 +334,6 @@ export class MockXChainProvider implements XChainProvider {
         const blockedOrThrottled = this.maybeBlockedOrThrottled();
         if (blockedOrThrottled) return blockedOrThrottled;
         if (this.opts.rejectAll) return { ok: false, error: 'USER_REJECTED' };
-        this.assertConnected();
         const chainId = this.opts.activeChains.find((id) => (
             (!params.chainId || params.chainId === id)
             && this.opts.addresses[id]?.some((a) => !params.chains?.length || params.chains.includes(a.chain))
@@ -359,6 +371,17 @@ export class MockXChainProvider implements XChainProvider {
     async parallel(
         actions: SignActionParams[],
     ): Promise<SignActionResult[]> {
+        if (!Array.isArray(actions) || actions.length === 0) {
+            throw codedError('INVALID_PARAMS', 'parallel requires a non-empty actions array');
+        }
+        const blockedOrThrottled = this.maybeBlockedOrThrottled();
+        if (blockedOrThrottled) {
+            throw codedError(
+                blockedOrThrottled.error,
+                `MockXChainProvider: ${blockedOrThrottled.error}`,
+                blockedOrThrottled,
+            );
+        }
         const results: SignActionResult[] = [];
         for (const a of actions) results.push(await this.signAction(a));
         return results;
@@ -390,9 +413,14 @@ export class MockXChainProvider implements XChainProvider {
         }
     }
 
+    // Throws NOT_CONNECTED for the methods that return a bare value rather than
+    // a result object, so a dApp sees the same coded error the wallet produces.
     private assertConnected(): void {
         if (!this.connected) {
-            throw new Error('MockXChainProvider: not connected');
+            throw codedError(
+                'NOT_CONNECTED',
+                'NOT_CONNECTED: MockXChainProvider is not connected',
+            );
         }
     }
 }

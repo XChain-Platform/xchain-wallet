@@ -10,7 +10,7 @@
 
 import { useMemo } from 'react';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
-import { t } from '../../i18n/index.js';
+import { getFormatLocale, t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
 
 /**
@@ -96,7 +96,7 @@ export function describeChartSeries(series, options = {}) {
         formatValue = formatChartValue,
     } = options;
     const values = Array.isArray(series) ? series.filter(Number.isFinite) : [];
-    if (values.length === 0) return `${label}. No data.`;
+    if (values.length === 0) return t('components.sparkline.noData', { label });
 
     const start = values[0];
     const end = values[values.length - 1];
@@ -105,13 +105,22 @@ export function describeChartSeries(series, options = {}) {
     const delta = end - start;
     const change = `${delta > 0 ? '+' : delta < 0 ? '-' : ''}${formatValue(Math.abs(delta))}`;
     const pctDisplay = start !== 0 ? percentChangeDisplay((delta / start) * 100) : null;
-    const percentage = pctDisplay ? ` (${pctDisplay.text})` : '';
-    const selectedRange = rangeLabel ? ` Range ${rangeLabel}.` : '';
-    return `${label}.${selectedRange} Values range from ${formatValue(low)} to ${formatValue(high)}. Start ${formatValue(start)}. End ${formatValue(end)}. Change ${change}${percentage}.`;
+    return t('components.sparkline.summary', {
+        label,
+        rangeState: rangeLabel ? 'withRange' : 'withoutRange',
+        range: rangeLabel || '',
+        low: formatValue(low),
+        high: formatValue(high),
+        start: formatValue(start),
+        end: formatValue(end),
+        change,
+        percentageState: pctDisplay ? 'withPercentage' : 'withoutPercentage',
+        percentage: pctDisplay?.text || '',
+    });
 }
 
 function formatChartValue(value) {
-    return new Intl.NumberFormat('en-US', { maximumSignificantDigits: 8 }).format(value);
+    return new Intl.NumberFormat(getFormatLocale(), { maximumSignificantDigits: 8 }).format(value);
 }
 
 // FNV-1a hash of a string → uint32. Used as the seed for the

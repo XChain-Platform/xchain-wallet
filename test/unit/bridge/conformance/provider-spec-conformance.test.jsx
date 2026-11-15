@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import React from 'react';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -39,6 +39,16 @@ const contentSource = readFileSync(
     join(process.cwd(), 'packages/extension/src/content/contentScript.js'),
     'utf8',
 );
+const handlersSource = readFileSync(
+    join(process.cwd(), 'packages/extension/src/bridge/handlers.js'),
+    'utf8',
+);
+const platformSpecPath = [
+    join(process.cwd(), '..', 'platform-root', 'claude', 'specs', 'living', 'XCHAIN_WALLET_SPEC.md'),
+    join(process.cwd(), '..', 'claude', 'specs', 'living', 'XCHAIN_WALLET_SPEC.md'),
+].find(existsSync);
+const platformSpecSource = platformSpecPath ? readFileSync(platformSpecPath, 'utf8') : null;
+if (!platformSpecSource) console.warn('SKIP: living wallet spec is absent from this checkout');
 
 function interfaceFieldNames(name) {
     const match = bridgeSpecSource.match(new RegExp(`export interface ${name} \\{([\\s\\S]*?)\\n\\}`));
@@ -77,6 +87,14 @@ function literal(name) {
     return match[1];
 }
 
+function specSection(start, end) {
+    const from = platformSpecSource.indexOf(start);
+    const to = platformSpecSource.indexOf(end, from + start.length);
+    expect(from, `${start} exists`).toBeGreaterThanOrEqual(0);
+    expect(to, `${end} follows ${start}`).toBeGreaterThan(from);
+    return platformSpecSource.slice(from, to);
+}
+
 afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
@@ -98,6 +116,26 @@ describe('provider interface conformance', () => {
             expect(typeof MockXChainProvider.prototype[method], method).toBe('function');
             expect(injectSource, method).toMatch(new RegExp(`\\b${method}\\s*\\(`));
         }
+    });
+
+    it('pins every request-path method list to XChainProvider', () => {
+        const expected = interfaceMembers().methods
+            .filter((method) => method !== 'on' && method !== 'off')
+            .sort();
+        expect(expected.length).toBeGreaterThanOrEqual(13);
+        const inject = [...injectSource.matchAll(/\b(?:send|sendResult)\(\s*'bridge\.(\w+)'/g)]
+            .map((match) => match[1]).sort();
+        const publicBody = contentSource.match(/const PUBLIC_TYPES = new Set\(\[([\s\S]*?)\]\);/);
+        expect(publicBody, 'content script declares PUBLIC_TYPES').not.toBeNull();
+        const publicEntries = [...publicBody[1].matchAll(/'([^']+)'/g)]
+            .map((match) => match[1]);
+        expect(publicEntries.every((entry) => entry.startsWith('bridge.'))).toBe(true);
+        const publicTypes = publicEntries.map((entry) => entry.slice('bridge.'.length)).sort();
+        const registered = [...handlersSource.matchAll(/\bregister\(\s*'bridge\.(\w+)'/g)]
+            .map((match) => match[1]).sort();
+        expect([...new Set(inject)]).toEqual(expected);
+        expect([...new Set(publicTypes)]).toEqual(expected);
+        expect([...new Set(registered)]).toEqual(expected);
     });
 
     it('serves approved and rejected coSign results from the mock', async () => {
@@ -131,6 +169,51 @@ describe('provider interface conformance', () => {
         expect(result.supportedVersions).toContain(result.version);
     });
 
+    it('matches wallet version negotiation on the reference mock', async () => {
+        for (const range of ['^0.1.0', '0.1.0', '~0.1.0', '^1.0.0', 'garbage', '', undefined]) {
+            const result = await new MockXChainProvider().connect({ requiredBridgeVersion: range });
+            expect(result.ok, String(range)).toBe(runtime.isBridgeVersionSupported(range));
+            if (!result.ok) expect(result.error).toBe('BRIDGE_VERSION_MISMATCH');
+        }
+        const refused = new MockXChainProvider();
+        await expect(refused.connect({ requiredBridgeVersion: '^1.0.0' }))
+            .resolves.toEqual({ ok: false, error: 'BRIDGE_VERSION_MISMATCH' });
+        await expect(refused.getAccounts()).rejects.toMatchObject({ code: 'NOT_CONNECTED' });
+    });
+
+    it('resolves unconnected result methods with NOT_CONNECTED', async () => {
+        const provider = new MockXChainProvider({
+            throttle: { retryAfterMs: 10 },
+            rejectAll: true,
+        });
+        const calls = [
+            () => provider.signMessage({ chainId: 'bitcoin-regtest', address: 'a', message: 'm' }),
+            () => provider.signAction({ chainId: 'bitcoin-regtest', action: 'SEND', params: {} }),
+            () => provider.signPsbt({ chainId: 'bitcoin-regtest', psbtHex: '00', signingPaths: [] }),
+            () => provider.coSign({ chainId: 'bitcoin-regtest', aggregateAddress: 'a', psbtHex: '00' }),
+            () => provider.signIn({ appId: 'app' }),
+        ];
+        for (const call of calls) {
+            await expect(call()).resolves.toEqual({ ok: false, error: 'NOT_CONNECTED' });
+        }
+        await expect(provider.parallel([{ chainId: 'bitcoin-regtest', action: 'SEND', params: {} }]))
+            .rejects.toMatchObject({ name: 'BridgeError', code: 'NOT_CONNECTED' });
+    });
+
+    it('rejects unconnected reads with a published code', async () => {
+        const provider = new MockXChainProvider();
+        const reads = [
+            () => provider.getAccounts(),
+            () => provider.getAddresses('bitcoin-regtest'),
+            () => provider.getBalances('bitcoin-regtest', 'a'),
+            () => provider.getActiveChains(),
+        ];
+        for (const read of reads) {
+            await expect(read()).rejects.toMatchObject({ name: 'BridgeError', code: 'NOT_CONNECTED' });
+        }
+        await expect(provider.getSupportedChains()).resolves.toHaveLength(1);
+    });
+
     it('matches mock sign-in filters to the published parameters', async () => {
         const chains = ['bitcoin-regtest', 'litecoin-regtest'];
         const descriptors = chains.map((id) => BUNDLED_DESCRIPTORS.find((item) => item.id === id));
@@ -154,6 +237,32 @@ describe('provider interface conformance', () => {
             .resolves.toEqual({ ok: false, error: 'ADDRESS_NOT_AUTHORIZED' });
         await expect(provider.signIn({ appId: 'example' }))
             .resolves.toMatchObject({ ok: true, address: 'btc-address', chainId: 'bitcoin-regtest' });
+    });
+});
+
+describe.skipIf(!platformSpecSource)('living spec conformance', () => {
+    it('keeps the provider surface and result summaries current', () => {
+        const section = specSection('### 43.2', '### 43.3');
+        const fence = section.match(/```ts\n([\s\S]*?)```/);
+        expect(fence, 'section 43.2 has a TypeScript fence').not.toBeNull();
+        const methods = [...fence[1].matchAll(/^\s{2}(\w+)(?:<.*>)?\s*\(/gm)]
+            .map((match) => match[1]).sort();
+        expect(methods).toEqual(interfaceMembers().methods.sort());
+        expect(section).toMatch(/signMessage\(\{ chainId, address, message/);
+        expect(section).toMatch(/actionIndex\?[^\n]*optional/);
+        expect(section).toMatch(/signPsbt[^\n]*does not broadcast/);
+        expect(section).toMatch(/supportedVersions[^\n]*permissions/);
+    });
+
+    it('keeps the sign-in challenge on the validated v2 format', () => {
+        const section = specSection('### 43.6', '### 43.7');
+        expect(section).toContain(runtime.SIGN_IN_CHALLENGE_PREFIX);
+        expect(section).not.toMatch(/XChain Sign-In \|/);
+        expect(section).toContain('validateSignInChallenge');
+        expect(section).toMatch(/MUST[^\n]*origin/);
+        for (const field of interfaceFieldNames('SignInSuccess')) {
+            expect(section, `SignInSuccess.${field}`).toContain(field);
+        }
     });
 });
 

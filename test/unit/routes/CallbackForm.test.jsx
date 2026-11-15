@@ -88,7 +88,7 @@ function mount(overrides = {}, props = {}) {
 }
 
 async function readySubmit() {
-    const button = await screen.findByRole('button', { name: 'Execute callback' });
+    const button = await screen.findByRole('button', { name: 'Recall tokens' });
     await waitFor(() => expect(button.disabled).toBe(false));
     return button;
 }
@@ -122,7 +122,7 @@ describe('callback field validation', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
         );
-        expect(screen.getByRole('button', { name: 'Execute callback' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Recall tokens' })).toBeDisabled();
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
@@ -172,7 +172,7 @@ describe('CallbackForm review safety', () => {
         const messages = await screen.findAllByText(/no callback configured/i);
         expect(messages).toHaveLength(1);
         expect(messages[0].closest('dd')).not.toBeNull();
-        expect(screen.getByRole('button', { name: 'Execute callback' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Recall tokens' })).toBeDisabled();
         expect(screen.queryByText(/nothing to recall/i)).toBeNull();
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
@@ -430,7 +430,7 @@ describe('CallbackForm with an unread token record', () => {
         expect(screen.queryByText(/has no callback configured/)).toBeNull();
         expect(screen.queryByText(/No callback configured/)).toBeNull();
         expect(screen.getAllByText('Unavailable').length).toBeGreaterThan(0);
-        expect(screen.getByRole('button', { name: 'Execute callback' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Recall tokens' })).toBeDisabled();
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 });

@@ -243,7 +243,10 @@
 
         parallel(actions) {
             if (!Array.isArray(actions) || actions.length === 0) {
-                return Promise.reject(new Error('xchain: parallel requires a non-empty actions array'));
+                const err = new Error('xchain: parallel requires a non-empty actions array');
+                err.name = 'BridgeError';
+                err.code = 'INVALID_PARAMS';
+                return Promise.reject(err);
             }
             return send('bridge.parallel', { actions });
         },

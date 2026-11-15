@@ -536,6 +536,21 @@ describe('PairPartnerWallet: exchange stage', () => {
         expect(screen.getByRole('alert')).not.toHaveTextContent(/pairPartner:/);
     });
 
+    it('replaces a nested builder name in a pairing refusal with the house sentence', async () => {
+        const messaging = mkMessaging({
+            pairPartnerRequest: vi.fn(async () => {
+                throw new Error('pairPartner: collectPairingKeys: none of the requested chains resolved a derivation path');
+            }),
+        });
+        await reachExchange(messaging);
+        fill(/Paste the other wallet's code/i, PARTNER_CODE);
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Pair a signer' }));
+        });
+        expect(screen.getByRole('alert')).toHaveTextContent('The two wallets could not be paired.');
+        expect(screen.getByRole('alert')).not.toHaveTextContent(/collectPairingKeys|derivation path/);
+    });
+
     it('lands through onPaired when Back leaves after the phrase was imported', async () => {
         const messaging = mkMessaging();
         const onBack = vi.fn();

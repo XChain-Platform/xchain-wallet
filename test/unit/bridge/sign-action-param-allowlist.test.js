@@ -132,6 +132,22 @@ describe('bridge.signAction refuses page params that diverge the signature', () 
         expect(calls).toHaveLength(0);
     });
 
+    for (const key of ['asset', 'tick']) {
+        it(`SWEEP: a per-asset ${key} is refused before any prompt`, async () => {
+            const { approvals, calls } = fakeApprovals();
+            const resp = await signAction(vault, approvals, {
+                fromAddress: 'bcrt1qfrom',
+                toAddress: 'bcrt1qto',
+                [key]: 'BTC',
+            }, 'SWEEP');
+
+            expect(resp.ok).toBe(false);
+            expect(resp.error?.code ?? resp.error).toBe('INVALID_PARAMS');
+            expect(resp.error?.message ?? resp.message).toMatch(/per-asset SWEEP/);
+            expect(calls).toHaveLength(0);
+        });
+    }
+
     it('a clean request still reaches the approval prompt', async () => {
         // The negative control for the three cases above: without it, a handler
         // that refused EVERYTHING would pass all of them. The legacy in-repo

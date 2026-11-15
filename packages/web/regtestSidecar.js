@@ -35,9 +35,12 @@
 // BEHAVIOR-NEUTRAL BY CONSTRUCTION, which is why it is safe to do at build
 // time to someone else's package: the block it deletes is guarded by a
 // capability check that is false in every browser and every WebView, so a
-// `store` bundle could never have executed it. `default` builds are untouched,
-// because the desktop shell wraps the same SPA and a developer running it
-// against a local regtest node is a real user of that sidecar.
+// `store` bundle could never have executed it. `default` builds are untouched
+// by scope choice, not because a default bundle reads the sidecar: the
+// desktop renderer is sandboxed with browser stubs for `fs` and `path`, so the
+// loader is equally dead there, and its Vite config does not register this
+// plugin. The sidecar's real readers are Node processes that load the SDK,
+// which this transform cannot reach.
 //
 // HASH-NEUTRAL TOO, and that part is not obvious: the `$`-prefixed keys are
 // descriptors, and `consensusSubset()` strips every descriptor before hashing

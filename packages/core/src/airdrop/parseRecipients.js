@@ -324,11 +324,12 @@ export async function classifyRecipientEntriesAsync(entries, chain, options = {}
  * Compare the recipient list the wallet believes it published against the
  * list the chain actually stored, once the LIST action has been indexed.
  *
- * that second half: the parser check is client-side, so it can still
- * be wrong (an older wallet build, a chain rule the wallet does not model
- * yet). The indexer silently drops items it rejects into
- * `list_items_invalid` and marks the LIST action itself valid, so the
- * only way to learn the real membership is to read the stored list back.
+ * This is the read-back half of recipient validation; the chain-aware
+ * `isRecipientForChain` check at parse time is the other half. That parser
+ * check is client-side, so it can still be wrong (an older wallet build, a
+ * chain rule the wallet does not model yet). The indexer silently drops items
+ * it rejects into `list_items_invalid` and marks the LIST action itself valid,
+ * so the only way to learn the real membership is to read the stored list back.
  * Doing that BEFORE pricing step 2 is what stops the user being quoted a
  * per-recipient AIRDROP fee for recipients that do not exist.
  *

@@ -441,7 +441,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                                     </option>
                                 ))}
                                 {stray ? (
-                                    <option value={rowAction}>{`${rowAction} (not in the allowed actions above)`}</option>
+                                    <option value={rowAction}>{`${actionMessageName(rowAction)} (not in the allowed actions above)`}</option>
                                 ) : null}
                             </Select>
                             <Input

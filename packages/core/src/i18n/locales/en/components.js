@@ -290,6 +290,7 @@ const messages = {
     'components.orderbookPanel.orderBookLevels': '{title} order book levels',
     'components.orderbookPanel.price': 'Price (',
     'components.orderbookPanel.total': 'Total (',
+    'components.orderbookPanel.sizeLabel': 'Size',
     'components.orderbookPanel.pickPrice': 'Pick {value} price {displayPrice}',
     'components.collectiblesView.collectiblesAppearHereAfterThis':
         'Collectibles appear here after this wallet receives them.',
@@ -342,6 +343,9 @@ const messages = {
     'components.marketChart.chartTimeframe': 'Chart timeframe',
     'components.marketChart.loadingPriceChart': 'Loading price chart',
     'components.marketChart.noTradesYetInThis': 'No trades yet in this market.',
+    'components.marketChart.priceChart': '{tick1}/{tick2} price chart',
+    'components.marketChart.noPriceTrend': '{tick1}/{tick2} price chart. No price trend available for the {range} range.',
+    'components.marketChart.chartValue': '{price} {unit}',
     'components.networkFilter.searchNetworks': 'Search networks…',
     'components.networkFilter.searchNetworks2': 'Search networks',
     'components.networkFilter.noMatchingNetworks': 'No matching networks.',
@@ -402,6 +406,8 @@ const messages = {
     'components.ownerWithdrawWarning.onlySendTokensHereIf':
         'Only send tokens here if you trust the deployer.',
     'components.sparkline.priceTrend': 'Price trend',
+    'components.sparkline.noData': '{label}. No data.',
+    'components.sparkline.summary': '{label}.{rangeState, select, withRange { Range {range}.} other {}} Values range from {low} to {high}. Start {start}. End {end}. Change {change}{percentageState, select, withPercentage { ({percentage})} other {}}.',
     'components.tokenField.selectAToken': 'Select a token',
     'components.hwFirmwareBanner.openVendorUpdateTool': 'Open vendor update tool',
     'components.keyQR.qrCode': 'QR code',

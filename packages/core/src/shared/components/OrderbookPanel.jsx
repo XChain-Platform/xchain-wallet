@@ -39,6 +39,7 @@ import { startVisibleInterval } from '../utils/visibleInterval.js';
 import styles from './MarketTrading.module.css';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/flows.js';
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -209,7 +210,7 @@ function LevelRow({ level, maxCumulative, side, onPick }) {
         >
             <td
                 className={`${tableStyles.cell} ${tableStyles.numeric}`}
-                data-label="Price"
+                data-label={t('components.placeOrderPanel.price')}
                 title={level.displayPrice}
                 style={{ color: side === 'bid' ? 'var(--xc-success)' : 'var(--xc-danger-fg)' }}
             >
@@ -224,12 +225,12 @@ function LevelRow({ level, maxCumulative, side, onPick }) {
                     </button>
                 ) : formatBookNumber(level.displayPrice)}
             </td>
-            <td className={`${tableStyles.cell} ${tableStyles.numeric}`} data-label="Size" title={level.displaySize}>
+            <td className={`${tableStyles.cell} ${tableStyles.numeric}`} data-label={t('components.orderbookPanel.sizeLabel')} title={level.displaySize}>
                 {formatBookNumber(level.displaySize)}
             </td>
             <td
                 className={`${tableStyles.cell} ${tableStyles.numeric}`}
-                data-label="Total"
+                data-label={t('flows.feesCard.total')}
                 title={level.cumulative}
                 style={{ color: 'var(--xc-text-muted)' }}
             >

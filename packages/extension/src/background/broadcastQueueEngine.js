@@ -64,8 +64,11 @@ function queuedRevealFields(source) {
 export function createBroadcastQueueEngine({ store: queueStore, importedAddressIdsFor, discardQueuedBroadcast }) {
     /** @type {Map<string, import('./broadcastQueueStorage.js').QueueEntry[]>} */
     const queuedBroadcasts = queueStore.queues;
-    // Wallets removed in this process; an in-flight send dies with the process and ids are random UUIDs, so it never clears.
-    const removedWallets = new Set();
+    // Wallets removed while this store is live. The set sits on the shared
+    // store, not this engine: a host a lock tore down keeps a broadcast on the
+    // network, and its late failure hook must see a removal a later host made.
+    // Ids are random UUIDs, so it never clears short of a seal.
+    const removedWallets = queueStore.removedWallets ?? (queueStore.removedWallets = new Set());
     // Fold a persisted snapshot into the live map instead of replacing it. A
     // retried rehydrate can land after this process already queued entries of
     // its own, and `getQueue` hands the routes the live array they splice, so
@@ -866,6 +869,18 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         return async (entry) => (await enqueueSignedBroadcast(walletId, entry)).persisted;
     }
     /**
+     * Whether `pruneWalletFromQueue` has run for this wallet in this process.
+     * A caller that awaits anything between its own checks and a push re-asks
+     * this immediately before the push, so a removal that landed meanwhile is
+     * seen.
+     *
+     * @param {string} walletId
+     * @returns {boolean}
+     */
+    function isWalletRemoved(walletId) {
+        return removedWallets.has(walletId);
+    }
+    /**
      * Add one signed transaction to the live queue and wait for its durable
      * snapshot. Direct broadcasters use the returned entry to report the
      * handoff without duplicating the queue's rehydrate and twin rules.
@@ -876,7 +891,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      */
     async function enqueueSignedBroadcast(walletId, entry) {
         // Refuse a removed wallet: no route lists its queue, so the entry would never be sent or discarded.
-        if (removedWallets.has(walletId)) return { entry: null, persisted: false };
+        if (isWalletRemoved(walletId)) return { entry: null, persisted: false };
         await ensureQueueLoaded();
         // A first list in the gap after the 'queued' stamp may have rebuilt
         // these bytes already; give that entry the verdict instead of a twin.
@@ -1089,6 +1104,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         reconcileRestoredEntries,
         enqueueOnBroadcastFailure,
         enqueueSignedBroadcast,
+        isWalletRemoved,
         pushQueueEntry,
         pendingTxIdsOf,
         settleQueuedPendingTx,

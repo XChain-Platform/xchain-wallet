@@ -8,8 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// On-chain TIS documents (Token_Information_Standard.md On-Chain
-// Format): DESCRIPTION = "action:<index>" names a same-chain FILE whose
+// On-chain TIS documents
+// (xchain-documentation/protocol/token-information-standard.md#on-chain-format-action-index):
+// DESCRIPTION = "action:<index>" names a same-chain FILE whose
 // bytes are the TIS JSON. The wallet resolves it through the explorer's
 // raw FILE endpoint instead of an external fetch.
 

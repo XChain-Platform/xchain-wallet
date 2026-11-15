@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     AddressField,
@@ -183,7 +184,7 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
                 setFromAddressId(sourceId);
                 setLoadError(null);
             })
-            .catch((err) => { if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.'); });
+            .catch((err) => { if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load addresses.')); });
         return () => { cancelled = true; };
     }, [walletId, chainId, messaging]);
 

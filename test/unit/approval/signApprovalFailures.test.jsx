@@ -72,6 +72,27 @@ describe('SignApproval wallet and permission failures', () => {
         expect(mocks.resolveApproval).not.toHaveBeenCalled();
     });
 
+    it('hides background host wording when wallet discovery rejects with an Error', async () => {
+        mocks.listWallets.mockRejectedValue(new Error('wallets.list: IndexedDB transaction aborted'));
+        mount('signMessage', {
+            chainId: 'bitcoin-regtest',
+            payload: { message: 'hello' },
+        });
+
+        expect(await screen.findByText('Failed to load wallets.')).toBeTruthy();
+        expect(screen.queryByText(/wallets\.list|IndexedDB/)).toBeNull();
+    });
+
+    it('keeps a plain sentence when wallet discovery rejects with user copy', async () => {
+        mocks.listWallets.mockRejectedValue(new Error('This wallet is locked. Unlock it and try again.'));
+        mount('signMessage', {
+            chainId: 'bitcoin-regtest',
+            payload: { message: 'hello' },
+        });
+
+        expect(await screen.findByText('This wallet is locked. Unlock it and try again.')).toBeTruthy();
+    });
+
     it('fails closed when no wallet proves ownership of the requested signer', async () => {
         mocks.listWallets.mockResolvedValue([
             { id: 'wallet-1', name: 'Wallet 1' },

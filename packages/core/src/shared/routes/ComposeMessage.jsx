@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FieldNote, FormPage, Icon, IconSelect, Input, NetworkField, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
@@ -291,7 +292,7 @@ function ComposeMessageForm({
                 }
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || t('composeMessage.loadFailed'));
+                if (!cancelled) setLoadError(userFacingMessage(err, t('composeMessage.loadFailed')));
             });
         return () => { cancelled = true; };
     }, [walletId, messaging, initialChainId, fromAddressId]);
@@ -584,10 +585,7 @@ function ComposeMessageForm({
         hardware: 'sendHandshakeHw',
     });
 
-    // Encrypt + compose + tamper-check + pre-flight all run HOST-side; Approve
-    // signs the byte-identical prebuilt PSBT over the SAME ciphertext (passed
-    // back as `prebuiltParams`, since re-encrypting would change the bytes).
-    async function openConfirmScreen() {
+    function buildMessageRequest() {
         const from = {
             address: fromAddress.address,
             publicKey: fromAddress.publicKey,
@@ -596,18 +594,49 @@ function ComposeMessageForm({
             source: fromAddress.source,
             signerId: fromAddress.signerId,
         };
-        // chainId = the recipient's chain (sets COIN, resolves their key);
-        // broadcastChainId = the delivery network that funds + pays the fee.
-        const base = {
-            walletId,
-            chainId: destChainId,
-            broadcastChainId: chainId,
+        return {
             from,
-            destination: toAddress.trim(),
-            message: wireMessage,
-            method: sendUnencrypted ? null : (encryptionChoice === 'ecdh' && !hw ? 2 : 1),
-            ...(feePerKb != null ? { feePerKb } : {}),
+            base: {
+                walletId,
+                chainId: destChainId,
+                broadcastChainId: chainId,
+                from,
+                destination: toAddress.trim(),
+                message: wireMessage,
+                method: sendUnencrypted ? null : (encryptionChoice === 'ecdh' && !hw ? 2 : 1),
+                ...(feePerKb != null ? { feePerKb } : {}),
+            },
         };
+    }
+
+    function mapSubmitFailure(err) {
+        if (err?.name === 'InvalidPasswordError') {
+            return { message: t('composeMessage.incorrectPassword') };
+        }
+        if (err?.name === 'PubkeyNotFoundError') {
+            return { message: t('composeMessage.keyUnavailable'), missingKey: true };
+        }
+        if (err?.name === 'PubkeyMismatchError') return { message: KEY_MISMATCH_MESSAGE };
+        const message = submitFailureMessage(err, {
+            chainId, coinTicker: nativeTicker, verb: 'send this message', fallback: err?.message || t('composeMessage.sendFailed'),
+        });
+        return { message, details: submitFailureDetails(err, message) };
+    }
+
+    function showSubmitFailure(err, { clearPubkeyError = false } = {}) {
+        const failure = mapSubmitFailure(err);
+        if (failure.missingKey) {
+            setPubkeyState('missing');
+            if (clearPubkeyError) setPubkeyError(null);
+        }
+        setSubmitError(failure.message, failure.details);
+    }
+
+    // Encrypt + compose + tamper-check + pre-flight all run HOST-side; Approve
+    // signs the byte-identical prebuilt PSBT over the SAME ciphertext (passed
+    // back as `prebuiltParams`, since re-encrypting would change the bytes).
+    async function openConfirmScreen() {
+        const { from, base } = buildMessageRequest();
         setSubmitError(null);
         try {
             const res = await actionConfirm.run({
@@ -628,29 +657,7 @@ function ComposeMessageForm({
             setStage('done');
         } catch (err) {
             if (isUserRejection(err)) return;
-            if (err?.name === 'PubkeyNotFoundError') {
-                setPubkeyState('missing');
-                setSubmitError(t('composeMessage.keyUnavailable'));
-                return;
-            }
-            // Retrying cannot help: the key on offer would encrypt to someone else.
-            if (err?.name === 'PubkeyMismatchError') {
-                setSubmitError(KEY_MISMATCH_MESSAGE);
-                return;
-            }
-            // submitFailureMessage owns the translation for the shapes the
-            // encoder writes for a log ("no spendable UTXOs found for the
-            // funding address"), since this is the screen a user reads. The
-            // fallback keeps err.message AHEAD of the house string, which is
-            // the helper's stated contract ("the message the form would have
-            // shown") and what every other swept form passes. Dropping that
-            // half swallows a specific host reason, such as an
-            // insufficient-funds shortfall naming the amount required, behind
-            // a bare "Send failed."
-            const failureMessage = submitFailureMessage(err, {
-                chainId, coinTicker: nativeTicker, verb: 'send this message', fallback: err?.message || t('composeMessage.sendFailed'),
-            });
-            setSubmitError(failureMessage, submitFailureDetails(err, failureMessage));
+            showSubmitFailure(err);
         }
     }
 
@@ -728,59 +735,16 @@ function ComposeMessageForm({
             return;
         }
         try {
-            const base = {
-                walletId,
-                // chainId = the recipient's chain (sets COIN, resolves their
-                // key); broadcastChainId = the delivery network that funds + pays
-                // the fee. They differ when messaging e.g. a BTC address via DOGE.
-                chainId: destChainId,
-                broadcastChainId: chainId,
-                from: {
-                    address: fromAddress.address,
-                    publicKey: fromAddress.publicKey,
-                    derivationPath: fromAddress.derivationPath,
-                    addressId: fromAddress.id,
-                    source: fromAddress.source,
-                    signerId: fromAddress.signerId,
-                },
-                destination: toAddress.trim(),
-                message: wireMessage,
-                method: sendUnencrypted
-                    ? null
-                    : (encryptionChoice === 'ecdh' && !hw ? 2 : 1),
-                ...(feePerKb != null ? { feePerKb } : {}),
-            };
-            const r = hw
-                ? await messaging.messageActionHw({ ...base, signerId: fromAddress.signerId })
-                : await messaging.messageAction({ ...base, password });
+            const { base } = buildMessageRequest();
+            const r = await messaging.messageAction({ ...base, password });
             if (onSent) { onSent(r); return; }
             setResult(r);
             setStage('done');
         } catch (err) {
-            const name = err?.name;
-            if (name === 'InvalidPasswordError') {
-                setSubmitError(t('composeMessage.incorrectPassword'));
-            } else if (name === 'PubkeyNotFoundError') {
-                setSubmitError(t('composeMessage.keyUnavailable'));
-                setPubkeyState('missing');
-                setPubkeyError(null);
-            } else if (name === 'PubkeyMismatchError') {
-                setSubmitError(KEY_MISMATCH_MESSAGE);
-            } else {
-                // Same translation, and the same fallback, as the confirm path
-                // above. The helper's own header names this exact trap: a form
-                // swept on one submit path and not the other still ships wire
-                // wording on the other.
-                const failureMessage = submitFailureMessage(err, {
-                    chainId, coinTicker: nativeTicker, verb: 'send this message', fallback: err?.message || t('composeMessage.sendFailed'),
-                });
-                setSubmitError(failureMessage, submitFailureDetails(err, failureMessage));
-            }
+            showSubmitFailure(err, { clearPubkeyError: true });
             setStage('review');
-            if (!hw) {
-                passwordRef.current?.focus();
-                passwordRef.current?.select();
-            }
+            passwordRef.current?.focus();
+            passwordRef.current?.select();
         }
     }
 

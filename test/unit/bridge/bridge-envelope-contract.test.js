@@ -577,7 +577,7 @@ describe('the signing methods answer their published success shapes', () => {
             expect(message.ok).toBe(true);
             expect(action.ok).toBe(true);
             expect(psbt.ok).toBe(true);
-            expect(flowMocks.signMessageFlow.mock.calls.at(-1)[0].walletId).toBe('wallet-1');
+            expect(flowMocks.signMessageFlow.mock.calls.at(-1)[0]).toMatchObject({ walletId: 'wallet-1', addressType: 'p2wpkh' });
             expect(flowMocks.sendToken.mock.calls.at(-1)[0].walletId).toBe('wallet-1');
             expect(flowMocks.signPsbtFlow.mock.calls.at(-1)[0].walletId).toBe('wallet-1');
         });
@@ -839,8 +839,8 @@ describe('bridge.signIn offers and enforces the site grant', () => {
             : coin === 'bitcoin' ? CHAIN : coin === 'litecoin' ? LTC : null),
     };
     const ADDRS = [
-        { id: 'addr-1', address: FROM, chain: 'bitcoin', network: 'regtest', accountId: 'acct-primary', derivationPath: "m/84'/1'/0'/0/0" },
-        { id: 'addr-2', address: SECOND, chain: 'bitcoin', network: 'regtest', accountId: 'acct-other-wallet', derivationPath: "m/84'/1'/0'/0/1" },
+        { id: 'addr-1', address: FROM, addressType: 'p2wpkh', chain: 'bitcoin', network: 'regtest', accountId: 'acct-primary', derivationPath: "m/84'/1'/0'/0/0" },
+        { id: 'addr-2', address: SECOND, addressType: 'p2wpkh', chain: 'bitcoin', network: 'regtest', accountId: 'acct-other-wallet', derivationPath: "m/84'/1'/0'/0/1" },
         { id: 'addr-3', address: OUTSIDE, chain: 'bitcoin', network: 'regtest', accountId: 'acct-second', derivationPath: "m/84'/1'/1'/0/0" },
         { id: 'addr-4', address: LTC_ADDR, chain: 'litecoin', network: 'regtest', accountId: 'acct-primary', derivationPath: "m/84'/1'/0'/0/0" },
     ];
@@ -917,7 +917,9 @@ describe('bridge.signIn offers and enforces the site grant', () => {
         const host = signInHost(scopedVault({ chains: [], accounts: [] }), signIn);
         const { result } = await call(host, {});
         expect(result.ok).toBe(true);
-        expect(flowMocks.signMessageFlow.mock.calls[0][0].walletId).toBe('wallet-2');
+        expect(flowMocks.signMessageFlow.mock.calls[0][0]).toMatchObject({
+            walletId: 'wallet-2', addressType: 'p2wpkh',
+        });
     });
 
     it('a site with no address in its grant is refused before the user is prompted', async () => {

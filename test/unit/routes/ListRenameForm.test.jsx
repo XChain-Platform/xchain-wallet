@@ -90,8 +90,9 @@ function makeMessaging({ detail = baseDetail(), shared = { lists: [] }, addresse
     });
 }
 
-function mount({ supported = true, actionIndex = '2700', ...messagingOptions } = {}) {
-    listMetaSupported.mockResolvedValue(supported);
+function mount({ supported = true, supportError = false, actionIndex = '2700', ...messagingOptions } = {}) {
+    if (supportError) listMetaSupported.mockRejectedValue(new Error('support lookup failed'));
+    else listMetaSupported.mockResolvedValue(supported);
     const messaging = makeMessaging(messagingOptions);
     render(
         <MessagingProvider shell="web" messaging={messaging}>
@@ -138,7 +139,7 @@ describe('ListRenameForm', () => {
     it('refuses review when the SDK does not support list metadata', async () => {
         const messaging = mount({ supported: false });
 
-        expect(await screen.findByText(/SDK cannot build a list rename yet/)).toBeTruthy();
+        expect(await screen.findByText("Renaming lists isn't available in this version of the wallet yet.")).toBeTruthy();
         expect(listMetaSupported).toHaveBeenCalledTimes(1);
         expect(listMetaSupported).toHaveBeenCalledWith({
             sdkRegistry: expect.objectContaining({ get: expect.any(Function) }),
@@ -148,6 +149,16 @@ describe('ListRenameForm', () => {
         expect(screen.getByRole('button', { name: 'Rename list' }).disabled).toBe(true);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
         expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
+    });
+
+    it('separates a failed support check from an unavailable action', async () => {
+        mount({ supportError: true });
+
+        expect(await screen.findByText(
+            "Couldn't check whether renaming lists is available right now. Reopen this page to try again.",
+        )).toBeTruthy();
+        expect(screen.queryByText(/isn't available in this version/)).toBeNull();
+        expect(screen.getByRole('button', { name: 'Rename list' }).disabled).toBe(true);
     });
 
     it('shows UTF-8 length and semicolon errors for the name', async () => {

@@ -76,7 +76,7 @@ import { execFileSync } from 'node:child_process';
 import { pointerNameFor, readPublishConfig } from './update-info.mjs';
 import {
     LANES, DIRECT_LANES, laneById, lanesByOs, ALL_OS_TRIGGER_PACKAGES, isAllOsTriggerPath,
-    basenameGlobMatch, directLanesForArtifacts,
+    basenameGlobMatch, directLanesForArtifacts, deviceNamesCiRunner,
 } from './rehearsal-matrix.mjs';
 
 // fileURLToPath, not `new URL(...).pathname`: the latter leaves a path
@@ -1356,6 +1356,12 @@ export function assertRecord({ record, tag, prodManifestSha256, releaseArtifacts
     // (which refuses to run in CI). Refused here too, because this is the
     // gate publish.sh runs and it is the last place the substitution can
     // be caught.
+    for (const swap of swaps.filter((s) => deviceNamesCiRunner(s.device))) {
+        problems.push(
+            `the swap on ${swap.lane} names ${swap.device} as the device it was watched on. A runner has `
+            + 'no person at it, so this is not a witnessed swap; attest it on a desktop or workstation.',
+        );
+    }
     for (const swap of swaps) {
         if (/^\s*(github[ -]?actions?|ci|runner|automation|automated|bot|robot)\b/i
             .test(String(swap['attested-by'] || ''))) {
@@ -1612,7 +1618,8 @@ const USAGE = `usage: rehearse.mjs <command> [args]
       tag skipped on the way, and refuse when the feed cannot say.
 
   coverage [--records <dir>] [--prod-input <dir>] [--lanes-file <path>]
-      Which lanes have ever had an observed swap. Exits 1 if any lane
+      Which lanes have ever had an observed swap. --records defaults to
+      release-artifacts under the wallet root, whatever the cwd. Exits 1 if any lane
       whose row is SHIPPED in shipped-lanes.txt, or that the --prod-input
       release carries, has never been swapped - the §7.5 pre-launch
       condition. NOT-SHIPPED lanes are listed and not demanded; an
@@ -1850,6 +1857,13 @@ async function main(argv) {
                         + '  ship".')
                 + ' Name the device in tools/release/rehearsal-matrix.mjs first.');
         }
+        // A runner has no person at it, so a swap attested against one would file a witness that
+        // cannot exist under a device that cannot show one.
+        if (deviceNamesCiRunner(lane.device)) {
+            fail(`lane ${laneId}'s named device (${lane.device}) is a CI runner, which cannot be where a\n`
+                + '  person watches a swap. Name a desktop or workstation for it in\n'
+                + '  tools/release/rehearsal-matrix.mjs, then attest the swap on that device.');
+        }
         // Refuse a device that installs another lane's artifact, so the record never files it here.
         const installs = deviceInstalledArch(lane);
         if (installs !== lane.arch) {
@@ -1994,7 +2008,7 @@ async function main(argv) {
     }
 
     if (command === 'coverage') {
-        const dir = flag(argv, '--records') || 'release-artifacts';
+        const dir = flag(argv, '--records') || join(WALLET_ROOT, 'release-artifacts');
         const lanesFile = flag(argv, '--lanes-file') || join(HERE, 'shipped-lanes.txt');
         let lanesText = null;
         try { lanesText = readFileSync(lanesFile, 'utf8'); } catch { lanesText = null; }
@@ -2005,7 +2019,10 @@ async function main(argv) {
         if (demand.reason) process.stdout.write(`every lane is demanded: ${demand.reason}\n\n`);
         const seen = new Map();
         const checked = new Map();
-        if (existsSync(dir)) {
+        if (!existsSync(dir)) {
+            process.stderr.write(`rehearse.mjs: no records directory at ${resolvePath(dir)}, so no swap is `
+                + 'counted; pass --records <dir> if the REHEARSAL-*.json files live elsewhere.\n');
+        } else {
             for (const name of readdirSync(dir)) {
                 if (!/^REHEARSAL-.*\.json$/.test(name)) continue;
                 let record;
@@ -2013,6 +2030,8 @@ async function main(argv) {
                 for (const swap of record.swaps || []) {
                     // A swap that installed another lane's artifact covers nothing for its own lane.
                     if (!swapExercisesLane(swap)) continue;
+                    // A swap filed against a runner was not watched by anyone.
+                    if (deviceNamesCiRunner(swap.device)) continue;
                     seen.set(swap.lane, { tag: record.tag, device: swap.device, at: swap.at });
                 }
                 for (const auto of record['automated-checks'] || []) {
@@ -2049,12 +2068,16 @@ async function main(argv) {
                 // so the lane is a named waiver awaiting the operator's hardware decision, not a red.
                 const cannot = laneDeviceCannotWitness(lane);
                 const why = lane.device ? `device ${lane.device}, never rehearsed` : `NO DEVICE NAMED (${dd})`;
+                const onRunner = deviceNamesCiRunner(lane.device);
                 const waiver = demand.waived.get(lane.id);
                 if (waiver) waivedIds.push(lane.id);
                 else if (cannot) unwitnessable.push(lane.id);
                 else blocked.push(lane.id);
                 const note = waiver
                     ? ` (not demanded: ${waiver}; rehearse before its first release)`
+                    : onRunner
+                        ? ' (BLOCKED, the named device is a CI runner and cannot witness a swap; '
+                          + 'operator hardware decision owed: name a desktop or workstation)'
                     : cannot
                         ? ` (WAIVED, device cannot witness: it installs the ${installs} artifact; `
                           + `operator hardware decision owed: name a native ${lane.arch} device)`

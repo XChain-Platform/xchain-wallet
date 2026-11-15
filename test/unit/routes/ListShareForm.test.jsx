@@ -107,10 +107,12 @@ function makeMessaging({
 
 function mount({
     support = { share: true, transfer: true, union: true },
+    supportError = false,
     actionIndex = '2700',
     ...messagingOptions
 } = {}) {
-    listFormatSupport.mockResolvedValue(support);
+    if (supportError) listFormatSupport.mockRejectedValue(new Error('support lookup failed'));
+    else listFormatSupport.mockResolvedValue(support);
     const messaging = makeMessaging({ ...messagingOptions, listActionIndex: actionIndex });
     render(
         <MessagingProvider shell="web" messaging={messaging}>
@@ -299,7 +301,7 @@ describe('ListShareForm', () => {
     ])('renders disabled with the SDK reason when share support is %s', async (_case, support) => {
         const messaging = mount({ support });
 
-        expect(await screen.findByText(/SDK cannot build a list share yet/)).toBeTruthy();
+        expect(await screen.findByText("Sharing lists isn't available in this version of the wallet yet.")).toBeTruthy();
         expect(listFormatSupport).toHaveBeenCalledWith({
             sdkRegistry: expect.objectContaining({ get: expect.any(Function) }),
             chainId: CHAIN,
@@ -308,6 +310,16 @@ describe('ListShareForm', () => {
         expect(screen.getByLabelText('Memo').disabled).toBe(true);
         expect(screen.getByLabelText('Type SHARE to confirm').disabled).toBe(true);
         expect(screen.getByLabelText('Pay protocol fee in BTC').disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Share list' }).disabled).toBe(true);
+    });
+
+    it('separates a failed support check from an unavailable action', async () => {
+        mount({ supportError: true });
+
+        expect(await screen.findByText(
+            "Couldn't check whether sharing lists is available right now. Reopen this page to try again.",
+        )).toBeTruthy();
+        expect(screen.queryByText(/isn't available in this version/)).toBeNull();
         expect(screen.getByRole('button', { name: 'Share list' }).disabled).toBe(true);
     });
 

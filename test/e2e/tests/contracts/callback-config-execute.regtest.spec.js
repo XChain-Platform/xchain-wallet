@@ -137,7 +137,7 @@ async function openExecuteCallbackWhenConfigured(page, tick, timeoutMs = 180_000
         const more = main.getByRole('button', { name: 'More', exact: true });
         await expect(more, 'Manage Token has no "More" overflow menu').toBeVisible({ timeout: 30_000 });
         await more.click();
-        const execute = main.getByRole('menuitem', { name: 'Execute callback', exact: true });
+        const execute = main.getByRole('menuitem', { name: 'Recall tokens', exact: true });
         if (await execute.isVisible()) {
             await execute.click();
             return main;
@@ -146,7 +146,7 @@ async function openExecuteCallbackWhenConfigured(page, tick, timeoutMs = 180_000
         await nudgeChain();
         await new Promise((resolve) => setTimeout(resolve, 5_000));
     }
-    throw new Error(`Manage Token did not offer "Execute callback" within ${timeoutMs} ms`);
+    throw new Error(`Manage Token did not offer "Recall tokens" within ${timeoutMs} ms`);
 }
 
 /** The block height printed on the Callback settings form ("Current block: N."). */
@@ -270,8 +270,8 @@ test.describe(`Callback config and execute on ${REGTEST_CHAIN_LABEL}`, () => {
             // (assetInfo, the indexer watermark), so re-opening from My Tokens
             // is what proves the BLOCK GATE lifted rather than assuming it did.
             const main = await openExecuteCallbackWhenConfigured(page, TICK);
-            const execute = main.getByRole('button', { name: 'Execute callback', exact: true });
-            await expect(execute, 'Execute callback never became available (block gate or missing config)')
+            const execute = main.getByRole('button', { name: 'Recall tokens', exact: true });
+            await expect(execute, 'Recall tokens never became available (block gate or missing config)')
                 .toBeEnabled({ timeout: 60_000 });
             await execute.click();
 
@@ -301,14 +301,14 @@ test.describe(`Callback config and execute on ${REGTEST_CHAIN_LABEL}`, () => {
  */
 async function approveConfirmWithTypedCallback(page) {
     const modal = await expectConfirmModal(page, 'the callback recall', 90_000);
-    const typed = page.getByLabel('Type "CALLBACK" to confirm');
-    await expect(typed, 'the confirm screen carries no typed-confirmation field for CALLBACK')
+    const typed = page.getByLabel('Type "RECALL" to confirm');
+    await expect(typed, 'the confirm screen carries no typed-confirmation field for RECALL')
         .toBeVisible({ timeout: 30_000 });
-    await typed.fill('CALLBACK');
+    await typed.fill('RECALL');
     const password = page.getByLabel('Password', { exact: true });
     if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
     const approve = page.getByTestId('confirm-approve');
-    await expect(approve, 'Approve never became enabled for the typed CALLBACK confirmation')
+    await expect(approve, 'Approve never became enabled for the typed RECALL confirmation')
         .toBeEnabled({ timeout: 120_000 });
     await approve.click();
     return modal;

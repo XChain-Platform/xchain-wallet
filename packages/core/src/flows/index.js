@@ -20,7 +20,7 @@ export {
 // growing a sixth private copy of the rule.
 export { importedAddressIdsFor } from './_importedAddressIds.js';
 export { createWallet } from './createWallet.js';
-export { createAccount } from './createAccount.js';
+export { createAccount, LegacySingleAccountError } from './createAccount.js';
 export { activateChain } from './activateChain.js';
 export { fundBtcFromMiner } from './regtestFaucet.js';
 export { renameWallet } from './renameWallet.js';

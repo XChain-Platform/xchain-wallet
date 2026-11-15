@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     AddressField,
@@ -46,11 +47,16 @@ import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { typedConfirmationCopy } from '../utils/typedConfirmationCopy.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
+import {
+    listActionCheckFailedMessage,
+    listActionUnavailableMessage,
+} from '../utils/listActionAvailability.js';
 import { explorerReadFailure } from '../../sdk/explorerErrors.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
-const SDK_REASON = "This wallet's SDK cannot build a list share yet; it arrives with the next SDK update.";
+const UNAVAILABLE_REASON = listActionUnavailableMessage('share');
+const SUPPORT_CHECK_FAILED_REASON = listActionCheckFailedMessage('share');
 const TICKER_BY_COIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 
 function rowsFromSharedLists(value) {
@@ -115,7 +121,7 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     const [detail, setDetail] = useState(/** @type {any | null} */ (null));
     const [owner, setOwner] = useState(/** @type {string | null | undefined} */ (undefined));
     const [sharedRows, setSharedRows] = useState(/** @type {any[] | null} */ (null));
-    const [sdkSupported, setSdkSupported] = useState(/** @type {boolean | null} */ (null));
+    const [sdkSupported, setSdkSupported] = useState(/** @type {boolean | 'error' | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [memo, setMemo] = useState('');
     const [typedConfirm, setTypedConfirm] = useState('');
@@ -134,7 +140,7 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                 setLoadError('No address on this network yet. Use Receive to generate one first.');
             }
         }).catch((err) => {
-            if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+            if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load addresses.'));
         });
         return () => { cancelled = true; };
     }, [walletId, chainId, messaging]);
@@ -175,7 +181,7 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
             .then((support) => {
                 if (!cancelled) setSdkSupported(support?.share === true);
             })
-            .catch(() => { if (!cancelled) setSdkSupported(false); });
+            .catch(() => { if (!cancelled) setSdkSupported('error'); });
         return () => { cancelled = true; };
     }, [chainId, messaging]);
 
@@ -232,7 +238,10 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
 
     function validate() {
         if (!listActionIndexValid) { setFormError('List reference must be a positive whole number.'); return false; }
-        if (sdkSupported !== true) { setFormError(SDK_REASON); return false; }
+        if (sdkSupported !== true) {
+            setFormError(sdkSupported === 'error' ? SUPPORT_CHECK_FAILED_REASON : UNAVAILABLE_REASON);
+            return false;
+        }
         if (!eligibility.ok) { setFormError(eligibility.reasons[0].text); return false; }
         if (!selectedOwner) {
             setFormError(owner
@@ -402,9 +411,10 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
             demoGuard={demoGuard}
             label="Share list"
             onSubmit={handleReview}
-            status={(sdkSupported === false || formError) ? (
+            status={(sdkSupported === false || sdkSupported === 'error' || formError) ? (
                 <>
-                    {sdkSupported === false ? <StatusMessage variant="error">{SDK_REASON}</StatusMessage> : null}
+                    {sdkSupported === false ? <StatusMessage variant="error">{UNAVAILABLE_REASON}</StatusMessage> : null}
+                    {sdkSupported === 'error' ? <StatusMessage variant="error">{SUPPORT_CHECK_FAILED_REASON}</StatusMessage> : null}
                     {formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
                 </>
             ) : null}

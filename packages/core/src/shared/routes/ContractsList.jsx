@@ -17,6 +17,7 @@ import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
 import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { useChainIdsWithAction } from '../hooks/useSupportedChains.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { contractDisplayLabel, contractMetaOf } from './contractResponseShape.js';
 import styles from './ActionsMenu.module.css';
 import contractStyles from './ContractScreens.module.css';
@@ -169,7 +170,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                 Promise.resolve()
                     .then(() => messaging.getContractsForSource({ chainId: cid, address: addr }))
                     .then((resp) => ({ addr, rows: extractRows(resp) }))
-                    .catch((err) => ({ addr, error: err?.message || String(err) }))
+                    .catch((err) => ({ addr, error: userFacingMessage(err, 'Failed to load contracts.') }))
             )).then((results) => {
                 if (cancelled) return;
                 const merged = [];
@@ -192,7 +193,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                 if (cancelled) return;
                 setMyByChain((prev) => ({
                     ...prev,
-                    [cid]: { loading: false, rows: [], error: err?.message || String(err) },
+                    [cid]: { loading: false, rows: [], error: userFacingMessage(err, 'Failed to load contracts.') },
                 }));
             });
         }
@@ -226,13 +227,13 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                     Promise.resolve()
                         .then(() => messaging.getDepositsForAddress({ chainId: cid, address: addr }))
                         .then((resp) => ({ kind: 'deposit', rows: extractRows(resp) }))
-                        .catch((err) => ({ error: err?.message || String(err) })),
+                        .catch((err) => ({ error: userFacingMessage(err, 'Failed to load contract activity.') })),
                 );
                 ops.push(
                     Promise.resolve()
                         .then(() => messaging.getWithdrawalsForAddress({ chainId: cid, address: addr }))
                         .then((resp) => ({ kind: 'withdraw', rows: extractRows(resp) }))
-                        .catch((err) => ({ error: err?.message || String(err) })),
+                        .catch((err) => ({ error: userFacingMessage(err, 'Failed to load contract activity.') })),
                 );
             }
             Promise.all(ops).then((results) => {
@@ -288,7 +289,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                 if (cancelled) return;
                 setInteractionsByChain((prev) => ({
                     ...prev,
-                    [cid]: { loading: false, rows: [], error: err?.message || String(err) },
+                    [cid]: { loading: false, rows: [], error: userFacingMessage(err, 'Failed to load contracts.') },
                 }));
             });
         }
@@ -322,7 +323,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                     if (cancelled) return;
                     setBrowseByChain((prev) => ({
                         ...prev,
-                        [cid]: { loading: false, rows: [], error: err?.message || String(err) },
+                        [cid]: { loading: false, rows: [], error: userFacingMessage(err, 'Failed to load contracts.') },
                     }));
                 });
         }

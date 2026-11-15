@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { t } from '../../i18n/index.js';
 import { AddressField, AddressText, Button, ChainBadge, EmptyState, FeeSelector, FormPage, Icon, ListPage, NetworkField, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
@@ -127,7 +128,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                 setFromAddressId(sourceId);
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+                if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load addresses.'));
             });
         return () => { cancelled = true; };
     }, [walletId, chainId, messaging]);

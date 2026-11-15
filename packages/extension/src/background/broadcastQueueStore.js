@@ -50,6 +50,9 @@ import {
  *   each add is also written to a durable ledger so a worker evicted before
  *   the read recovers still drops the wallet on the next boot. The default
  *   uses chrome.storage or localStorage; shells without either pass a ledger
+ * @property {Set<string>} removedWallets  walletIds removed while this store is live, in memory only;
+ *   every host built over the store reads it, so a torn-down host's late
+ *   failure hook cannot queue a wallet a later host removed. Cleared by a seal
  * @property {number} bootedAt  wall-clock ms this store was built; the vault restore
  *   reads a 'broadcasting' PendingTx created after it as this process's own live call
  */
@@ -88,7 +91,8 @@ const WRITABLE_OWED_STATUSES = new Set(['queued', 'broadcasting']);
  * Fold a later owed write for one PendingTx into the earlier one, giving the
  * record whose replay equals replaying both in order. Patches stack, and a
  * discard carries earlier work so the flush applies it first. Reveal promotion
- * stays byte-free while later patches and discards remain attached to it. An
+ * stays byte-free while later patches and discards remain attached to it, and
+ * a later reveal record is dropped only when it carries neither. An
  * earlier discard or terminal patch closes the record, so it is returned
  * unchanged and the later write is dropped, as its replay would be.
  * Always builds a new record (the flush retires records by identity).
@@ -103,13 +107,15 @@ export function foldOwedSettlement(prior, next) {
     const priorStatus = prior.patch?.status;
     if (typeof priorStatus === 'string' && !WRITABLE_OWED_STATUSES.has(priorStatus)) return prior;
     if (prior.op === 'reveal') {
-        if (next.op === 'reveal') return prior;
+        // A later reveal is the same promotion, dropped unless it already
+        // carries the patch or discard folded onto it in memory.
+        if (next.op === 'reveal' && !next.patch && next.discard !== true) return prior;
         return {
             ...next,
             op: 'reveal',
             reveal: prior.reveal,
             patch: { ...(prior.patch ?? {}), ...(next.patch ?? {}) },
-            ...(next.op === 'discard' ? { discard: true } : {}),
+            ...(next.op === 'discard' || next.discard === true ? { discard: true } : {}),
         };
     }
     if (prior.op !== 'patch' || !prior.patch || typeof prior.patch !== 'object') return next;
@@ -376,6 +382,7 @@ export function createBroadcastQueueStore({ storage = null, prunedLedger } = {})
         loadPromise: null,
         inFlight: new Set(),
         prunedWallets,
+        removedWallets: new Set(),
         bootedAt: Date.now(),
     };
 }
@@ -529,6 +536,7 @@ export async function sealBroadcastQueueStore(store) {
     store.queues.clear();
     store.owed = [];
     store.prunedWallets?.clear();
+    store.removedWallets?.clear();
     // Not awaited: a read already held by the failing store must not stall the
     // wipe, and the ledger holds walletIds only.
     store.prunedWallets?.erase?.().catch(() => {});

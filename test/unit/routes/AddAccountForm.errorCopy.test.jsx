@@ -74,6 +74,17 @@ describe('AddAccountForm error copy', () => {
         expect(await submitAndReadError('An account named "Savings" already exists.')).toBeTruthy();
     });
 
+    it('shows the legacy single-account explanation from the flow', async () => {
+        const message = 'This older FreeWallet recovery phrase supports one software account. '
+            + 'Upgrade to a standard recovery phrase to add another software account.';
+        messaging.createAccount.mockRejectedValue(Object.assign(new Error(message), {
+            name: 'LegacySingleAccountError',
+        }));
+
+        expect(await submitAndReadError(message)).toBeTruthy();
+        expect(document.body.textContent).not.toMatch(FALLBACK);
+    });
+
     it('explains a shell without account creation in plain words', async () => {
         messaging.createAccount = undefined;
 

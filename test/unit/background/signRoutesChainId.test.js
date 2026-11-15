@@ -21,6 +21,7 @@ const addressRecord = (network = 'regtest') => ({
     chain: 'bitcoin',
     network,
     source: 'hd',
+    addressType: 'p2wpkh',
     derivationPath: PATH,
     signerId: 'wallet-1',
     address: ADDRESS,
@@ -73,7 +74,7 @@ describe('software signing routes resolve the address chain id', () => {
 
         expect(response.ok, JSON.stringify(response.error ?? {})).toBe(true);
         expect(signMessage).toHaveBeenCalledWith(expect.objectContaining({
-            chainId: CHAIN_ID, path: PATH,
+            chainId: CHAIN_ID, path: PATH, addressType: 'p2wpkh',
         }));
     });
 

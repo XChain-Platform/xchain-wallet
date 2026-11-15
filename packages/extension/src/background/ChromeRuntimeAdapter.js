@@ -158,17 +158,7 @@ export function attachChromeRuntime(host, chromeRuntime, opts = {}) {
                 try { onWebSender(sender.tab.id, senderOrigin); } catch { /* best-effort */ }
             }
         }
-        const requesterTabId = !trusted && Number.isInteger(sender?.tab?.id)
-            ? sender.tab.id
-            : null;
-        const routedMessage = requesterTabId == null
-            || !message?.request
-            || typeof message.request !== 'object'
-            ? message
-            : {
-                ...message,
-                request: { ...message.request, requesterTabId },
-            };
+        const routedMessage = trusted ? message : withBrowserRequesterTab(message, sender);
         Promise.resolve()
             .then(() => host.handle(routedMessage))
             .then((response) => sendResponse(publishedError(response, trusted)))
@@ -189,6 +179,30 @@ export function attachChromeRuntime(host, chromeRuntime, opts = {}) {
     // The boot gate hands a message it held back to this listener once a host exists.
     detach.listener = listener;
     return detach;
+}
+
+/**
+ * `request.requesterTabId` as the browser reports it, for an untrusted sender.
+ *
+ * The content-script relay copies the page's request object, so a page can
+ * name any tab id of its own. The field must come only from `sender.tab.id`:
+ * any page-supplied value is dropped, and the browser's integer tab id is
+ * stamped when there is one. The caller's message is never mutated.
+ *
+ * @param {any} message
+ * @param {{ tab?: { id?: unknown } } | null | undefined} sender
+ * @returns {any}
+ */
+function withBrowserRequesterTab(message, sender) {
+    const request = message?.request;
+    if (!request || typeof request !== 'object') return message;
+    const tabId = Number.isInteger(sender?.tab?.id) ? sender.tab.id : null;
+    if (tabId == null && !('requesterTabId' in request)) return message;
+    const { requesterTabId: _fromPage, ...rest } = request;
+    return {
+        ...message,
+        request: tabId == null ? rest : { ...rest, requesterTabId: tabId },
+    };
 }
 
 /**

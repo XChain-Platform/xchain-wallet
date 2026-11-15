@@ -229,7 +229,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         // residual (§5.6 slice 5): the confirm page renders the intent
         // the HOST described from the composed action string
         // (`composed.decoded`), so this local describer serves the LEGACY
-        // review stage only - the watcher, demo and locked-ECDH path. It used
+        // review stage only, which only watcher mode reaches. It used
         // to also recompute while the confirm page was open, which was work
         // nothing read and, worse, read like the confirm surface still
         // depended on form state.
@@ -425,9 +425,9 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
             return;
         }
         setFormError(null);
-        // slice 2: with the flag on, software destroys go straight
-        // to the single-encode confirm modal instead of the legacy review
-        // stage. Hardware + watcher keep the legacy path for this slice.
+        // Software and hardware signers both go straight to the single-encode
+        // confirm page; only watcher mode, which builds an unsigned
+        // transaction, reaches the legacy review stage.
         if (!isWatcherMode) {
             openConfirmModal();
             return;

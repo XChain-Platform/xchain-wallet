@@ -7,12 +7,18 @@
 // General Public License v3.0 or later; see LICENSE.md.
 
 import React from 'react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
 import {
     Sparkline,
+    describeChartSeries,
     synthesizeTokenChart,
 } from '../../../packages/core/src/shared/components/Sparkline.jsx';
+import { registerLocale, setLocale } from '../../../packages/core/src/i18n/index.js';
+
+afterEach(async () => {
+    await setLocale('en');
+});
 
 describe('Sparkline', () => {
     it.each([null, '1,2', {}, [], [NaN, Infinity]])('renders nothing for an unusable series', (series) => {
@@ -72,6 +78,18 @@ describe('Sparkline', () => {
         expect(container.querySelector('polyline')?.getAttribute('points'))
             .toBe('48.00,50.00 52.00,50.00');
         expect(screen.getByRole('img', { name: /^Price trend\. .*Change 0 \(0\.00%\)/ })).toBeInTheDocument();
+    });
+
+    it('uses the active dictionary and number locale for the summary', async () => {
+        registerLocale('de-DE', {
+            'components.sparkline.summary': '{label}.{rangeState, select, withRange { Zeitraum {range}.} other {}} Werte von {low} bis {high}. Start {start}. Ende {end}. Änderung {change}{percentageState, select, withPercentage { ({percentage})} other {}}.',
+        });
+        await setLocale('de-DE');
+
+        expect(describeChartSeries([0, 1234.5], {
+            label: 'Preistrend',
+            rangeLabel: '1T',
+        })).toBe('Preistrend. Zeitraum 1T. Werte von 0 bis 1.234,5. Start 0. Ende 1.234,5. Änderung +1.234,5.');
     });
 });
 

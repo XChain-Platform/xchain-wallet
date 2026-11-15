@@ -128,4 +128,33 @@ describe('ChromeRuntimeAdapter edge branches', () => {
         });
         expect(request).toEqual({ origin: WEB.origin });
     });
+
+    it('overwrites a page-supplied requester tab with the browser-reported one', async () => {
+        const runtime = runtimeBus();
+        const request = { origin: WEB.origin, requesterTabId: 999 };
+        const handle = vi.fn(async () => ({ ok: true }));
+        attachChromeRuntime({ handle }, runtime);
+
+        await runtime.emit({ type: 'bridge.getAccounts', request }, WEB);
+
+        expect(handle.mock.calls[0][0].request).toEqual({ origin: WEB.origin, requesterTabId: 41 });
+        expect(request.requesterTabId).toBe(999);
+    });
+
+    it.each([
+        ['no tab', { id: EXT_ID, origin: 'https://app.example' }],
+        ['a non-integer tab id', { id: EXT_ID, origin: 'https://app.example', tab: { id: '41' } }],
+    ])('drops a page-supplied requester tab when the sender has %s', async (_label, sender) => {
+        const runtime = runtimeBus();
+        const request = { origin: WEB.origin, requesterTabId: 999 };
+        const handle = vi.fn(async () => ({ ok: true }));
+        attachChromeRuntime({ handle }, runtime);
+
+        await runtime.emit({ type: 'bridge.getAccounts', request }, sender);
+
+        const forwarded = handle.mock.calls[0][0].request;
+        expect(forwarded).toEqual({ origin: WEB.origin });
+        expect('requesterTabId' in forwarded).toBe(false);
+        expect(request.requesterTabId).toBe(999);
+    });
 });

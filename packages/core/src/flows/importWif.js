@@ -27,6 +27,7 @@ import {
     base64ToBytes,
 } from '../crypto/index.js';
 import { createAddress } from '../schemas/address.js';
+import { VaultConflictError } from '../storage/backend.js';
 import { WalletNotFoundError } from './unlockWallet.js';
 import { RAW_HEX_KEY, isRawHexPrivateKey, wifFailureMessage } from './_wifFailureMessage.js';
 import { importedKeyAddressType } from './_importedKeyAddressType.js';
@@ -66,6 +67,13 @@ export class DuplicateImportError extends Error {
         super(`This private key is already in this wallet (${address}).`);
         this.name = 'DuplicateImportError';
         this.address = address;
+    }
+}
+
+export class ImportConflictError extends Error {
+    constructor() {
+        super('Your wallet changed while the key was being imported. Nothing was imported; try again.');
+        this.name = 'ImportConflictError';
     }
 }
 
@@ -227,47 +235,47 @@ export async function importWif({
         throw new Error(`importWif: address id collision "${addressRecord.id}"`);
     }
 
-    // Append to Wallet.importedKeys. The record is read again here: the key
-    // derivation above takes seconds, and a rename or another key import that
-    // landed meanwhile would be overwritten by the copy read before it.
-    const currentWallet = (await vault.wallets.get(walletRecord.id)) ?? walletRecord;
-    const updatedWallet = {
-        ...currentWallet,
-        importedKeys: [
-            ...currentWallet.importedKeys,
-            {
-                addressId: addressRecord.id,
-                encryptedWif,
-                importedAt: new Date().toISOString(),
-            },
-        ],
-    };
-    let addressPutAttempted = false;
-    let walletPutAttempted = false;
+    let updatedWallet;
     try {
-        addressPutAttempted = true;
-        await vault.addresses.put(addressRecord);
-        walletPutAttempted = true;
-        await vault.wallets.put(updatedWallet);
+        await vault.putManyGuarded((document) => {
+            const currentWallet = document.wallets.find((record) => record.id === walletRecord.id);
+            if (!currentWallet) throw new WalletNotFoundError(walletRecord.id);
+            if (!walletSealMatches(currentWallet, walletRecord)) throw new ImportConflictError();
+            if (document.addresses.some((record) => record.id === addressRecord.id)) {
+                throw new Error(`importWif: address id collision "${addressRecord.id}"`);
+            }
+            updatedWallet = {
+                ...currentWallet,
+                importedKeys: [
+                    ...currentWallet.importedKeys,
+                    {
+                        addressId: addressRecord.id,
+                        encryptedWif,
+                        importedAt: new Date().toISOString(),
+                    },
+                ],
+            };
+            return [
+                { store: vault.addresses, record: addressRecord },
+                { store: vault.wallets, record: updatedWallet },
+            ];
+        });
     } catch (error) {
-        const rollbackErrors = [];
-        if (walletPutAttempted) {
-            try { await vault.wallets.put(currentWallet); } catch (e) { rollbackErrors.push(e); }
-        }
-        if (addressPutAttempted) {
-            try { await vault.addresses.delete(addressRecord.id); } catch (e) { rollbackErrors.push(e); }
-        }
-        if (rollbackErrors.length > 0) {
-            throw new AggregateError(
-                [error, ...rollbackErrors],
-                'importWif: persistence and rollback failed',
-                { cause: error },
-            );
+        if (error instanceof VaultConflictError || error?.name === 'VaultConflictError') {
+            throw new ImportConflictError();
         }
         throw error;
     }
 
     return { wallet: updatedWallet, address: addressRecord };
+}
+
+function walletSealMatches(stored, read) {
+    if (stored.format !== read.format) return false;
+    if (read.format === 'wif-only') {
+        return stored.importedKeys?.[0]?.encryptedWif === read.importedKeys?.[0]?.encryptedWif;
+    }
+    return stored.encryptedSeed === read.encryptedSeed;
 }
 
 /**

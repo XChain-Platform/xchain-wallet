@@ -204,7 +204,10 @@ export function forwardSignMessage(params) {
     return provider.signMessage(params);
 }
 
-/** @param {{ chainId: string, action: object }} params */
+/**
+ * @param {{ chainId: string, action: string, params: object,
+ *   feeStrategyHint?: 'low' | 'normal' | 'fast' }} params
+ */
 export function forwardSignAction(params) {
     const provider = getExtensionProvider();
     if (!provider) throw new ExtensionUnavailableError('signAction');

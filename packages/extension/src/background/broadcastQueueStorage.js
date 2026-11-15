@@ -278,6 +278,22 @@ function localStorageAdapter() {
  * @returns {{ queues: QueueSnapshot, settlements: OwedSettlement[], needsMigration: boolean, newerVersion: number | null }}
  */
 function splitBlob(blob) {
+    // The version check runs before the shape check: a blob a newer build wrote
+    // is refused whatever its layout, and never read as an unversioned snapshot.
+    const stamped = /** @type {any} */ (blob);
+    if (stamped && typeof stamped === 'object' && !Array.isArray(stamped)
+        && Object.prototype.hasOwnProperty.call(stamped, 'storageVersion')
+        && typeof stamped.storageVersion === 'number' && Number.isFinite(stamped.storageVersion)
+        && stamped.storageVersion > BROADCAST_QUEUE_STORAGE_VERSION) {
+        const q = stamped.queues;
+        const plain = !!q && typeof q === 'object' && !Array.isArray(q);
+        return {
+            queues: plain ? coerceSnapshot(q) : {},
+            settlements: coerceSettlements(stamped.settlements),
+            needsMigration: false,
+            newerVersion: stamped.storageVersion,
+        };
+    }
     const isEnvelope = !!blob
         && typeof blob === 'object'
         && !Array.isArray(blob)

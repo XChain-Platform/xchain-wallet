@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     AddressField,
@@ -38,10 +39,15 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { explorerReadFailure } from '../../sdk/explorerErrors.js';
 import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
 import { typedConfirmationCopy } from '../utils/typedConfirmationCopy.js';
+import {
+    listActionCheckFailedMessage,
+    listActionUnavailableMessage,
+} from '../utils/listActionAvailability.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
-const SDK_REASON = "This wallet's SDK cannot build a list transfer yet; it arrives with the next SDK update.";
+const UNAVAILABLE_REASON = listActionUnavailableMessage('transfer');
+const SUPPORT_CHECK_FAILED_REASON = listActionCheckFailedMessage('transfer');
 
 function shortAddress(value) {
     const address = String(value || '');
@@ -78,7 +84,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
     );
     const [owner, setOwner] = useState(/** @type {string | null | undefined} */ (undefined));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
-    const [sdkSupported, setSdkSupported] = useState(/** @type {boolean | null} */ (null));
+    const [sdkSupported, setSdkSupported] = useState(/** @type {boolean | 'error' | null} */ (null));
     const [destination, setDestination] = useState('');
     const [memo, setMemo] = useState('');
     const [typedConfirm, setTypedConfirm] = useState('');
@@ -99,7 +105,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
                 setLoadError('No address on this network yet. Use Receive to generate one first.');
             }
         }).catch((err) => {
-            if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+            if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load addresses.'));
         });
         return () => { cancelled = true; };
     }, [walletId, chainId, messaging]);
@@ -138,7 +144,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
             .then((support) => {
                 if (!cancelled) setSdkSupported(support?.transfer === true);
             })
-            .catch(() => { if (!cancelled) setSdkSupported(false); });
+            .catch(() => { if (!cancelled) setSdkSupported('error'); });
         return () => { cancelled = true; };
     }, [chainId, messaging]);
 
@@ -167,7 +173,10 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
 
     function validate() {
         if (!listActionIndexValid) { setFormError('List reference must be a positive whole number.'); return false; }
-        if (sdkSupported !== true) { setFormError(SDK_REASON); return false; }
+        if (sdkSupported !== true) {
+            setFormError(sdkSupported === 'error' ? SUPPORT_CHECK_FAILED_REASON : UNAVAILABLE_REASON);
+            return false;
+        }
         if (!selectedOwner) {
             setFormError(owner
                 ? 'This list is owned by an address that is not in this wallet, so this wallet cannot transfer it.'
@@ -377,9 +386,10 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
             demoGuard={demoGuard}
             label="Transfer list"
             onSubmit={handleReview}
-            status={sdkSupported === false || formError ? (
+            status={sdkSupported === false || sdkSupported === 'error' || formError ? (
                 <>
-                    {sdkSupported === false ? <StatusMessage variant="error">{SDK_REASON}</StatusMessage> : null}
+                    {sdkSupported === false ? <StatusMessage variant="error">{UNAVAILABLE_REASON}</StatusMessage> : null}
+                    {sdkSupported === 'error' ? <StatusMessage variant="error">{SUPPORT_CHECK_FAILED_REASON}</StatusMessage> : null}
                     {formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
                 </>
             ) : null}

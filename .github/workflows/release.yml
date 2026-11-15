@@ -522,13 +522,16 @@ jobs:
 
       # ---- §7.5 rehearsal variant -------------------------------------
       #
-      # AppImage only: it is the one Linux format electron-updater can
-      # actually swap in place, and a staging variant of a format with no
-      # auto-update path exercises nothing. Builds to `dist-staging`
-      # (selected by the config off XCHAIN_STAGING_FEED_URL) because
-      # electron-builder names artifacts by VERSION, not channel: a staging
-      # AppImage and a prod AppImage are byte-different twins under the same
-      # filename, and sharing a directory would let one be signed and
+      # The Linux update-capable formats only, AppImage and deb: each has an
+      # electron-updater path that swaps in place (AppImageUpdater, and
+      # DebUpdater ending in `pkexec dpkg -i`), and a staging variant of a
+      # format with no auto-update path exercises nothing. The set is
+      # UPDATE_CAPABLE_TARGET.linux in electron-builder.config.cjs, which
+      # rehearsal-matrix.mjs mirrors as one lane per format and arch. Builds
+      # to `dist-staging` (selected by the config off XCHAIN_STAGING_FEED_URL)
+      # because electron-builder names artifacts by VERSION, not channel: a
+      # staging package and a prod package are byte-different twins under the
+      # same filename, and sharing a directory would let one be signed and
       # published as the other.
       #
       # Uploaded under its own artifact name and NEVER into the release

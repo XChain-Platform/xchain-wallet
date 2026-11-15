@@ -434,7 +434,7 @@ describe('PreflightPanel <-> xchain-sdk contract', () => {
         return;
     }
 
-    // The panel duplicates the two Tier-1 codes as literals on purpose: it is
+    // The panel duplicates the Tier-1 notice codes it keys on as literals on purpose: it is
     // rendered by the extension approval root and must not pull the SDK into
     // that bundle. So the parity lives here, where importing the SDK is free
     // (#3935). A silent rename in the registry would otherwise leave the panel
