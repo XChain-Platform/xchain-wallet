@@ -83,7 +83,7 @@ export const FINDINGS = {
     'POINTER-NO-HASH': "a yml pointer names a file with no sha512 the desktop client can read, which every desktop client refuses",
     'POINTER-UNCOVERED': "a pointer names a file its own version's signed manifest does not cover",
     'POINTER-NO-MANIFEST': "no manifest is published for a live pointer's version",
-    'POINTER-UNGATED': "a live pointer's own manifest records a dev-mock gate other than enforced, which every desktop client refuses",
+    'POINTER-UNGATED': "a live pointer's own manifest records a dev-mock gate other than enforced; desktop clients refuse it and direct APK installs have no client-side gate",
     'MANIFEST-UNSIGNED': 'a manifest with no detached signature beside it',
     'MANIFEST-BAD-SIG': 'a manifest whose signature did not verify',
     'MANIFEST-TAG-MISMATCH': 'a manifest file name does not name the release in its signed tag header',
@@ -586,6 +586,11 @@ export function sweep(root, options = {}) {
             if (!byManifestFile.has(`v${version}.txt`)) {
                 add('POINTER-NO-MANIFEST', rel,
                     `names version ${version}, no RELEASE_HASHES/v${version}.txt`);
+            }
+            const ownGate = gateByFile.get(`v${version}.txt`);
+            if (ownGate !== undefined && ownGate !== 'enforced') {
+                add('POINTER-UNGATED', rel,
+                    `the v${version} manifest records the dev-mock gate as '${ownGate || 'unrecorded'}', not 'enforced'`);
             }
             continue;
         }

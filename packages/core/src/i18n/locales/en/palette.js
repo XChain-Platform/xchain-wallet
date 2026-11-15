@@ -58,7 +58,7 @@ const messages = {
     'palette.createDestroy.subtitle': 'Burn supply',
     'palette.createSweep.title': 'Sweep address',
     'palette.createSweep.subtitle': 'Move balances, ownerships, and escrow to one destination',
-    'palette.createBroadcast.title': 'Broadcast a message',
+    'palette.createBroadcast.title': 'Post an announcement',
     'palette.createBroadcast.subtitle': 'Post a message on-chain',
     'palette.createOraclePrice.title': 'Publish oracle price',
     'palette.createOraclePrice.subtitle': 'Price a token in a currency so dispensers can sell at that rate',

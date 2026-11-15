@@ -116,7 +116,7 @@ describe('ManageToken approved design', () => {
             'Mint', 'Mint settings', 'Lock settings',
             'Destroy', 'Dispenser', 'Sell name',
             'Description', 'Artwork', 'Gated content',
-            'Official list', 'Broadcast', 'Transfer',
+            'Official list', 'Announce', 'Transfer',
             'Controller', 'Callback settings', 'Recall tokens',
             'Access lists', 'Shared block list', 'Bridge', 'Pause token',
         ]);

@@ -54,6 +54,7 @@ import {
     resolveProdFeed,
     RECORD_VERSION,
     deviceInstalledArch,
+    laneDeviceCannotWitness,
     swapExercisesLane,
 } from '../../../tools/release/rehearse.mjs';
 import { LANES, ALL_OS_TRIGGER_PACKAGES, deviceNamesCiRunner } from '../../../tools/release/rehearsal-matrix.mjs';
@@ -939,21 +940,20 @@ const check = (over) => assertRecord({
         assert.match(short.stdout, /never had an observed swap: mac-arm64\./);
     }
 
-    // THIS ASSERTION IS THE INVERSE OF WHAT IT USED TO BE, and the reason is
-    // worth keeping. It used to require that "NO DEVICE NAMED (DD4)" APPEAR
-    // in the output, which encoded the UNANSWERED state as an invariant: the
-    // day the operator answered DD4, a correct matrix would have failed this
-    // smoke. A test that fails when the open question gets closed is testing
-    // the calendar, not the code.
+    // This assertion rejects "NO DEVICE NAMED (DD4)" because encoding an open
+    // decision as an invariant makes the correct answer fail when it arrives.
+    // The durable contract is that every lane has an explicit witness target,
+    // while capability checks decide whether that target can observe its swap.
+    // This keeps the smoke tied to the matrix contract instead of a calendar
+    // state and makes a newly added unnamed lane fail immediately.
     //
-    // DD4 was answered for all eight lanes on 2026-08-03, so the useful claim
-    // is the opposite one: no lane may be unnamed. A lane added later with
-    // `device: null` would otherwise inherit the old state in silence, and
-    // `rehearse.mjs attest` would refuse it at release time - which is a much
-    // worse place to discover it than here.
+    // Every lane received a non-null device on 2026-08-03, so no lane may be
+    // unnamed. A runner or a device that installs another lane's artifact is
+    // named but cannot witness this lane, and is checked separately below.
+    // The distinction prevents a placeholder name from satisfying the gate.
+    // It also keeps hardware waivers visible in each coverage report.
     assert.doesNotMatch(coverage.stdout, /NO DEVICE NAMED \(DD4\)/,
-        'every lane must name a smoke device: DD4 is answered for all eight, so an '
-        + 'unnamed lane is a new gap rather than a leftover');
+        'every lane must name a smoke device; an unnamed lane is a new gap rather than a leftover');
     for (const lane of LANES) {
         assert.ok(lane.device, `lane ${lane.id} names no DD4 device`);
         assert.match(coverage.stdout, new RegExp(`${lane.id}\\s+device `),
@@ -965,8 +965,7 @@ const check = (over) => assertRecord({
         const readme = readFileSync(join(root, 'tools/release/README.md'), 'utf8');
         for (const stale of [/blocked on DD4 for [a-z]+ of/i, /only lane with hardware/i]) {
             assert.doesNotMatch(readme, stale,
-                'tools/release/README.md says DD4 still blocks lanes, but every lane in '
-                + 'rehearsal-matrix.mjs names a device. Re-state the README status bullet from the '
+                'tools/release/README.md uses obsolete blanket DD4 wording. Re-state the status from the '
                 + 'matrix rather than editing this assertion.');
         }
         // Hold the two tool sources' prose to the same answer; a pattern spans wrapped `//` lines.
@@ -975,8 +974,31 @@ const check = (over) => assertRecord({
             for (const stale of [/DD4[\s/*]+is[\s/*]+the[\s/*]+open[\s/*]+question/i,
                 /before[\s/*]+DD4[\s/*]+lands/i, /still[\s/*]+blocked[\s/*]+on[\s/*]+DD4/i]) {
                 assert.doesNotMatch(src, stale,
-                    `${file} says DD4 is still open, but every lane in rehearsal-matrix.mjs names a device. `
+                    `${file} uses obsolete blanket DD4 wording. Re-state the prose from the LANES data `
+                    + 'and each device\'s witness capability rather than editing this assertion.');
+            }
+        }
+    }
+
+    const unwitnessable = LANES.filter((lane) => deviceNamesCiRunner(lane.device)
+        || laneDeviceCannotWitness(lane));
+    if (unwitnessable.length) {
+        const prose = new Map([
+            ['tools/release/rehearsal-matrix.mjs', readFileSync(join(root, 'tools/release/rehearsal-matrix.mjs'), 'utf8')],
+            ['tools/release/rehearse.mjs', readFileSync(join(root, 'tools/release/rehearse.mjs'), 'utf8')],
+            ['tools/release/README.md', readFileSync(join(root, 'tools/release/README.md'), 'utf8')],
+        ]);
+        for (const [file, src] of prose) {
+            for (const stale of [/answered[\s/*]+for[\s/*]+all[\s/*]+eight/i,
+                /named[\s/*]+a[\s/*]+device[\s/*]+for[\s/*]+every[\s/*]+desktop[\s/*]+lane/i]) {
+                assert.doesNotMatch(src, stale,
+                    `${file} claims every device can witness while the matrix has unwitnessable lanes. `
                     + 'Re-state the prose from the LANES data rather than editing this assertion.');
+            }
+        }
+        for (const lane of unwitnessable) {
+            for (const file of ['tools/release/rehearsal-matrix.mjs', 'tools/release/README.md']) {
+                assert.ok(prose.get(file).includes(lane.id), `${file} must name unwitnessable lane ${lane.id}`);
             }
         }
     }

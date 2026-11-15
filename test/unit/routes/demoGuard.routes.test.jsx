@@ -120,7 +120,7 @@ const ROUTES = [
     ['Delegate vote', DelegateVoteForm],
     ['Create poll', CreatePollForm],
     ['Compose message', ComposeMessage],
-    ['Broadcast', BroadcastForm],
+    ['Announce', BroadcastForm],
     ['Create list', ListCreateForm],
     ['Fork list', ListForkForm],
     ['Rename list', ListRenameForm],

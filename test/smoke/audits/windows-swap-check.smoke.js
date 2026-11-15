@@ -52,7 +52,7 @@ import {
 import {
     pairFromArtifacts, installElectronStandIn, siliconOf, disposabilityVerdict, positionalOf,
 } from '../../../tools/release/drills/win-update-swap.mjs';
-import { LANES, laneById } from '../../../tools/release/rehearsal-matrix.mjs';
+import { LANES, deviceNamesCiRunner, laneById } from '../../../tools/release/rehearsal-matrix.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
@@ -324,6 +324,21 @@ const passing = makeSwapCheck({
     assert.ok(!macNote.includes(laneById('mac-x64').device),
         'the mac-x64 note must not name the Rosetta device as the place to attest');
 
+    for (const lane of LANES.filter((entry) => deviceNamesCiRunner(entry.device))) {
+        const runnerPass = check({
+            'automated-checks': [makeSwapCheck({
+                lane: lane.id, from: '0.337.0', to: '0.337.1', result: 'pass',
+                runner: 'Linux x64 automated runner', silicon: 'native x64',
+            })],
+        });
+        const note = runnerPass.notes.join(' ');
+        assert.match(note, /not an attestation/i);
+        assert.match(note, /CI runner/);
+        assert.match(note, /operator hardware decision owed/);
+        assert.ok(!note.includes(lane.device),
+            `${lane.id} note must not name its runner as the place to witness the swap`);
+    }
+
     // The last door: an attestation whose witness is a CI system. `attest`
     // refuses to produce one, so this can only arrive by hand, and the gate
     // that runs at publish time refuses it too.
@@ -401,6 +416,21 @@ const passing = makeSwapCheck({
         'the mac-x64 check must not name the Rosetta device as the place to attest');
     assert.match(filed.stderr, /rehearse\.mjs attest/,
         'a lane whose device can witness is still pointed at `attest`');
+
+    fresh();
+    const runnerResultPath = join(work, 'linux-x64-deb-check-result.json');
+    writeFileSync(runnerResultPath, `${JSON.stringify(makeSwapCheck({
+        lane: 'linux-x64-deb', from: '0.337.0', to: '0.337.1', result: 'pass',
+        runner: 'Linux x64 automated runner', silicon: 'native x64',
+    }), null, 2)}\n`);
+    const runnerFiled = cli(['check', '--record', recordPath, '--from-result', runnerResultPath]);
+    assert.equal(runnerFiled.status, 0, `linux-x64-deb check failed: ${runnerFiled.stderr}`);
+    assert.match(runnerFiled.stderr, /NOT an attestation/);
+    assert.match(runnerFiled.stderr, /CI runner/);
+    assert.match(runnerFiled.stderr, /operator hardware decision owed/);
+    assert.doesNotMatch(runnerFiled.stderr, /rehearse\.mjs attest/);
+    assert.ok(!runnerFiled.stderr.includes(laneById('linux-x64-deb').device),
+        'the linux-x64-deb check must not name its runner as the place to witness the swap');
 
     // The flag form refuses `--by` outright rather than ignoring it, so
     // somebody reaching for the attestation vocabulary is told where it went.

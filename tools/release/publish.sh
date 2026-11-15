@@ -482,6 +482,18 @@ fi
 echo "publish.sh: verifying the signed release before upload ..." >&2
 bash "$HERE/verify.sh" --input "$INPUT_DIR" --tag "$TAG" >&2
 
+# dev-mock publish gate begin
+# verify.sh warns, but this effector must refuse before any release byte moves.
+M_GATE="$(xr_header_field "$MANIFEST" "dev-mock-gate")"
+if [[ "$M_GATE" != "enforced" ]]; then
+    echo "publish.sh: $MANIFEST records the dev-mock gate as '${M_GATE:-unrecorded}', not 'enforced'; refusing to publish $TAG." >&2
+    echo "  The gate keeps the fabricated-address dev SDK, which cannot sign or" >&2
+    echo "  broadcast, out of a shipped bundle. Nothing was uploaded. Re-sign the" >&2
+    echo "  release with the gate running." >&2
+    exit 1
+fi
+# dev-mock publish gate end
+
 BASE="$(target_path)"
 MANIFEST_REMOTE="$BASE/$MANIFEST_REL"
 

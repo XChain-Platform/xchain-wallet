@@ -496,11 +496,10 @@ if (docsAvailable()) {
 
 // Two properties, and neither fails visibly when it breaks.
 //
-// The profile: a mobile store artifact built at `default` carries the
-// §2.3 review-hidden surfaces. Dropping the env var produces a perfectly
-// good ipa of the wrong app, and the only later signal is
-// expected-artifacts.txt refusing it at the release machine, long after
-// the build looked green.
+// The profile: a mobile store artifact built at `default` has the wrong CSP,
+// sourcemap setting and profile stamp. Dropping the env var produces a valid
+// ipa under the wrong label, and expected-artifacts.txt refuses it only later
+// at the release machine, long after the build looked green.
 //
 // The gate: the archive/export steps must stay conditional on the App
 // Store Connect key being present. Until K2 enrollment completes there is
@@ -511,7 +510,7 @@ const ios = jobs.get('mobile-ios');
 
 assert.ok(/XCHAIN_BUILD_PROFILE:\s*store/.test(ios),
     'the iOS lane must build the web shell at the `store` profile, or the ipa '
-    + 'carries the surfaces §2.3 compiles out');
+    + 'has the wrong CSP, sourcemap setting and profile stamp');
 
 assert.ok(/ASC_KEY_ID:\s*\$\{\{\s*secrets\.APPLE_API_KEY_ID/.test(ios),
     'the iOS lane reads the ASC key id into env, which is what its steps gate on');

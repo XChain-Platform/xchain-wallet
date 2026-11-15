@@ -45,7 +45,7 @@ async function onboardOntoBroadcastForm(page, walletName) {
     await createWallet(page, { password: PASSWORD, name: walletName });
     await switchToRegtest(page, PASSWORD);
 
-    await openPaletteCommand(page, 'Broadcast a message');
+    await openPaletteCommand(page, 'Post an announcement');
     let main = page.getByRole('main');
     await expect(main.getByLabel('Message', { exact: true })).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
@@ -56,7 +56,7 @@ async function onboardOntoBroadcastForm(page, walletName) {
     await page.reload();
     await unlockAfterReload(page, PASSWORD);
 
-    await openPaletteCommand(page, 'Broadcast a message');
+    await openPaletteCommand(page, 'Post an announcement');
     main = page.getByRole('main');
     await expect(main.getByLabel('Message', { exact: true })).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
@@ -102,7 +102,7 @@ test.describe(`Broadcast submit path on ${REGTEST_CHAIN_LABEL}`, () => {
             const main = opened.main;
 
             await main.getByLabel('Message', { exact: true }).fill(text);
-            await main.getByRole('button', { name: 'Broadcast', exact: true }).click();
+            await main.getByRole('button', { name: 'Announce', exact: true }).click();
 
             await approveConfirm(page, 'the plain broadcast');
             const txid = await readDoneTxid(page);

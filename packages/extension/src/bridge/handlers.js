@@ -34,7 +34,7 @@
 // assertNotBlocked and no site record. It is the only route that carries its
 // own blocklist check for that reason.
 
-import { flows, schemas } from '@xchain-wallet/core';
+import { flows, registry, schemas } from '@xchain-wallet/core';
 import {
     resolveAutoApproveScope,
     shouldAutoApproveConnect,
@@ -311,15 +311,23 @@ export function registerBridgeHandlers(host, opts = {}) {
             if (!decision || !decision.approved) {
                 throw new UserRejectedError('connect');
             }
-            // `decision.accounts` is the user's selection from the prompt, but it
-            // crosses a message boundary, so drop any id that is not a real vault
-            // account before it can become a grant: a foreign or made-up id stored
-            // in site.permissions.accounts would be handed back unchanged by every
-            // reader that trusts that list.
+            // Approval decisions cross a message boundary. Keep only chain ids
+            // the background registry knows and account ids the vault holds.
+            // An empty chain list is a wildcard under §43.3, so a decision with
+            // no valid chain must fail instead of becoming a grant for every chain.
+            // Reject the decision as a unit rather than broadening its authority.
+            registry.hydrateCustomChainsFromSettings(deps.chainRegistry, settings);
+            const approvedChains = Array.isArray(decision.chains)
+                ? [...new Set(decision.chains.filter((id) => (
+                    typeof id === 'string' && id.length > 0
+                    && Boolean(deps.chainRegistry.get(id))
+                )))]
+                : [];
+            if (approvedChains.length === 0) throw new UserRejectedError('connect');
             const vaultAccounts = await deps.vault.accounts.list();
             const knownAccountIds = new Set(vaultAccounts.map((a) => a.id));
             const permissions = {
-                chains: Array.isArray(decision.chains) ? decision.chains : [],
+                chains: approvedChains,
                 accounts: Array.isArray(decision.accounts)
                     ? decision.accounts.filter((id) => knownAccountIds.has(id))
                     : [],

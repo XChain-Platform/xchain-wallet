@@ -79,17 +79,18 @@ therefore signed a spend of an outpoint that does not exist, and returned
 a perfectly well-formed transaction to prove it. That is exactly what the
 `spends` assertion in `ledger-speculos.js` pins.
 
-The wallet's default path hits this: `XChainEncoder.js` builds segwit
-inputs with `witnessUtxo` only, and p2wpkh is the default address type.
-So hardware signing currently works for legacy inputs and refuses segwit
-ones. Completing it means supplying the real previous transaction, one of:
+The supported wallet compose path supplies that transaction at build
+time. The encoder's `attachPrevTx` option adds `nonWitnessUtxo` beside
+the normal `witnessUtxo`, and wallet compose routes request the option
+for Ledger and Trezor sources. Doing this before review keeps the PSBT
+the user previews byte-identical to the one later signed. The SDK's
+`decomposePsbt` preserves `nonWitnessUtxo` when both fields are present,
+so `prevTxHexForInput` can pass the real transaction to Ledger.
 
-1. the encoder attaching `nonWitnessUtxo` to segwit inputs too (it
-   already fetches the whole prev-tx hex for the legacy branch),
-2. `decomposePsbt` exposing `nonWitnessUtxo` whenever it is present (it
-   currently reports it only when `witnessUtxo` is absent, so even a PSBT
-   carrying both loses it), or
-3. the wallet hydrating inputs from a connector before hardware signing.
+The signer still refuses a segwit PSBT that carries only `witnessUtxo`,
+including one built outside the wallet's device compose path. That is
+the intended boundary: the signer cannot recover the real previous
+transaction from the script and value alone.
 
 Do not "fix" it by restoring the synthesized prev tx. That path returns
 transactions that cannot be broadcast and signatures over the wrong

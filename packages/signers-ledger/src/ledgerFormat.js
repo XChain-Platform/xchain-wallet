@@ -22,12 +22,12 @@
 //   - segwit: boolean
 //   - additionals: string[]             e.g. ['bech32'] for native segwit
 //
-// For p2wpkh inputs the PSBT only carries a witnessUtxo (scriptPubKey
-// + value). Ledger still wants a prev-transaction structure to
-// compute BIP143 sighashes, so the converter synthesizes a minimal
-// valid raw tx for each segwit input that places the right output at
-// the right vout. The caller passes the resulting `inputs[i].prevTxHex`
-// to the signer, which runs `app.splitTransaction` on it at call time.
+// Ledger needs the full previous transaction for every input, including
+// p2wpkh, because it takes the signed outpoint from those bytes. The
+// converter therefore requires `nonWitnessUtxoHex` and refuses an input
+// that carries only `witnessUtxo`. The caller passes the resulting
+// `inputs[i].prevTxHex` to the signer, which runs `app.splitTransaction`
+// on it at call time.
 
 import {
     enablesRelativeLock, isDeviceTxVersion, isValidSequence,
@@ -177,11 +177,12 @@ export function serializeOutputs(outputs) {
 }
 
 /**
- * Build a minimal valid raw transaction hex placing the given output
- * at `vout`. Used for segwit inputs where the PSBT only carries a
- * witnessUtxo (no full prev-tx). Ledger treats the synthesized tx as
- * a carrier for scriptPubKey + value at the given vout; the inputs
- * and surrounding outputs are zeroed.
+ * Build a minimal raw transaction hex placing the given output at
+ * `vout`, with the other inputs and outputs zeroed. This helper remains
+ * useful for deterministic fixtures and explicit carrier construction,
+ * but its output is not the previous transaction of a real PSBT input.
+ * Hardware signing must receive the transaction whose hash is the
+ * outpoint named by the PSBT, never a structure synthesized from its output.
  *
  * Layout (non-segwit): version(4 LE) + inputCount(varint) + inputs +
  * outputCount(varint) + outputs + locktime(4 LE).
@@ -229,19 +230,20 @@ export function synthesizeMinimalPrevTx(vout, value, scriptPubKeyHex) {
 }
 
 /**
- * Resolve the prev-tx hex to feed into Ledger's splitTransaction for
- * an input. Prefer the real nonWitnessUtxoHex (legacy lane); fall
- * back to a synthesized minimal tx when the PSBT only carries a
- * witnessUtxo (segwit lane).
+ * Resolve the full previous transaction to feed into Ledger's
+ * splitTransaction. Every input requires its real nonWitnessUtxoHex.
+ * A witnessUtxo alone is refused because a synthesized transaction
+ * would make the device sign a different outpoint.
  *
  * @param {import('../../core/src/signers/types.js').DecomposedPsbtInput} inp
  * @returns {string}
+ * @throws {Error} when the full previous transaction is unavailable
  */
 function prevTxHexForInput(inp) {
     if (inp.nonWitnessUtxoHex) return inp.nonWitnessUtxoHex;
 
-    // A synthesized prev tx CANNOT be used to build a spend, and this used
-    // to do exactly that for every witnessUtxo-only input.
+    // A synthesized prev tx cannot build a valid spend for a witnessUtxo-only
+    // input.
     // Ledger derives the outpoint it signs from the bytes of the prev tx it
     // is handed, and a synthesized tx hashes to a different txid than the
     // real one by construction. The device happily produced a fully-formed,
@@ -249,12 +251,12 @@ function prevTxHexForInput(inp) {
     // exist, so it could never be broadcast. Verified on a real device: the
     // signed input matched the synthesized txid, not the PSBT's.
     //
-    // This is the wallet's DEFAULT path, not an edge case: the encoder
-    // builds segwit inputs with witnessUtxo only (XChainEncoder.js), and
-    // p2wpkh is the default address type. Fail closed; refusing to sign is
-    // strictly better than emitting an invalid signature over the wrong
-    // outpoint. See test/README-hardware.md for the completing fix, which
-    // has to supply the real prev tx.
+    // The encoder emits witnessUtxo alone unless attachPrevTx is requested.
+    // Wallet device compose paths request it at build time, but an external
+    // PSBT may not. Fail closed instead of signing the wrong outpoint. See
+    // test/README-hardware.md for the compose-time requirement and device
+    // verification procedure. The check belongs here as the final boundary
+    // because imported PSBTs can bypass wallet composition entirely.
     if (inp.witnessUtxoScriptHex) {
         throw new Error(
             'ledgerFormat: input has only a witnessUtxo, so the previous transaction is '

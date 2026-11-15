@@ -47,6 +47,14 @@ describe('shared/actionDisplayLabel', () => {
         expect(actionDisplayLabel('DEPLOY')).toBe('Publish contract');
     });
 
+    it('names BROADCAST as an announcement and CALLBACK as a token recall', () => {
+        expect(actionDisplayLabel('BROADCAST')).toBe('Announcement');
+        expect(actionDisplayLabel('broadcast')).toBe('Announcement');
+        expect(actionDisplayLabel('CALLBACK')).toBe('Token recall');
+        expect(actionDisplayLabel('callback')).toBe('Token recall');
+        expect(actionDisplayLabel('CALLBACK')).not.toMatch(/callback/i);
+    });
+
     it('maps validator and mirror-injected verbs, not the recased opcode', () => {
         expect(actionDisplayLabel('ANCHOR')).toBe('Network checkpoint');
         expect(actionDisplayLabel('ATTEST')).toBe('Validator attestation');
@@ -141,6 +149,13 @@ describe('shared/psbtActionSummary', () => {
     it('summarizes ADDRESS without describing a messaging action', () => {
         expect(psbtActionSummary({ action: 'ADDRESS', version: 1 }))
             .toBe('Carries an XChain Address settings action');
+    });
+
+    it('uses the plain display names for announcement and recall actions', () => {
+        expect(psbtActionSummary({ action: 'BROADCAST', version: 0 }))
+            .toBe('Carries an XChain Announcement action');
+        expect(psbtActionSummary({ action: 'CALLBACK', version: 0 }))
+            .toBe('Carries an XChain Token recall action');
     });
 
     it('reads cleanly when the action name is missing', () => {

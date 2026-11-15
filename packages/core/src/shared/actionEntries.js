@@ -100,7 +100,7 @@ export const ACTION_ENTRY_DEFS = Object.freeze([
     {
         id: 'broadcast',
         handler: 'onBroadcast',
-        label: 'Broadcast',
+        label: 'Announce',
         description: 'Publish text, oracle value, or feed reference on-chain.',
     },
     {

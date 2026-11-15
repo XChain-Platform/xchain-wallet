@@ -495,8 +495,8 @@ for (const [label, channel, args, staging] of [
     const r = await run(['--input', dir, '--tag', TAG, '--target', target, ...args]);
     if (!staging) writeRehearsalRecord(prodRelease);
     assert.equal(r.status, 1, `${label}: a SKIPPED-gate release is refused:\n${r.out}`);
-    assert.match(r.out, /POINTER-REFUSED\s+the signed manifest records the dev-mock gate as 'SKIPPED'/,
-        `${label}: the pointer gate names the skipped gate:\n${r.out}`);
+    assert.match(r.out, /publish\.sh: .* records the dev-mock gate as 'SKIPPED', not 'enforced'/,
+        `${label}: the publisher names the skipped gate:\n${r.out}`);
     assert.equal(existsSync(join(target, 'desktop')), false, `${label}: nothing was uploaded`);
     assert.equal(existsSync(join(target, 'RELEASE_HASHES', `${TAG}.txt`)), false,
         `${label}: the manifest was not uploaded either`);
@@ -720,7 +720,7 @@ function serve(dir, { missing = null, wrongLength = null } = {}) {
  * A partial release signed for one lane, the shape `sign.sh --lane <lane>`
  * produces: the scope and header come from lib.sh, not a hand-rolled copy.
  */
-function makePartial(name, lane, artifacts) {
+function makePartial(name, lane, artifacts, gate = 'enforced') {
     const dir = join(work, name);
     const scope = join(work, `scope-${name}.txt`);
     mkdirSync(dir, { recursive: true });
@@ -731,7 +731,7 @@ function makePartial(name, lane, artifacts) {
         + `"${join(root, 'tools/release/expected-artifacts.txt')}" ${lane}) && `
         + `printf '%s\\n' "$scope" > "${scope}" && `
         + `xr_write_manifest "${dir}" "${TAG}" "${'0'.repeat(40)}" `
-        + `"2026-07-31T00:00:00Z" "enforced" "${scope}" "${lane}"`],
+        + `"2026-07-31T00:00:00Z" "${gate}" "${scope}" "${lane}"`],
     { env: process.env });
     execFileSync('gpg', ['--batch', '--yes', '--armor', '--detach-sign',
         join(dir, 'RELEASE_HASHES.txt')], { env: { ...process.env, GNUPGHOME: gnupg } });
@@ -744,6 +744,30 @@ const partial = makePartial('release-partial', 'android', {
     'xchain-wallet-android-v0.333.1.aab': 'aab-bytes',
 });
 const ABSENT_RECORD = join(work, 'REHEARSAL-never-written.json');
+
+{
+    const skipped = makePartial('release-partial-skipped', 'android', {
+        [APK_NAME]: buildApk(),
+        'xchain-wallet-android-v0.333.1.aab': 'aab-bytes',
+    }, 'SKIPPED');
+    for (const [label, target, args, manifestRel] of [
+        ['production', makeTarget('feed-partial-skipped-prod'), [], join('RELEASE_HASHES', `${TAG}.txt`)],
+        ['staging', makeTarget('feed-partial-skipped-staging', { staging: true }), ['--staging'],
+            join('RELEASE_HASHES', 'android', `${TAG}.txt`)],
+    ]) {
+        if (label === 'production') writeRehearsalRecord(skipped, { manifestFrom: skipped });
+        const r = await run(['--input', skipped, '--tag', TAG, '--target', target,
+            '--no-edge-verify', ...args]);
+        assert.equal(r.status, 1, `${label}: an Android partial with a skipped gate is refused:\n${r.out}`);
+        assert.match(r.out, /records the dev-mock gate as 'SKIPPED', not 'enforced'/,
+            `${label}: the refusal names the skipped gate`);
+        assert.equal(existsSync(join(target, 'android', APK_NAME)), false,
+            `${label}: the APK was not uploaded`);
+        assert.equal(existsSync(join(target, manifestRel)), false,
+            `${label}: the manifest was not uploaded`);
+    }
+    writeRehearsalRecord(prodRelease);
+}
 
 {
     assert.match(readFileSync(join(partial, 'RELEASE_HASHES.txt'), 'utf8'),

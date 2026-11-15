@@ -1139,7 +1139,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: BroadcastForm,
             props: {},
-            actionLabel: 'Broadcast',
+            actionLabel: 'Announce',
             fill: (utils) => setValue(utils, 'Message', 'hello chain'),
         });
         expectSingleEncode(calls, {
@@ -1186,7 +1186,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             await drainMicrotasks();
         });
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Broadcast' }));
+            fireEvent.click(utils.getByRole('button', { name: 'Announce' }));
             await drainMicrotasks();
         });
 

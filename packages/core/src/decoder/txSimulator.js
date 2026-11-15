@@ -476,7 +476,7 @@ function simulateBroadcast(p, balMap, coinTick, feeEstimate) {
     } else {
         sideEffects.push({
             kind: 'broadcast',
-            label: 'Broadcast',
+            label: 'Announcement',
             value: message ? `"${message}"` : '(empty message)',
         });
     }

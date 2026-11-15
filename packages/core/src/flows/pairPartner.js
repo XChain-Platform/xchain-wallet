@@ -64,6 +64,7 @@
 
 import { sha256 } from '@noble/hashes/sha2';
 import { t } from '../i18n/index.js';
+import { defaultAddressTypeForFormat } from './_defaultAddressType.js';
 import '../i18n/locales/en/flows.js';
 import '../i18n/locales/en/settings.js';
 
@@ -245,7 +246,7 @@ export async function collectPairingKeys({
             ? chainRegistry.descriptorFor(chainId)
             : chainRegistry.get(chainId);
         if (!descriptor) continue;
-        const addressType = descriptor.defaultAddressType;
+        const addressType = defaultAddressTypeForFormat(descriptor, format);
         const fullPath = chainRegistry.derivationPathFor(
             chainId, addressType, accountIndex, 0, 0, { format },
         );

@@ -72,19 +72,19 @@
 // ship" - `rehearse.mjs coverage` refuses to call such a lane launch-
 // ready, and says so rather than passing quietly.
 //
-// DD4 IS NOW ANSWERED FOR ALL EIGHT LANES (the last two by operator
-// decision 2026-08-03). No lane carries `device: null`, and
-// `rehearsal.smoke.js` refuses a new one that does, rather than letting it
-// inherit the old unanswered state silently.
+// Every lane has carried a non-null device since the operator decision of
+// 2026-08-03, and `rehearsal.smoke.js` refuses a new null. A name answers
+// DD4 only when that device can witness the lane's own swap. The
+// linux-x64-appimage and linux-x64-deb names are CI runners, so an x64
+// desktop or workstation is still owed. mac-x64 is waived until a native
+// Intel Mac is named.
 //
 // NAMING A DEVICE IS NOT A CLAIM THAT THE LANE HAS BEEN REHEARSED. It says
-// only which machine the swap will be watched on. `coverage` still reports
-// an un-rehearsed lane as ⬜ and still exits non-zero; naming changes only
-// the REASON it gives, from "DD4 unanswered" to "never rehearsed". Those
-// are different blockers with different owners and the output must not
-// conflate them. What blocks a named lane now is the swap itself, watched
-// on its device and recorded with `rehearse.mjs attest --by <who>`;
-// `rehearse.mjs coverage` is the live list of lanes that still owe one.
+// where a swap is intended to be watched. For the other five lanes the open
+// item is the swap itself, watched on that device and recorded with
+// `rehearse.mjs attest --by <who>`. `coverage` reports the two runner lanes
+// as BLOCKED, mac-x64 as WAIVED, and remains the live list of swaps owed.
+// A device name is therefore inventory, while witness capability is evidence.
 //
 // WHY A HOSTED RUNNER DOES NOT TAKE THE WINDOWS LANES, since it is the
 // obvious idea and it was measured rather than dismissed. A

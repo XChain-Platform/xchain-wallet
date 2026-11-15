@@ -534,8 +534,6 @@ describe('translations', () => {
             ['routes.addressList.dispensers', 'walletMenu.row.dispensers'],
             // The menu's Actions group and the token page's actions heading.
             ['routes.manageToken.actions', 'walletMenu.group.actions'],
-            // The token page broadcast action verb and the timeline stage name for the broadcast step.
-            ['routes.manageToken.broadcast', 'txTimeline.broadcast.label'],
             // The wallet menu reuses the label the same destination carries elsewhere.
             ['scan.title', 'walletMenu.row.scan'],
             // The Send form's network field and the Settings network row.

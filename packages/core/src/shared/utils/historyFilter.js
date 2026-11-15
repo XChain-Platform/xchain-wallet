@@ -51,7 +51,7 @@ export const ACTION_TYPE_OPTIONS = [
     { id: 'order', label: 'Order' },
     { id: 'swap', label: 'Swap' },
     { id: 'dividend', label: 'Dividend' },
-    { id: 'broadcast', label: 'Broadcast' },
+    { id: 'broadcast', label: 'Announcement' },
     { id: 'message', label: 'Message' },
     { id: 'link', label: 'Link' },
     { id: 'crosschain', label: 'Cross-chain link' },

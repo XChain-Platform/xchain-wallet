@@ -68,10 +68,10 @@ export async function broadcastAction(opts) {
         fromAddress: source.address,
         toAddress: null,
         actionSummary: hasMessage && value
-            ? `Broadcast "${message}" (value ${value})`
+            ? `Announce "${message}" (value ${value})`
             : hasMessage
-                ? `Broadcast "${message}"`
-                : `Broadcast feed result #${opts.params.BROADCAST_ACTION_INDEX}`,
+                ? `Announce "${message}"`
+                : `Announce feed result #${opts.params.BROADCAST_ACTION_INDEX}`,
     };
 
     return submitAction({

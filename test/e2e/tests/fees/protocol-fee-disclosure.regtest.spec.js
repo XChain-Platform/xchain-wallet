@@ -495,7 +495,7 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
             await createWallet(page, { password: PASSWORD, name: 'Zero Fee Wallet' });
             await switchToRegtest(page, PASSWORD);
 
-            await openPaletteCommand(page, 'Broadcast a message');
+            await openPaletteCommand(page, 'Post an announcement');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Message')).toBeVisible({ timeout: 30_000 });
             source = await main.getByLabel('From').inputValue();
@@ -518,14 +518,14 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
         });
 
         const composeBroadcast = async (message) => {
-            await openPaletteCommand(page, 'Broadcast a message');
+            await openPaletteCommand(page, 'Post an announcement');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Message')).toBeVisible({ timeout: 30_000 });
             await main.getByLabel('Message').fill(message);
             await expect(feeToggle(main), 'BROADCAST exposes a protocol-fee switch').toHaveCount(0);
             const password = main.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-            await main.getByRole('button', { name: 'Broadcast', exact: true }).click();
+            await main.getByRole('button', { name: 'Announce', exact: true }).click();
             await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
         };

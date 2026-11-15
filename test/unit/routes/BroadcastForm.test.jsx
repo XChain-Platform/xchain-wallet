@@ -91,7 +91,7 @@ async function fill(message) {
 }
 
 function submit() {
-    fireEvent.click(screen.getByRole('button', { name: 'Broadcast' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Announce' }));
 }
 
 // The BROADCAST params as they reach the host-side compose.
@@ -115,7 +115,8 @@ describe('BroadcastForm plain message flow', () => {
         await fill('watcher broadcast');
         submit();
 
-        expect(await screen.findByRole('button', { name: 'Broadcast' })).toBeTruthy();
+        expect(await screen.findByRole('button', { name: 'Create unsigned transaction' })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'Announce' })).toBeNull();
         expect(screen.getByText(/Watcher mode: this prepares the transaction for your offline signer/)).toBeTruthy();
     });
 
@@ -135,7 +136,7 @@ describe('BroadcastForm plain message flow', () => {
         expect(screen.queryByLabelText(/Feed name/)).toBeNull();
         expect(screen.queryByLabelText(/^Value/)).toBeNull();
         expect(screen.queryByLabelText(/Feed fee/)).toBeNull();
-        expect(screen.getByRole('button', { name: 'Broadcast' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Announce' })).toBeTruthy();
     });
 
     it('shows a field error when Message is empty', async () => {
@@ -168,7 +169,7 @@ describe('BroadcastForm plain message flow', () => {
         await fill(message);
 
         expect(screen.getByText('Message is 251 characters; the network accepts at most 250 characters.')).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Broadcast' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Announce' })).toBeDisabled();
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -207,8 +208,8 @@ describe('BroadcastForm success screen', () => {
         expect(screen.getByRole('status')).toHaveAttribute('aria-atomic', 'true');
         expect(screen.getAllByRole('status')).toHaveLength(1);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Broadcast another' }));
-        expect(await screen.findByRole('button', { name: 'Broadcast' })).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Announce another' }));
+        expect(await screen.findByRole('button', { name: 'Announce' })).toBeTruthy();
         expect(screen.queryByText('deadbeef')).toBeNull();
         expect(confirm).not.toBeInTheDocument();
     });

@@ -1545,7 +1545,7 @@ function decodeBroadcast(p, chainSuffix) {
 
     // Version 0: plain broadcast message.
     return {
-        summary: `Broadcast "${message || ''}"${chainSuffix}`,
+        summary: `Announce "${message || ''}"${chainSuffix}`,
         details: [
             { label: 'Message', value: message },
             ...(value ? [{ label: 'Value', value }] : []),

@@ -278,14 +278,14 @@ test.describe(`the mandatory native-fee lane on ${REGTEST_CHAIN_LABEL}`, () => {
                 'BROADCAST is priced on this venue, so it cannot serve as the zero-fee case')
                 .toBe(0);
 
-            await openPaletteCommand(page, 'Broadcast a message');
+            await openPaletteCommand(page, 'Post an announcement');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Message')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
             await main.getByLabel('Message').fill(`mandatory lane zero check ${STAMP}`);
             const password = main.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-            await main.getByRole('button', { name: 'Broadcast', exact: true }).click();
+            await main.getByRole('button', { name: 'Announce', exact: true }).click();
 
             await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });

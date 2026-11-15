@@ -51,9 +51,9 @@ describe('broadcastAction guards and summary branches', () => {
     });
 
     it.each([
-        [{ MESSAGE: 'temperature', VALUE: '21.5' }, 'Broadcast "temperature" (value 21.5)'],
-        [{ MESSAGE: 'heartbeat', VALUE: '' }, 'Broadcast "heartbeat"'],
-        [{ BROADCAST_ACTION_INDEX: '42', VALUE: '1' }, 'Broadcast feed result #42'],
+        [{ MESSAGE: 'temperature', VALUE: '21.5' }, 'Announce "temperature" (value 21.5)'],
+        [{ MESSAGE: 'heartbeat', VALUE: '' }, 'Announce "heartbeat"'],
+        [{ BROADCAST_ACTION_INDEX: '42', VALUE: '1' }, 'Announce feed result #42'],
     ])('builds the pending summary for %#', async (params, summary) => {
         await broadcastAction(actionOpts(params));
         expect(vi.mocked(submitAction).mock.calls[0][0].pendingTxMeta.actionSummary).toBe(summary);

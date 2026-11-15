@@ -56,6 +56,12 @@ describe('ACTION_ENTRY_DEFS', () => {
         expect(issue.description).toMatch(/template/i);
     });
 
+    it('names the on-chain publish action without overloading network broadcast', () => {
+        const broadcast = ACTION_ENTRY_DEFS.find((entry) => entry.id === 'broadcast');
+        expect(broadcast.label).toBe('Announce');
+        expect(broadcast.description).toMatch(/publish/i);
+    });
+
     it('leaves developer tools out of All actions and lists Multisig signing for multisig sends', () => {
         const ids = ACTION_ENTRY_DEFS.map((entry) => entry.id);
         expect(ids).not.toContain('parallel');

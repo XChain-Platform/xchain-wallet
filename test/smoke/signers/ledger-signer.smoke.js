@@ -315,7 +315,8 @@ assert.equal(capturedCreateArgs.segwit, true, 'p2wpkh → segwit');
 assert.deepEqual(capturedCreateArgs.additionals, ['bech32'], 'native segwit → bech32 additional');
 assert.equal(capturedCreateArgs.associatedKeysets[0], "m/84'/0'/0'/0/5");
 assert.equal(capturedSplitCalls.length, 1, 'one input → one splitTransaction call');
-assert.match(capturedSplitCalls[0].rawTxHex, /^01000000/, 'synthesized prev tx starts with version=1 LE');
+assert.match(capturedSplitCalls[0].rawTxHex, /^01000000/,
+    'segwit lane passes the supplied nonWitnessUtxoHex (version=1 LE)');
 
 // Legacy lane: p2pkh input uses nonWitnessUtxoHex directly.
 const legacyDecomposed = {

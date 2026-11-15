@@ -117,8 +117,8 @@ assert.ok(
 );
 assert.ok(!/\.VALUE\s*=|\.FEE\s*=|\.MEMO\s*=|toISOString/.test(src),
     'BroadcastForm does not compose feed, oracle, memo, or timestamp fields');
-assert.ok(/variant="success"[\s\S]*?icon=\{<Icon\.BroadcastIcon \/>\}[\s\S]*?>\s*Broadcast/.test(src),
-    'BroadcastForm uses the green Broadcast button and broadcast icon');
+assert.ok(/variant="success"[\s\S]*?icon=\{<Icon\.BroadcastIcon \/>\}[\s\S]*?>\s*Announce/.test(src),
+    'BroadcastForm uses the green Announce button and broadcast icon');
 
 // --- 7. Core flow -----------------------------------------------------
 
@@ -166,7 +166,7 @@ assert.ok(
         action: 'BROADCAST',
         params: { VERSION: '0', MESSAGE: 'hello world' },
     });
-    assert.ok(/Broadcast\s+"hello world"/.test(v0.summary), 'v0 summary quotes the message');
+    assert.ok(/Announce\s+"hello world"/.test(v0.summary), 'v0 summary quotes the message');
     assert.ok(v0.details.some((d) => d.label === 'Message'), 'v0 surfaces Message detail');
 
     // v0 empty message warns
@@ -258,7 +258,7 @@ for (const [shell, appPath] of [
         `${shell} App.jsx tracks the broadcast sub-route`,
     );
     assert.ok(
-        surfacesEntry(app, 'broadcast', 'Broadcast'),
+        surfacesEntry(app, 'broadcast', 'Announce'),
         `${shell} App.jsx registers the broadcast entry in buildActionEntries`,
     );
     assert.ok(

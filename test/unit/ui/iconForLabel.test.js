@@ -36,6 +36,8 @@ describe('ui/icons/iconForLabel', () => {
         ['Sign', SignIcon],
         ['Sign action', SignIcon],
         ['Broadcast', BroadcastIcon],
+        ['Announce', BroadcastIcon],
+        ['Announcement', BroadcastIcon],
         ['Lock', LockIcon],
         ['Unlock', UnlockIcon],
         ['Save', SaveIcon],

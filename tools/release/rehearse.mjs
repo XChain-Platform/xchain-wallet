@@ -30,8 +30,9 @@
 //   2. Install and swap.  Whether the downloaded artifact actually
 //      replaces the running app. That needs the OS and the arch, so it
 //      is attested by a human on the lane's named device (`attest`).
-//      DD4 named a device for every desktop lane (rehearsal-matrix.mjs);
-//      what a lane still owes is the witnessed swap, listed by `coverage`.
+//      The two linux-x64 lanes name a CI runner, which does not answer DD4,
+//      and mac-x64 is waived until a native Intel device is named. The other
+//      lanes owe a witnessed swap; `coverage` is the live list.
 //
 // Splitting them still puts the risk in the right place: the half
 // that historically breaks - a pointer name nothing fetches, an arch
@@ -408,6 +409,13 @@ export function laneDeviceCannotWitness(lane) {
 function cannotWitnessReason(lane) {
     return `this lane's named device cannot witness it (it installs the ${deviceInstalledArch(lane)} `
         + `artifact); operator hardware decision owed: name a native ${lane.arch} device in `
+        + 'tools/release/rehearsal-matrix.mjs';
+}
+
+// Say why a runner name is not a place where the human half can be witnessed.
+function ciRunnerWitnessReason() {
+    return 'this lane\'s named device is a CI runner and cannot witness a swap; '
+        + 'operator hardware decision owed: name a desktop or workstation in '
         + 'tools/release/rehearsal-matrix.mjs';
 }
 
@@ -1401,7 +1409,9 @@ export function assertRecord({ record, tag, prodManifestSha256, releaseArtifacts
                 `${auto.lane}: an automated swap check PASSED on ${auto.runner}`
                 + `${auto.silicon ? ` (${auto.silicon})` : ''}, ${auto.from} -> ${auto.to}. `
                 + 'That is a machine result and not an attestation: §7.5 still requires a person '
-                + (laneDeviceCannotWitness(lane)
+                + (deviceNamesCiRunner(lane.device)
+                    ? `to watch the swap, and ${ciRunnerWitnessReason()}.`
+                    : laneDeviceCannotWitness(lane)
                     ? `to watch the swap, and ${cannotWitnessReason(lane)}.`
                     : `to watch the swap on ${lane.device}.`),
             );
@@ -1958,7 +1968,10 @@ async function main(argv) {
         // Said on the way out, every time, because the whole risk of having
         // this command at all is that its output starts reading as the
         // rehearsal it stands beside.
-        process.stderr.write(laneDeviceCannotWitness(lane)
+        process.stderr.write(deviceNamesCiRunner(lane.device)
+            ? `rehearse.mjs: this is NOT an attestation. ${result.lane} still owes a swap watched by a `
+              + `person, and ${ciRunnerWitnessReason()}.\n`
+            : laneDeviceCannotWitness(lane)
             ? `rehearse.mjs: this is NOT an attestation. ${result.lane} still owes a swap watched by a `
               + `person, and ${cannotWitnessReason(lane)}.\n`
             : `rehearse.mjs: this is NOT an attestation. ${result.lane} still owes an observed swap `

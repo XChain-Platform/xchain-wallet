@@ -111,7 +111,10 @@ function fakeVault(accounts = [
     };
 }
 
-const chainRegistry = { get: () => null, supportedChains: () => [] };
+const chainRegistry = {
+    get: (id) => (id === chain.id ? chain : null),
+    supportedChains: () => [chain],
+};
 
 function makeBackground({ vault = fakeVault(), approvals } = {}) {
     const windows = {

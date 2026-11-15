@@ -93,7 +93,7 @@ const messages = {
     'routes.manageToken.description': 'Description',
     'routes.manageToken.artwork': 'Artwork',
     'routes.manageToken.officialList': 'Official list',
-    'routes.manageToken.broadcast': 'Broadcast',
+    'routes.manageToken.broadcast': 'Announce',
     'routes.manageToken.transfer': 'Transfer',
     'routes.manageToken.controller': 'Controller',
     'routes.manageToken.callbackSettings': 'Callback settings',

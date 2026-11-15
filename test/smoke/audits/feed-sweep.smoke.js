@@ -564,6 +564,16 @@ function clientVerdict(pointerText, manifests, artifacts) {
     assert.equal(clean.pointers, 1, 'the JSON pointer is recognised as a pointer');
     assert.deepEqual(codes(clean), [], 'a feed that matches its signed manifest is clean');
 
+    const manifestPath = join(root, 'RELEASE_HASHES', 'v0.336.0.txt');
+    const enforcedManifest = readFileSync(manifestPath, 'utf8');
+    writeFileSync(manifestPath,
+        enforcedManifest.replace('# dev-mock-gate: enforced', '# dev-mock-gate: SKIPPED'));
+    const ungated = sweep(root);
+    assert.deepEqual(codes(ungated), ['POINTER-UNGATED'],
+        'an Android JSON pointer reports its own skipped-gate manifest');
+    assert.equal(ungated.findings[0].path, 'android/latest.json');
+    writeFileSync(manifestPath, enforcedManifest);
+
     // The swap this tool exists to detect, on the only binary we ship.
     writeFileSync(join(root, 'android', apk), `${bytes}-tampered`);
     assert.deepEqual(codes(sweep(root)), ['MISMATCH'],

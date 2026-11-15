@@ -65,7 +65,7 @@ assert.ok(/<CopyButton value=\{txid\} label="Copy transaction ID" \/>/.test(broa
     'BROADCAST success makes the transaction ID copyable');
 assert.ok(/explorerPageUrl\(\{[\s\S]*?kind: 'transaction',[\s\S]*?value: txid/.test(broadcast),
     'BROADCAST success builds a chain-scoped transaction explorer URL');
-assert.ok(/Broadcast another/.test(broadcast),
+assert.ok(/Announce another/.test(broadcast),
     'BROADCAST success offers a repeat path');
 assert.ok(!/Signed transaction code|Feed name|Prepend UTC timestamp/.test(broadcast),
     'BROADCAST success belongs to the plain-message-only form');

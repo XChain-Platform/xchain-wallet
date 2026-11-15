@@ -44,9 +44,9 @@ if [ ! -d "$project" ]; then
 fi
 
 # The listing must show the app users actually get, which is the `store`
-# profile: a `default` build carries the §2.3 review-hidden surfaces, and a
-# screenshot of a surface the shipped app does not have is a rejection all by
-# itself.
+# profile with its store CSP and no sourcemaps. If `HIDDEN_SURFACES.store`
+# ever hides a surface, a `default` screenshot would advertise a feature the
+# shipped app lacks; today both profiles carry the same product surfaces.
 if [ "${SKIP_BUILD:-}" != "1" ]; then
     echo "screenshots: building the web shell at the store profile"
     ( cd "$repo" && XCHAIN_BUILD_PROFILE=store pnpm --filter @xchain-wallet/web build >/dev/null )
@@ -61,6 +61,8 @@ fi
 # a surface the shipped store build compiles out, which is the exact §2.3
 # problem the profile exists to prevent, and nothing about the screenshots
 # looked wrong. A wrong-profile set is worse than no set.
+# Since 2026-10-09 the store build hides no surface; this check remains the
+# guard for its CSP, sourcemap setting and any future registry change.
 stamp="$pkg/www/build-profile.txt"
 if [ ! -f "$stamp" ]; then
     echo "screenshots: no build-profile stamp at $stamp; the bundle was never staged" >&2
@@ -69,7 +71,7 @@ fi
 profile="$(tr -d '[:space:]' < "$stamp")"
 if [ "$profile" != "store" ]; then
     echo "screenshots: staged bundle is profile '$profile', refusing to shoot a listing set." >&2
-    echo "  A '$profile' build carries the review-hidden surfaces (§2.3)." >&2
+    echo "  A '$profile' build has the wrong CSP, sourcemap setting and profile stamp." >&2
     echo "  Re-run without SKIP_BUILD=1, or stage a store build by hand:" >&2
     echo "    XCHAIN_BUILD_PROFILE=store pnpm --filter @xchain-wallet/web build" >&2
     echo "    pnpm --filter @xchain-wallet/mobile sync:ios" >&2

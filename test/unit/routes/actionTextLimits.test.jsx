@@ -123,7 +123,7 @@ describe('BroadcastForm text limits', () => {
         const message = await screen.findByLabelText('Message');
 
         fireEvent.change(message, { target: { value: AT_LIMIT } });
-        fireEvent.click(screen.getByRole('button', { name: 'Broadcast' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Announce' }));
 
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
         expect(messaging.composeForConfirm.mock.calls[0][0].actionData.params.MESSAGE).toBe(AT_LIMIT);
@@ -132,7 +132,7 @@ describe('BroadcastForm text limits', () => {
     it('shows a live counter and disables Broadcast past the message limit', async () => {
         const messaging = mount(BroadcastForm, { initialChainId: BTC });
         const message = await screen.findByLabelText('Message');
-        const submit = screen.getByRole('button', { name: 'Broadcast' });
+        const submit = screen.getByRole('button', { name: 'Announce' });
         const atLimit = '😀'.repeat(MAX_TEXT_LENGTH / 2);
         const overLimit = `${atLimit}a`;
 
@@ -153,7 +153,7 @@ describe('BroadcastForm text limits', () => {
         fireEvent.change(message, { target: { value: 'safe\u202eunsafe' } });
 
         expect(screen.getByText('Message cannot contain text-direction control characters.')).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Broadcast' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Announce' }).disabled).toBe(true);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 });

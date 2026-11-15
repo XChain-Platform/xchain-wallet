@@ -73,7 +73,7 @@ const ALL_FORMS = [
     { label: 'Issue token', open: (page) => palette(page, 'Issue token') },
     { label: 'Create dispenser', open: (page) => palette(page, 'Create dispenser') },
     { label: 'Airdrop', open: (page) => palette(page, 'Airdrop') },
-    { label: 'Broadcast a message', open: (page) => palette(page, 'Broadcast a message') },
+    { label: 'Post an announcement', open: (page) => palette(page, 'Post an announcement') },
     { label: 'Compose message', open: (page) => openFromList(page, 'Messaging', 'New message') },
     { label: 'Publish contract', open: (page) => openFromList(page, 'Contracts', /Publish contract/) },
     // Destroy states its irreversibility the moment it opens, before any input.

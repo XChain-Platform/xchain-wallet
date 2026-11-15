@@ -343,7 +343,7 @@ const LABEL_MAP = [
     [/^receive\b/, ReceiveIcon],
     [/^sign\b/, SignIcon],
     [/^verify\b/, VerifyIcon],
-    [/^broadcast\b/, BroadcastIcon],
+    [/^broadcast\b|^announce/, BroadcastIcon],
     [/^lock\b/, LockIcon],
     [/^unlock\b/, UnlockIcon],
     [/^stake$|^staking$|^claim/, StakeIcon],

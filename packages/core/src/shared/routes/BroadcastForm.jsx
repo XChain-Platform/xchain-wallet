@@ -119,7 +119,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                 const first = Object.keys(byChain)[0];
                 if (!first) {
                     setLoadError(
-                        'No addresses on any network yet. Use Receive to generate one before broadcasting.',
+                        'No addresses on any network yet. Use Receive to generate one before posting an announcement.',
                     );
                     return;
                 }
@@ -242,7 +242,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
         }
         // Refuse protocol separators with a field-level explanation.
         if (RESERVED_DELIMITERS.test(message)) {
-            setFormError('Remove any | or ; characters: the network reserves them as separators and will reject the broadcast.');
+            setFormError('Remove any | or ; characters: the network reserves them as separators and will reject the announcement.');
             return;
         }
         setFormError(null);
@@ -404,8 +404,8 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
             onBack={onBack}
             backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
-                ? 'Review broadcast'
-                : 'Broadcast'}
+                ? 'Review announcement'
+                : 'Announce'}
         />
     );
     const wrap = (children) => (
@@ -418,12 +418,12 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
     // FormPage like the form itself, so no state draws straight into Screen.
     if (loadError) {
         return wrap(
-            <FormPage as="div" label="Broadcast" status={<StatusMessage variant="error">{loadError}</StatusMessage>} />,
+            <FormPage as="div" label="Announce" status={<StatusMessage variant="error">{loadError}</StatusMessage>} />,
         );
     }
     if (!addressesByChain || !chainId) {
         return wrap(
-            <FormPage as="div" label="Broadcast">
+            <FormPage as="div" label="Announce">
                 <p className={styles.hint}>Loading…</p>
             </FormPage>,
         );
@@ -433,7 +433,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <FormPage as="div" label="Broadcast result">
+                <FormPage as="div" label="Announcement result">
                     <ResultScreen
                         state="unsigned"
                         result={result}
@@ -448,8 +448,8 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
         // branch it renders as a completed broadcast.
         if (result?.queued) {
             return wrap(
-                <FormPage as="div" label="Broadcast result">
-                    <ResultScreen state="signed-not-broadcast" onDone={onDone || onBack} what="broadcast" unsaved={result?.unsaved} />
+                <FormPage as="div" label="Announcement result">
+                    <ResultScreen state="signed-not-broadcast" onDone={onDone || onBack} what="announcement" unsaved={result?.unsaved} />
                 </FormPage>,
             );
         }
@@ -460,7 +460,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
             settings,
         }) : null;
         return wrap(
-            <FormPage as="div" label="Broadcast result">
+            <FormPage as="div" label="Announcement result">
                 <div role="status" aria-live="polite" aria-atomic="true">
                     <h2 className={styles.successTitle}>Broadcast pending</h2>
                     <p className={styles.hint}>
@@ -483,7 +483,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                     <p className={styles.hint}>The broadcast completed without a transaction ID.</p>
                 )}
                 <div className={styles.actions}>
-                    <Button type="button" onClick={handleBuildAnother}>Broadcast another</Button>
+                    <Button type="button" onClick={handleBuildAnother}>Announce another</Button>
                     <Button type="button" variant="primary" onClick={onDone || onBack}>Done</Button>
                 </div>
             </FormPage>,
@@ -494,7 +494,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
         return wrap(
             <FormPage
                 demoGuard={demoGuard}
-                label="Review broadcast"
+                label="Review announcement"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
                     <StatusMessage variant="error">{submitError}</StatusMessage>
@@ -513,7 +513,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                         }
                     >
                         {isWatcherMode
-                            ? 'Broadcast'
+                            ? 'Create unsigned transaction'
                             : isHwSource
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
                                 : 'Sign'}
@@ -611,7 +611,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
     return wrap(
         <FormPage
             demoGuard={demoGuard}
-            label="Broadcast"
+            label="Announce"
             onSubmit={handleReview}
             status={formError ? (
                 <StatusMessage variant="error">{formError}</StatusMessage>
@@ -626,7 +626,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                         || !!messageLengthError
                         || actionConfirm.composing}
                 >
-                    Broadcast
+                    Announce
                 </Button>
             )}
         >

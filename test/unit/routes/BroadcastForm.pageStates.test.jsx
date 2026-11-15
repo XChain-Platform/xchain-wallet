@@ -75,7 +75,7 @@ describe('BroadcastForm lays out every page state through FormPage', () => {
         expect(loading).toBeTruthy();
         const page = formPageOf(loading);
         expect(page).not.toBeNull();
-        expect(page.getAttribute('aria-label')).toBe('Broadcast');
+        expect(page.getAttribute('aria-label')).toBe('Announce');
     });
 
     it('shows the address-load error as the FormPage status', async () => {
@@ -91,7 +91,7 @@ describe('BroadcastForm lays out every page state through FormPage', () => {
     it('puts the message broadcast result and its Done action inside a FormPage', async () => {
         mountForm();
         fireEvent.change(await screen.findByLabelText(/^Message/), { target: { value: 'hello chain' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Broadcast' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Announce' }));
         await screen.findByTestId('confirm-modal');
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'test password' } });
         const approve = screen.getByTestId('confirm-approve');
@@ -100,7 +100,7 @@ describe('BroadcastForm lays out every page state through FormPage', () => {
         const title = await screen.findByRole('heading', { name: 'Broadcast pending' });
         const page = formPageOf(title);
         expect(page).not.toBeNull();
-        expect(page.getAttribute('aria-label')).toBe('Broadcast result');
+        expect(page.getAttribute('aria-label')).toBe('Announcement result');
         expect(page.textContent).toContain('deadbeef');
         expect(page.contains(screen.getByRole('button', { name: 'Done' }))).toBe(true);
     });
