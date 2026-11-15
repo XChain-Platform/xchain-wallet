@@ -17,6 +17,7 @@
 
 import { useEffect, useState } from 'react';
 import { decoder as decoderLib } from '@xchain-wallet/core';
+import { tickAmountOf } from '../utils/walletBalanceShape.js';
 
 /**
  * @param {object} opts
@@ -26,7 +27,7 @@ import { decoder as decoderLib } from '@xchain-wallet/core';
  * @param {string | null} opts.chainId
  * @param {string | null | undefined} opts.address    the SOURCE address whose balance backs Max/available
  * @param {string} opts.tick                  token ticker; empty hides the balance
- * @returns {string | null}                   coin-scale balance string, '0' for none, null while unresolved
+ * @returns {string | null}                   coin-scale balance string, '0' for none, null while unresolved or when the read could not tell
  */
 export function useTickBalance({ messaging, walletId, accountId, chainId, address, tick }) {
     const [balance, setBalance] = useState(/** @type {string | null} */ (null));
@@ -45,7 +46,7 @@ export function useTickBalance({ messaging, walletId, accountId, chainId, addres
                     const entry = entries.find((e) => e && e.address === address);
                     const rows = entry ? decoderLib.balancesFromSdk(entry.balances) || [] : [];
                     const match = rows.find((b) => String(b.tick).toUpperCase() === tickUpper);
-                    setBalance(match ? String(match.amount) : '0');
+                    setBalance(tickAmountOf(entry, match));
                 })
                 .catch(() => { /* footer stays empty on failure */ });
         }, 400);

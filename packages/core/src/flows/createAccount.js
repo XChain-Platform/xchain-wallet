@@ -18,6 +18,7 @@
 
 import { createAccount as createAccountRecord } from '../schemas/account.js';
 import { createAddress } from '../schemas/address.js';
+import { addressSourceForSignerKind } from '../schemas/constants.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { unlockWalletRecord } from './unlockWallet.js';
 import { WalletNotFoundError } from './unlockWallet.js';
@@ -171,9 +172,9 @@ export async function createAccount({
         // signers produce HD addresses; HW signers produce trezor / ledger
         // addresses tied to the SignerRecord by signerId (§17.6).
         const signerKind = signer.kind;
-        const addressSource = signerKind === 'software' ? 'hd' : signerKind;
 
         try {
+            const addressSource = addressSourceForSignerKind(signerKind);
             const addresses = [];
             for (const chainId of activeChainIds) {
                 const descriptor = chainRegistry.get(chainId);

@@ -219,7 +219,7 @@ export function keySetIdOf(keys) {
  * @param {import('../registry/index.js').ChainRegistry} opts.chainRegistry
  * @param {string[]} opts.chainIds
  * @param {number} [opts.accountIndex]
- * @param {'bip39' | 'counterwallet-legacy' | 'wif-only'} [opts.format]
+ * @param {'bip39' | 'counterwallet-legacy' | 'wif-only'} opts.format
  * @returns {Promise<Array<{ chainId: string, addressType: string, path: string, publicKey: string, chainCode: string, xpub: string | null, keyId: string }>>}
  */
 export async function collectPairingKeys({
@@ -227,7 +227,7 @@ export async function collectPairingKeys({
     chainRegistry,
     chainIds,
     accountIndex = 0,
-    format = 'bip39',
+    format,
 }) {
     if (!signer || typeof signer.getPublicKey !== 'function') {
         throw new PartnerPairingError('collectPairingKeys: an unlocked signer is required');
@@ -237,6 +237,12 @@ export async function collectPairingKeys({
     }
     if (!Array.isArray(chainIds) || chainIds.length === 0) {
         throw new PartnerPairingError('collectPairingKeys: chainIds must be a non-empty array');
+    }
+    // Require the caller to preserve the wallet's seed derivation format.
+    if (format === undefined) {
+        throw new PartnerPairingError(
+            'collectPairingKeys: format is required ("bip39", "counterwallet-legacy" or "wif-only")',
+        );
     }
 
     const keys = [];

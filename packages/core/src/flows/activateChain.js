@@ -37,9 +37,11 @@
 // source 'trezor'/'ledger' and the signer's id, exactly like createAccount.
 
 import { createAddress } from '../schemas/address.js';
+import { addressSourceForSignerKind } from '../schemas/constants.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { unlockWalletRecord, WalletNotFoundError } from './unlockWallet.js';
 import { seedSettingsForChains } from './seedSettings.js';
+import { serializeSettingsWrites } from './settings.js';
 import { defaultAddressTypeForFormat } from './_defaultAddressType.js';
 
 /**
@@ -98,14 +100,14 @@ export async function activateChain({
     // (signer rejected, etc.) the user still ends up with the chain
     // visible in pickers, which is the worse half of being half-active.
     // Using the existing primitive keeps this idempotent.
-    const settings = (await vault.settings.get()) ?? null;
-    if (!settings) {
-        throw new Error('activateChain: settings record missing (wallet not fully provisioned)');
-    }
-    const seeded = seedSettingsForChains(settings, chainRegistry, [chainId]);
-    if (seeded !== settings) {
-        await vault.settings.put(seeded);
-    }
+    await serializeSettingsWrites(vault, async () => {
+        const settings = (await vault.settings.get()) ?? null;
+        if (!settings) {
+            throw new Error('activateChain: settings record missing (wallet not fully provisioned)');
+        }
+        const seeded = seedSettingsForChains(settings, chainRegistry, [chainId]);
+        if (seeded !== settings) await vault.settings.put(seeded);
+    });
 
     const accounts = await vault.accounts.findBy('walletId', walletId);
     if (accounts.length === 0) {
@@ -127,13 +129,12 @@ export async function activateChain({
     // addresses; hardware devices produce 'trezor'/'ledger' addresses tied
     // to their SignerRecord by signerId. For hardware the device must be
     // connected so signer.getAddresses can derive the new chain's address.
-    const addressSource = signer.kind === 'software' ? 'hd' : signer.kind;
-
     const descriptor = chainRegistry.get(chainId);
     const addressType = defaultAddressTypeForFormat(descriptor, wallet?.format);
     const allAddresses = await vault.addresses.list();
 
     try {
+        const addressSource = addressSourceForSignerKind(signer.kind);
         const created = [];
         let skipped = 0;
         const skippedAccountDetails = [];

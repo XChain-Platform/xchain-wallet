@@ -88,7 +88,7 @@ function pushHex(dataHex) {
  * amount, { input, kind: 'swap' } puts a multisig input's signatures out of key
  * order.
  *
- * @param {{ inputs: Array<{ type: string, value?: number, key?: string }>,
+ * @param {{ inputs: Array<{ type: string, value?: number, key?: string, txid?: string, vout?: number }>,
  *   outputs?: Array<{ script: string, value: number }>, version?: number,
  *   tamper?: { input: number, kind: string, value?: number } }} spec
  */
@@ -98,9 +98,10 @@ export function signedTxFor(spec) {
     const prevouts = spec.inputs.map((inp, i) => {
         const key = inp.key ?? TEST_KEYS[0];
         const s = prevoutScripts(inp.type, key);
-        const txid = (i + 1).toString(16).padStart(4, '0').repeat(16);
-        tx.addInput(Buffer.from(txid, 'hex').reverse(), i % 3, 0xfffffffd);
-        return { prevTxHash: txid, prevTxIndex: i % 3, scriptPubKeyHex: s.script, value: inp.value ?? 100_000, sighashType: null, ...s, type: inp.type, key };
+        const txid = inp.txid ?? (i + 1).toString(16).padStart(4, '0').repeat(16);
+        const vout = inp.vout ?? (i % 3);
+        tx.addInput(Buffer.from(txid, 'hex').reverse(), vout, 0xfffffffd);
+        return { prevTxHash: txid, prevTxIndex: vout, scriptPubKeyHex: s.script, value: inp.value ?? 100_000, sighashType: null, ...s, type: inp.type, key };
     });
     for (const o of spec.outputs ?? [{ script: `0014${'cc'.repeat(20)}`, value: 90_000 }]) {
         tx.addOutput(Buffer.from(o.script, 'hex'), o.value);

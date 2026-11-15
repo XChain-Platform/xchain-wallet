@@ -12,9 +12,9 @@
 //
 // v2 adds `signerId` per §17.6: addresses are tied to a signer by stable
 // id, so switching signers (e.g. pairing a new Trezor) re-associates
-// addresses by path+pubkey match. v1 records migrate forward with
-// `signerId: null`, signaling "needs reconciliation"; the runtime
-// resolver fills this in on first load.
+// addresses by path+pubkey match. v1 records migrate forward unlinked
+// with `signerId: null`. Software routing does not read that field, and
+// no runtime path reconciles it automatically; see migrations.js.
 //
 // v3 adds `role` per §16: 'receive' | 'change' | 'dispenser'.
 // 'receive'/'change' track the BIP44 external/internal branch (change
@@ -100,7 +100,7 @@ export function normalizeAddressLabel(label, record) {
  * @property {string} label
  * @property {boolean} pinned
  * @property {boolean} hidden
- * @property {string | null} signerId         owning signer id (§17.6); null = needs reconciliation
+ * @property {string | null} signerId         owning signer id (§17.6); null = unlinked (invalid for hardware sources)
  * @property {typeof ADDRESS_ROLES[number]} role   'receive' | 'change' | 'dispenser' (§16)
  * @property {string} createdAt
  */

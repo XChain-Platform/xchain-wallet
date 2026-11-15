@@ -183,9 +183,13 @@ export function tokensFromBalances(balResp) {
 }
 
 // A row that is not an object (null, a number) carries no tick; it is skipped
-// so the rest of the ledger stays readable, and the read is marked partial.
+// so the rest of the ledger stays readable, and the read is marked partial. So
+// is a page that holds fewer rows than the ledger's own `total`: the ticks
+// past it were never read, which is not the same as the address not holding them.
 function tokenRowsFromBalances(balResp) {
     if (!balResp || !Array.isArray(balResp.data)) return { rows: [], invalid: true };
+    const total = Number(balResp.total);
+    const truncated = Number.isSafeInteger(total) && total > balResp.data.length;
     const rows = [];
     let invalid = false;
     for (const row of balResp.data) {
@@ -196,7 +200,7 @@ function tokenRowsFromBalances(balResp) {
         }
         rows.push(normalized);
     }
-    return { rows, invalid };
+    return { rows, invalid, truncated };
 }
 
 function normalizeTokenBalanceRow(row) {
@@ -463,8 +467,8 @@ function shapeFromReads({ balResp, addrResp, nativeTicker, address }) {
     // projecting the coin from zero. A confirmed amount that is not a
     // non-negative decimal (text, a negative, an object) is the same
     // "could not read": the number is unknown, not zero.
-    const tokenResult = balOk ? tokenRowsFromBalances(balResp) : { rows: [], invalid: false };
-    const balUnreadable = balOk && tokenResult.invalid;
+    const tokenResult = balOk ? tokenRowsFromBalances(balResp) : { rows: [], invalid: false, truncated: false };
+    const balUnreadable = balOk && (tokenResult.invalid || tokenResult.truncated);
     const addrUnreadable = addrOk && nativeAnswerUnreadable(addrResp, address);
     const unavailable = [
         ...(balOk && !balUnreadable ? [] : ['tokens']),
@@ -473,7 +477,9 @@ function shapeFromReads({ balResp, addrResp, nativeTicker, address }) {
     const reason = !balOk
         ? balResp?.message
         : (balUnreadable
-            ? 'balance service returned invalid token data'
+            ? (tokenResult.invalid
+                ? 'balance service returned invalid token data'
+                : 'balance service returned only part of the token list')
             : (addrUnreadable ? NATIVE_BALANCE_UNREADABLE_REASON : addrResp?.message));
     return {
         native: addrOk && !addrUnreadable ? nativeFromAddress(addrResp, nativeTicker) : null,

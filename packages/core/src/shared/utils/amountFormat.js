@@ -447,8 +447,8 @@ export function formatAtomicAmount(quantity, divisibility = 0, locale) {
 // rounding the string form exists to avoid.
 //
 // Used where the wallet has to aggregate raw rows itself rather than read an
-// aggregate the indexer computed - the settled-market split, where the
-// explorer's own pool sums cover open bets only.
+// aggregate the indexer computed - the settled-market split, where an older
+// explorer can answer with no pool sums at all.
 //
 // A value that is not a plain decimal is skipped rather than guessed at,
 // matching trimAmountTail's rule: on a screen about money, a number we cannot

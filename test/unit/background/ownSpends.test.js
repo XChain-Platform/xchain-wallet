@@ -87,7 +87,12 @@ function makeHost() {
         vault: {
             settings: { get: async () => ({ activeNetwork: 'mainnet' }) },
             wallets: { list: async () => [] },
-            addresses: { list: async () => [{ id: 'addr-one', address: 'source-one' }] },
+            addresses: {
+                list: async () => [{
+                    id: 'addr-one', address: 'source-one', accountId: 'acct-one', chain: 'bitcoin', network: 'mainnet',
+                }],
+            },
+            accounts: { get: async (id) => (id === 'acct-one' ? { id, walletId: 'wallet-one' } : null) },
             pendingTxs: (() => {
                 const records = new Map();
                 return {
@@ -99,6 +104,7 @@ function makeHost() {
             })(),
         },
         chainRegistry: {
+            chainIdFor: (coin, network) => (coin === 'bitcoin' && network === 'mainnet' ? 'bitcoin-mainnet' : null),
             get: (id) => (id === 'bitcoin-mainnet' ? { id, coin: 'bitcoin', networkKind: 'mainnet' } : null),
             descriptorFor: (id) => (id === 'bitcoin-mainnet' ? { id, coin: 'bitcoin', networkKind: 'mainnet' } : null),
             list: () => [],
@@ -315,6 +321,19 @@ describe('a send waiting in the broadcast queue', () => {
         await expect(ledger.claim('bitcoin-mainnet', coin, { queued: coin }))
             .rejects.toMatchObject({ name: 'InputsAlreadySpentError' });
         await expect(ledger.claim('bitcoin-testnet', coin, { queued: [] })).resolves.toBeTruthy();
+    });
+
+    it('refuses queued names and keeps them held after the queued send lands', async () => {
+        const ledger = createOwnSpendLedger();
+        await expect(ledger.claim('bitcoin-mainnet', [], {
+            names: ['alpha'], queuedNames: ['ALPHA'],
+        })).rejects.toMatchObject({ name: 'NameSaleInFlightError' });
+
+        await ledger.hold('bitcoin-mainnet', [], 'sale-txid', { names: ['alpha'] });
+        await expect(ledger.claim('bitcoin-mainnet', [], { names: ['ALPHA'] }))
+            .rejects.toMatchObject({ name: 'NameSaleInFlightError' });
+        await expect(ledger.claim('bitcoin-mainnet', [], { names: ['BETA'] }))
+            .resolves.toBeTruthy();
     });
 });
 

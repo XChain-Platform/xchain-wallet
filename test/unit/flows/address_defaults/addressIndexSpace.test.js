@@ -11,6 +11,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
     indexSpaceSharedAcrossTypes,
+    indexSpaceSharedForAccount,
     indexSpaceSharedForWallet,
 } from '../../../../packages/core/src/flows/_addressIndexSpace.js';
 
@@ -52,6 +53,45 @@ describe('indexSpaceSharedForWallet', () => {
         const vault = { wallets: { get: vi.fn().mockRejectedValue(new Error('read failed')) } };
 
         await expect(indexSpaceSharedForWallet(vault, 'wallet-1')).rejects.toThrow('read failed');
+    });
+});
+
+describe('indexSpaceSharedForAccount', () => {
+    const account = { id: 'account-1', index: 0 };
+
+    it('keeps the legacy seed account shared', async () => {
+        const vault = vaultReturning({ format: 'counterwallet-legacy' });
+        await expect(indexSpaceSharedForAccount(vault, 'wallet-1', {
+            account, addresses: [{ accountId: account.id, source: 'hd' }], signerKind: 'software',
+        })).resolves.toBe(true);
+    });
+
+    it.each(['trezor', 'ledger'])('keeps a %s account partitioned by type', async (source) => {
+        const vault = vaultReturning({ format: 'counterwallet-legacy' });
+        await expect(indexSpaceSharedForAccount(vault, 'wallet-1', {
+            account, addresses: [{ accountId: account.id, source }], signerKind: source,
+        })).resolves.toBe(false);
+    });
+
+    it('keeps non-seed legacy accounts partitioned before they hold an address', async () => {
+        const vault = vaultReturning({ format: 'counterwallet-legacy' });
+        await expect(indexSpaceSharedForAccount(vault, 'wallet-1', {
+            account: { id: 'account-2', index: 1 }, addresses: [],
+        })).resolves.toBe(false);
+    });
+
+    it('partitions by the hardware signer alone when the account holds no address yet', async () => {
+        const vault = vaultReturning({ format: 'counterwallet-legacy' });
+        await expect(indexSpaceSharedForAccount(vault, 'wallet-1', {
+            account, addresses: [], signerKind: 'trezor',
+        })).resolves.toBe(false);
+    });
+
+    it('partitions by a held hardware address alone when no signer kind is known', async () => {
+        const vault = vaultReturning({ format: 'counterwallet-legacy' });
+        await expect(indexSpaceSharedForAccount(vault, 'wallet-1', {
+            account, addresses: [{ accountId: account.id, source: 'ledger' }],
+        })).resolves.toBe(false);
     });
 });
 
