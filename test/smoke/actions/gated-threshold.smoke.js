@@ -59,7 +59,8 @@ assert.match(publish, /resolveGateMinAmountActive\(/, 'publish flow checks activ
 assert.match(publish, /not active on this chain yet/, 'early emission refused with a reason');
 assert.match(publish, /\.\.\.\(gateMinAmount !== null \? \[gateMinAmount\] : \[\]\)/,
     'GATE_MIN_AMOUNT rides as an optional ninth FILE field');
-assert.match(publish, /gateMinAmount,\s*\}\);/, 'threshold counted in the plaintext ceiling');
+// The second argument is the picked upload method's ceiling (Taproot or Standard).
+assert.match(publish, /gateMinAmount,\s*\}(, envelope \? \{ encoding: 'TAPROOT' \} : \{\})?\);/, 'threshold counted in the plaintext ceiling');
 
 // ---- 2b. Size math ----------------------------------------------------
 const limits = read('packages', 'core', 'src', 'flows', 'fileSizeLimits.js');

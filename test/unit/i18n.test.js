@@ -541,6 +541,8 @@ describe('translations', () => {
             ['send.title', 'uri.intent.send', 'walletMenu.row.send'],
             // The wallet menu reuses the label the same destination carries elsewhere.
             ['settings.thisWallet.wallet', 'walletMenu.group.wallet'],
+            // The Upload method option and the BIP39 word-list choice are both plain "Standard".
+            ['uploadMethod.standard', 'walletPicker.bip39'],
         ]);
     });
 

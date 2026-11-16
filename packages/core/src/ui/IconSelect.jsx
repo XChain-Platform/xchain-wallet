@@ -33,7 +33,8 @@ import '../i18n/locales/en/ui.js';
  * @param {import('react').ReactNode} [props.help] contextual help shown from the label-row InfoTip.
  * @param {string} props.value
  * @param {(value: string) => void} props.onChange   receives the option value
- * @param {Array<{ value: string, label: string, sub?: string, icon?: import('react').ReactNode }>} props.options
+ * @param {Array<{ value: string, label: import('react').ReactNode, text?: string, sub?: import('react').ReactNode, icon?: import('react').ReactNode, disabled?: boolean }>} props.options
+ *   `text` names an option whose label is markup; a `disabled` option stays listed but cannot be picked
  * @param {string} [props.placeholder]
  * @param {boolean} [props.disabled]
  * @param {'sm' | 'md' | 'lg'} [props.size]
@@ -76,10 +77,11 @@ export function IconSelect({
     useEffect(() => {
         if (!open) return;
         const optionElements = listboxOptions(popoverRef.current);
+        const enabled = optionElements.filter(isEnabledOption);
         const selectedOption = optionElements.find(
             (option) => option.getAttribute('aria-selected') === 'true',
         );
-        const fallback = focusOnOpenRef.current === 'last' ? optionElements.at(-1) : optionElements[0];
+        const fallback = focusOnOpenRef.current === 'last' ? enabled.at(-1) : enabled[0];
         (selectedOption || fallback)?.focus();
     }, [open]);
 
@@ -89,7 +91,8 @@ export function IconSelect({
     };
 
     const onListboxKeyDown = (e) => {
-        const optionElements = listboxOptions(popoverRef.current);
+        // Arrow keys, Home and End skip a disabled option, as a native select does.
+        const optionElements = listboxOptions(popoverRef.current).filter(isEnabledOption);
         const index = optionElements.indexOf(document.activeElement);
         let nextIndex = null;
         if (e.key === 'ArrowDown') nextIndex = (index + 1) % optionElements.length;
@@ -110,9 +113,9 @@ export function IconSelect({
 
     // The visual label is a span, so the accessible name pairs the field label
     // with its current selection. An unlabelled select keeps its visible text as
-    // its name.
+    // its name. An option whose label is markup names itself with its `text`.
     const accessibleName = label
-        ? `${label}: ${selected ? selected.label : placeholder}`
+        ? `${label}: ${selected ? optionText(selected) : placeholder}`
         : undefined;
     const hasHelp = Boolean(label && help);
 
@@ -180,8 +183,17 @@ export function IconSelect({
                                     role="option"
                                     tabIndex={-1}
                                     aria-selected={value === o.value ? 'true' : 'false'}
-                                    className={`${styles.item} ${value === o.value ? styles.itemActive : ''}`}
-                                    onClick={() => { onChange(o.value); closeSelect(true); }}
+                                    aria-disabled={o.disabled ? 'true' : undefined}
+                                    className={[
+                                        styles.item,
+                                        value === o.value ? styles.itemActive : '',
+                                        o.disabled ? styles.itemDisabled : '',
+                                    ].filter(Boolean).join(' ')}
+                                    onClick={() => {
+                                        if (o.disabled) return;
+                                        onChange(o.value);
+                                        closeSelect(true);
+                                    }}
                                 >
                                     <span className={styles.icon} aria-hidden="true">{o.icon || null}</span>
                                     <span className={styles.text}>
@@ -200,4 +212,14 @@ export function IconSelect({
 
 function listboxOptions(popover) {
     return Array.from(popover?.querySelectorAll('[role="option"]') || []);
+}
+
+function isEnabledOption(option) {
+    return option.getAttribute('aria-disabled') !== 'true';
+}
+
+/** An option's plain name: its `text`, else its label when that is a string. */
+function optionText(option) {
+    if (typeof option.text === 'string') return option.text;
+    return typeof option.label === 'string' ? option.label : String(option.value ?? '');
 }

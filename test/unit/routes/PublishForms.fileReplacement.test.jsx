@@ -237,7 +237,15 @@ describe('publish forms replace file state safely', () => {
     });
 
     it('uses the encoding-aware attachment cap and rechecks it after metadata edits', async () => {
-        mount(<AttachContentForm walletId="w" chainId={CHAIN} tick="ART" issuerAddress={SOURCE.address} onBack={() => {}} />);
+        // A hardware From cannot sign the Taproot upload reveal, so Standard is
+        // the only Upload method and its legacy ceiling is the one rechecked.
+        // (With the envelope available, a title that outgrows Standard moves the
+        // upload onto the envelope instead of refusing it.)
+        const client = messaging();
+        const device = { ...SOURCE, source: 'ledger' };
+        client.getAddressesByChain.mockResolvedValue({ [CHAIN]: [device] });
+        client.getActiveAddresses.mockResolvedValue({ [CHAIN]: device });
+        mount(<AttachContentForm walletId="w" chainId={CHAIN} tick="ART" issuerAddress={SOURCE.address} onBack={() => {}} />, client);
         const input = await screen.findByLabelText('Choose file to attach');
         const file = new File([new Uint8Array(8_080)], 'art.txt', { type: 'text/plain' });
         fireEvent.change(input, { target: { files: [file] } });

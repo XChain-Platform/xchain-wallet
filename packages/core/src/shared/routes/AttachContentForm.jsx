@@ -42,6 +42,8 @@ import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { imagePreviewDataUrl, publishFileType } from '../utils/publishingFile.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
+import { UploadMethodField, UploadMethodReviewRows, useUploadMethod } from '../components/UploadMethodField.jsx';
+import { publicFileCompiledBytes } from '../../flows/uploadMethod.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -50,6 +52,11 @@ const ARTWORK_ACCEPT = ['image/*', 'audio/*', '.svg', '.json', '.txt'];
 // Moderate oversize drops reach the exact metadata-aware error below, while
 // unexpectedly large drops stop before FileReader allocates their contents.
 const MAX_DROP_BYTES = 32 * 1024;
+
+/** The compiled action-plus-file push of the artwork FILE leg, for the Upload method fees. */
+function artworkUploadBytes(file, { title, memo }) {
+    return publicFileCompiledBytes({ name: file.name, type: file.type, title, memo }, file.bytes.length);
+}
 const MAX_TITLE_LENGTH = 100;
 const POSITIVE_ACTION_INDEX = /^[1-9]\d*$/;
 
@@ -359,6 +366,27 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
     const { isWatcherMode } = useWalletMode();
 
+    // The Upload method Publish file offers (flows/uploadMethod.js): Taproot
+    // envelope by default where a signer can sign the reveal (never hardware)
+    // on a chain whose descriptor does Taproot (BTC yes, DOGE never), Standard
+    // otherwise. The ceiling below and the FILE compose both follow the pick,
+    // so the size offered is the size the encoder can carry. Only the FILE leg
+    // uses it; the LINK, token-info and description legs stay on the default lane.
+    const upload = useUploadMethod({
+        descriptor,
+        fromAddress,
+        isWatcherMode,
+        feeEstimate,
+        coinTicker,
+        file: fileMeta,
+        metadata: { title, memo },
+        compiledBytesFor: artworkUploadBytes,
+        standardCap: fileMeta
+            ? flowsLib.maxPublicFileBytes({ name: fileMeta.name, type: fileMeta.type, title, memo }, {})
+            : null,
+    });
+    const envelopePicked = upload.method === 'taproot';
+
     // §5.6: all four legs sign through the shared confirm lane. The ISSUE
     // leg is the sharpest case, token administration signed against a
     // locally rendered summary while every other ISSUE surface in the
@@ -467,10 +495,21 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         [fileMeta, title, memo],
     );
 
+    // Sized from the encoding the FILE compose requests, the same call
+    // Publish file makes: the envelope ceiling when the picked method asks
+    // for AUTO, the legacy compiled ceiling for Standard.
     const attachmentCapFor = useCallback(
-        (name, type) => flowsLib.maxPublicFileBytes({ name, type, title, memo }),
-        [title, memo],
+        (name, type) => flowsLib.maxPublicFileBytes(
+            { name, type, title, memo },
+            envelopePicked ? { encoding: 'TAPROOT' } : {},
+        ),
+        [title, memo, envelopePicked],
     );
+    // The legacy ceiling is small enough that a URL is the honest way to
+    // carry larger artwork; at the envelope ceiling that advice would mislead.
+    const largerArtworkAdvice = envelopePicked
+        ? ''
+        : ' For larger artwork, put an image URL in the token\'s description instead.';
 
     const acceptFile = useCallback((file, content) => {
         const bytes = new Uint8Array(content);
@@ -487,7 +526,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         const cap = attachmentCapFor(file.name || 'file', type);
         if (bytes.length > cap) {
             setFormError(
-                `That file is ${bytes.length.toLocaleString()} bytes; with this title and memo the on-chain ceiling is ${cap.toLocaleString()} bytes. For larger artwork, put an image URL in the token's description instead.`,
+                `That file is ${bytes.length.toLocaleString()} bytes; with this title and memo the on-chain ceiling is ${cap.toLocaleString()} bytes.${largerArtworkAdvice}`,
             );
             return;
         }
@@ -498,7 +537,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             type,
             bytes,
         });
-    }, [attachmentCapFor]);
+    }, [attachmentCapFor, largerArtworkAdvice]);
 
     const handleFilePick = useCallback((event) => {
         const file = event.target?.files?.[0];
@@ -531,7 +570,11 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     const drop = useDropZone({
         readAs: 'arrayBuffer',
         accept: ARTWORK_ACCEPT,
-        maxBytes: MAX_DROP_BYTES,
+        // The envelope ceiling is far above the legacy one, so a drop that
+        // fits it still reaches the exact metadata-aware check.
+        maxBytes: envelopePicked
+            ? attachmentCapFor('file.bin', 'application/octet-stream') + MAX_DROP_BYTES
+            : MAX_DROP_BYTES,
         onError: (msg) => { setFileMeta(null); setFormError(msg); },
         onFile: ({ file, content }) => {
             if (content instanceof ArrayBuffer) acceptFile(file, content);
@@ -633,7 +676,14 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 action: 'FILE',
                 params: fileParams,
             },
-            encoderOpts: { rawData },
+            // The picked method's request, as Publish file sends it: AUTO with
+            // the signer's asserted tapscript capability for the envelope, no
+            // encoding for Standard, so the ceiling offered above is one the
+            // encoder can carry.
+            encoderOpts: {
+                rawData,
+                ...upload.encoderOpts,
+            },
             dispatch: (prebuiltPsbt) => submitFile({
                 walletId,
                 chainId,
@@ -848,13 +898,20 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     // Confirm page for whichever leg is in flight, rendered in place of that
     // leg's review stage; the stage machine stays intact behind it.
     if (actionConfirm.open) {
+        // The file leg names its upload method, and its fee estimate is the
+        // picked method's for this file.
+        const fileLeg = stage === 'review-file';
+        const legFeeAmount = (fileLeg && upload.fee?.coinAmount) || feeEstimate?.coinAmount;
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                feeText={feeEstimate?.coinAmount
-                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                feeText={legFeeAmount
+                    ? `Network fee: ${legFeeAmount} ${coinTicker}`.trim()
                     : undefined}
+                extraCredentials={fileLeg
+                    ? <p className={styles.hint} data-testid="confirm-upload-method">{upload.confirmLine}</p>
+                    : null}
                 coinTicker={coinTicker}
                 signerReady={signerReady}
                 password={password}
@@ -1171,6 +1228,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     <dd className={styles.detailsValue}>{fileParams.TYPE}</dd>
                     <dt className={styles.detailsLabel}>Size</dt>
                     <dd className={styles.detailsValue}>{fileMeta.bytes.length.toLocaleString()} bytes</dd>
+                    <UploadMethodReviewRows upload={upload} labelClassName={styles.detailsLabel} valueClassName={styles.detailsValue} />
                     {fileParams.TITLE ? (
                         <>
                             <dt className={styles.detailsLabel}>Title</dt>
@@ -1352,12 +1410,15 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 onOpenPicker={() => {}}
                 disabled
             />
+            {/* How the bytes ride the chain, before the file: the pick sets the
+                ceiling the file field names. */}
+            <UploadMethodField upload={upload} />
             <div className={inputStyles.field}>
                 <div className={inputStyles.labelRow}>
                     <span id={fileFieldLabelId} className={inputStyles.label}>Artwork file</span>
                     <InfoTip
                         className={inputStyles.labelHelp}
-                        label={`Stores the artwork on the chain itself and links it to ${tick}. Two signatures: one to upload the file, one to make it official. A compact image (SVG, small PNG/JPEG/WebP) works best. For larger artwork, put an image URL in the token's description instead.`}
+                        label={`Stores the artwork on the chain itself and links it to ${tick}. Two signatures: one to upload the file, one to make it official. A compact image (SVG, small PNG/JPEG/WebP) works best.${largerArtworkAdvice}`}
                         aria="About Artwork file"
                     />
                 </div>

@@ -239,6 +239,18 @@
     background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
 }
 
+/* A disabled option stays listed, as in a native select, but reads as unavailable. */
+.itemDisabled,
+.itemDisabled:hover {
+    background: transparent;
+    color: var(--xc-control-disabled-text);
+    cursor: not-allowed;
+}
+
+.itemDisabled .labelText {
+    color: var(--xc-control-disabled-text);
+}
+
 /* Box-shadow focus rings are not painted in forced-colors mode, so give
  * this control a real outline there (WCAG 2.4.7). */
 @media (forced-colors: active) {

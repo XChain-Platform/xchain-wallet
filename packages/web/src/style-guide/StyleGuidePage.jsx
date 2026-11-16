@@ -62,6 +62,7 @@ import { ButtonsSection } from './sections/ButtonsSection.jsx';
 import { ChipSection } from './sections/ChipSection.jsx';
 import { SwitchSection } from './sections/SwitchSection.jsx';
 import { DialogsSection } from './sections/DialogsSection.jsx';
+import { UploadMethodFieldSection } from './sections/UploadMethodFieldSection.jsx';
 import {
     AddressComboboxSection,
     IconSelectSection,
@@ -168,6 +169,7 @@ export const SECTIONS = [
     { id: 'activity-rows',         label: 'Activity rows',          Component: ActivityRowsSection, components: ['ActivityRow', 'HistoryEntryRow', 'RelativeTime'] },
     { id: 'shell-navigation',      label: 'Shell navigation',       Component: ShellNavigationSection, components: ['LeftNav', 'BottomTabBar'] },
     { id: 'home-tabs',             label: 'Home tabs',              Component: HomeTabsSection, components: ['HomeTabs'] },
+    { id: 'upload-method-field',   label: 'Upload method field',    Component: UploadMethodFieldSection, components: ['UploadMethodField'] },
 ];
 
 // Shared components that live outside the UI barrel (shared/components and

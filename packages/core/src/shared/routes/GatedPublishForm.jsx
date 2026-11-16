@@ -37,12 +37,19 @@ import { TokenField } from '../components/TokenField.jsx';
 import { CheckIcon, PlusIcon, UploadIcon } from '../../ui/icons/index.jsx';
 import styles from './IssueTokenForm.module.css';
 import publishStyles from './GatedPublishForm.module.css';
+import { UploadMethodField, useUploadMethod } from '../components/UploadMethodField.jsx';
+import { gatedFileCompiledBytes } from '../../flows/uploadMethod.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/gatedPublish.js';
 import '../../i18n/locales/en/palette.js';
 import '../../i18n/locales/en/send.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+/** The compiled BATCH-plus-ciphertext push of a gated publish, for the Upload method fees. */
+function gatedUploadBytes(file, meta) {
+    return gatedFileCompiledBytes({ ...meta, name: file.name, type: file.type }, file.bytes.length);
+}
 
 /**
  * PC-25 gated-content publisher (Token_Gated_Content.md). Owner-only
@@ -64,8 +71,12 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {string} props.tick               gate ticker (canonical uppercase)
  * @param {string | null} [props.issuerAddress]  the token's current owner; publishing from any other address is indexer-rejected
  * @param {() => void} props.onBack
+ * @param {string | null} [props.uploadPick]  the explicit Upload method pick, controlled by Publish file (null: the default)
+ * @param {(method: string | null) => void} [props.onUploadPick]  with uploadPick, shares the pick with Publish file
  */
-export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null, onBack }) {
+export function GatedPublishForm({
+    walletId, chainId, tick, issuerAddress = null, onBack, uploadPick = null, onUploadPick,
+}) {
     const { messaging, shell } = useMessaging();
     const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
@@ -287,19 +298,45 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
 
-    // Encoding-aware ceiling for the CURRENT metadata: exact once the
-    // signing address is known, the conservative floor until then.
+    // The metadata the BATCH string carries besides the file's own name and type.
+    const batchMeta = {
+        title,
+        memo: memo.trim(),
+        gateTicker: gateTick || '',
+        coin: coinTicker,
+        address: fromAddress?.address || '',
+        gateMinAmount: thresholdActive && gateMinAmount.trim() ? gateMinAmount.trim() : null,
+    };
+    const capWith = (name, type, ceilingOpts) => flowsLib.maxGatedPlaintextBytes(
+        { ...batchMeta, name, type },
+        ceilingOpts,
+    );
+
+    // The Upload method (flows/uploadMethod.js): Taproot envelope by default
+    // where a software signer on the confirm lane and a Taproot chain can carry
+    // it, Standard otherwise. Inside Publish file the pick is shared with the
+    // Public mode, like the rest of the draft.
+    const upload = useUploadMethod({
+        descriptor,
+        fromAddress,
+        isWatcherMode,
+        feeEstimate,
+        coinTicker,
+        file: fileMeta,
+        // Typed fields settle before they re-estimate; the token, coin and
+        // address are picked, so they re-estimate at once.
+        metadata: { title: batchMeta.title, memo: batchMeta.memo, gateMinAmount: batchMeta.gateMinAmount },
+        context: { gateTicker: batchMeta.gateTicker, coin: batchMeta.coin, address: batchMeta.address },
+        compiledBytesFor: gatedUploadBytes,
+        standardCap: fileMeta && fromAddress ? capWith(fileMeta.name, fileMeta.type, {}) : null,
+        ...(typeof onUploadPick === 'function' ? { picked: uploadPick, onPick: onUploadPick } : {}),
+    });
+
+    // Encoding-aware ceiling for the CURRENT metadata and the picked upload
+    // method: exact once the signing address is known, the conservative
+    // floor until then.
     const plainCapFor = (name, type) => (fromAddress
-        ? flowsLib.maxGatedPlaintextBytes({
-            name,
-            type,
-            title,
-            memo: memo.trim(),
-            gateTicker: gateTick,
-            coin: coinTicker,
-            address: fromAddress.address,
-            gateMinAmount: thresholdActive && gateMinAmount.trim() ? gateMinAmount.trim() : null,
-        })
+        ? capWith(name, type, upload.ceilingOpts)
         : MAX_BYTES_FLOOR);
 
     function handlePickFile(event) {
@@ -474,6 +511,9 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 ? { gateMinAmount: gateMinAmount.trim() }
                 : {}),
             ...(feePerKb != null ? { feePerKb } : {}),
+            // The picked upload method: the envelope's AUTO request, or no
+            // encoding at all for Standard (the flow sizes its ceiling to match).
+            ...(upload.encoderOpts.encoding ? { encoding: upload.encoderOpts.encoding } : {}),
         };
     }
 
@@ -610,12 +650,15 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
                 chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
-                feeText={feeEstimate?.coinAmount
+                // The picked method's estimate for this file, shown only until
+                // the composed transactions state their exact fee.
+                feeText={(upload.fee?.coinAmount || feeEstimate?.coinAmount)
                     ? t('send.networkFeeValue', {
-                        amount: feeEstimate.coinAmount,
+                        amount: upload.fee?.coinAmount || feeEstimate.coinAmount,
                         ticker: coinTicker,
                     }).trim()
                     : undefined}
+                extraCredentials={<p className={styles.hint} data-testid="confirm-upload-method">{upload.confirmLine}</p>}
                 coinTicker={coinTicker}
                 signerReady={signerReady}
                 password={password}
@@ -734,6 +777,9 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 <FieldNote variant="error">{ownedTokensError}</FieldNote>
             ) : null}
 
+            {/* How the bytes ride the chain, before the file: the pick sets the
+                ceiling the file field names. */}
+            <UploadMethodField upload={upload} disabled={ownerMissing} />
             <Input
                 type="file"
                 label={t('gatedPublish.fileLimit', {

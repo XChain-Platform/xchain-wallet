@@ -39,6 +39,8 @@ import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { imagePreviewDataUrl, publishFileType } from '../utils/publishingFile.js';
 import { ForwardIcon, UploadIcon } from '../../ui/icons/index.jsx';
+import { publicFileCompiledBytes } from '../../flows/uploadMethod.js';
+import { UploadMethodField, UploadMethodReviewRows, useUploadMethod } from '../components/UploadMethodField.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -52,6 +54,11 @@ function latin1Of(bytes) {
     let out = '';
     for (let i = 0; i < bytes.length; i += 1) out += String.fromCharCode(bytes[i]);
     return out;
+}
+
+/** The compiled action-plus-file push of a public FILE upload, for the Upload method fees. */
+function publicUploadBytes(file, { title, memo }) {
+    return publicFileCompiledBytes({ name: file.name, type: file.type, title, memo }, file.bytes.length);
 }
 
 /**
@@ -90,6 +97,10 @@ export function PublishFileForm({ walletId, onBack }) {
     const { isWatcherMode } = useWalletMode();
 
     const [mode, setMode] = useState(/** @type {'public' | 'gated'} */ ('public'));
+    // The user's explicit Upload method pick, carried into the encrypted
+    // composer like the rest of the draft; null means the default (Taproot
+    // when available).
+    const [uploadPick, setUploadPick] = useState(/** @type {string | null} */ (null));
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -265,34 +276,35 @@ export function PublishFileForm({ walletId, onBack }) {
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
 
-    // Can this publish actually ride a Taproot envelope? All three must hold,
-    // and each rules out a different disaster.
-    //
-    // The SIGNER half (§6): a reveal that cannot be signed strands the commit, so
-    // hardware never qualifies (flows/signerCapability.js).
-    //
-    // The LANE half: only the confirm lane carries the commit, its reveal and the
-    // recovery record to Approve. The watch-only lane builds one unsigned PSBT
-    // with no reveal, so it stays on the legacy ceiling.
-    //
-    // The CHAIN half: offering a 390 KB ceiling on a chain with no Taproot would
-    // let the user pick a file the encoder cannot carry, and they would find out
-    // at submit. `p2tr` in addressTypes is the descriptor's own statement that the
-    // chain does Taproot: BTC yes, DOGE never (no segwit at all). LTC is
-    // protocol-capable, but its descriptor still reserves p2tr, so the wallet
-    // stays conservative there until that lands rather than guessing ahead.
-    const envelopeAvailable = Boolean(
-        !isWatcherMode
-        && flowsLib.signerSupportsTapscript(fromAddress)
-        && descriptor?.addressTypes?.includes('p2tr'),
-    );
+    // The Upload method the user picks (flows/uploadMethod.js). The Taproot
+    // envelope is offered only where a reveal can be signed and carried: a
+    // software signer (never hardware, §6), the confirm lane (the watch-only
+    // lane builds one unsigned PSBT and no reveal) and a chain whose descriptor
+    // does Taproot (BTC yes, DOGE never, LTC once its descriptor enables p2tr).
+    // An unusable option stays on the list, disabled with its reason.
+    const upload = useUploadMethod({
+        descriptor,
+        fromAddress,
+        isWatcherMode,
+        feeEstimate,
+        coinTicker,
+        file: mode === 'public' ? fileMeta : null,
+        metadata: { title, memo },
+        compiledBytesFor: publicUploadBytes,
+        standardCap: fileMeta
+            ? flowsLib.maxPublicFileBytes({ name: fileMeta.name, type: fileMeta.type, title, memo }, {})
+            : null,
+        picked: uploadPick,
+        onPick: setUploadPick,
+    });
+    const envelopePicked = upload.method === 'taproot';
 
     // Size the ceiling from the encoding the compose actually requests (PC-28):
-    // the envelope ceiling when the compose asks for AUTO below, the legacy
-    // compiled ceiling otherwise.
+    // the envelope ceiling when the picked method asks for AUTO below, the
+    // legacy compiled ceiling for Standard.
     const publicCapFor = (name, type) => flowsLib.maxPublicFileBytes(
         { name, type, title, memo },
-        envelopeAvailable ? { encoding: 'TAPROOT' } : {},
+        upload.ceilingOpts,
     );
 
     useEffect(() => {
@@ -387,12 +399,10 @@ export function PublishFileForm({ walletId, onBack }) {
                     rawData,
                     payFeeInNativeCoin: nativeFee.flag || undefined,
                     ...(feePerKb != null ? { feePerKb } : {}),
-                    // Opt in to size-aware selection, and ASSERT the signer's
-                    // tapscript capability rather than letting AUTO assume it: AUTO
-                    // reaches for the envelope only when that flag is true.
-                    ...(envelopeAvailable
-                        ? { encoding: 'AUTO', options: flowsLib.encoderSignerOptions(fromAddress) }
-                        : {}),
+                    // The picked method's request: Taproot opts in to AUTO and
+                    // ASSERTS the signer's tapscript capability rather than letting
+                    // AUTO assume it; Standard sends no encoding at all.
+                    ...upload.encoderOpts,
                 },
                 // prebuiltPsbt carries the envelope's reveal and recovery record
                 // when AUTO chose TAPROOT, so Approve signs both composed PSBTs.
@@ -530,6 +540,8 @@ export function PublishFileForm({ walletId, onBack }) {
                 tick={gatePick.tick}
                 issuerAddress={gatePick.ownerAddress}
                 onBack={() => setGatedComposerOpen(false)}
+                uploadPick={uploadPick}
+                onUploadPick={setUploadPick}
             />
         );
     }
@@ -566,9 +578,12 @@ export function PublishFileForm({ walletId, onBack }) {
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
-                feeText={feeEstimate?.coinAmount
-                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                // The picked method's estimate for this file, shown only until
+                // the composed transactions state their exact fee.
+                feeText={(upload.fee?.coinAmount || feeEstimate?.coinAmount)
+                    ? `Network fee: ${upload.fee?.coinAmount || feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
+                extraCredentials={<p className={styles.hint} data-testid="confirm-upload-method">{upload.confirmLine}</p>}
                 coinTicker={coinTicker}
                 signerReady={signerReady}
                 password={password}
@@ -712,6 +727,7 @@ export function PublishFileForm({ walletId, onBack }) {
                     <dd className={styles.detailsValue}>
                         {fromAddress ? <AddressText address={fromAddress.address} /> : null}
                     </dd>
+                    <UploadMethodReviewRows upload={upload} labelClassName={styles.detailsLabel} valueClassName={styles.detailsValue} />
                 </dl>
                 <p className={styles.hint} role="note">
                     Permanent: the published bytes live on-chain forever and
@@ -919,6 +935,9 @@ export function PublishFileForm({ walletId, onBack }) {
                 </div>
             ) : (
                 <>
+                    {/* How the bytes ride the chain, before the file: the pick sets the
+                        ceiling the file field names. */}
+                    <UploadMethodField upload={upload} />
                     <Input
                         type="file"
                         label={`File (up to ${capHint.toLocaleString()} bytes)`}
@@ -927,7 +946,7 @@ export function PublishFileForm({ walletId, onBack }) {
                                 Up to about {capHint.toLocaleString()} bytes with the current title and memo.
                                 The ceiling is exact per upload: shorter names and titles leave a little more
                                 room for the file itself.
-                                {envelopeAvailable
+                                {envelopePicked
                                     ? ' This network and account support the compact Taproot encoding, which is what makes the larger ceiling possible. Files are compressed automatically when that makes them smaller, so what lands on-chain is often well under the size shown here.'
                                     : ' Files are compressed automatically when that makes them smaller, so what lands on-chain is often less than the file size.'}
                             </>

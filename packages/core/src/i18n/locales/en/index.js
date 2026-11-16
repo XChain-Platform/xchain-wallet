@@ -112,6 +112,7 @@ import transactionStatus from './transactionStatus.js';
 import txTimeline from './txTimeline.js';
 import ui from './ui.js';
 import undoSend from './undoSend.js';
+import uploadMethod from './uploadMethod.js';
 import verifySignature from './verifySignature.js';
 import walletDetails from './walletDetails.js';
 import walletMenu from './walletMenu.js';
@@ -178,6 +179,7 @@ export const en = {
     ...txTimeline,
     ...ui,
     ...undoSend,
+    ...uploadMethod,
     ...verifySignature,
     ...walletDetails,
     ...walletMenu,
