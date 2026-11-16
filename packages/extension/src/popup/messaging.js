@@ -1188,6 +1188,21 @@ export function listPendingDeploys(req) {
     return /** @type {any} */ (sendMessage('pendingDeploys.listForWallet', req));
 }
 
+/** Multi-part file upload or resume. */
+export function fileMultipart(opts) {
+    return /** @type {any} */ (sendMessage('action.fileMultipart', opts));
+}
+
+/** In-flight multi-part file uploads for a wallet. */
+export function listPendingFileUploads(req) {
+    return /** @type {any} */ (sendMessage('pendingFileUploads.listForWallet', req));
+}
+
+/** Discard a saved multi-part file upload. */
+export function discardPendingFileUpload(req) {
+    return /** @type {any} */ (sendMessage('pendingFileUploads.discard', req));
+}
+
 /** @param {{ id: string }} req */
 export function clearPendingDeploy(req) {
     return /** @type {any} */ (sendMessage('pendingDeploys.clear', req));

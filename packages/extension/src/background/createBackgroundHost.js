@@ -33,6 +33,12 @@ import { mintedAmountForAddress } from '@xchain-wallet/core/flows/mintedAmount.j
 import { capRbfToDescriptor } from '@xchain-wallet/core/flows/rbfCap.js';
 import { assertWalletUnlockedForReveal } from '@xchain-wallet/core/flows/revealAccess.js';
 import {
+    handleDiscardPendingFileUpload,
+    handleFileMultipart,
+    handleListPendingFileUploads,
+} from '@xchain-wallet/core/flows/fileMultipartRoutes.js';
+import { publishMultipartFile } from '@xchain-wallet/core/flows/publishMultipartFile.js';
+import {
     buildEditFeedListsParams,
     buildBetActionPsbt,
     editBetFeedListsAction,
@@ -727,7 +733,8 @@ async function pickSignerFromRequest({ vault, walletId, signerId, signerPool }) 
 const SPENDING_ACTION_TYPES = [
     'sweep', 'issue', 'mint', 'destroy', 'callback', 'sleep', 'broadcast', 'oraclePrice', 'addressPrefs',
     'deployChunked', 'dispenser', 'dividend', 'createList', 'airdrop', 'advanced', 'order', 'cancelOrder',
-    'editOrder', 'coinpay', 'swap', 'link', 'file', 'gatedPublish', 'message', 'deploy', 'execute', 'deposit',
+    'editOrder', 'coinpay', 'swap', 'link', 'file', 'fileMultipart', 'gatedPublish', 'message', 'deploy',
+    'execute', 'deposit',
     'withdraw', 'stake', 'unstake', 'collect', 'delegate', 'revokeDelegation', 'createPoll', 'castBallot',
     'delegateVote', 'createMarket', 'placeBet', 'resolveMarket', 'cancelMarket', 'editBetFeedLists',
     'clearVoteDelegation', 'contractStake',
@@ -5256,6 +5263,17 @@ export function createBackgroundHost(deps) {
         return fileAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
+    host.register('action.fileMultipart', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return handleFileMultipart(req, {
+            publishMultipartFile,
+            signer: await sessionSigner(req, vault, signerPool),
+            vault,
+            chainRegistry,
+            sdkRegistry,
+            onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId),
+        });
+    });
+
     // Project registry: current roster lookup (ProjectRosterForm prefill).
     host.register('projects.byTick', async (req, { sdkRegistry }) => {
         return getProjectForTick({ ...req, sdkRegistry });
@@ -6000,6 +6018,14 @@ export function createBackgroundHost(deps) {
 
     host.register('pendingDeploys.clear', async (req, { vault }) => {
         return clearPendingDeploy({ ...req, vault });
+    });
+
+    host.register('pendingFileUploads.listForWallet', async (req, { vault }) => {
+        return handleListPendingFileUploads(req, { vault });
+    });
+
+    host.register('pendingFileUploads.discard', async (req, { vault }) => {
+        return handleDiscardPendingFileUpload(req, { vault });
     });
 
     host.register('contracts.checkCodeSize', async (req, { sdkRegistry }) => {
