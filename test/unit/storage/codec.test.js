@@ -44,6 +44,7 @@ describe('storage/codec', () => {
             pendingTxs: [],
             signers: [],
             pendingAirdrops: [],
+            pendingFileUploads: [],
             pendingDeploys: [],
             watchlistEntries: [],
             priceAlerts: [],
