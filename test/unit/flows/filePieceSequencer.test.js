@@ -92,7 +92,11 @@ describe('a dropped piece', () => {
         const states = { [record.fundingTxid]: 'confirmed' };
         for (const index of [0, 2]) states[confirmed(record, index, String(index))] = 'confirmed';
         const dropped = txid('dropped');
-        piece(record, 1, { signedTxids: [dropped], txid: dropped });
+        piece(record, 1, {
+            signedTxids: [dropped],
+            txid: dropped,
+            actionIndex: 1,
+        });
         states[dropped] = 'dropped';
 
         expect(planResend({ record, chainStates: states })).toMatchObject({

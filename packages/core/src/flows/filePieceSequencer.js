@@ -51,7 +51,6 @@ function outputIsUnspent(output) {
 }
 
 function piecePlan(piece, record, chainStates) {
-    if (piece?.actionIndex != null) return 'skip';
     const txids = txidsOf(piece);
     if (txids.length === 0) return 'send';
     const states = txids.map((txid) => chainStateOf(chainStates, txid));
