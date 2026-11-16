@@ -82,6 +82,20 @@ function multipartReply(result) {
     return record == null ? reply : { ...reply, upload: pendingUploadSummary(record) };
 }
 
+function multipartSizes(req, deps) {
+    if (typeof deps.multipartSizesFor !== 'function') return undefined;
+    const sizes = deps.multipartSizesFor(deps.chainRegistry.get(req.chainId));
+    if (sizes === null || typeof sizes !== 'object'
+        || typeof sizes.envelopePairVbytes !== 'function'
+        || typeof sizes.standardPairBytes !== 'function') {
+        throw routeError(
+            'FILE_MULTIPART_SIZES_INVALID',
+            'handleFileMultipart: multipart pair-size estimators are required',
+        );
+    }
+    return sizes;
+}
+
 export async function handleFileMultipart(req, deps) {
     requireText(req?.walletId, 'walletId', 'handleFileMultipart');
     requireText(req?.chainId, 'chainId', 'handleFileMultipart');
@@ -98,8 +112,12 @@ export async function handleFileMultipart(req, deps) {
         gateMinAmountHeights: deps.gateMinAmountHeights,
     });
     delete request.rawData;
+    delete request.outputFloor;
+    delete request.sizes;
+    const sizes = multipartSizes(req, deps);
     const result = await publishMultipartFile({
         ...request,
+        ...(sizes === undefined ? {} : { sizes }),
         signer,
         vault,
         chainRegistry,
