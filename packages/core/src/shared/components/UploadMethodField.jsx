@@ -27,6 +27,7 @@ import {
     UPLOAD_METHOD_TAPROOT,
     UPLOAD_METHODS,
 } from '../../flows/uploadMethod.js';
+import { satsToCoinDecimal } from '../../flows/feeEstimate.js';
 import { formatBytes } from '../utils/formatBytes.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/uploadMethod.js';
@@ -162,14 +163,67 @@ const REASON_COPY = Object.freeze({
     chain: () => t('uploadMethod.reason.chain'),
 });
 
-function reasonText(reason, standardCap) {
+function reasonText(reason, standardCap, multipartCap) {
     if (!reason) return null;
     if (reason === 'tooLarge') {
+        if (Number.isFinite(multipartCap)) {
+            return t('uploadMethod.reason.tooLargeFor', {
+                cap: formatBytes(multipartCap, { limit: true }),
+            });
+        }
         return t('uploadMethod.reason.tooLarge', {
             cap: Number.isFinite(standardCap) ? formatBytes(standardCap, { limit: true }) : '',
         });
     }
     return (REASON_COPY[reason] || REASON_COPY.signer)();
+}
+
+function singleFeeLine(upload, value) {
+    const fee = upload.fees[value];
+    return fee
+        ? t('uploadMethod.fee', { amount: fee.coinAmount, ticker: upload.coinTicker }).trim()
+        : null;
+}
+
+function optionCopy(upload, value) {
+    const multipart = upload.multipart?.options?.[value] ?? null;
+    const reason = reasonText(upload.reasons[value], upload.standardCap, multipart?.cap);
+    if (reason) return { description: reason, feeLine: singleFeeLine(upload, value) };
+    if (multipart?.pending) {
+        return { description: t('uploadMethod.multipartPending'), feeLine: null };
+    }
+    if (multipart?.multipart && multipart.summary) {
+        const feeLine = Number.isFinite(multipart.fee)
+            ? t('uploadMethod.fee', {
+                amount: satsToCoinDecimal(multipart.fee), ticker: upload.coinTicker,
+            }).trim()
+            : null;
+        return { description: multipart.summary, feeLine };
+    }
+    return { description: methodDescription(value), feeLine: singleFeeLine(upload, value) };
+}
+
+function fieldOption(upload, value) {
+    const name = methodName(value);
+    const { description, feeLine } = optionCopy(upload, value);
+    return {
+        value,
+        text: name,
+        label: value === UPLOAD_METHOD_TAPROOT ? (
+            <>
+                {name}{' '}
+                <span className={inputStyles.optionalPill} data-upload-cheapest>{t('uploadMethod.cheapest')}</span>
+            </>
+        ) : name,
+        icon: value === UPLOAD_METHOD_TAPROOT ? <DocumentIcon /> : <GridIcon />,
+        disabled: Boolean(upload.reasons[value]),
+        sub: (
+            <>
+                <span data-upload-description>{description}</span>
+                {feeLine ? <span data-upload-fee={value}>{` ${feeLine}`}</span> : null}
+            </>
+        ),
+    };
 }
 
 /**
@@ -207,33 +261,7 @@ export function UploadMethodReviewRows({ upload, labelClassName, valueClassName 
  * @param {boolean} [props.disabled]
  */
 export function UploadMethodField({ upload, disabled = false }) {
-    const options = UPLOAD_METHODS.map((value) => {
-        const name = methodName(value);
-        const reason = reasonText(upload.reasons[value], upload.standardCap);
-        const fee = upload.fees[value];
-        const feeLine = fee
-            ? t('uploadMethod.fee', { amount: fee.coinAmount, ticker: upload.coinTicker }).trim()
-            : null;
-        const description = reason || methodDescription(value);
-        return {
-            value,
-            text: name,
-            label: value === UPLOAD_METHOD_TAPROOT ? (
-                <>
-                    {name}{' '}
-                    <span className={inputStyles.optionalPill} data-upload-cheapest>{t('uploadMethod.cheapest')}</span>
-                </>
-            ) : name,
-            icon: value === UPLOAD_METHOD_TAPROOT ? <DocumentIcon /> : <GridIcon />,
-            disabled: Boolean(upload.reasons[value]),
-            sub: (
-                <>
-                    <span data-upload-description>{description}</span>
-                    {feeLine ? <span data-upload-fee={value}>{` ${feeLine}`}</span> : null}
-                </>
-            ),
-        };
-    });
+    const options = UPLOAD_METHODS.map((value) => fieldOption(upload, value));
     return (
         <IconSelect
             label={t('uploadMethod.label')}
