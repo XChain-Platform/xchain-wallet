@@ -50,3 +50,23 @@ export async function indexSpaceSharedForWallet(vault, walletId) {
     const wallet = await vault.wallets.get(walletId);
     return indexSpaceSharedAcrossTypes(wallet?.format);
 }
+
+/**
+ * Resolve the rule for one account. Hardware accounts keep one BIP44 branch
+ * per address type even when their containing wallet uses legacy derivation.
+ *
+ * @param {import('../storage/Vault.js').Vault} vault
+ * @param {string} walletId
+ * @param {{ account?: { id?: string, index?: number }, addresses?: any[], signerKind?: string }} context
+ * @returns {Promise<boolean>}
+ */
+export async function indexSpaceSharedForAccount(
+    vault, walletId, { account, addresses = [], signerKind } = {},
+) {
+    if (!(await indexSpaceSharedForWallet(vault, walletId))) return false;
+    if (signerKind === 'trezor' || signerKind === 'ledger') return false;
+    if (Number.isInteger(account?.index) && account.index !== 0) return false;
+    if (account?.id && addresses.some((address) => address.accountId === account.id
+        && (address.source === 'trezor' || address.source === 'ledger'))) return false;
+    return true;
+}

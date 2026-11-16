@@ -8,29 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for S4: the release workflow's safety properties.
-//
-// The remotes are shared and a second coder pushes to them. A
-// tag-triggered workflow holding code-signing secrets is a
-// signed-malware factory, and the manual store-publish gate does not
-// help: the output of a compromised run is a properly signed, notarized
-// binary that a direct downloader never runs past a store at all.
-//
-// Half the protection lives in repository settings, which this offline
-// suite cannot reach. That half is measured by
-// `tools/release/verify-ci-controls.mjs`, which reads the live settings
-// with `gh api` and compares them to what the public page claims. It is
-// not part of `npm run ci` (network, authenticated `gh`), so it is run
-// before a release and after any settings or page change - and the first
-// time it ran it found the page's third false claim in nine days
-// (2026-08-12: signing credentials described as environment-scoped while
-// all ten sat at repository scope).
-//
-// The half that lives in the workflow file is pinned here, because each
-// of these is one plausible edit away from being undone by someone
-// fixing something else, and none of them fails visibly when it breaks.
-// A workflow that has quietly started handing secrets to pull requests
-// still goes green.
+// Verify the release workflow's safety properties.
+// Check live repository settings separately with verify-ci-controls.mjs.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -145,16 +124,8 @@ for (const step of [
 assert.match(dispatchVerifyTag, /VERSION="DRYRUN-[^\n]+"/,
     'workflow_dispatch builds must use a visibly non-release version');
 
-// --- 2b. This file must not claim the controls that do not exist -------
-//
-// corrected the public page. The same two false claims were also
-// written into this workflow's own header ("required-reviewer approval
-// gate", "tag creation is restricted to the release maintainer by a tag
-// protection rule"), which is worse in one way: a reader who opens
-// release.yml to check the page's story finds the page's story repeated
-// back, and reads two independent sources agreeing. Neither exists, and
-// by operator decision 2026-08-03 neither will. Guarded here so restoring
-// the comfortable wording is red rather than invisible.
+// --- 2b. Reject claims about controls that do not exist ----------------
+// Keep reviewer-gate and tag-rule claims out of the workflow.
 for (const [claim, re] of [
     ['a required-reviewer approval gate on the signing environment',
         /required[- ]reviewer|reviewer approves|requires a human reviewer/i],
@@ -235,24 +206,8 @@ for (const [name, block] of jobs) {
         `job '${name}' produces artifacts and must pin SOURCE_DATE_EPOCH`);
 }
 
-// --- 6b. A macOS build step must name a signing identity ---------------
-//
-// App-builder-lib reads an explicit null identity as "do not
-// sign", checked BEFORE it looks at CSC_LINK. So a mac step holding the
-// Developer ID cert and the notarization credentials, and nothing else,
-// signed nothing, notarized nothing, exited 0 and said so in one info
-// line. That is how the direct download channel shipped unsigned while
-// reading as fully configured.
-//
-// The identity now defaults from the builder config whenever a certificate
-// was supplied (MAC_IDENTITY, pinned by desktop-packaging.smoke.js), so
-// dropping the env line no longer restores that defect. This check is the
-// second layer and stays: it keeps each step naming the signer it intends
-// rather than inheriting one, and it is where the notarization credentials
-// are asserted to travel beside the certificate.
-//
-// A `--mac mas` step is exempt: `mas.identity` has its own non-null
-// default in the builder config, which mas-lane.smoke.js pins.
+// --- 6b. Require each macOS build step to name its signing identity ----
+// Exempt `--mac mas`; its signer comes from the pinned builder default.
 function stepBlocks(jobBlock) {
     const out = [];
     let current = null;
@@ -333,24 +288,8 @@ if (docsAvailable()) {
     // asserting on will eventually straddle a line break.
     const setup = readDoc('release', 'ci-setup.md').replace(/\s+/g, ' ');
 
-    // THIS BLOCK USED TO PIN TWO CONTROLS THAT DO NOT EXIST, and that is
-    // why the page went on claiming them. It required the doc to say the
-    // signing environment "requires a human reviewer to approve" and that
-    // tag creation is "restricted to the release maintainer through a
-    // repository tag ruleset". Both were measured in 2026-08 and neither is
-    // in force: environment reviewers need a plan tier this org does not
-    // have, and a tag rule cannot exempt one named person while another
-    // account holds admin, so none was created rather than a partial one.
-    //
-    // The effect was worse than a stale test. Correcting the page would
-    // have REDDENED this smoke, so the true state could not be documented
-    // without first fixing the gate that demanded the false state. A test
-    // that pins a security claim rather than a security property will
-    // always fail in that direction.
-    //
-    // What is pinned now is what is actually in force, plus the two
-    // absences stated out loud, because an absent control that is written
-    // down is the thing being relied on here.
+    // Pin controls in force plus explicit statements for both absent controls.
+    // Test security properties rather than claims about repository settings.
     for (const [control, re] of [
         ['the signing environment restricted to the release tag pattern',
             /restricted to the release tag pattern/i],
@@ -384,37 +323,8 @@ if (docsAvailable()) {
             + 'an intentional run');
     }
 
-    // Those two guards pin the exact sentences that were there, which is
-    // one paraphrase away from being useless: "gated on an approving
-    // reviewer" says the same false thing and matches neither. So the
-    // property, not the wording - the page may name a reviewer gate or a
-    // tag rule ONLY to say it is absent. Any sentence that mentions one
-    // without denying it is asserting it.
-    //
-    // This is not hypothetical: §2 went on saying an environment-scoped
-    // secret is "only readable by a job that has already cleared the
-    // approval gate above" after §1 had been corrected to say there is no
-    // such gate, so the page both denied and asserted the same control
-    // (found 2026-08-04, re-scan).
-    //
-    // BOTH HALVES OF THAT GUARD LEAKED, measured by mutation 2026-08-12
-    // verification, and the leaks compose into exactly the claim
-    // this whole block exists to keep off the page:
-    //
-    //   1. The mention vocabulary was three phrases lifted from the old
-    //      wording, so "held until the release maintainer approves it from
-    //      the deployments tab" was never even examined.
-    //   2. "Contains a negation token" is not "denies the control". The
-    //      survivor that proves it is "The tag ruleset does not allow
-    //      anyone but the release maintainer to create a v* tag" - the
-    //      false claim itself, stated in the affirmative, waved through on
-    //      the `\bnot\b` inside "does not allow".
-    //
-    // So the vocabulary is now the concept rather than the sentence, and a
-    // sentence must carry an EXPLICIT statement of absence, not merely a
-    // negation somewhere in it. Phrasings that describe the control working
-    // ("does not start until", "does not allow anyone but") no longer count
-    // as denying that it exists.
+    // Allow gate or tag-rule terms only in explicit absence statements.
+    // Do not treat an arbitrary negation as proof that the control is denied.
     const ABSENCE = new RegExp([
         'there (?:is|are) no\\b',
         '\\bno such\\b',
@@ -431,16 +341,8 @@ if (docsAvailable()) {
         'never will',
     ].join('|'), 'i');
 
-    // Sentences that use this vocabulary about a DIFFERENT, real control.
-    // §4's fork-run approval is a genuine platform behaviour and has nothing
-    // to do with the per-run reviewer gate on the signing environment.
-    //
-    // Deliberately narrow: "pull request" alone must NOT exempt a sentence.
-    // §2's whole argument for environment scoping is that a repository-wide
-    // secret is readable "from a pull request branch", and that is the exact
-    // sentence which once went on to invoke the non-existent approval gate.
-    // An exemption keyed on "pull request" hides the one regression this
-    // guard was written for (measured 2026-08-12: it did).
+    // Exempt only sentences about the distinct fork-run approval control.
+    // Do not exempt a sentence merely because it mentions a pull request.
     const OTHER_CONTROL = /\bfork(?:s|ed)?\b|outside collaborator/i;
 
     const sentences = setup.split(/(?<=[.!?])\s+/);
@@ -494,17 +396,8 @@ if (docsAvailable()) {
 
 // --- 8b. The iOS lane (§5, S4b) --------------------------------
 
-// Two properties, and neither fails visibly when it breaks.
-//
-// The profile: a mobile store artifact built at `default` has the wrong CSP,
-// sourcemap setting and profile stamp. Dropping the env var produces a valid
-// ipa under the wrong label, and expected-artifacts.txt refuses it only later
-// at the release machine, long after the build looked green.
-//
-// The gate: the archive/export steps must stay conditional on the App
-// Store Connect key being present. Until K2 enrollment completes there is
-// no key, and an ungated archive step turns every release tag red for a
-// reason that has nothing to do with the release.
+// Require the store profile and gate signed archive/export on ASC credentials.
+// The unsigned archive path remains exempt from the credential gate.
 assert.ok(jobs.has('mobile-ios'), 'workflow has an iOS lane');
 const ios = jobs.get('mobile-ios');
 
@@ -622,35 +515,8 @@ assert.match(manifestConformance,
     /if \(!skipOrFail\(ctx, docs, 'the canonical action-manifest\.json byte-identity guard'\)\) return;\s*expect\(readFileSync\(VENDORED, 'utf8'\),[\s\S]*?\)\.toEqual\(readFileSync\(DOCS, 'utf8'\)\)/,
     'the manifest identity guard must directly compare vendored and supplied canonical bytes');
 
-// --- 10. Every workflow that builds the web SPA raises Node's heap ------
-//
-// The web bundle is one large synchronous graph carrying every chain, and
-// Node sizes its default old-space from the machine it starts on. A
-// developer box builds it happily; a GitHub-hosted runner dies at ~2.0 GB
-// with `FATAL ERROR: ... JavaScript heap out of memory`.
-//
-// This is pinned rather than remembered because it has already been
-// forgotten once, in the way that matters most. release.yml hit the wall
-// on 2026-08-01 and was fixed the same day (d3f8a4ec). mobile.yml builds
-// the SAME bundle in the SAME way and did not get the fix, so it failed on
-// all three of its runs (the v0.334.0 tag pushes, 2026-08-02) at that one
-// line. The cost was not one red workflow: that step is upstream of
-// `bundleRelease`, so no Gradle build has ever run in CI, and every
-// artifact-level gate below it in mobile.yml - the ones written precisely
-// because a source-level assertion cannot see what packaging did - has
-// never executed there at all.
-//
-// Any future shell that builds the SPA on a runner inherits the same wall.
-//
-// This check itself then proved the point, twice over (2026-08-03). It named
-// its two workflows in a literal list while its own comment promised "any
-// future shell", so ci.yml was never looked at; and its scope test knew only
-// the two spellings those two files happened to use, so it could not have
-// seen ci.yml's `pnpm -r --if-present build` even if it had. ci.yml's build
-// job duly aborted at 2042 MB on master (run 30787587046), taking with it the
-// three artifact gates that run after it - no-dev-mock, no-@trezor, and SRI -
-// none of which had executed since. So: enumerate the directory, never a
-// list, and match on BUILDING rather than on a known incantation.
+// --- 10. Require a larger Node heap for every workflow building the SPA -
+// Enumerate workflows and match build behavior, not known command strings.
 const WORKFLOW_DIR = '.github/workflows';
 const workflows = readdirSync(join(root, WORKFLOW_DIR)).filter((f) => /\.ya?ml$/.test(f));
 assert.ok(workflows.length >= 3, `found the workflow directory (${workflows.length} files)`);

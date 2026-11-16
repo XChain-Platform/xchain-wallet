@@ -88,10 +88,9 @@ export const accountMigrations = {
 /** @type {MigrationMap} */
 export const addressMigrations = {
     // v1 -> v2: §17.6. Signer routing. Existing v1 records predate
-    // address-to-signer linkage; fill signerId as null ("unresolved").
-    // Runtime reconciliation: the next time the wallet is unlocked,
-    // the shell can match addresses by (publicKey, derivationPath)
-    // against available signers and write signerId back.
+    // address-to-signer linkage, so seed signerId as null. Software
+    // routing does not require the link. Nothing backfills it automatically;
+    // callers may explicitly use reconcileAddressSigners with unlocked signers.
     1: (r) => ({ ...r, schemaVersion: 2, signerId: null }),
     // v2 -> v3: §16. Dispenser sub-addresses. Backfill `role` from the
     // BIP44 change segment of derivationPath (1 -> change, 2 -> dispenser,

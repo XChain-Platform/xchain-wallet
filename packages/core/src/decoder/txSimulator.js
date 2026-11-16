@@ -106,7 +106,7 @@ const PROTOCOL_COIN_TICKER = {
  * @property {string} tick   ticker (coin family, e.g., "BTC" for the native coin)
  * @property {string} amount string-encoded big-number balance
  * @property {boolean} [isCoin]
- * @property {boolean} [unknown]  the coin balance could not be read (tick and amount are empty)
+ * @property {boolean} [unknown]  the balance could not be read; with no tick, the whole coin (isCoin) or token ledger is unknown
  */
 
 /**
@@ -636,10 +636,12 @@ function indexBalances(balances, coinTick) {
     return map;
 }
 
-function blankUnknownBalances(result, balances, coinTick) {
-    if (!result || !Array.isArray(result.deltas)) return;
-    const deltas = result.deltas;
+// Ticks whose balance the read could not give, mapped to whether each is the
+// coin. A tickless token marker means the whole token ledger was unreadable,
+// so every token the action touches is unknown too.
+function unknownBalanceTicks(balances, coinTick, deltas) {
     const unknown = new Map();
+    let tokenLedgerUnknown = false;
     if (Array.isArray(balances)) {
         for (const balance of balances) {
             if (!balance?.unknown) continue;
@@ -647,8 +649,21 @@ function blankUnknownBalances(result, balances, coinTick) {
                 ? String(balance.tick).toUpperCase()
                 : balance.isCoin ? coinTick : '';
             if (tick) unknown.set(tick, Boolean(balance.isCoin));
+            else if (!balance.isCoin) tokenLedgerUnknown = true;
         }
     }
+    if (tokenLedgerUnknown) {
+        for (const d of deltas) {
+            if (d.tick && !d.isCoin && !d.isFee && !unknown.has(d.tick)) unknown.set(d.tick, false);
+        }
+    }
+    return unknown;
+}
+
+function blankUnknownBalances(result, balances, coinTick) {
+    if (!result || !Array.isArray(result.deltas)) return;
+    const deltas = result.deltas;
+    const unknown = unknownBalanceTicks(balances, coinTick, deltas);
     for (const [tick, isCoin] of unknown) {
         let touched = false;
         let balanceRow = null;

@@ -21,7 +21,7 @@ import { createBroadcastQueueStore } from '../../../packages/extension/src/backg
 const W = 'w1';
 const CHAIN = 'bitcoin-regtest';
 const ADDR = 'bcrt1qwallet-a';
-const VERDICT = { chainId: CHAIN, donationIncluded: true };
+const VERDICT = { chainId: CHAIN, donationIncluded: true, donationAmount: 25000 };
 
 function memStorage() {
     let blob = {};
@@ -36,11 +36,12 @@ function memStorage() {
 }
 
 // One wallet owning one address, holding one PendingTx the signing flow stamped 'queued'.
-function vaultWithQueuedRecord() {
+function vaultWithQueuedRecord(over = {}) {
     const record = {
         id: 'p1', chain: 'bitcoin', network: 'regtest', fromAddress: ADDR,
         actionSummary: 'Send', status: 'queued', txHex: 'hex-p1', txid: 'tx-p1',
         createdAt: '2026-01-01T00:00:00.000Z',
+        ...over,
     };
     return {
         pendingTxs: { findBy: async (k, v) => (record[k] === v ? [{ ...record }] : []) },
@@ -120,5 +121,28 @@ describe('the auto-enqueue hook after a vault rebuild of the same PendingTx', ()
 
         expect(engine.getQueue(W)).toHaveLength(1);
         expect(engine.getQueue(W)[0].adsCommit).toEqual(VERDICT);
+    });
+
+    it('fills a missing amount when matching signed bytes carry the complete verdict', async () => {
+        const { engine } = await boot();
+        await engine.enqueueOnBroadcastFailure(W)(hookEntry({
+            adsCommit: { chainId: CHAIN, donationIncluded: true },
+        }));
+
+        await engine.enqueueOnBroadcastFailure(W)(hookEntry());
+
+        expect(engine.getQueue(W)).toHaveLength(1);
+        expect(engine.getQueue(W)[0].adsCommit).toEqual(VERDICT);
+    });
+
+    it('restores sold names from PendingTx params and preserves them in storage', async () => {
+        const { storage, engine } = await boot();
+        await engine.restoreQueueFromVault(vaultWithQueuedRecord({
+            params: { GIVE_OWNERSHIP: 1, GIVE_TICK: 'alpha' },
+        }), chainRegistry, W);
+
+        expect(engine.getQueue(W)).toEqual([expect.objectContaining({ soldNames: ['ALPHA'] })]);
+        await engine.enqueueOnBroadcastFailure(W)(hookEntry({ soldNames: ['ALPHA'] }));
+        expect(storage.read()[W]).toEqual([expect.objectContaining({ soldNames: ['ALPHA'] })]);
     });
 });

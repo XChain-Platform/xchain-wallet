@@ -110,6 +110,47 @@ describe('useTickBalance lookup', () => {
     });
 });
 
+describe('useTickBalance unreadable reads', () => {
+    function stubEntry(entry, rows = []) {
+        messaging.getWalletBalances.mockResolvedValue({ bitcoin: [{ address: 'addr1', ...entry }] });
+        mocked.balancesFromSdk.mockReturnValue(rows);
+    }
+
+    it.each([
+        ['a failed address', { balances: null, error: 'boom' }],
+        ['an unreadable token ledger', { balances: { tokens: [], unavailable: ['tokens'] } }],
+        ['an unreadable coin half', { balances: { tokens: [], unavailable: ['native'] } }],
+        ['an entry with no balances', { balances: null }],
+    ])('stays null for %s instead of reading 0', async (_name, entry) => {
+        stubEntry(entry);
+        const { result } = render();
+        await advance(400);
+        expect(messaging.getWalletBalances).toHaveBeenCalledTimes(1);
+        expect(result.current).toBeNull();
+    });
+
+    it('stays null for a row whose quantity could not be scaled', async () => {
+        stubEntry({ balances: {} }, [{ tick: 'PEPE', amount: '', unknown: true }]);
+        const { result } = render();
+        await advance(400);
+        expect(result.current).toBeNull();
+    });
+
+    it('still reads a held token when the coin half is unreadable', async () => {
+        stubEntry({ balances: { unavailable: ['native'] } }, [{ tick: 'PEPE', amount: '9' }]);
+        const { result } = render();
+        await advance(400);
+        await expectBalance(result, '9');
+    });
+
+    it('gives 0 for a token a fully read address does not hold', async () => {
+        stubEntry({ balances: { native: null, tokens: [] } });
+        const { result } = render();
+        await advance(400);
+        await expectBalance(result, '0');
+    });
+});
+
 describe('useTickBalance failure and lifecycle', () => {
     it('keeps null on a falsy result', async () => {
         messaging.getWalletBalances.mockResolvedValue(null);

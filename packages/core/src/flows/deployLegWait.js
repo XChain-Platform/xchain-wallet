@@ -23,7 +23,7 @@
 // the network dropped it. The explorer's transaction record is no help here,
 // because it is written by the same indexer that is behind.
 
-import { inclusionOf } from './txInclusionProbe.js';
+import { inclusionOf, utxoListOf } from './txInclusionProbe.js';
 
 /** Total time one leg may wait for the indexer, across every round. */
 export const INDEXER_PATIENCE_MS = 15 * 60 * 1000;
@@ -41,18 +41,6 @@ const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
 /** @param {unknown} v */
 const lower = (v) => String(v || '').trim().toLowerCase();
-
-/**
- * The UTXO list out of an encoder `get_utxos` reply (`{ utxos: [...] }`, or a
- * bare array from an older encoder); anything else is "did not answer".
- *
- * @param {any} res
- * @returns {any[] | null}
- */
-function utxoListOf(res) {
-    if (Array.isArray(res)) return res;
-    return res && Array.isArray(res.utxos) ? res.utxos : null;
-}
 
 /**
  * Did the SDK's indexer wait end because its round ran out, rather than
@@ -139,8 +127,8 @@ export function legNotIndexedError({ chainState, legLabel, txid, patienceMs, isC
     const saved = 'The deploy is saved';
     let message;
     if (chainState === 'confirmed') {
-        message = `${legLabel} (${txid}) is confirmed on chain, but the indexer has not processed it `
-            + `after ${minutes} minutes. Do not send it again. ${saved}: resume it once the indexer `
+        message = `${legLabel} (${txid}) is confirmed on chain, but the service has not processed it `
+            + `after ${minutes} minutes. Do not send it again. ${saved}: resume it once the service `
             + 'catches up and it continues from this point without re-sending anything already on chain.';
     } else if (chainState === 'mempool') {
         message = `${legLabel} (${txid}) is still waiting on the network to be confirmed after ${minutes} `
@@ -151,7 +139,7 @@ export function legNotIndexedError({ chainState, legLabel, txid, patienceMs, isC
             + `network dropped it and its inputs were not spent. ${saved}: resume it to send this `
             + `${isChunk ? 'chunk' : 'transaction'} again.`;
     } else {
-        message = `${legLabel} (${txid}) was not indexed within ${minutes} minutes, and the wallet `
+        message = `${legLabel} (${txid}) was not processed within ${minutes} minutes, and the wallet `
             + `could not read its status from the network. ${saved}: resume it later and the wallet `
             + 'checks the transaction again before sending anything.';
     }
@@ -249,11 +237,11 @@ export function indexerWaitMessage(wait) {
     const isChunk = Number.isInteger(wait.leg) && Number(wait.total) > 0;
     const leg = isChunk ? `Chunk ${Number(wait.leg) + 1} of ${wait.total}` : 'The assembling transaction';
     if (wait.chainState === 'confirmed') {
-        return `${leg} ${isChunk ? 'confirmed' : 'is confirmed'} on chain, waiting for the indexer `
-            + '(it can take several minutes on this network).';
+        return `${leg} ${isChunk ? 'confirmed' : 'is confirmed'} on chain; waiting for the service `
+            + 'to process it (this can take several minutes on this network).';
     }
     if (wait.chainState === 'mempool') {
-        return `${leg} is waiting on the network to be confirmed, then for the indexer.`;
+        return `${leg} is waiting on the network to confirm it, then for the service to process it.`;
     }
-    return `${leg} is taking longer than usual to index; still waiting.`;
+    return `${leg} is taking longer than usual to process; still waiting.`;
 }

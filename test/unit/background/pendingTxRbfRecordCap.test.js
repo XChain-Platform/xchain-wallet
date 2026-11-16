@@ -46,8 +46,11 @@ const { createBackgroundHost } = await import(
 const DOGE = { id: 'dogecoin-regtest', coin: 'dogecoin', networkKind: 'regtest', feeStrategy: { rbfSupported: false } };
 const BTC = { id: 'bitcoin-regtest', coin: 'bitcoin', networkKind: 'regtest', feeStrategy: { rbfSupported: true } };
 
-function makeHost() {
-    const rows = new Map([[PENDING_ID, { id: PENDING_ID, status: 'broadcast', psbtHex: 'unsigned-psbt' }]]);
+function makeHost(recordOverrides = {}) {
+    const rows = new Map([[
+        PENDING_ID,
+        { id: PENDING_ID, status: 'broadcast', psbtHex: 'unsigned-psbt', ...recordOverrides },
+    ]]);
     const descriptors = { [DOGE.id]: DOGE, [BTC.id]: BTC };
     const host = createBackgroundHost({
         vault: {
@@ -107,5 +110,13 @@ describe('action routes record the RBF the chain allowed', () => {
         const h = makeHost();
         await h.send('action.send', { chainId: 'unknown-chain', walletId: 'w1', rbf: true });
         expect(h.record().rbf).toBe(false);
+    });
+
+    it('does not overwrite the bytes-derived plan already recorded by core', async () => {
+        const h = makeHost({ psbtHex: 'bytes-derived-psbt', rbf: false });
+
+        await h.send('action.send', { chainId: BTC.id, walletId: 'w1', rbf: true });
+
+        expect(h.record()).toMatchObject({ psbtHex: 'bytes-derived-psbt', rbf: false });
     });
 });

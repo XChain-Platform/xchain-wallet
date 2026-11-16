@@ -19,6 +19,7 @@ import { WALLET_VERSION } from '../../buildInfo.js';
 import { useDocumentTitleSection } from '../hooks/useDocumentTitle.js';
 import { AboutSection } from '../components/settings/AboutSection.jsx';
 import { AdsSection } from '../components/settings/AdsSection.jsx';
+import { adsChainIdsForUser } from '../components/settings/adsChains.js';
 import { AppearanceSection } from '../components/settings/AppearanceSection.jsx';
 import { BackupSection } from '../components/settings/BackupSection.jsx';
 import { ConnectedSitesSection } from '../components/settings/ConnectedSitesSection.jsx';
@@ -50,6 +51,8 @@ import {
     SMALL_BALANCE_THRESHOLD_DEFAULT,
     WALLET_MODE_DEFAULT,
 } from '../../schemas/settings.js';
+import { defaultRegistry } from '../../registry/index.js';
+import { formatNativeBaseUnits, tickerForDescriptor } from '../../registry/coinTicker.js';
 import {
     clearActiveWallet,
     writeActiveWallet,
@@ -62,6 +65,7 @@ import { getLocale, t } from '../../i18n/index.js';
 import cardStyles from '../../ui/Card.module.css';
 
 const row = (title, terms = '', target = title) => ({ title, terms, target });
+const settingsChainRegistry = defaultRegistry();
 
 // Each time Settings opens it takes a fresh list scroll key, so the shell has
 // no saved offset for it and the list starts at its first row. Closing a
@@ -1120,10 +1124,15 @@ function endpointsSummary(settings) {
 function adsSummary(settings) {
     if (!settings) return '-';
     if (!settings.ads?.enabled) return t('settings.privacy.off');
-    const total = Object.values(settings.ads.perChain || {})
-        .reduce((s, c) => s + (Number(c?.lifetimeDonatedSats) || 0), 0);
-    if (total === 0) return t('settings.page.donatedZero');
-    return t('settings.page.donatedOn', { sats: total });
+    const amounts = adsChainIdsForUser(settings, settingsChainRegistry).flatMap((chainId) => {
+        const descriptor = settingsChainRegistry.get(chainId);
+        const donated = settings.ads.perChain?.[chainId]?.lifetimeDonatedSats;
+        if (!descriptor || !Number.isSafeInteger(donated) || donated <= 0) return [];
+        const amount = formatNativeBaseUnits(donated, descriptor);
+        return amount === null ? [] : [`${amount} ${tickerForDescriptor(descriptor)}`];
+    });
+    if (amounts.length === 0) return t('settings.page.donatedZero');
+    return t('settings.page.donatedOn', { amounts: amounts.join(', ') });
 }
 
 function developerSummary(settings) {

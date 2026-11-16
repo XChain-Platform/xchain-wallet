@@ -100,6 +100,15 @@ export function nativeDebitSatsFromPsbt(decomposed, ownedAddresses) {
     return debit >= 0n ? debit.toString() : null;
 }
 
+/** Names handed over by a queued ownership ORDER or DISPENSER. */
+function queuedSoldNames(actionData) {
+    if (actionData?.action !== 'ORDER' && actionData?.action !== 'DISPENSER') return [];
+    const params = actionData?.params;
+    if (!params || Number(params.GIVE_OWNERSHIP || 0) !== 1) return [];
+    const tick = typeof params.GIVE_TICK === 'string' ? params.GIVE_TICK.trim() : '';
+    return tick ? [tick] : [];
+}
+
 /**
  * @typedef {Object} PendingTxMeta
  * @property {string} fromAddress
@@ -126,9 +135,9 @@ export function nativeDebitSatsFromPsbt(decomposed, ownedAddresses) {
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
- * @property {(transactions: { signed: object, revealSigned: object | null, psbtHex?: string }) => void | Promise<void>} [beforeBroadcast] awaited after signing and before any broadcast
+ * @property {(transactions: { signed: object, revealSigned: object | null, psbtHex?: string, finalPsbtHex?: string }) => void | Promise<void>} [beforeBroadcast] awaited after signing and before any broadcast
  * @property {boolean} [verifyBuiltTx]   hold the encoder's PSBT to the confirm pipeline's tamper checks before signing (submitWithSigner)
- * @property {(entry: { signedTxHex: string, txid: string, chainId: string, signedAt: number, summary: string, error: string, pendingTxId: string | null, adsCommit: { chainId: string, donationIncluded: boolean } | null, commitLanded?: true, commitTxid?: string | null, revealTxHex?: string, revealTxid?: string | null }) => boolean | void | Promise<boolean | void>} [onBroadcastFailure]   Cluster G FOLLOWUP 1: fires when the broadcast leg fails after a successful sign. A two-phase commit's entry carries its signed reveal (`revealTxHex`), which the queue sends right after the commit. The bridge background host resolves false when the entry did not reach §49.5's durable queued-broadcast surface; legacy void callbacks are treated as accepted handoffs.
+ * @property {(entry: { signedTxHex: string, txid: string, chainId: string, signedAt: number, summary: string, error: string, pendingTxId: string | null, soldNames?: string[], adsCommit: { chainId: string, donationIncluded: boolean, donationAmount?: number } | null, commitLanded?: true, commitTxid?: string | null, revealTxHex?: string, revealTxid?: string | null }) => boolean | void | Promise<boolean | void>} [onBroadcastFailure]   Cluster G FOLLOWUP 1: fires when the broadcast leg fails after a successful sign. A two-phase commit's entry carries its signed reveal (`revealTxHex`), which the queue sends right after the commit. The bridge background host resolves false when the entry did not reach §49.5's durable queued-broadcast surface; legacy void callbacks are treated as accepted handoffs.
  */
 
 /**
@@ -220,9 +229,16 @@ export async function submitAction({
     // accumulator growing on top of one already paid). The bytes the user
     // approved are the only description of what broadcasts. An envelope from an
     // older composer carries no verdict and keeps today's behaviour.
-    const donationIncluded = typeof prebuiltPsbt?.adsDonation?.included === 'boolean'
+    const carriesDonationVerdict = typeof prebuiltPsbt?.adsDonation?.included === 'boolean';
+    const donationIncluded = carriesDonationVerdict
         ? prebuiltPsbt.adsDonation.included
         : adsPlan.canSubmit;
+    const carriedDonationAmount = prebuiltPsbt?.adsDonation?.donationAmount;
+    const donationAmount = donationIncluded
+        ? (carriesDonationVerdict && Number.isSafeInteger(carriedDonationAmount) && carriedDonationAmount > 0
+            ? carriedDonationAmount
+            : (carriesDonationVerdict ? undefined : adsPlan.donationAmount))
+        : 0;
 
     // If the caller supplied pendingTxMeta, set up lifecycle persistence.
     // The tracker mutates a mutable record and writes through to the vault
@@ -244,6 +260,7 @@ export async function submitAction({
             action: actionData.action,
             actionSummary: pendingTxMeta.actionSummary,
             psbtHex: '',
+            params: actionData.params,
             ...(sendDelta ? { tick: sendDelta.tick, amount: sendDelta.amount } : {}),
             balanceDebits: Array.isArray(pendingTxMeta.balanceDebits)
                 ? pendingTxMeta.balanceDebits
@@ -403,8 +420,7 @@ export async function submitAction({
         : effectiveEncoderOpts;
 
     const composedBeforeBroadcast = async (transactions) => {
-        // A hardware signer returns signedPsbtHex '' after checking its transaction
-        // spends and pays exactly what the commit PSBT does, so that PSBT gives the debit.
+        // A hardware signer's commit PSBT gives the debit when signedPsbtHex is empty.
         const debitPsbtHex = transactions?.signed?.signedPsbtHex || transactions?.psbtHex;
         if (pending && debitPsbtHex) {
             const owned = new Set([
@@ -428,16 +444,38 @@ export async function submitAction({
                 // Source and explicit change still provide a safe minimum when ownership lookup is unavailable.
             }
             let nativeDebitSats = null;
+            let replacementPlan = null;
             try {
                 const sdk = sdkRegistry.get(chainId);
-                nativeDebitSats = nativeDebitSatsFromPsbt(
-                    sdk.wallet.decomposePsbt(debitPsbtHex),
-                    owned,
-                );
+                const debitPlan = sdk.wallet.decomposePsbt(debitPsbtHex);
+                nativeDebitSats = nativeDebitSatsFromPsbt(debitPlan, owned);
+                const finalPsbtHex = transactions?.finalPsbtHex
+                    || transactions?.revealSigned?.signedPsbtHex
+                    || transactions?.signed?.signedPsbtHex
+                    || transactions?.psbtHex;
+                if (typeof finalPsbtHex === 'string' && finalPsbtHex) {
+                    const finalPlan = finalPsbtHex === debitPsbtHex
+                        ? debitPlan
+                        : sdk.wallet.decomposePsbt(finalPsbtHex);
+                    const inputs = Array.isArray(finalPlan?.inputs) ? finalPlan.inputs : [];
+                    const sequencesKnown = inputs.length > 0
+                        && inputs.every((input) => Number.isInteger(input?.sequence));
+                    replacementPlan = {
+                        psbtHex: finalPsbtHex,
+                        ...(sequencesKnown
+                            ? { rbf: inputs.some((input) => input.sequence < 0xfffffffe) }
+                            : {}),
+                    };
+                }
             } catch {
                 nativeDebitSats = null;
+                replacementPlan = null;
             }
-            if (nativeDebitSats !== null) await writePending({ nativeDebitSats });
+            const patch = {
+                ...(nativeDebitSats !== null ? { nativeDebitSats } : {}),
+                ...(replacementPlan ?? {}),
+            };
+            if (Object.keys(patch).length > 0) await writePending(patch);
         }
         if (typeof beforeBroadcast === 'function') await beforeBroadcast(transactions);
     };
@@ -572,12 +610,13 @@ export async function submitAction({
                                 // can settle the durable half; without the id
                                 // the record stays 'queued' after the bytes land.
                                 pendingTxId: pending?.id ?? null,
+                                soldNames: queuedSoldNames(actionData),
                                 // Carry the ADS-commit intent so the queue's
                                 // eventual-success handler advances the
                                 // accumulator (a queued tx is what donates,
                                 // not the failed immediate attempt). §5.3.4.
                                 adsCommit: adsEnabledForChain
-                                    ? { chainId, donationIncluded }
+                                    ? { chainId, donationIncluded, donationAmount }
                                     : null,
                             }) !== false;
                         } catch (_inner) {
@@ -625,6 +664,7 @@ export async function submitAction({
                 vault,
                 chainId,
                 donationIncluded,
+                donationAmount,
                 chainRegistry,
             });
         } catch (e) {

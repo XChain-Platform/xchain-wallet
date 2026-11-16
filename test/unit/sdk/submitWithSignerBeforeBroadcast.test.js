@@ -87,6 +87,9 @@ describe.each(['OP_RETURN', 'P2SH', 'TAPROOT'])('beforeBroadcast hold on the %s 
                 signedPsbtHex: 'SIGNED(PHASE1)',
                 txHex: 'TX(PHASE1)',
             });
+            expect(held.finalPsbtHex).toBe(
+                encoding === 'OP_RETURN' ? 'PHASE1' : (encoding === 'P2SH' ? 'PHASE2' : 'REVEAL'),
+            );
             if (encoding === 'TAPROOT') {
                 expect(held.revealSigned).toMatchObject({
                     signedPsbtHex: 'SIGNED(REVEAL)',

@@ -26,8 +26,12 @@ const CHAIN = 'litecoin-regtest';
 const W = 'w1';
 const ADDR = 'rltc1qsrc';
 const COMMIT = signedTxFor({ inputs: [{ type: 'p2wpkh' }] });
-const REVEAL = signedTxFor({
+const CONFLICT = signedTxFor({
     inputs: [{ type: 'p2wpkh' }],
+    outputs: [{ script: `0014${'ee'.repeat(20)}`, value: 88_000 }],
+});
+const REVEAL = signedTxFor({
+    inputs: [{ type: 'p2wpkh', txid: '0002'.repeat(16), vout: 1 }],
     outputs: [{ script: `0014${'dd'.repeat(20)}`, value: 89_000 }],
 });
 
@@ -230,6 +234,15 @@ describe('the host queue sends a two-phase entry as commit then reveal', () => {
             status: 'queued', txHex: REVEAL.txHex, txid: 'txid-PHASE2', commitLanded: true, commitTxid: 'txid-PHASE1',
         });
 
+        const resend = await h.call('broadcast.signedTx', {
+            walletId: W, chainId: CHAIN, txHex: COMMIT.txHex,
+        });
+        expect(resend.ok, JSON.stringify(resend.error)).toBe(true);
+        const conflict = await h.call('broadcast.signedTx', {
+            walletId: W, chainId: CHAIN, txHex: CONFLICT.txHex,
+        });
+        expect(conflict).toMatchObject({ ok: false, error: { name: 'InputsAlreadySpentError' } });
+
         // The retry, past its backoff, sends the reveal alone.
         revealUp = true;
         const later = Date.now() + 120_000;
@@ -240,7 +253,7 @@ describe('the host queue sends a two-phase entry as commit then reveal', () => {
         } finally {
             clock.mockRestore();
         }
-        expect(h.sent()).toEqual([COMMIT.txHex, REVEAL.txHex, REVEAL.txHex]);
+        expect(h.sent()).toEqual([COMMIT.txHex, REVEAL.txHex, COMMIT.txHex, REVEAL.txHex]);
         expect(await pendingTxs.get('p1')).toMatchObject({ status: 'broadcast', txid: 'txid-PHASE2' });
         expect(await h.list()).toEqual([]);
     });

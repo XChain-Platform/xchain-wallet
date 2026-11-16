@@ -19,11 +19,12 @@
 // receive address a second time.
 
 import { createAddress } from '../schemas/address.js';
+import { addressSourceForSignerKind } from '../schemas/constants.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { unlockWallet } from './unlockWallet.js';
 import { HardwareAddressMismatchError } from './verifyReceiveAddress.js';
 import { defaultAddressTypeForWallet } from './_defaultAddressType.js';
-import { indexSpaceSharedForWallet } from './_addressIndexSpace.js';
+import { indexSpaceSharedForAccount } from './_addressIndexSpace.js';
 import { sdkSupportedAddressTypes } from './sdkAddressTypes.js';
 
 export class NoMatchingAccountError extends Error {
@@ -211,8 +212,10 @@ async function deriveReceiveAddress({
     // type, so its types share one index space and the addressType filter
     // below must not apply: partitioning by type there would re-issue the
     // key already held at that index under another encoding.
-    const sharedIndexSpace = await indexSpaceSharedForWallet(vault, walletId);
     const allAddresses = await vault.addresses.list();
+    const sharedIndexSpace = await indexSpaceSharedForAccount(vault, walletId, {
+        account, addresses: allAddresses, signerKind: providedSigner?.kind,
+    });
     const held = new Set();
     let highest = -1;
     for (const a of allAddresses) {
@@ -254,10 +257,10 @@ async function deriveReceiveAddress({
         });
     const ownsSigner = !providedSigner;
     const signerKind = signer.kind;
-    const addressSource = signerKind === 'software' ? 'hd' : signerKind;
 
     const isHardware = signerKind === 'trezor' || signerKind === 'ledger';
     try {
+        const addressSource = addressSourceForSignerKind(signerKind);
         let targetIndex = derivationIndex;
         let derived;
         if (targetIndex === undefined) {
