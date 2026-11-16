@@ -37,6 +37,14 @@ function actionIndex(value) {
     return value;
 }
 
+function gatedKeyHash(upload) {
+    return upload?.gated === true
+        && typeof upload.keyHash === 'string'
+        && /^[0-9a-f]{64}$/.test(upload.keyHash)
+        ? upload.keyHash
+        : null;
+}
+
 export function multipartPublishResult(reply, { originalBytes } = {}) {
     if (reply?.multipart?.status !== 'complete') throw invalid('multipart.status');
     const manifestActionIndex = actionIndex(reply.fileId);
@@ -56,6 +64,7 @@ export function multipartPublishResult(reply, { originalBytes } = {}) {
         totalParts,
         totalBytes,
         transactions: 1 + (2 * (totalParts + 1)),
+        keyHash: gatedKeyHash(reply.upload),
         compression: reply.upload?.gated === true ? null : {
             rawLength: originalBytes,
             storedLength: totalBytes,

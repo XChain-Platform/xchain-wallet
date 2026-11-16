@@ -79,7 +79,17 @@ function requestCarriesGateKey(req) {
 function multipartReply(result) {
     if (!result || !Object.prototype.hasOwnProperty.call(result, 'record')) return result;
     const { record, ...reply } = result;
-    return record == null ? reply : { ...reply, upload: pendingUploadSummary(record) };
+    if (record == null) return reply;
+    const upload = pendingUploadSummary(record);
+    return {
+        ...reply,
+        upload: {
+            ...upload,
+            keyHash: upload.gated && typeof record.gate?.keyHash === 'string'
+                ? record.gate.keyHash
+                : null,
+        },
+    };
 }
 
 function multipartSizes(req, deps) {
