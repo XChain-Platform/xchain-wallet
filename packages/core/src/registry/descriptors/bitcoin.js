@@ -24,6 +24,7 @@ const COMMON = {
     color: '#F7931A',
     addressTypes: ['p2pkh', 'p2sh-p2wpkh', 'p2wpkh', 'p2tr'],
     defaultAddressType: 'p2wpkh',
+    taprootEnvelope: true,
     // SLIP-44 coin-type stays at the mainnet slot (0') on every network:
     // testnet and regtest deliberately reuse it to match xchain-sdk and the
     // backend CryptoNetworks, not SLIP-44's generic 1' testnet slot.
