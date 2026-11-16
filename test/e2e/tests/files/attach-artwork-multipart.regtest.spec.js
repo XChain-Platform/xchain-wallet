@@ -79,11 +79,14 @@ async function issueToken(page, source) {
     await openPaletteCommand(page, 'My tokens');
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    // Issue token opens the template wizard; Custom opens the full form (ruling U79).
+    await main.getByRole('button', { name: /^Custom\b/ }).click();
+    // Each field label carries a help tip button named after it (ruling U80), so fields are found by role.
+    await expect(main.getByRole('textbox', { name: 'Ticker', exact: true })).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
-    expect(await main.getByLabel('From', { exact: true }).inputValue()).toBe(source);
-    await main.getByLabel('Ticker').fill(TICK);
-    await main.getByLabel('Supply', { exact: true }).fill('1000');
+    expect(await main.getByRole('textbox', { name: 'From', exact: true }).inputValue()).toBe(source);
+    await main.getByRole('textbox', { name: 'Ticker', exact: true }).fill(TICK);
+    await main.getByRole('textbox', { name: 'Max supply', exact: true }).fill('1000');
     await fillUnlock(main);
     await main.getByRole('button', { name: 'Issue token', exact: true }).click();
     await expectConfirmModal(page, 'the multipart artwork token', 90_000);
@@ -98,9 +101,11 @@ async function prepareWallet(page) {
     await switchToRegtest(page, UNLOCK_VALUE);
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    // Issue token opens the template wizard; Custom opens the full form (ruling U79).
+    await main.getByRole('button', { name: /^Custom\b/ }).click();
+    await expect(main.getByRole('textbox', { name: 'Ticker', exact: true })).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
-    const source = await main.getByLabel('From', { exact: true }).inputValue();
+    const source = await main.getByRole('textbox', { name: 'From', exact: true }).inputValue();
     expect(source).toMatch(REGTEST_ADDRESS_RE);
     await fundAddress(source, FUNDING);
     await page.reload();
@@ -119,7 +124,8 @@ async function openArtwork(page) {
     const row = main.getByRole('button', { name: `Open ${TICK} token details`, exact: true }).first();
     await expectMyTokensRow(main, row, `${TICK} is absent from My Tokens`);
     await row.click();
-    await expect(main.getByText('Manage Token').first()).toBeVisible({ timeout: 30_000 });
+    // Token details carry the manage actions on an Actions tab now.
+    await expect(main.getByRole('tab', { name: 'Actions' })).toBeVisible({ timeout: 30_000 });
     await clickManageTokenAction(main, 'Artwork');
     await expect(main.getByText(`Attach artwork to ${TICK}`)).toBeVisible({ timeout: 30_000 });
 }
