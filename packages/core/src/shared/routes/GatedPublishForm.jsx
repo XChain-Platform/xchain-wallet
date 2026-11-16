@@ -22,6 +22,7 @@ import {
     estimateNativeSendFeeTiers,
     customFeeEstimate,
     displayRateToSettingsCustom,
+    displayRateToPerByte,
 } from '../../flows/feeEstimate.js';
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
@@ -38,7 +39,21 @@ import { CheckIcon, PlusIcon, UploadIcon } from '../../ui/icons/index.jsx';
 import styles from './IssueTokenForm.module.css';
 import publishStyles from './GatedPublishForm.module.css';
 import { UploadMethodField, useUploadMethod } from '../components/UploadMethodField.jsx';
-import { gatedFileCompiledBytes } from '../../flows/uploadMethod.js';
+import {
+    gatedFileCompiledBytes,
+    standardUnavailableReason,
+    taprootUnavailableReason,
+    uploadMethodSizes,
+} from '../../flows/uploadMethod.js';
+import { useMultipartUploadMethod } from '../hooks/useMultipartUploadMethod.js';
+import { useMultipartUploadPanel } from '../hooks/useMultipartUploadPanel.js';
+import { MultipartUploadSection } from '../components/MultipartUploadSection.jsx';
+import { multipartQuoteLanes } from '../../flows/multipartQuoteLanes.js';
+import { multipartSupportForMethod } from '../../flows/multipartMethodSupport.js';
+import { maxUploadBytesFor } from '../../flows/multipartSupport.js';
+import { multipartResumeRequestBuilder } from '../../flows/multipartResumeRequest.js';
+import { gatedMultipartStartFields } from '../../flows/gatedMultipartStartFields.js';
+import { gatedPublishMultipartStart } from '../../flows/gatedPublishAction.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/gatedPublish.js';
 import '../../i18n/locales/en/palette.js';
@@ -49,6 +64,35 @@ const chainRegistry = registryLib.defaultRegistry();
 /** The compiled BATCH-plus-ciphertext push of a gated publish, for the Upload method fees. */
 function gatedUploadBytes(file, meta) {
     return gatedFileCompiledBytes({ ...meta, name: file.name, type: file.type }, file.bytes.length);
+}
+
+function multipartSource(address) {
+    if (!address) return null;
+    return {
+        address: address.address,
+        publicKey: address.publicKey,
+        derivationPath: address.derivationPath,
+        addressId: address.id,
+        source: address.source,
+        signerId: address.signerId,
+    };
+}
+
+function multipartSizes(descriptor) {
+    const size = (compiledBytes, method) => uploadMethodSizes({
+        compiledBytes: Math.max(1, compiledBytes), descriptor,
+    })[method];
+    return {
+        envelopePairVbytes: (bytes) => size(bytes, 'taproot'),
+        standardPairBytes: (bytes) => size(bytes, 'standard'),
+    };
+}
+
+function completedMultipart(reply) {
+    return {
+        ...reply,
+        keyHash: reply?.upload?.keyHash ?? null,
+    };
 }
 
 /**
@@ -297,6 +341,9 @@ export function GatedPublishForm({
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
+    const multipartRate = (feeEstimate?.unit && Number.isFinite(feeEstimate?.rateValue))
+        ? displayRateToPerByte(feeEstimate.unit, feeEstimate.rateValue)
+        : null;
 
     // The metadata the BATCH string carries besides the file's own name and type.
     const batchMeta = {
@@ -311,6 +358,43 @@ export function GatedPublishForm({
         { ...batchMeta, name, type },
         ceilingOpts,
     );
+    const standardCap = fileMeta && fromAddress
+        ? capWith(fileMeta.name, fileMeta.type, {})
+        : null;
+    const envelopeCap = fileMeta && fromAddress
+        ? capWith(fileMeta.name, fileMeta.type, { encoding: 'TAPROOT' })
+        : null;
+    const singleReasons = {
+        taproot: taprootUnavailableReason({ descriptor, fromAddress, isWatcherMode }),
+        standard: standardUnavailableReason({
+            fileBytes: fileMeta?.bytes?.length ?? null, standardCap,
+        }),
+    };
+    const singleFits = {
+        taproot: !fileMeta || !Number.isFinite(envelopeCap)
+            || fileMeta.bytes.length <= envelopeCap,
+        standard: !fileMeta || !Number.isFinite(standardCap)
+            || fileMeta.bytes.length <= standardCap,
+    };
+    const quoteLanes = useMemo(() => multipartQuoteLanes({ descriptor }), [descriptor]);
+    const quoteSizes = useMemo(() => multipartSizes(descriptor), [descriptor]);
+    const multipart = useMultipartUploadMethod({
+        bytes: fileMeta?.bytes ?? null,
+        meta: fileMeta ? {
+            name: fileMeta.name, type: fileMeta.type, title: title.trim(), memo: memo.trim(),
+        } : null,
+        gated: true,
+        gate: { ticker: gateTick, minAmount: batchMeta.gateMinAmount ?? '' },
+        rate: multipartRate,
+        descriptor,
+        addressRecord: fromAddress,
+        addressType: fromAddress?.addressType ?? descriptor?.defaultAddressType,
+        isWatcherMode,
+        singleReasons,
+        singleFits,
+        lanes: quoteLanes,
+        sizes: quoteSizes,
+    });
 
     // The Upload method (flows/uploadMethod.js): Taproot envelope by default
     // where a software signer on the confirm lane and a Taproot chain can carry
@@ -328,7 +412,8 @@ export function GatedPublishForm({
         metadata: { title: batchMeta.title, memo: batchMeta.memo, gateMinAmount: batchMeta.gateMinAmount },
         context: { gateTicker: batchMeta.gateTicker, coin: batchMeta.coin, address: batchMeta.address },
         compiledBytesFor: gatedUploadBytes,
-        standardCap: fileMeta && fromAddress ? capWith(fileMeta.name, fileMeta.type, {}) : null,
+        standardCap,
+        multipart,
         ...(typeof onUploadPick === 'function' ? { picked: uploadPick, onPick: onUploadPick } : {}),
     });
 
@@ -338,6 +423,49 @@ export function GatedPublishForm({
     const plainCapFor = (name, type) => (fromAddress
         ? capWith(name, type, upload.ceilingOpts)
         : MAX_BYTES_FLOOR);
+    const selectedSupport = multipartSupportForMethod({
+        method: upload.method,
+        descriptor,
+        addressRecord: fromAddress,
+        addressType: fromAddress?.addressType ?? descriptor?.defaultAddressType,
+        isWatcherMode,
+    });
+    const uploadCapFor = (name, type) => maxUploadBytesFor(
+        selectedSupport,
+        plainCapFor(name, type),
+    );
+    const fileFieldCapFor = (name, type) => {
+        const singleCap = plainCapFor(name, type);
+        return fileMeta && fileMeta.bytes.length > singleCap
+            ? uploadCapFor(name, type)
+            : singleCap;
+    };
+    const resumeRequest = useMemo(() => multipartResumeRequestBuilder({
+        walletId,
+        chainId: selectedChainId,
+        from: multipartSource(fromAddress),
+        singleTransactionCap: MAX_BYTES_FLOOR,
+        support: selectedSupport,
+        gate: { ticker: gateTick, minAmount: batchMeta.gateMinAmount ?? '' },
+        rate: multipartRate,
+    }), [
+        walletId, selectedChainId, fromAddress, selectedSupport.lane,
+        selectedSupport.buildMode, selectedSupport.reason, gateTick,
+        batchMeta.gateMinAmount, multipartRate,
+    ]);
+    const multipartUpload = useMultipartUploadPanel({
+        messaging,
+        walletId,
+        chainId: selectedChainId,
+        sourceAddress: fromAddress?.address ?? '',
+        gated: true,
+        buildResumeRequest: resumeRequest,
+    });
+    useEffect(() => {
+        if (!multipartUpload.result) return;
+        setResult(completedMultipart(multipartUpload.result));
+        setStage('done');
+    }, [multipartUpload.result]);
 
     function handlePickFile(event) {
         const file = event.target.files && event.target.files[0];
@@ -349,7 +477,7 @@ export function GatedPublishForm({
         if (fileNameError) { setFormError(fileNameError); return; }
         const { type, error: typeError } = publishFileType(file);
         if (typeError) { setFormError(typeError); return; }
-        const cap = plainCapFor(file.name, type);
+        const cap = uploadCapFor(file.name, type);
         if (file.size === 0) {
             setFormError('That file is empty.');
             return;
@@ -420,14 +548,12 @@ export function GatedPublishForm({
             setFormError(thresholdError);
             return;
         }
-        // Re-check the ceiling with the FINAL metadata: title/memo typed
-        // after the pick shrink the budget, and the flow enforces the
-        // same computed cap at compose time.
-        const reviewCap = plainCapFor(fileMeta.name, fileMeta.type);
+        const singleCap = plainCapFor(fileMeta.name, fileMeta.type);
+        const reviewCap = uploadCapFor(fileMeta.name, fileMeta.type);
         if (fileMeta.bytes.length > reviewCap) {
             setFormError(
-                `With this title/memo the on-chain ceiling is ${reviewCap.toLocaleString()} bytes `
-                + `and the file is ${fileMeta.bytes.length.toLocaleString()}. Shorten the title or memo.`,
+                `This publish lane supports up to ${reviewCap.toLocaleString()} bytes `
+                + `and the file is ${fileMeta.bytes.length.toLocaleString()} bytes.`,
             );
             return;
         }
@@ -479,7 +605,63 @@ export function GatedPublishForm({
             }
         }
         setFormError(null);
-        await publish();
+        await publishSelected(singleCap);
+    }
+
+    function multipartStart(singleTransactionCap) {
+        const fields = gatedMultipartStartFields({
+            gateTicker: gateTick,
+            thresholdActive,
+            gateMinAmount,
+            packChoice,
+        });
+        return gatedPublishMultipartStart({
+            walletId,
+            chainId: selectedChainId,
+            from: multipartSource(fromAddress),
+            bytes: fileMeta.bytes,
+            meta: {
+                name: fileMeta.name,
+                type: fileMeta.type,
+                title: title.trim(),
+                memo: memo.trim(),
+            },
+            singleTransactionCap,
+            support: selectedSupport,
+            rate: multipartRate,
+            ...fields,
+        });
+    }
+
+    async function publishSelected(singleTransactionCap) {
+        let start;
+        try {
+            start = multipartStart(singleTransactionCap);
+        } catch (error) {
+            setFormError(userFacingMessage(error, 'Could not prepare this upload.'));
+            return;
+        }
+        if (start.path === 'single') {
+            await publish();
+            return;
+        }
+        if (start.path !== 'multipart') {
+            setFormError(`This file cannot use the selected upload method (${start.reason}).`);
+            return;
+        }
+        if (!multipart.ready) {
+            setFormError('Wait for the multipart fee estimate, then try again.');
+            return;
+        }
+        setStage('submitting');
+        try {
+            const reply = await multipartUpload.start(start.request, start.match);
+            setResult(completedMultipart(reply));
+            setStage('done');
+        } catch (error) {
+            setStage('form');
+            setFormError(userFacingMessage(error, 'Multipart publish failed.'));
+        }
     }
 
     function publishRequest() {
@@ -741,8 +923,9 @@ export function GatedPublishForm({
                     type="submit"
                     variant="success"
                     icon={isWatcherMode ? <PlusIcon /> : <UploadIcon />}
-                    loading={stage === 'submitting'}
-                    disabled={issuerEligibility.pending || !!issuerEligibility.error}
+                    loading={stage === 'submitting' || multipartUpload.running}
+                    disabled={issuerEligibility.pending || !!issuerEligibility.error
+                        || multipartUpload.running}
                 >
                     {isWatcherMode ? t('send.review.createUnsigned') : t('palette.createPublishFile.title')}
                 </Button>
@@ -780,10 +963,17 @@ export function GatedPublishForm({
             {/* How the bytes ride the chain, before the file: the pick sets the
                 ceiling the file field names. */}
             <UploadMethodField upload={upload} disabled={ownerMissing} />
+            <MultipartUploadSection
+                {...multipartUpload}
+                fallbackMessage="Could not continue the multipart upload."
+            />
             <Input
                 type="file"
                 label={t('gatedPublish.fileLimit', {
-                    bytes: plainCapFor(fileMeta?.name || `file${'.bin'}`, fileMeta?.type || 'application/octet-stream').toLocaleString(),
+                    bytes: fileFieldCapFor(
+                        fileMeta?.name || `file${'.bin'}`,
+                        fileMeta?.type || 'application/octet-stream',
+                    ).toLocaleString(),
                 })}
                 help={(
                     <>
@@ -794,7 +984,7 @@ export function GatedPublishForm({
                 )}
                 aria-label={t('gatedPublish.fileToPublish')}
                 onChange={handlePickFile}
-                disabled={ownerMissing}
+                disabled={ownerMissing || multipartUpload.running}
             />
             {fileMeta ? (
                 <>
