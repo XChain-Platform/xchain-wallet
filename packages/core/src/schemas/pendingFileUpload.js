@@ -45,6 +45,8 @@ export const PENDING_FILE_UPLOAD_STAGES = /** @type {const} */ ([
  * @property {string} originalSha256
  * @property {string} fileHash
  * @property {Record<string, unknown>} meta
+ * @property {'envelope' | 'standard' | null} [lane]
+ * @property {string | null} [buildMode]
  * @property {Record<string, unknown> | null} gate
  * @property {string} compression
  * @property {number} totalParts
@@ -82,6 +84,8 @@ export function createPendingFileUpload(input) {
         originalSha256: input.originalSha256,
         fileHash: input.fileHash,
         meta: { ...input.meta },
+        lane: input.lane ?? null,
+        buildMode: input.buildMode ?? null,
         gate: input.gate == null ? null : { ...input.gate },
         compression: input.compression,
         totalParts: input.totalParts,
@@ -137,6 +141,12 @@ function validateIdentity(errors, record) {
 
 function validatePlan(errors, record) {
     check(errors, 'meta', isPlainObject(record.meta), 'must be an object');
+    check(errors, 'lane', record.lane === undefined || record.lane === null
+        || isOneOf(record.lane, ['envelope', 'standard']),
+    'must be absent, null, envelope, or standard');
+    check(errors, 'buildMode', record.buildMode === undefined || record.buildMode === null
+        || isNonEmptyString(record.buildMode),
+    'must be absent, null, or a non-empty string');
     check(errors, 'gate', record.gate === null || isPlainObject(record.gate),
         'must be null or an object');
     check(errors, 'compression', isString(record.compression), 'must be a string');
