@@ -32,8 +32,8 @@ import {
     gatedBatchActionString,
     publicFileActionString,
 } from './fileSizeLimits.js';
-import { compiledPayloadByteLen } from './envelopeSelection.js';
-import { encoderSignerOptions, signerSupportsTapscript } from './signerCapability.js';
+import { compiledPayloadByteLen, envelopeAvailableFor } from './envelopeSelection.js';
+import { encoderSignerOptions } from './signerCapability.js';
 import { displayRateToPerByte, satsToCoinDecimal } from './feeEstimate.js';
 
 export const UPLOAD_METHOD_TAPROOT = 'taproot';
@@ -65,6 +65,7 @@ export function gatedFileCompiledBytes(meta, plainBytes) {
     return compiledPayloadByteLen(gatedBatchActionString(meta), { byteLength: plainBytes + AES_GCM_ENVELOPE_BYTES });
 }
 
+const ENVELOPE_CAPABLE_SOURCE = Object.freeze({ source: 'hd' });
 const HARDWARE_SOURCES = Object.freeze(['trezor', 'ledger']);
 
 /**
@@ -72,25 +73,21 @@ const HARDWARE_SOURCES = Object.freeze(['trezor', 'ledger']);
  * Chain reasons come first because no signer change fixes them.
  *
  * @param {object} args
- * @param {{ coin?: string, addressTypes?: string[] } | null | undefined} args.descriptor
+ * @param {{ coin?: string, taprootEnvelope?: boolean, addressTypes?: string[] } | null | undefined} args.descriptor
  * @param {{ source?: string } | null | undefined} args.fromAddress  the spending Address record
  * @param {boolean} [args.isWatcherMode]  another phone signs: the watch-only lane builds one unsigned PSBT and no reveal
- * @returns {null | 'noTaproot' | 'litecoinPending' | 'chain' | 'watcher' | 'hardware' | 'watchOnly' | 'signer'}
+ * @returns {null | 'noTaproot' | 'chain' | 'watcher' | 'hardware' | 'watchOnly' | 'signer'}
  */
 export function taprootUnavailableReason({ descriptor, fromAddress, isWatcherMode = false }) {
-    const types = Array.isArray(descriptor?.addressTypes) ? descriptor.addressTypes : [];
-    if (!types.includes('p2tr')) {
-        // Dogecoin has no segwit, so no Taproot ever. Litecoin has Taproot on
-        // chain, but the wallet's descriptor does not enable p2tr yet.
+    if (!envelopeAvailableFor(descriptor, ENVELOPE_CAPABLE_SOURCE)) {
         if (descriptor?.coin === 'dogecoin') return 'noTaproot';
-        if (descriptor?.coin === 'litecoin') return 'litecoinPending';
         return 'chain';
     }
     if (isWatcherMode) return 'watcher';
     const source = fromAddress?.source;
     if (HARDWARE_SOURCES.includes(source)) return 'hardware';
     if (source === 'watch-only') return 'watchOnly';
-    if (!signerSupportsTapscript(fromAddress)) return 'signer';
+    if (!envelopeAvailableFor(descriptor, fromAddress)) return 'signer';
     return null;
 }
 
@@ -244,7 +241,7 @@ export function uploadMethodSizes({ compiledBytes, descriptor }) {
     // Both lanes put a payload this small in one OP_RETURN output: AUTO and the
     // no-encoding default make the same choice there.
     const tiny = compiledBytes + MAGIC_BYTES <= OP_RETURN_SIZE;
-    const taprootChain = Array.isArray(descriptor?.addressTypes) && descriptor.addressTypes.includes('p2tr');
+    const taprootChain = envelopeAvailableFor(descriptor, ENVELOPE_CAPABLE_SOURCE);
     const standardFits = compiledBytes <= compiledCeilingFor(undefined);
     const taprootFits = compiledBytes <= compiledCeilingFor('TAPROOT');
     return {
