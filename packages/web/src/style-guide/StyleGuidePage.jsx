@@ -63,6 +63,7 @@ import { ChipSection } from './sections/ChipSection.jsx';
 import { SwitchSection } from './sections/SwitchSection.jsx';
 import { DialogsSection } from './sections/DialogsSection.jsx';
 import { UploadMethodFieldSection } from './sections/UploadMethodFieldSection.jsx';
+import { MultipartUploadSectionSection } from './sections/MultipartUploadSectionSection.jsx';
 import {
     AddressComboboxSection,
     IconSelectSection,
@@ -170,6 +171,7 @@ export const SECTIONS = [
     { id: 'shell-navigation',      label: 'Shell navigation',       Component: ShellNavigationSection, components: ['LeftNav', 'BottomTabBar'] },
     { id: 'home-tabs',             label: 'Home tabs',              Component: HomeTabsSection, components: ['HomeTabs'] },
     { id: 'upload-method-field',   label: 'Upload method field',    Component: UploadMethodFieldSection, components: ['UploadMethodField'] },
+    { id: 'multipart-upload-section', label: 'Multi-part upload section', Component: MultipartUploadSectionSection, components: ['MultipartUploadSection'] },
 ];
 
 // Shared components that live outside the UI barrel (shared/components and
