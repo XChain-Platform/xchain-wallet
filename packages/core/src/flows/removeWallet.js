@@ -31,7 +31,7 @@ import { withAccountLock } from '../cosigner/accountLock.js';
 
 /**
  * @param {{ vault: import('../storage/Vault.js').Vault, walletId: string }} opts
- * @returns {Promise<{ removed: Record<string, number> }>}
+ * @returns {Promise<{ removed: { wallet: 1, accounts: number, addresses: number, signers: number, pendingTxs: number, pendingAirdrops: number, pendingFileUploads: number, pendingDeploys: number, multisigSigningSessions: number, coSignerAccounts: number, watchlistEntries: number, priceAlerts: number, gatedKeys: number, autopayOrders: number, connectedSiteGrants: number } }>}
  */
 export async function removeWallet({ vault, walletId }) {
     if (!vault) throw new Error('removeWallet: vault is required');
