@@ -110,11 +110,12 @@ describe('gated multipart batch text refusals', () => {
 
 describe('gated multipart batch boundaries and shape', () => {
     it.each([
-        ['totalParts', 2], ['totalParts', 32],
-        ['totalBytes', 1], ['totalBytes', 12000000],
-    ])('accepts the %s boundary %s', (field, value) => {
+        ['totalParts', 3, 2], ['totalParts', 3, 32],
+        ['totalBytes', 4, 1], ['totalBytes', 4, 12000000],
+    ])('accepts the %s boundary %s', (field, wireIndex, value) => {
         const result = compose({ manifest: manifest({ [field]: value }) });
-        expect(result.params.COMMAND).toContain(`|${value}|`);
+        const fileFields = result.params.COMMAND.split(';')[0].split('|');
+        expect(fileFields[wireIndex]).toBe(String(value));
     });
 
     it('contains exactly two commands and no file bytes or part command', () => {
