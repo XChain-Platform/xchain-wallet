@@ -43,6 +43,7 @@ export const COMPRESSION_MAX_RATIO = 150;
  * FILE|0|NAME|TYPE|TITLE|MEMO|GATE_TICKER|ENCRYPTION_METHOD|KEY_HASH|GATE_MIN_AMOUNT|COMPRESSION
  */
 const COMPRESSION_FIELD_INDEX = 10;
+const MULTIPART_COMPRESSION_FIELD_INDEX = 13;
 
 /**
  * Read the COMPRESSION field out of a FILE v0 action string.
@@ -61,6 +62,23 @@ export function compressionFieldOf(actionString) {
 }
 
 /**
+ * Read COMPRESSION from a complete FILE action string.
+ *
+ * @param {string} actionString
+ * @returns {string} the field verbatim, or ''.
+ */
+export function fileCompressionFieldOf(actionString) {
+    if (typeof actionString !== 'string' || actionString.length === 0) return '';
+    const parts = actionString.split('|');
+    if (String(parts[0]).toUpperCase() !== 'FILE') return '';
+    const version = String(parts[1]);
+    const index = version === '0' ? COMPRESSION_FIELD_INDEX
+        : version === '1' ? MULTIPART_COMPRESSION_FIELD_INDEX : null;
+    if (index === null || parts.length <= index) return '';
+    return String(parts[index]);
+}
+
+/**
  * Does this declared value mean deflate-raw?
  *
  * Strict equality against the known code, so any unknown or future value
@@ -76,6 +94,50 @@ export function declaresDeflateRaw(declared) {
     return typeof declared === 'string' && declared === COMPRESSION_CODE_DEFLATE_RAW;
 }
 
+function inflationCeiling(storedLength, options) {
+    const maxRatio = options?.maxRatio === undefined
+        ? COMPRESSION_MAX_RATIO : options.maxRatio;
+    const maxOutputBytes = options?.maxOutputBytes;
+    if (maxOutputBytes !== undefined
+        && (!Number.isSafeInteger(maxOutputBytes) || maxOutputBytes <= 0)) {
+        return { ceiling: 0, error: 'INVALID_OPTIONS' };
+    }
+    const ratioCeiling = Math.max(1, Math.ceil(storedLength * maxRatio));
+    const ceiling = maxOutputBytes === undefined
+        ? ratioCeiling : Math.min(ratioCeiling, maxOutputBytes);
+    return { ceiling, error: null };
+}
+
+async function readCapped(reader, ceiling) {
+    const chunks = [];
+    let total = 0;
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.length;
+        if (total > ceiling) {
+            try { await reader.cancel(); } catch { /* already closing */ }
+            return null;
+        }
+        chunks.push(value);
+    }
+    const bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+    return bytes;
+}
+
+function storedResult(input, error) {
+    return {
+        bytes: input,
+        inflated: false,
+        storedForm: true,
+        error,
+        storedLength: input ? input.length : 0,
+        originalLength: input ? input.length : 0,
+    };
+}
+
 /**
  * Inflate deflate-raw bytes with a streamed ratio guard. Never throws.
  *
@@ -84,29 +146,21 @@ export function declaresDeflateRaw(declared) {
  * it has been fully allocated in a renderer process.
  *
  * @param {Uint8Array} stored
- * @param {{ maxRatio?: number }} [options]
+ * @param {{ maxRatio?: number, maxOutputBytes?: number }} [options]
  * @returns {Promise<{bytes: Uint8Array, inflated: boolean, storedForm: boolean,
  *                    error: string|null, storedLength: number, originalLength: number}>}
  */
 export async function inflateDeflateRaw(stored, options = {}) {
-    const maxRatio = options.maxRatio === undefined ? COMPRESSION_MAX_RATIO : options.maxRatio;
-
-    const asStored = (input, error) => ({
-        bytes: input,
-        inflated: false,
-        storedForm: true,
-        error,
-        storedLength: input ? input.length : 0,
-        originalLength: input ? input.length : 0,
-    });
-
-    if (!stored || typeof stored.length !== 'number') return asStored(new Uint8Array(0), 'INVALID_INPUT');
+    if (!stored || typeof stored.length !== 'number')
+        return storedResult(new Uint8Array(0), 'INVALID_INPUT');
     const input = stored instanceof Uint8Array ? stored : new Uint8Array(stored);
-    if (input.length === 0) return asStored(input, 'EMPTY_STREAM');
-    if (typeof DecompressionStream !== 'function') return asStored(input, 'NO_DECOMPRESSION_STREAM');
-    if (typeof ReadableStream !== 'function') return asStored(input, 'NO_READABLE_STREAM');
-
-    const ceiling = Math.max(1, Math.ceil(input.length * maxRatio));
+    if (input.length === 0) return storedResult(input, 'EMPTY_STREAM');
+    const { ceiling, error } = inflationCeiling(input.length, options);
+    if (error) return storedResult(input, error);
+    if (typeof DecompressionStream !== 'function')
+        return storedResult(input, 'NO_DECOMPRESSION_STREAM');
+    if (typeof ReadableStream !== 'function')
+        return storedResult(input, 'NO_READABLE_STREAM');
 
     try {
         // Feed the bytes through a ReadableStream rather than Blob.stream():
@@ -120,24 +174,8 @@ export async function inflateDeflateRaw(stored, options = {}) {
             },
         });
         const stream = source.pipeThrough(new DecompressionStream('deflate-raw'));
-        const reader = stream.getReader();
-        const chunks = [];
-        let total = 0;
-        for (;;) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            total += value.length;
-            if (total > ceiling) {
-                // Streamed abort: stop pulling, drop what we have.
-                try { await reader.cancel(); } catch { /* already closing */ }
-                chunks.length = 0;
-                return asStored(input, 'RATIO_GUARD_TRIPPED');
-            }
-            chunks.push(value);
-        }
-        const bytes = new Uint8Array(total);
-        let offset = 0;
-        for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+        const bytes = await readCapped(stream.getReader(), ceiling);
+        if (bytes === null) return storedResult(input, 'RATIO_GUARD_TRIPPED');
         return {
             bytes,
             inflated: true,
@@ -148,7 +186,7 @@ export async function inflateDeflateRaw(stored, options = {}) {
         };
     } catch {
         // Truncated, corrupt, or simply-not-deflate bytes (a lying field).
-        return asStored(input, 'INVALID_DEFLATE_STREAM');
+        return storedResult(input, 'INVALID_DEFLATE_STREAM');
     }
 }
 
@@ -158,7 +196,7 @@ export async function inflateDeflateRaw(stored, options = {}) {
  * @param {Uint8Array} decrypted - plaintext straight out of AES-256-GCM.
  * @param {string | boolean | null | undefined} declared - the FILE's
  *   COMPRESSION field.
- * @param {{ maxRatio?: number }} [options]
+ * @param {{ maxRatio?: number, maxOutputBytes?: number }} [options]
  * @returns {Promise<{bytes: Uint8Array, inflated: boolean, storedForm: boolean, error: string|null}>}
  */
 export async function inflateGatedPlaintext(decrypted, declared, options = {}) {
@@ -206,7 +244,7 @@ export async function resolveGatedCompression({ sdk, actionIndex, declared = nul
         for (const key of ['tx_data', 'action_string', 'actionString', 'raw_action']) {
             const candidate = record[key] ?? action[key];
             if (typeof candidate === 'string' && candidate.length > 0) {
-                const field = compressionFieldOf(candidate);
+                const field = fileCompressionFieldOf(candidate);
                 if (field.length > 0) return field;
             }
         }
