@@ -91,7 +91,12 @@ export async function handleFileMultipart(req, deps) {
 
     const { publishMultipartFile, vault, sdkRegistry, chainRegistry, signer, onBroadcastFailure } = deps;
     const sdk = requestCarriesGateKey(req) ? undefined : sdkRegistry.get(req.chainId);
-    const request = await gatedMultipartRequest({ ...req, bytes }, { sdk, vault });
+    const request = await gatedMultipartRequest({ ...req, bytes }, {
+        sdk,
+        vault,
+        sdkRegistry,
+        gateMinAmountHeights: deps.gateMinAmountHeights,
+    });
     delete request.rawData;
     const result = await publishMultipartFile({
         ...request,
