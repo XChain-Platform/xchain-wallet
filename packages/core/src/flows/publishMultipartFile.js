@@ -31,8 +31,10 @@ import { createPendingFileUpload } from '../schemas/pendingFileUpload.js';
 import { normalizeSource } from './sendToken.js';
 import { utxoListOf } from './txInclusionProbe.js';
 import { isAlreadyOnNetworkRejection } from './broadcastPermanence.js';
+import { gatedManifestActionData } from './gatedMultipartManifest.js';
 
 const TXID = /^[0-9a-f]{64}$/i;
+const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 const defaultSleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
 function progress(opts, phase, data = {}) {
@@ -454,6 +456,25 @@ function assertInputs(opts) {
     }
 }
 
+function withManifestActionData(opts, sdk, source) {
+    if (!opts.gate?.key || typeof opts.manifestActionData === 'function') return opts;
+    const descriptor = opts.chainRegistry?.get?.(opts.chainId);
+    const coin = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : null;
+    if (!coin) {
+        throw new Error(`publishMultipartFile: cannot resolve protocol coin ticker for ${opts.chainId}`);
+    }
+    return {
+        ...opts,
+        manifestActionData: gatedManifestActionData({
+            sdk,
+            key: opts.gate.key,
+            publicKey: source.publicKey,
+            coin,
+            sourceAddress: source.address,
+        }),
+    };
+}
+
 export async function publishMultipartFile(opts) {
     assertInputs(opts);
     const sourceInput = opts.from || opts.source || {
@@ -464,6 +485,7 @@ export async function publishMultipartFile(opts) {
     };
     const source = normalizeSource(sourceInput, 'publishMultipartFile');
     const sdk = opts.sdkRegistry.get(opts.chainId);
+    const runOpts = withManifestActionData(opts, sdk, source);
     const tip = await chainTipBlockTime({
         sdkRegistry: opts.sdkRegistry, chainId: opts.chainId, withProtocolTime: true,
     });
@@ -485,7 +507,7 @@ export async function publishMultipartFile(opts) {
     const waitForTxid = opts.waitForTxid
         || ((txid, waitOpts) => sdk.waitForAction(txid, waitOpts));
     const ctx = {
-        opts, sdk, source, lane, buildMode, plan, rate, record, save, waitForTxid,
+        opts: runOpts, sdk, source, lane, buildMode, plan, rate, record, save, waitForTxid,
         signer: opts.signer, chainId: opts.chainId,
     };
     if (!record.fundingTxid) await fundUpload(ctx, quote);
