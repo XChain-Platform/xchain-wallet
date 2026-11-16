@@ -473,7 +473,7 @@ function runConfig(opts, record) {
 async function prepareRun(opts, source, sdk) {
     const savedRecord = await resumeRecord(opts);
     const config = runConfig(opts, savedRecord);
-    const effectiveOpts = { ...opts, ...config };
+    const effectiveOpts = withManifestActionData({ ...opts, ...config }, sdk, source);
     const gate = planningGate(effectiveOpts, savedRecord);
     const planner = opts.planMultipartFile || planMultipartFile;
     const plan = await planner(opts.bytes, config.meta, { carrier: config.lane, gate });
@@ -534,13 +534,12 @@ export async function publishMultipartFile(opts) {
     });
     const run = await prepareRun(opts, source, sdk);
     const { config, plan, quote, rate } = run;
-    const runOpts = withManifestActionData(run.effectiveOpts, sdk, source);
     let { record } = run;
     const save = async (next) => opts.vault.pendingFileUploads.put(next);
     const waitForTxid = opts.waitForTxid
         || ((txid, waitOpts) => sdk.waitForAction(txid, waitOpts));
     const ctx = {
-        opts: runOpts, sdk, source, lane: config.lane, buildMode: config.buildMode,
+        opts: run.effectiveOpts, sdk, source, lane: config.lane, buildMode: config.buildMode,
         plan, rate, record, save, waitForTxid,
         signer: opts.signer, chainId: opts.chainId,
     };
