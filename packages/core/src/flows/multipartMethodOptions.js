@@ -1,0 +1,34 @@
+// Copyright © 2025–2026 Dankest, LLC
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+function invalidQuote(method) {
+    const error = new Error(`Invalid multipart quote for ${method}`);
+    error.code = 'MULTIPART_QUOTE_INVALID';
+    return error;
+}
+
+function methodSummary(method, quote) {
+    if (quote === null) return { summary: null, fee: null };
+
+    const { parts, transactions, fee } = quote;
+    const partsValid = Number.isInteger(parts) && parts >= 2 && parts <= 32;
+    const transactionsValid = Number.isInteger(transactions)
+        && transactions === 1 + (2 * (parts + 1));
+    const feeValid = Number.isFinite(fee) && fee >= 0;
+
+    if (!partsValid || !transactionsValid || !feeValid) {
+        throw invalidQuote(method);
+    }
+
+    return {
+        summary: `${parts} parts, ${transactions} transactions`,
+        fee,
+    };
+}
+
+export function multipartMethodSummaries({ taproot, standard }) {
+    return {
+        taproot: methodSummary('taproot', taproot),
+        standard: methodSummary('standard', standard),
+    };
+}
