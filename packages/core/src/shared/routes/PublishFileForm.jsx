@@ -147,6 +147,29 @@ function hasMultipartMessaging(messaging) {
     return 'fileMultipart' in messaging && 'listPendingFileUploads' in messaging;
 }
 
+function publishReviewError({
+    fileMeta, fromAddress, title, memo, feePick, feeTiers, feeCustomEstimate, publicCapFor, ackForever,
+}) {
+    if (!fileMeta) return 'Pick a file first.';
+    if (!fromAddress) return 'No signing address available on this network.';
+    if ((title && /[|;]/.test(title)) || (memo && /[|;]/.test(memo)) || /[|;]/.test(fileMeta.name)) {
+        return 'File name, title, and memo cannot contain | or ; characters.';
+    }
+    const unsafeMetadata = actionTextSafetyError(fileMeta.name, 'File name')
+        || actionTextSafetyError(title, 'Title');
+    if (unsafeMetadata) return unsafeMetadata;
+    const memoError = memoLengthError(memo);
+    if (memoError) return memoError;
+    const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+    if (feeStop) return feeStop.formError;
+    const cap = publicCapFor(fileMeta.name, fileMeta.type);
+    if (fileMeta.bytes.length > cap) {
+        return `With this title/memo the on-chain ceiling is ${cap.toLocaleString()} bytes `
+            + `and the file is ${fileMeta.bytes.length.toLocaleString()}. Shorten the title or memo.`;
+    }
+    return ackForever ? null : 'Confirm you understand the publish is permanent.';
+}
+
 /**
  * PC-28 unified "Publish file" form, reachable from ActionsMenu (no
  * token context needed). One surface, an explicit publish-mode choice:
@@ -567,33 +590,18 @@ export function PublishFileForm({ walletId, onBack }) {
 
     async function handleReview(event) {
         event.preventDefault();
-        if (!fileMeta) { setFormError('Pick a file first.'); return; }
-        if (!fromAddress) { setFormError('No signing address available on this network.'); return; }
-        if ((title && /[|;]/.test(title)) || (memo && /[|;]/.test(memo)) || /[|;]/.test(fileMeta.name)) {
-            setFormError('File name, title, and memo cannot contain | or ; characters.');
-            return;
-        }
-        const unsafeMetadata = actionTextSafetyError(fileMeta.name, 'File name')
-            || actionTextSafetyError(title, 'Title');
-        if (unsafeMetadata) { setFormError(unsafeMetadata); return; }
-        const memoError = memoLengthError(memo);
-        if (memoError) { setFormError(memoError); return; }
-        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        if (feeStop) { setFormError(feeStop.formError); return; }
-        // Re-check with the FINAL metadata: a title/memo typed after the
-        // pick shrinks the byte budget.
-        const cap = publicCapFor(fileMeta.name, fileMeta.type);
-        if (fileMeta.bytes.length > cap) {
-            setFormError(
-                `With this title/memo the on-chain ceiling is ${cap.toLocaleString()} bytes `
-                + `and the file is ${fileMeta.bytes.length.toLocaleString()}. Shorten the title or memo.`,
-            );
-            return;
-        }
-        if (!ackForever) {
-            setFormError('Confirm you understand the publish is permanent.');
-            return;
-        }
+        const reviewError = publishReviewError({
+            fileMeta,
+            fromAddress,
+            title,
+            memo,
+            feePick,
+            feeTiers,
+            feeCustomEstimate,
+            publicCapFor,
+            ackForever,
+        });
+        if (reviewError) { setFormError(reviewError); return; }
         setFormError(null);
         setSubmitError(null);
         if (fileMeta.bytes.length <= selectedSingleCap) {
