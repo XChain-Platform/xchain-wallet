@@ -74,6 +74,7 @@ export function fileMultipartRequest(args = {}) {
     return {
         walletId,
         chainId,
+        sourceAddress: from.address,
         from: { ...from, sourceAddress: from.address },
         rawData: binaryStringOf(bytes),
         meta: requestMeta(meta),
