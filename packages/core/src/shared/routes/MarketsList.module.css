@@ -78,6 +78,14 @@
     margin-bottom: 0;
 }
 
+/* The search shares its row with the market tabs, whose labels are 13px at
+   every width (G43), so its text takes the small control size to match (U07).
+   The token stays 1rem on touch screens, where the tabs drop to their own row
+   and a smaller field would zoom the page on focus. */
+.searchField input {
+    font-size: var(--xc-control-font-sm);
+}
+
 .starButton {
     display: inline-flex;
     align-items: center;

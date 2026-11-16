@@ -50,6 +50,9 @@ test('dark mode fields share the field tokens', async ({ page }, testInfo) => {
     const outDir = OUT_ROOT ? join(OUT_ROOT, testInfo.project.name) : testInfo.outputPath('fields');
     mkdirSync(outDir, { recursive: true });
     await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+    // Each walk step is bounded, so a stale label fails that step in seconds
+    // (and the test below) instead of waiting out the whole test timeout.
+    page.setDefaultTimeout(30_000);
     const screens = {};
     const snap = async (label) => {
         await page.mouse.move(1, 1);
@@ -60,10 +63,16 @@ test('dark mode fields share the field tokens', async ({ page }, testInfo) => {
 
     await gotoSection(page, 'Settings');
     await snap('settings-root');
+    const skipped = [];
     for (const title of SUBPAGES) {
         try {
-            const row = page.getByRole('main').getByRole('button', { name: new RegExp(`^${escapeRegExp(title)}\\b`, 'i') }).first();
-            if (!(await row.isVisible().catch(() => false))) continue;
+            // The drill row's visible text starts with its title (run into
+            // its summary, so no word boundary there). Matching the accessible
+            // name alone also hits the inline rows' help tips ("About the
+            // language setting" for About), which carry no text and open no page.
+            const row = page.getByRole('main').getByRole('button', { name: new RegExp(`^${escapeRegExp(title)}\\b`, 'i') })
+                .filter({ hasText: new RegExp(`^${escapeRegExp(title)}`, 'i') }).first();
+            if (!(await row.isVisible().catch(() => false))) { skipped.push(title); continue; }
             await row.click();
             await snap(`settings-${title}`);
             await page.getByRole('button', { name: 'Back to settings' }).click();
@@ -104,6 +113,17 @@ test('dark mode fields share the field tokens', async ({ page }, testInfo) => {
     } catch (err) { screens['page-New contact'] = [{ error: String(err.message).slice(0, 120) }]; }
 
     writeFileSync(join(outDir, 'fields.json'), JSON.stringify(screens, null, 2));
+
+    // A step that could not reach its screen measured nothing there.
+    const stepErrors = Object.entries(screens).filter(([, fs]) => fs.some((f) => f.error))
+        .map(([label, fs]) => `${label}: ${fs.find((f) => f.error).error}`);
+    expect(stepErrors, stepErrors.join('\n')).toEqual([]);
+    // Notifications sits inline on the Settings root (measured there), and
+    // Network & endpoints shows only with developer mode (walked above), and
+    // the phone layout has no Keyboard page; any other row the walk cannot
+    // find is a stale title.
+    const mayBeAbsent = ['Notifications', 'Network & endpoints', ...(testInfo.project.use.isMobile ? ['Keyboard'] : [])];
+    expect(skipped.filter((title) => !mayBeAbsent.includes(title)), 'Settings rows the walk did not find').toEqual([]);
 
     // The shared tokens, resolved in the page the way a field resolves them:
     // enabled fields sit on --xc-surface, disabled ones on the disabled tokens.
