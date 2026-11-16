@@ -55,6 +55,7 @@ import { counterwalletMnemonicToSeedBytes } from '../crypto/counterwallet.js';
 import { WalletNotFoundError } from './unlockWallet.js';
 import { submitAction } from './submitAction.js';
 import { ENVELOPE_MAX_PAYLOAD } from './fileSizeLimits.js';
+import { readRawFile } from './rawFileRead.js';
 import { activeSourceId } from '../shared/addressSelection.js';
 
 export const LABEL_SYNC_PAYLOAD_VERSION = 1;
@@ -917,6 +918,29 @@ function bytesToHex(bytes) {
 /** How many same-name FILE rows a single restore will try to decrypt. */
 export const LABEL_SYNC_MAX_CANDIDATES = 5;
 
+async function decryptLabelSyncCandidates(sdk, key, candidates) {
+    for (const row of candidates) {
+        let served;
+        try {
+            const result = await readRawFile(sdk, String(row.actionIndex));
+            if (result.state !== 'ready') continue;
+            served = toBytes(result.bytes);
+        } catch {
+            continue;
+        }
+        if (!served || served.length === 0) continue;
+        for (const ciphertext of ciphertextForms(served)) {
+            if (ciphertext.length > ENVELOPE_MAX_PAYLOAD) continue;
+            try {
+                return await decodeLabelSyncPayload(key, ciphertext);
+            } catch {
+                continue;
+            }
+        }
+    }
+    return null;
+}
+
 /**
  * @typedef {Object} FetchAndDecryptLabelSyncOpts
  * @property {import('../sdk/SDKRegistry.js').XChainSDKLike} sdk   SDK for the chain the labels were published on
@@ -977,34 +1001,7 @@ export async function fetchAndDecryptLabelSync({
             0,
             Math.floor(maxCandidates),
         );
-
-        for (const row of candidates) {
-            let served;
-            try {
-                // Same endpoint serves gated and non-gated FILE bytes
-                // (/{COIN}/api/file/{index}/raw); the SDK method is named for
-                // its first caller. A label payload is never gated.
-                served = toBytes(await sdk.getGatedFileRaw(String(row.actionIndex)));
-            } catch {
-                // One unreadable row must not sink the restore: a later
-                // candidate may still be the wallet's own payload.
-                continue;
-            }
-            if (!served || served.length === 0) continue;
-            for (const ciphertext of ciphertextForms(served)) {
-                // Anyone can publish arbitrary bytes under this name. Refuse to
-                // spend AES work on anything larger than a payload could legally be.
-                if (ciphertext.length > ENVELOPE_MAX_PAYLOAD) continue;
-                try {
-                    return await decodeLabelSyncPayload(key, ciphertext);
-                } catch {
-                    // Failed GCM auth (or a foreign payload version) means the row
-                    // is not ours. That is the expected miss, not an error.
-                    continue;
-                }
-            }
-        }
-        return null;
+        return await decryptLabelSyncCandidates(sdk, key, candidates);
     } finally {
         if (derivedHere) key.fill(0);
     }

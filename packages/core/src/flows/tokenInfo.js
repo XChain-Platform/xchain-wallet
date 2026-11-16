@@ -39,6 +39,7 @@ import {
     IPFS_GATEWAY_BASE,
 } from '../branding/branding.js';
 import { fetchWithRetry } from '../shared/utils/fetchWithRetry.js';
+import { readRawFile } from './rawFileRead.js';
 
 /**
  * @typedef {Object} TisMediaEntry
@@ -1103,8 +1104,9 @@ export async function fetchOnChainTisBundle({ sdk, actionIndex, coin = null }) {
     try {
         // The raw endpoint serves non-gated FILE bytes too; for a JSON
         // document those bytes ARE the TIS text.
-        const bytes = await sdk.getGatedFileRaw(String(actionIndex), coin);
-        if (!bytes || !bytes.length) return null;
+        const result = await readRawFile(sdk, String(actionIndex), coin);
+        if (result.state !== 'ready') return null;
+        const { bytes } = result;
         const u8 = bytes instanceof Uint8Array
             ? bytes
             : new Uint8Array(/** @type {any} */ (bytes));
