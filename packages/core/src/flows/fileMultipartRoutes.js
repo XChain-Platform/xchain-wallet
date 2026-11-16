@@ -140,7 +140,8 @@ export async function handleFileMultipart(req, deps) {
 
 export async function handleListPendingFileUploads(req, { vault }) {
     requireText(req?.walletId, 'walletId', 'handleListPendingFileUploads');
-    const records = await vault.pendingFileUploads.listForWallet(req.walletId);
+    // The vault collection API (storage/Vault.js makeCollection): findBy, get, delete.
+    const records = await vault.pendingFileUploads.findBy('walletId', req.walletId);
     return { uploads: records.map(pendingUploadSummary) };
 }
 
@@ -155,6 +156,6 @@ export async function handleDiscardPendingFileUpload(req, { vault }) {
         throw routeError('FILE_UPLOAD_WALLET_MISMATCH', 'Pending file upload belongs to another wallet');
     }
     const { paidTransactions } = uploadCounts(record);
-    await vault.pendingFileUploads.remove(req.id);
+    await vault.pendingFileUploads.delete(req.id);
     return { removed: true, paidTransactions };
 }

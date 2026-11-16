@@ -71,7 +71,7 @@ assert.match(uploadMethod, /\{ encoding: 'AUTO', options: encoderSignerOptions\(
     'the Taproot method requests AUTO with the signer capability asserted');
 assert.match(uploadMethod, /if \(isWatcherMode\) return 'watcher';/,
     'the envelope is refused on the watch-only lane, whose single PSBT cannot carry a reveal');
-assert.match(uploadMethod, /if \(!signerSupportsTapscript\(fromAddress\)\) return 'signer';/,
+assert.match(uploadMethod, /if \(!envelopeAvailableFor\(descriptor, fromAddress\)\) return 'signer';/,
     'the envelope is offered only to a tapscript-capable signer');
 
 // ---- Encoding-aware limits module --------------------------------------

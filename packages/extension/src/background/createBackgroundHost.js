@@ -38,6 +38,7 @@ import {
     handleListPendingFileUploads,
 } from '@xchain-wallet/core/flows/fileMultipartRoutes.js';
 import { publishMultipartFile } from '@xchain-wallet/core/flows/publishMultipartFile.js';
+import { multipartPairSizes } from '@xchain-wallet/core/flows/uploadMethod.js';
 import {
     buildEditFeedListsParams,
     buildBetActionPsbt,
@@ -5279,6 +5280,7 @@ export function createBackgroundHost(deps) {
     host.register('action.fileMultipart', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         return handleFileMultipart(req, {
             publishMultipartFile,
+            multipartSizesFor: multipartPairSizes,
             signer: await sessionSigner(req, vault, signerPool),
             vault,
             chainRegistry,

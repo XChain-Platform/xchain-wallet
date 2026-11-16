@@ -26,6 +26,7 @@ import { matchFundingOutputs } from './multipartFundingMatch.js';
 import { multipartFundingEncoderOpts } from './multipartFundingOpts.js';
 import { planMultipartFile, quoteMultipartFile } from './multipartFilePlan.js';
 import { multipartQuoteLanes } from './multipartQuoteLanes.js';
+import { multipartFileActionString } from './multipartFileAction.js';
 import { confirmResumePick } from './multipartResumeMatch.js';
 import { advanceUploadStage, withFunding } from './multipartUploadRecord.js';
 import { createPendingFileUpload } from '../schemas/pendingFileUpload.js';
@@ -38,6 +39,11 @@ import { recordGateOf, resumeGateOf } from './gatedUploadGate.js';
 const TXID = /^[0-9a-f]{64}$/i;
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 const defaultSleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+// A just-broadcast funding transaction reaches the tracker's UTXO view seconds
+// later, and a plain funding transaction never shows in the explorer's mempool
+// rows, so a reading in this window that finds it nowhere is not yet evidence
+// that the network dropped it.
+const FUNDING_DROP_GRACE_MS = 60_000;
 
 function progress(opts, phase, data = {}) {
     if (typeof opts.onProgress === 'function') opts.onProgress(phase, data);
@@ -109,10 +115,11 @@ function pieceAction(plan, index, opts) {
 
 function pieceInput(plan, index, ctx) {
     const actionData = pieceAction(plan, index, ctx.opts);
-    const created = ctx.sdk.actions.createAction(actionData);
+    const data = multipartFileActionString(actionData)
+        ?? ctx.sdk.actions.createAction(actionData).actionString;
     return {
         kind: index === -1 ? 'manifest' : 'part',
-        data: created.actionString,
+        data,
         rawData: index === -1 ? undefined : plan.parts[index].rawData,
     };
 }
@@ -269,12 +276,15 @@ async function waitForFunding(ctx, txid) {
     const sleep = ctx.opts.sleep ?? defaultSleep;
     const pollMs = Number(ctx.opts.fundingPollMs) > 0 ? Number(ctx.opts.fundingPollMs) : 2000;
     const timeout = Number(ctx.opts.fundingTimeoutMs) > 0 ? Number(ctx.opts.fundingTimeoutMs) : 900000;
+    const grace = Number(ctx.opts.fundingDropGraceMs) >= 0
+        ? Number(ctx.opts.fundingDropGraceMs) : FUNDING_DROP_GRACE_MS;
     const started = Date.now();
     let droppedReadings = 0;
     for (;;) {
         const state = await legChainStatus({ sdk: ctx.sdk, txid, address: ctx.source.address });
         if (state === 'confirmed') return;
-        droppedReadings = state === 'dropped' ? droppedReadings + 1 : 0;
+        const settled = Date.now() - started >= grace;
+        droppedReadings = state === 'dropped' && settled ? droppedReadings + 1 : 0;
         if (state === null || droppedReadings >= 2 || Date.now() - started >= timeout) {
             const error = new Error('The upload is saved and funding is not confirmed. Do not pay again.');
             error.code = 'FILE_FUNDING_NOT_CONFIRMED';

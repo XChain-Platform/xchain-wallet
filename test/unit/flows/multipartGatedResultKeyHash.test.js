@@ -30,7 +30,7 @@ function record(gate) {
 function routeDeps(flowRecord, listed = []) {
     return {
         publishMultipartFile: vi.fn(async () => ({ record: flowRecord, fileId: '42' })),
-        vault: { pendingFileUploads: { listForWallet: vi.fn(async () => listed) } },
+        vault: { pendingFileUploads: { findBy: vi.fn(async () => listed) } },
         sdkRegistry: { get: vi.fn(() => ({ waitForAction: vi.fn() })) },
         chainRegistry: {}, signer: {}, onBroadcastFailure: vi.fn(),
     };

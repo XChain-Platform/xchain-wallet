@@ -35,16 +35,16 @@ function upload(index = 0, overrides = {}) {
 }
 
 function vaultFor(records) {
-    const listForWallet = vi.fn(async () => records);
+    const findBy = vi.fn(async () => records);
     const get = vi.fn();
-    return { vault: { pendingFileUploads: { listForWallet, get } }, listForWallet, get };
+    return { vault: { pendingFileUploads: { findBy, get } }, findBy, get };
 }
 
 describe('pending file upload summary projection', () => {
     it('copies resume fields while excluding gated secrets and persisted internals', async () => {
         const linkTarget = { tick: 'ART', issueActionIndex: '42' };
         const record = upload(0, { gate: { packKey: KEY_HEX }, linkTarget });
-        const { vault, listForWallet, get } = vaultFor([record]);
+        const { vault, findBy, get } = vaultFor([record]);
         const result = await handleListPendingFileUploads({ walletId: 'wallet-1' }, { vault });
         expect(result.uploads).toEqual([{
             id: 'upload-0', name: 'file-0.png', chainId: 'btc:regtest',
@@ -57,13 +57,13 @@ describe('pending file upload summary projection', () => {
         expect(result.uploads[0].linkTarget).not.toBe(linkTarget);
         expect(JSON.stringify(result)).not.toContain('"gate"');
         expect(JSON.stringify(result)).not.toContain(KEY_HEX);
-        expect(listForWallet).toHaveBeenCalledTimes(1);
+        expect(findBy).toHaveBeenCalledTimes(1);
         expect(get).not.toHaveBeenCalled();
     });
 
     it('lists six records on two chains in one read and preserves null link targets', async () => {
         const records = Array.from({ length: 6 }, (_, index) => upload(index));
-        const { vault, listForWallet, get } = vaultFor(records);
+        const { vault, findBy, get } = vaultFor(records);
         const result = await handleListPendingFileUploads({ walletId: 'wallet-1' }, { vault });
         expect(result.uploads).toHaveLength(6);
         expect(result.uploads.map(({ chainId }) => chainId)).toEqual([
@@ -71,8 +71,8 @@ describe('pending file upload summary projection', () => {
             'ltc:regtest', 'btc:regtest', 'ltc:regtest',
         ]);
         expect(result.uploads.every(({ linkTarget, gated }) => linkTarget === null && !gated)).toBe(true);
-        expect(listForWallet).toHaveBeenCalledTimes(1);
-        expect(listForWallet).toHaveBeenCalledWith('wallet-1');
+        expect(findBy).toHaveBeenCalledTimes(1);
+        expect(findBy).toHaveBeenCalledWith('walletId', 'wallet-1');
         expect(get).not.toHaveBeenCalled();
     });
 });

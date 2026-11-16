@@ -41,9 +41,11 @@ import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { imagePreviewDataUrl, publishFileType } from '../utils/publishingFile.js';
 import { ForwardIcon, UploadIcon } from '../../ui/icons/index.jsx';
 import {
+    UPLOAD_METHOD_TAPROOT,
     publicFileCompiledBytes,
     standardUnavailableReason,
     taprootUnavailableReason,
+    uploadMethodCeilingOpts,
 } from '../../flows/uploadMethod.js';
 import { UploadMethodField, UploadMethodReviewRows, useUploadMethod } from '../components/UploadMethodField.jsx';
 import { useMultipartUploadMethod } from '../hooks/useMultipartUploadMethod.js';
@@ -85,7 +87,7 @@ function usePublicMultipartMethod({
     descriptor, fromAddress, isWatcherMode, file, title, memo, feeEstimate,
 }) {
     const meta = { name: file?.name || 'file.bin', type: file?.type || 'application/octet-stream', title, memo };
-    const taprootCap = flowsLib.maxPublicFileBytes(meta, { encoding: 'TAPROOT' });
+    const taprootCap = flowsLib.maxPublicFileBytes(meta, uploadMethodCeilingOpts(UPLOAD_METHOD_TAPROOT));
     const standardCap = flowsLib.maxPublicFileBytes(meta, {});
     const singleReasons = {
         taproot: taprootUnavailableReason({ descriptor, fromAddress, isWatcherMode }),

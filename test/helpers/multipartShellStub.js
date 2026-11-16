@@ -18,14 +18,15 @@ function createPendingStore(records) {
         get(id) {
             return stored.get(id) ?? null;
         },
-        listForWallet(walletId) {
-            return [...stored.values()].filter((record) => record.walletId === walletId);
+        // The vault collection API the routes call (storage/Vault.js makeCollection).
+        findBy(field, value) {
+            return [...stored.values()].filter((record) => record[field] === value);
         },
         put(record) {
             stored.set(record.id, record);
             return record;
         },
-        remove(id) {
+        delete(id) {
             return stored.delete(id);
         },
     };
