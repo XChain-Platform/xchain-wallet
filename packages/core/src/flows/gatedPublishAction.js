@@ -38,6 +38,7 @@ import { maxGatedPlaintextBytes } from './fileSizeLimits.js';
 import { encoderSignerOptions } from './signerCapability.js';
 import { indexerWatermark } from './balances.js';
 import { resolveGateMinAmountActive } from './protocolActivations.js';
+import { fileUploadStart } from './fileUploadStart.js';
 
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 
@@ -77,6 +78,15 @@ async function persistGeneratedKey(vault, record) {
  * envelope), which for realistic metadata lands well above this floor.
  */
 export const MAX_GATED_PLAINTEXT_BYTES = 6500;
+
+export function gatedPublishMultipartStart(upload = {}) {
+    if (upload?.gate == null) {
+        const error = new TypeError('gatedPublishMultipartStart: gate is required');
+        error.code = 'GATED_MULTIPART_GATE_REQUIRED';
+        throw error;
+    }
+    return fileUploadStart(upload);
+}
 
 /**
  * Validate the canonical decimal spelling accepted by FILE.GATE_MIN_AMOUNT.
