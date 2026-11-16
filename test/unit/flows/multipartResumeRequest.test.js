@@ -17,6 +17,11 @@ const SUPPORT = Object.freeze({
     supported: true, lane: 'envelope', buildMode: 'one_call',
 });
 const GATE = Object.freeze({ ticker: 'PASS', minAmount: '10' });
+const EXPECTED_MATCH = Object.freeze({
+    chainId: 'btc:regtest',
+    sourceAddress: 'bcrt1source',
+    originalSha256: '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81',
+});
 
 function builder(overrides = {}) {
     return multipartResumeRequestBuilder({
@@ -83,15 +88,14 @@ describe('resume upload matching', () => {
         const result = build();
         const record = multipartRecordFixture({
             id: 'upload-1',
-            chainId: result.match.chainId,
-            sourceAddress: result.match.sourceAddress,
-            originalSha256: result.match.originalSha256,
+            ...EXPECTED_MATCH,
             stage: 'sending',
         });
         const stub = createMultipartShellStub({ records: [record] });
         const { uploads } = await stub.messaging.listPendingFileUploads({
             walletId: record.walletId,
         });
+        expect(result.match).toEqual(EXPECTED_MATCH);
         expect(findActiveUpload(uploads, result.match)).toBe(uploads[0]);
     });
 });
