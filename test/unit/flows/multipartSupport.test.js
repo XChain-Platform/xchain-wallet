@@ -42,7 +42,6 @@ describe('multipartSupportFor lane selection', () => {
         ['p2pkh', 'one_call'],
         ['p2wpkh', 'one_call'],
         ['p2sh-p2wpkh', 'one_call'],
-        ['p2tr', 'sourceType'],
     ])('uses the standard lane for a non-Taproot chain with %s', (addressType, buildMode) => {
         expect(support({ taprootChain: false, addressType })).toEqual({
             supported: true, lane: 'standard', buildMode,
@@ -51,6 +50,11 @@ describe('multipartSupportFor lane selection', () => {
 });
 
 describe('multipartSupportFor refusal reasons', () => {
+    it('refuses a p2tr source on the standard lane', () => {
+        expect(support({ taprootChain: false, addressType: 'p2tr' }))
+            .toEqual({ supported: false, reason: 'sourceType' });
+    });
+
     it('checks watcher mode before every signer source', () => {
         for (const source of ['trezor', 'ledger', 'watch-only', 'unknown']) {
             expect(support({ addressRecord: { source }, isWatcherMode: true }))
