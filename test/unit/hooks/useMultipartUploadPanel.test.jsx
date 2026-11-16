@@ -142,6 +142,24 @@ describe('start settlement refresh', () => {
     });
 });
 
+describe('running upload route matching', () => {
+    it('hides an active entry when route fields differ only by case', async () => {
+        const entry = route({
+            chainId: MATCH.chainId.toUpperCase(),
+            sourceAddress: MATCH.sourceAddress.toUpperCase(),
+            originalSha256: MATCH.originalSha256.toUpperCase(),
+        });
+        const { messaging, upload } = messagingWith([entry]);
+        const { result } = mount(messaging);
+        await loaded(result, messaging.listPendingFileUploads);
+
+        const promise = begin(result);
+
+        expect(result.current.panelProps.unfinished).toEqual([]);
+        await act(async () => { upload.resolve({ txid: 'done' }); await promise; });
+    });
+});
+
 describe('continue control', () => {
     it('clicks once while idle and does nothing while running', async () => {
         const { messaging, upload } = messagingWith();

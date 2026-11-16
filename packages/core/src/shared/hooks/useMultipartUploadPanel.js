@@ -7,11 +7,15 @@ import { useRunningFileUpload } from './useRunningFileUpload.js';
 import { useUnfinishedFileUploads } from './useUnfinishedFileUploads.js';
 
 function matchesRunningUpload(entry, match) {
-    return entry?.chainId === match?.chainId
-        && entry?.sourceAddress === match?.sourceAddress
-        && typeof entry?.originalSha256 === 'string'
-        && typeof match?.originalSha256 === 'string'
-        && entry.originalSha256.toLowerCase() === match.originalSha256.toLowerCase();
+    return matchesLowerCase(entry?.chainId, match?.chainId)
+        && matchesLowerCase(entry?.sourceAddress, match?.sourceAddress)
+        && matchesLowerCase(entry?.originalSha256, match?.originalSha256);
+}
+
+function matchesLowerCase(left, right) {
+    return typeof left === 'string'
+        && typeof right === 'string'
+        && left.toLowerCase() === right.toLowerCase();
 }
 
 function visibleUploads(unfinished, uploadById, running, match) {
