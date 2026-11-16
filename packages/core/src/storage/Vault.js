@@ -52,6 +52,7 @@ import {
     migratePriceAlert,
     migrateGatedKey,
     migratePendingDeploy,
+    migratePendingFileUpload,
     migrateAutopayOrder,
     migrateAutopayLease,
 } from '../schemas/migrations.js';
@@ -61,6 +62,7 @@ import { validateConnectedSite } from '../schemas/connectedSite.js';
 import { validateContact } from '../schemas/contact.js';
 import { validatePendingAirdrop } from '../schemas/pendingAirdrop.js';
 import { validatePendingDeploy } from '../schemas/pendingDeploy.js';
+import { validatePendingFileUpload } from '../schemas/pendingFileUpload.js';
 import { validatePendingTx } from '../schemas/pendingTx.js';
 import { validateMultisigSigningSession } from '../schemas/multisigSigningSession.js';
 import { validateCoSignerAccount } from '../schemas/coSignerAccount.js';
@@ -229,6 +231,12 @@ export class Vault {
             'pendingAirdrops',
             migratePendingAirdrop,
             validatePendingAirdrop,
+        );
+        this.pendingFileUploads = makeCollection(
+            this,
+            'pendingFileUploads',
+            migratePendingFileUpload,
+            validatePendingFileUpload,
         );
         // PC-38: crash-safe state for the multi-transaction chunked DEPLOY.
         this.pendingDeploys = makeCollection(

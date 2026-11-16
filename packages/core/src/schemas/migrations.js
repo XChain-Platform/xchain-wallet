@@ -30,6 +30,7 @@ import { CURRENT_VERSION as PRICE_ALERT_VERSION } from './priceAlert.js';
 import { CURRENT_VERSION as COSIGNER_ACCOUNT_VERSION } from './coSignerAccount.js';
 import { CURRENT_VERSION as GATED_KEY_VERSION } from './gatedKey.js';
 import { CURRENT_VERSION as PENDING_DEPLOY_VERSION } from './pendingDeploy.js';
+import { CURRENT_VERSION as PENDING_FILE_UPLOAD_VERSION } from './pendingFileUpload.js';
 import { CURRENT_VERSION as AUTOPAY_ORDER_VERSION } from './autopayOrder.js';
 import { CURRENT_VERSION as AUTOPAY_LEASE_VERSION } from './autopayLease.js';
 import { randomUUID } from '../util/uuid.js';
@@ -254,6 +255,9 @@ export const gatedKeyMigrations = {};
 /** @type {MigrationMap} */
 export const pendingDeployMigrations = {};
 
+/** @type {MigrationMap} */
+export const pendingFileUploadMigrations = {};
+
 // AutopayOrder / AutopayLease (PC-16) are base-v1 schemas; no upgrade steps yet.
 /** @type {MigrationMap} */
 export const autopayOrderMigrations = {};
@@ -324,6 +328,8 @@ export const migrateGatedKey = (r) =>
     migrate(r, gatedKeyMigrations, GATED_KEY_VERSION);
 export const migratePendingDeploy = (r) =>
     migrate(r, pendingDeployMigrations, PENDING_DEPLOY_VERSION);
+export const migratePendingFileUpload = (r) =>
+    migrate(r, pendingFileUploadMigrations, PENDING_FILE_UPLOAD_VERSION);
 export const migrateAutopayOrder = (r) =>
     migrate(r, autopayOrderMigrations, AUTOPAY_ORDER_VERSION);
 export const migrateAutopayLease = (r) =>

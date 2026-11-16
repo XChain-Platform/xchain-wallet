@@ -25,6 +25,7 @@ export * as settings from './settings.js';
 export * as pendingTx from './pendingTx.js';
 export * as signer from './signer.js';
 export * as pendingAirdrop from './pendingAirdrop.js';
+export * as pendingFileUpload from './pendingFileUpload.js';
 export * as watchlistEntry from './watchlistEntry.js';
 export * as gatedKey from './gatedKey.js';
 export * as autopayOrder from './autopayOrder.js';
@@ -64,6 +65,11 @@ export {
     PENDING_AIRDROP_STAGES,
 } from './pendingAirdrop.js';
 export {
+    createPendingFileUpload,
+    validatePendingFileUpload,
+    PENDING_FILE_UPLOAD_STAGES,
+} from './pendingFileUpload.js';
+export {
     createWatchlistEntry,
     validateWatchlistEntry,
     watchlistEntryKey,
@@ -88,6 +94,7 @@ export {
     migrateMultisigSigningSession,
     migrateSigner,
     migratePendingAirdrop,
+    migratePendingFileUpload,
     migrateWatchlistEntry,
     migratePriceAlert,
 } from './migrations.js';

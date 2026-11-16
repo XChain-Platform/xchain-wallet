@@ -10,7 +10,7 @@
 
 // removeWallet: destructive flow that deletes a Wallet record and all
 // records linked to it: accounts, addresses (HD-derived + imported-WIF),
-// signers, pendingTxs, pendingAirdrops, pendingDeploys,
+// signers, pendingTxs, pendingAirdrops, pendingFileUploads, pendingDeploys,
 // multisigSigningSessions, coSignerAccounts, watchlistEntries,
 // priceAlerts, gatedKeys, autopayOrders.
 //
@@ -31,7 +31,7 @@ import { withAccountLock } from '../cosigner/accountLock.js';
 
 /**
  * @param {{ vault: import('../storage/Vault.js').Vault, walletId: string }} opts
- * @returns {Promise<{ removed: { wallet: 1, accounts: number, addresses: number, signers: number, pendingTxs: number, pendingAirdrops: number, pendingDeploys: number, multisigSigningSessions: number, coSignerAccounts: number, watchlistEntries: number, priceAlerts: number, gatedKeys: number, autopayOrders: number, connectedSiteGrants: number } }>}
+ * @returns {Promise<{ removed: Record<string, number> }>}
  */
 export async function removeWallet({ vault, walletId }) {
     if (!vault) throw new Error('removeWallet: vault is required');
@@ -42,100 +42,119 @@ export async function removeWallet({ vault, walletId }) {
     const wallet = await vault.wallets.get(walletId);
     if (!wallet) throw new WalletNotFoundError(walletId);
 
-    // Resolve descendants up front. We delete by id, so capturing the
-    // shape before mutating the vault keeps the bookkeeping honest.
-    const accounts = await vault.accounts.findBy('walletId', walletId);
-    const accountIds = new Set(accounts.map((a) => a.id));
-    const importedAddrIds = new Set(wallet.importedKeys.map((k) => k.addressId));
-
-    const connectedSites = await vault.connectedSites.list();
-    const connectedSiteUpdates = [];
-    const connectedSiteDeletes = [];
-    for (const site of connectedSites) {
-        const grantedAccounts = Array.isArray(site.permissions?.accounts)
-            ? site.permissions.accounts
-            : [];
-        if (!grantedAccounts.some((id) => accountIds.has(id))) continue;
-        const survivingAccounts = grantedAccounts.filter((id) => !accountIds.has(id));
-        if (survivingAccounts.length === 0) {
-            connectedSiteDeletes.push(site);
-        } else {
-            connectedSiteUpdates.push({
-                ...site,
-                permissions: { ...site.permissions, accounts: survivingAccounts },
-            });
-        }
-    }
-
-    const allAddresses = await vault.addresses.list();
-    const addressesToDelete = allAddresses.filter((addr) =>
-        (addr.accountId && accountIds.has(addr.accountId)) || importedAddrIds.has(addr.id),
-    );
-    const addressIdsToDelete = new Set(addressesToDelete.map((a) => a.id));
-    const pendingScopesToDelete = new Set(addressesToDelete.map(pendingScopeForAddress));
-    const survivingPendingScopes = new Set(
-        allAddresses
-            .filter((address) => !addressIdsToDelete.has(address.id))
-            .map(pendingScopeForAddress),
-    );
-
-    const allPendingTxs = await vault.pendingTxs.list();
-    const pendingTxsToDelete = allPendingTxs.filter((pending) => {
-        const scope = pendingScopeForPendingTx(pending);
-        return pendingScopesToDelete.has(scope) && !survivingPendingScopes.has(scope);
-    });
-
-    const pendingAirdrops = await vault.pendingAirdrops.findBy('walletId', walletId);
-    const pendingDeploys = await vault.pendingDeploys.findBy('walletId', walletId);
-    const multisigSessions = await vault.multisigSigningSessions.findBy('walletId', walletId);
-    const coSignerAccounts = await vault.coSignerAccounts.findBy('walletId', walletId);
-    const watchlistEntries = await vault.watchlistEntries.findBy('walletId', walletId);
-    const priceAlerts = await vault.priceAlerts.findBy('walletId', walletId);
-    const gatedKeys = await vault.gatedKeys.findBy('walletId', walletId);
-    const autopayOrders = await vault.autopayOrders.findBy('walletId', walletId);
-    const signers = await vault.signers.findBy('walletId', walletId);
-
-    // Each collection mutation auto-saves the whole vault. Serial writes keep
-    // an older encrypted snapshot from finishing last and restoring a deleted row.
-    await deleteRecords(vault.addresses, addressesToDelete);
-    for (const site of connectedSiteUpdates) await vault.connectedSites.put(site);
-    await deleteRecords(vault.connectedSites, connectedSiteDeletes);
-    await deleteRecords(vault.accounts, accounts);
-    await deleteRecords(vault.signers, signers);
-    await deleteRecords(vault.pendingTxs, pendingTxsToDelete);
-    await deleteRecords(vault.pendingAirdrops, pendingAirdrops);
-    await deleteRecords(vault.pendingDeploys, pendingDeploys);
-    await deleteRecords(vault.multisigSigningSessions, multisigSessions);
-    await deleteCoSignerAccounts(vault, coSignerAccounts);
-    await deleteRecords(vault.watchlistEntries, watchlistEntries);
-    await deleteRecords(vault.priceAlerts, priceAlerts);
-    await deleteRecords(vault.gatedKeys, gatedKeys);
-    await deleteRecords(vault.autopayOrders, autopayOrders);
+    const state = await collectRemovalState(vault, wallet, walletId);
+    await deleteWalletChildren(vault, state);
     await vault.wallets.delete(walletId);
-    // Sweep again for agent accounts added for this wallet while it was being removed.
     const lateCoSignerAccounts = await vault.coSignerAccounts.findBy('walletId', walletId);
     await deleteCoSignerAccounts(vault, lateCoSignerAccounts);
     clearGatedContentCaches();
     clearPendingGeneratedKeysForWallet(walletId);
+    return { removed: removalCounts(state, lateCoSignerAccounts.length) };
+}
 
+function connectedSitePlan(sites, accountIds) {
+    const updates = [];
+    const deletes = [];
+    for (const site of sites) {
+        const granted = Array.isArray(site.permissions?.accounts) ? site.permissions.accounts : [];
+        if (!granted.some((id) => accountIds.has(id))) continue;
+        const surviving = granted.filter((id) => !accountIds.has(id));
+        if (surviving.length === 0) deletes.push(site);
+        else {
+            updates.push({
+                ...site,
+                permissions: { ...site.permissions, accounts: surviving },
+            });
+        }
+    }
+    return { updates, deletes };
+}
+
+function pendingTxsForDeletedAddresses(pendingTxs, allAddresses, addresses) {
+    const deletedIds = new Set(addresses.map((address) => address.id));
+    const deletedScopes = new Set(addresses.map(pendingScopeForAddress));
+    const survivingScopes = new Set(allAddresses
+        .filter((address) => !deletedIds.has(address.id))
+        .map(pendingScopeForAddress));
+    return pendingTxs.filter((pending) => {
+        const scope = pendingScopeForPendingTx(pending);
+        return deletedScopes.has(scope) && !survivingScopes.has(scope);
+    });
+}
+
+async function walletOwnedRecords(vault, walletId) {
+    const names = [
+        'signers', 'pendingAirdrops', 'pendingDeploys', 'multisigSigningSessions',
+        'coSignerAccounts', 'watchlistEntries', 'priceAlerts', 'gatedKeys', 'autopayOrders',
+    ];
+    if (vault.pendingFileUploads) names.splice(3, 0, 'pendingFileUploads');
+    const entries = await Promise.all(names.map(async (name) => [
+        name,
+        await vault[name].findBy('walletId', walletId),
+    ]));
+    return Object.fromEntries(entries);
+}
+
+async function collectRemovalState(vault, wallet, walletId) {
+    const accounts = await vault.accounts.findBy('walletId', walletId);
+    const accountIds = new Set(accounts.map((account) => account.id));
+    const importedIds = new Set(wallet.importedKeys.map((key) => key.addressId));
+    const allAddresses = await vault.addresses.list();
+    const addresses = allAddresses.filter((address) =>
+        (address.accountId && accountIds.has(address.accountId)) || importedIds.has(address.id));
+    const pendingTxs = pendingTxsForDeletedAddresses(
+        await vault.pendingTxs.list(), allAddresses, addresses);
+    const connectedSites = connectedSitePlan(await vault.connectedSites.list(), accountIds);
     return {
-        removed: {
-            wallet: 1,
-            accounts: accounts.length,
-            addresses: addressesToDelete.length,
-            signers: signers.length,
-            pendingTxs: pendingTxsToDelete.length,
-            pendingAirdrops: pendingAirdrops.length,
-            pendingDeploys: pendingDeploys.length,
-            multisigSigningSessions: multisigSessions.length,
-            coSignerAccounts: coSignerAccounts.length + lateCoSignerAccounts.length,
-            watchlistEntries: watchlistEntries.length,
-            priceAlerts: priceAlerts.length,
-            gatedKeys: gatedKeys.length,
-            autopayOrders: autopayOrders.length,
-            connectedSiteGrants: connectedSiteUpdates.length + connectedSiteDeletes.length,
-        },
+        accounts,
+        addresses,
+        pendingTxs,
+        connectedSites,
+        owned: await walletOwnedRecords(vault, walletId),
     };
+}
+
+async function deleteWalletChildren(vault, state) {
+    await deleteRecords(vault.addresses, state.addresses);
+    for (const site of state.connectedSites.updates) await vault.connectedSites.put(site);
+    await deleteRecords(vault.connectedSites, state.connectedSites.deletes);
+    await deleteRecords(vault.accounts, state.accounts);
+    await deleteRecords(vault.signers, state.owned.signers);
+    await deleteRecords(vault.pendingTxs, state.pendingTxs);
+    await deleteRecords(vault.pendingAirdrops, state.owned.pendingAirdrops);
+    if (vault.pendingFileUploads) {
+        await deleteRecords(vault.pendingFileUploads, state.owned.pendingFileUploads);
+    }
+    await deleteRecords(vault.pendingDeploys, state.owned.pendingDeploys);
+    await deleteRecords(vault.multisigSigningSessions, state.owned.multisigSigningSessions);
+    await deleteCoSignerAccounts(vault, state.owned.coSignerAccounts);
+    await deleteRecords(vault.watchlistEntries, state.owned.watchlistEntries);
+    await deleteRecords(vault.priceAlerts, state.owned.priceAlerts);
+    await deleteRecords(vault.gatedKeys, state.owned.gatedKeys);
+    await deleteRecords(vault.autopayOrders, state.owned.autopayOrders);
+}
+
+function removalCounts(state, lateCoSignerCount) {
+    const removed = {
+        wallet: 1,
+        accounts: state.accounts.length,
+        addresses: state.addresses.length,
+        signers: state.owned.signers.length,
+        pendingTxs: state.pendingTxs.length,
+        pendingAirdrops: state.owned.pendingAirdrops.length,
+        pendingDeploys: state.owned.pendingDeploys.length,
+        multisigSigningSessions: state.owned.multisigSigningSessions.length,
+        coSignerAccounts: state.owned.coSignerAccounts.length + lateCoSignerCount,
+        watchlistEntries: state.owned.watchlistEntries.length,
+        priceAlerts: state.owned.priceAlerts.length,
+        gatedKeys: state.owned.gatedKeys.length,
+        autopayOrders: state.owned.autopayOrders.length,
+        connectedSiteGrants: state.connectedSites.updates.length + state.connectedSites.deletes.length,
+    };
+    if (state.owned.pendingFileUploads) {
+        removed.pendingFileUploads = state.owned.pendingFileUploads.length;
+    }
+    return removed;
 }
 
 async function deleteRecords(collection, records) {
