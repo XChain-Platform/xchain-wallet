@@ -25,6 +25,7 @@ import {
 import { matchFundingOutputs } from './multipartFundingMatch.js';
 import { multipartFundingEncoderOpts } from './multipartFundingOpts.js';
 import { planMultipartFile, quoteMultipartFile } from './multipartFilePlan.js';
+import { multipartQuoteLanes } from './multipartQuoteLanes.js';
 import { confirmResumePick } from './multipartResumeMatch.js';
 import { advanceUploadStage, withFunding } from './multipartUploadRecord.js';
 import { createPendingFileUpload } from '../schemas/pendingFileUpload.js';
@@ -257,10 +258,8 @@ async function feeRate(opts, sdk) {
 
 function quoteFor(opts, plan, rate, lane) {
     const descriptor = opts.chainRegistry?.get?.(opts.chainId);
-    const outputFloor = opts.outputFloor
-        ?? (descriptor?.coin === 'dogecoin' ? 1_000_000 : descriptor?.dustThreshold);
-    const revealPad = descriptor?.coin === 'litecoin';
-    return quoteMultipartFile(plan, rate, { type: lane, outputFloor, revealPad }, opts.sizes || {});
+    const lanes = multipartQuoteLanes({ descriptor, outputFloor: opts.outputFloor });
+    return quoteMultipartFile(plan, rate, lanes[lane], opts.sizes || {});
 }
 
 async function waitForFunding(ctx, txid) {
