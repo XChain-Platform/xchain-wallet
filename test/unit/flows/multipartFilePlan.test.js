@@ -1,0 +1,127 @@
+// Copyright © 2025–2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC – https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { describe, expect, it } from 'vitest';
+import { sha256 } from '@noble/hashes/sha2';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
+import vectorsFixture from '../../fixtures/multipart_file.json';
+import {
+    fileHashOf,
+    planMultipartFile,
+    quoteMultipartFile,
+} from '../../../packages/core/src/flows/multipartFilePlan.js';
+import {
+    FILE_MULTIPART_ACTIVATION_TIME,
+    MULTIPART_ENVELOPE_PART_CAPACITY,
+    MULTIPART_FILE_MAX_BYTES,
+    MULTIPART_FILE_MAX_PARTS,
+    MULTIPART_STANDARD_PART_CAPACITY,
+    fileMultipartActivationTime,
+} from '../../../packages/core/src/flows/fileSizeLimits.js';
+
+const { vectors } = vectorsFixture;
+const partsOf = (vector) => vector.parts.map((part) => hexToBytes(part.hex));
+
+describe('multipart FILE protocol constants', () => {
+    it('pins caps, capacities, and chain-id activation segments', () => {
+        expect(MULTIPART_FILE_MAX_PARTS).toBe(32);
+        expect(MULTIPART_FILE_MAX_BYTES).toBe(12_000_000);
+        expect(MULTIPART_ENVELOPE_PART_CAPACITY).toBe(389_920);
+        expect(MULTIPART_STANDARD_PART_CAPACITY).toBe(8_114);
+        expect(FILE_MULTIPART_ACTIVATION_TIME).toEqual({
+            mainnet: null, testnet: 1_796_083_200, regtest: 0,
+        });
+        expect(fileMultipartActivationTime('bitcoin-testnet')).toBe(1_796_083_200);
+        expect(fileMultipartActivationTime('litecoin-regtest')).toBe(0);
+        expect(fileMultipartActivationTime('bitcoin-unknown')).toBeUndefined();
+    });
+});
+
+describe('documentation multipart vectors', () => {
+    it('reproduces every part digest and ordered FILE_HASH', () => {
+        for (const vector of vectors) {
+            const parts = partsOf(vector);
+            parts.forEach((bytes, index) => {
+                expect(bytesToHex(sha256(bytes))).toBe(vector.parts[index].digest);
+            });
+            expect(fileHashOf(parts)).toBe(vector.actual_file_hash ?? vector.FILE_HASH);
+            expect(fileHashOf(vector.parts)).toBe(vector.actual_file_hash ?? vector.FILE_HASH);
+        }
+    });
+
+    it('produces the documented deflate-raw stored bytes byte-for-byte', async () => {
+        const vector = vectors.find(({ COMPRESSION }) => COMPRESSION === '1');
+        const plan = await planMultipartFile(hexToBytes(vector.original_hex));
+        expect(plan.compressed).toBe(true);
+        expect(plan.compression).toBe('1');
+        expect(bytesToHex(plan.storedBytes)).toBe(vector.parts.map((part) => part.hex).join(''));
+        expect(plan.totalBytes).toBe(vector.TOTAL_BYTES);
+    });
+
+    it('binds slice boundaries as well as assembled bytes', () => {
+        const naive = ['31323334', '35363738', '39'].map(hexToBytes);
+        const rebalanced = partsOf(vectors.find(({ carrier_ceiling: cap }) => cap === 4));
+        expect(bytesToHex(new Uint8Array(naive.flatMap((part) => [...part]))))
+            .toBe(bytesToHex(new Uint8Array(rebalanced.flatMap((part) => [...part]))));
+        expect(fileHashOf(naive)).not.toBe(fileHashOf(rebalanced));
+    });
+});
+
+describe('multipart planning', () => {
+    it('uses exact capacities and rebalances a one-byte final slice', async () => {
+        const envelope = await planMultipartFile(new Uint8Array(389_921));
+        const standard = await planMultipartFile(new Uint8Array(8_115), {}, { carrier: 'STANDARD' });
+        expect(envelope.parts.map((part) => part.bytes.length)).toEqual([389_919, 2]);
+        expect(standard.parts.map((part) => part.bytes.length)).toEqual([8_113, 2]);
+        expect(envelope.partCapacity).toBe(389_920);
+        expect(standard.partCapacity).toBe(8_114);
+    });
+
+    it('keeps a 10 MB ratio-guarded file raw and returns the SDK plan shape', async () => {
+        const plan = await planMultipartFile(new Uint8Array(10_000_000), {
+            name: 'zeros.bin', type: 'application/octet-stream',
+        });
+        expect(plan.compressed).toBe(false);
+        expect(plan.compression).toBe('');
+        expect(plan.parts).toHaveLength(26);
+        expect(plan.parts.slice(0, -1).every((part) => part.bytes.length === 389_920)).toBe(true);
+        expect(plan.totalBytes).toBe(10_000_000);
+        expect(plan.manifestParams).toMatchObject({
+            version: 1, fileHash: plan.fileHash, totalParts: 26, totalBytes: 10_000_000,
+        });
+        expect(fileHashOf(plan.parts)).toBe(plan.fileHash);
+    });
+});
+
+describe('multipart funding quotes', () => {
+    it('quotes the documented 26-part, 55-transaction envelope case', async () => {
+        const plan = await planMultipartFile(new Uint8Array(10_000_000));
+        const quote = quoteMultipartFile(plan, 2, { type: 'envelope', outputFloor: 546 }, {
+            envelopePairVbytes: (partBytes) => partBytes + 100,
+            standardPairBytes: () => { throw new Error('wrong lane'); },
+        });
+        expect(quote).toEqual({
+            parts: 26,
+            transactions: 55,
+            outputs: expect.arrayContaining([expect.any(Number)]),
+            fundingTotal: 25_036_234,
+            fee: 25_006_750,
+        });
+        expect(quote.outputs).toHaveLength(27);
+        expect(quote.outputs.reduce((sum, value) => sum + value, 0)).toBe(quote.fundingTotal);
+    });
+
+    it('adds one output floor per Standard chunk plus the reveal output', () => {
+        const plan = { parts: [{ bytes: new Uint8Array(477) }], totalParts: 1 };
+        const quote = quoteMultipartFile(plan, 4, { type: 'standard', outputFloor: 1_000 }, {
+            envelopePairVbytes: () => { throw new Error('wrong lane'); },
+            standardPairBytes: (partBytes) => partBytes + 10,
+        });
+        expect(quote.outputs).toEqual([1_050, 5_435]);
+        expect(quote.fee).toBe(2_485);
+        expect(quote.fundingTotal).toBe(6_485);
+        expect(quote.transactions).toBe(5);
+    });
+});
