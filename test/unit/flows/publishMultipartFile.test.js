@@ -252,3 +252,33 @@ describe('multipart publish resume safety', () => {
         expect(h.encoder.getTxBlock).not.toHaveBeenCalled();
     });
 });
+
+// The tracker sees a just-broadcast funding transaction seconds later, and the
+// explorer's mempool rows never list a plain funding transaction, so the first
+// readings after the broadcast find it nowhere.
+function fundingSeenOnThirdReading(h) {
+    let readings = 0;
+    h.encoder.getTxBlock.mockImplementation(async () => {
+        readings += 1;
+        return readings > 2 ? { block_height: 12 } : null;
+    });
+    h.sdk.getUnconfirmed = vi.fn(async () => []);
+}
+
+describe('multipart publish funding wait after the broadcast', () => {
+    it('keeps waiting while a fresh funding transaction is not yet visible', async () => {
+        const h = harness();
+        fundingSeenOnThirdReading(h);
+        const result = await publishMultipartFile(options(h));
+        expect(result.record.stage).toBe('complete');
+        expect(h.encoder.getTxBlock.mock.calls.length).toBeGreaterThanOrEqual(3);
+    });
+
+    it('still ends on two dropped readings once the grace has passed', async () => {
+        const h = harness();
+        fundingSeenOnThirdReading(h);
+        await expect(publishMultipartFile(options(h, { fundingDropGraceMs: 0 })))
+            .rejects.toMatchObject({ code: 'FILE_FUNDING_NOT_CONFIRMED', chainState: 'dropped' });
+        expect(h.encoder.createTx.mock.calls.filter(([opts]) => !opts.customOutputs)).toHaveLength(0);
+    });
+});

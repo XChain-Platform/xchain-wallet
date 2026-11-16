@@ -125,8 +125,13 @@ function options(h, overrides = {}) {
     };
 }
 
-function createdActions(h) {
-    return h.sdk.actions.createAction.mock.calls.map(([action]) => action);
+// The data each piece's commit was built with, in send order: the wallet
+// serializes FILE formats 1 and 2 itself, and the SDK stub returns JSON for
+// any action it composes (the gated BATCH manifest).
+function pieceData(h) {
+    return h.encoder.createTx.mock.calls
+        .filter(([opts]) => !opts.customOutputs)
+        .map(([opts]) => opts.data);
 }
 
 function sdkActionString(action) {
@@ -200,21 +205,18 @@ describe('multipart publish manifest action selection', () => {
     it('builds a BATCH manifest and FILE version 2 parts for a gated upload', async () => {
         const h = harness();
         await publishMultipartFile(options(h, { gate: { key: KEY } }));
-        const actions = createdActions(h);
-        expect(actions.slice(0, 2)).toEqual([
-            { action: 'FILE', params: { VERSION: '2', FILE_HASH, PART_INDEX: '0' } },
-            { action: 'FILE', params: { VERSION: '2', FILE_HASH, PART_INDEX: '1' } },
-        ]);
-        expect(actions[2]).toMatchObject({ action: 'BATCH', params: { VERSION: '0' } });
-        expect(actions[2].params.COMMAND).toContain(`;MESSAGE|2|BTC|${ADDRESS}|ciphertext`);
+        const data = pieceData(h);
+        expect(data.slice(0, 2)).toEqual([`FILE|2|${FILE_HASH}|0`, `FILE|2|${FILE_HASH}|1`]);
+        const manifest = JSON.parse(data[2]);
+        expect(manifest).toMatchObject({ action: 'BATCH', params: { VERSION: '0' } });
+        expect(manifest.params.COMMAND).toContain(`;MESSAGE|2|BTC|${ADDRESS}|ciphertext`);
     });
 
     it('keeps an ungated manifest as a bare FILE version 1', async () => {
         const h = harness();
         await publishMultipartFile(options(h));
-        expect(createdActions(h)[2]).toMatchObject({
-            action: 'FILE', params: { VERSION: '1', FILE_HASH },
-        });
+        expect(pieceData(h)[2]).toMatch(new RegExp(`^FILE\\|1\\|${FILE_HASH}\\|`));
+        expect(h.sdk.actions.createAction).not.toHaveBeenCalled();
         expect(h.sdk.messaging.eciesEncryptBytes).not.toHaveBeenCalled();
     });
 
@@ -225,7 +227,7 @@ describe('multipart publish manifest action selection', () => {
         }));
         await publishMultipartFile(options(h, { gate: { key: KEY }, manifestActionData }));
         expect(manifestActionData).toHaveBeenCalledOnce();
-        expect(createdActions(h)[2].params.COMMAND).toBe('caller');
+        expect(JSON.parse(pieceData(h)[2]).params.COMMAND).toBe('caller');
         expect(h.sdk.messaging.eciesEncryptBytes).not.toHaveBeenCalled();
     });
 });

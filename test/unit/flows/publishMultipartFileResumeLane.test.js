@@ -178,12 +178,11 @@ describe('saved multipart run configuration', () => {
         expect(standardPairBytes).toHaveBeenCalledTimes(3);
         expect(envelopePairVbytes).not.toHaveBeenCalled();
         expect(h.encoder.spendP2sh).toHaveBeenCalledTimes(1);
-        expect(h.sdk.actions.createAction).toHaveBeenCalledWith({
-            action: 'FILE',
-            params: expect.objectContaining({
-                NAME: 'saved.bin', TYPE: 'application/saved', TITLE: 'Saved', MEMO: 'Keep me',
-            }),
-        });
+        // The wallet serializes the FILE version 1 manifest itself (multipartFileAction.js).
+        const manifestData = h.encoder.createTx.mock.calls
+            .map(([opts]) => opts.data)
+            .find((data) => typeof data === 'string' && data.startsWith('FILE|1|'));
+        expect(manifestData).toContain('|saved.bin|application/saved|Saved|Keep me');
         expect(result.record).toMatchObject({ stage: 'complete', lane: 'standard' });
     });
 });
