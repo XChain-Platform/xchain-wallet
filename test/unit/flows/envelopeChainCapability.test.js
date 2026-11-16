@@ -46,7 +46,7 @@ describe('chainCarriesEnvelope', () => {
 });
 
 describe('live envelope availability', () => {
-    it('remains unavailable for a Litecoin descriptor with a software signer', () => {
-        expect(envelopeAvailableFor(litecoinDescriptors[0], { kind: 'software' })).toBe(false);
+    it('is available for a Litecoin descriptor with a software signer', () => {
+        expect(envelopeAvailableFor(litecoinDescriptors[0], { kind: 'software' })).toBe(true);
     });
 });
