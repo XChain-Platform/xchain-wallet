@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { bytesFromLatin1 } from './latin1Bytes.js';
+import { gatedMultipartRequest } from './fileMultipartGateKey.js';
 
 function requireText(value, field, caller) {
     if (typeof value !== 'string' || value.trim().length === 0) {
@@ -84,7 +85,7 @@ export async function handleFileMultipart(req, deps) {
 
     const { publishMultipartFile, vault, sdkRegistry, chainRegistry, signer, onBroadcastFailure } = deps;
     const sdk = sdkRegistry.get(req.chainId);
-    const request = { ...req, bytes };
+    const request = await gatedMultipartRequest({ ...req, bytes }, { sdk, vault });
     delete request.rawData;
     const result = await publishMultipartFile({
         ...request,
