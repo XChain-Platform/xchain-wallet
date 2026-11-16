@@ -59,7 +59,10 @@ function fakeVault() {
     };
     const pending = new Map();
     return {
-        settings: { get: async () => ({ blockedOrigins: [] }), put: async () => {} },
+        settings: {
+            get: async () => ({ activeNetwork: 'regtest', blockedOrigins: [] }),
+            put: async () => {},
+        },
         connectedSites: {
             findBy: async (field, value) => [site].filter((s) => s[field] === value),
             put: async () => site,

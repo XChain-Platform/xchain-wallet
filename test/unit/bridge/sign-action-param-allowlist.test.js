@@ -34,6 +34,7 @@ const CHAIN = 'bitcoin-regtest';
 
 const chainRegistry = {
     get: (id) => (id === CHAIN ? { id, coin: 'bitcoin', networkKind: 'regtest' } : null),
+    descriptorFor: (id) => (id === CHAIN ? { id, coin: 'bitcoin', networkKind: 'regtest' } : null),
     supportedChains: () => [{ id: CHAIN, coin: 'bitcoin', networkKind: 'regtest' }],
 };
 
@@ -53,7 +54,7 @@ function fakeSite() {
 function fakeVault(site) {
     const sites = new Map([[site.id, site]]);
     return {
-        settings: { get: async () => ({ blockedOrigins: [] }) },
+        settings: { get: async () => ({ activeNetwork: 'regtest', blockedOrigins: [] }) },
         connectedSites: {
             findBy: async (field, value) => [...sites.values()].filter((s) => s[field] === value),
             put: async (s) => { sites.set(s.id, s); return s; },

@@ -47,7 +47,9 @@ import {
     BRIDGE_SUPPORTED_VERSIONS,
     SIGN_IN_CHALLENGE_SEPARATOR,
     SIGN_IN_CHALLENGE_VERSION,
+    SIGN_IN_DEFAULT_EXPIRY_MS,
     formatSignInChallenge,
+    generateNonce,
     isBridgeVersionSupported,
 } from '@xchain-wallet/bridge-spec';
 import { rejectAllApprovals, UserRejectedError } from './Approvals.js';
@@ -632,6 +634,9 @@ export function registerBridgeHandlers(host, opts = {}) {
                 'signPsbt does not broadcast; pass false or omit broadcast and send the returned txHex',
             );
         }
+        // Signing is held to the active network; the refusals above keep
+        // their codes because none of them can sign.
+        await assertChainOnActiveNetwork(deps, req.chainId);
         const decision = await approvals.signPsbt({
             origin: req.origin,
             kind: 'signPsbt',
@@ -642,6 +647,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         if (!decision?.approved) throw new UserRejectedError('signPsbt');
         if (!decision.password) throw bridgeError('NO_PASSWORD', 'approvals must return password');
         await assertGrantStillHeld(req, deps, site);
+        await assertChainOnActiveNetwork(deps, req.chainId);
         const resolved = await resolveBridgeSigningPaths(deps, site, req.chainId, req.signingPaths);
         const signed = await signPsbtFlow({
             vault: deps.vault,
@@ -834,6 +840,10 @@ export function registerBridgeHandlers(host, opts = {}) {
                 throw bridgeError('INVALID_PARAMS', `${field} contains the reserved separator`);
             }
         }
+        // The expiry arrives from the page too. A non-positive or non-numeric
+        // window would be signed as an already-expired (or unparseable)
+        // challenge after the user typed a password, so refuse it up front.
+        const expiresInMs = signInExpiryMs(req.expiresInMs);
         // Offer only addresses this site's grant covers; with none, refuse before prompting.
         const candidates = await signInCandidates(deps, site, req);
         if (candidates.length === 0) {
@@ -865,13 +875,12 @@ export function registerBridgeHandlers(host, opts = {}) {
         await assertAddressPermitted(deps, site, chosen.chainId, decision.address);
         // Compose challenge per §43.6 format.
         const now = Date.now();
-        const expiresInMs = Math.min(
-            req.expiresInMs ?? 5 * 60 * 1000,
-            60 * 60 * 1000,
-        );
+        if (now + expiresInMs <= now) {
+            throw bridgeError('CHALLENGE_EXPIRED', 'sign-in window is too short to be valid');
+        }
         const nonce = typeof req.nonce === 'string' && req.nonce.length > 0
             ? req.nonce
-            : randomNonce();
+            : generateNonce();
         // req.origin is stamped by the content script (location.origin),
         // never by the page. requireSite above has already asserted it.
         // Embedding it in the signed bytes binds the sign-in to the site
@@ -965,6 +974,11 @@ async function executeSignAction(req, deps, ctx) {
     }
     const permission = site.permissions.canSignAction?.[actionName] ?? 'ask';
     if (permission === 'never') throw bridgeError('ACTION_REJECTED_BY_POLICY', actionName);
+    // Signing is held to the wallet's active network even when the site's
+    // chain grant is empty (all chains). Checked after the two refusals above,
+    // which never sign and keep their published results, and before any vault
+    // lookup, indexer read, auto-sign or prompt.
+    await assertChainOnActiveNetwork(deps, req.chainId);
 
     // bridge-spec publishes the spending address as `fromAddress` (SEND and
     // SWEEP alike); the handler read `params.from`, a name no published shape
@@ -1082,6 +1096,7 @@ async function executeSignAction(req, deps, ctx) {
     if (!decision?.approved) throw new UserRejectedError('signAction');
     if (!decision.password) throw bridgeError('NO_PASSWORD', 'approvals must return password');
     await assertGrantStillHeld(req, deps, site);
+    await assertChainOnActiveNetwork(deps, req.chainId);
 
     const finish = async (submitted) => {
         const success = signActionSuccess(req.chainId, submitted);
@@ -1160,6 +1175,7 @@ async function executeSignAction(req, deps, ctx) {
             chainId: req.chainId,
             trackPendingTx: true,
             verifyBuiltTx: true,
+            beforeBroadcast: () => assertChainOnActiveNetwork(deps, req.chainId),
         });
         return finish(submitted);
     }
@@ -1178,6 +1194,7 @@ async function executeSignAction(req, deps, ctx) {
             trackPendingTx: true,
             verifyBuiltTx: true,
             chainId: req.chainId,
+            beforeBroadcast: () => assertChainOnActiveNetwork(deps, req.chainId),
         });
         return finish(submitted);
     }
@@ -1860,12 +1877,16 @@ async function invokeSignMessage(deps, req) {
     });
 }
 
-function randomNonce() {
-    const bytes = new Uint8Array(16);
-    crypto.getRandomValues(bytes);
-    let hex = '';
-    for (const b of bytes) hex += b.toString(16).padStart(2, '0');
-    return hex;
+const SIGN_IN_MAX_EXPIRY_MS = 60 * 60 * 1000;
+
+// The sign-in window from the page: absent means the published default, a
+// finite positive number is capped at one hour, anything else is refused.
+function signInExpiryMs(raw) {
+    if (raw === undefined || raw === null) return SIGN_IN_DEFAULT_EXPIRY_MS;
+    if (typeof raw !== 'number' || !Number.isFinite(raw) || raw <= 0) {
+        throw bridgeError('INVALID_PARAMS', 'expiresInMs must be a positive number');
+    }
+    return Math.min(raw, SIGN_IN_MAX_EXPIRY_MS);
 }
 
 // A refusal raised by a bridge handler.

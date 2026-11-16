@@ -99,7 +99,8 @@ describe('sweepToken wire params', () => {
     it('encodes SWEEP v0 params with protocol defaults and forwards prebuiltPsbt', async () => {
         const vault = makeVault();
         const prebuilt = { psbtHex: 'dead', encoding: 'op_return', actionString: 'SWEEP|0|x', version: 0 };
-        await sweepToken(sweepOpts(vault, { memo: 'bye', prebuiltPsbt: prebuilt }));
+        const beforeBroadcast = vi.fn();
+        await sweepToken(sweepOpts(vault, { memo: 'bye', prebuiltPsbt: prebuilt, beforeBroadcast }));
         const call = vi.mocked(submitAction).mock.calls[0][0];
         expect(call.actionData.action).toBe('SWEEP');
         expect(call.actionData.params).toEqual({
@@ -112,6 +113,7 @@ describe('sweepToken wire params', () => {
             MEMO: 'bye',
         });
         expect(call.prebuiltPsbt).toBe(prebuilt);
+        expect(call.beforeBroadcast).toBe(beforeBroadcast);
     });
 
     it('refuses an all-flags-off no-op sweep', async () => {

@@ -24,6 +24,7 @@ const ORIGIN = 'https://composer.example';
 
 const chainRegistry = {
     get: (id) => (id === 'bitcoin-regtest' ? { id, coin: 'bitcoin', networkKind: 'regtest' } : null),
+    descriptorFor: (id) => (id === 'bitcoin-regtest' ? { id, coin: 'bitcoin', networkKind: 'regtest' } : null),
     supportedChains: () => [{ id: 'bitcoin-regtest', coin: 'bitcoin', networkKind: 'regtest' }],
 };
 
@@ -46,7 +47,7 @@ function fakeSite(overrides = {}) {
 function fakeVault(site) {
     const sites = new Map([[site.id, site]]);
     return {
-        settings: { get: async () => ({ blockedOrigins: [] }) },
+        settings: { get: async () => ({ activeNetwork: 'regtest', blockedOrigins: [] }) },
         connectedSites: {
             findBy: async (field, value) => [...sites.values()].filter((s) => s[field] === value),
             put: async (s) => { sites.set(s.id, s); return s; },
@@ -131,6 +132,41 @@ describe('bridge.parallel: per-action results carry their own ok flag', () => {
         expect(calls.signAction).toHaveLength(1);
         expect(calls.signAction[0].action).toBe('SEND');
         expect(calls.signAction[0].chainId).toBe('bitcoin-regtest');
+    });
+
+    it('folds an action on an inactive network into CHAIN_NOT_SUPPORTED without a prompt', async () => {
+        const offNetwork = {
+            ...vault,
+            settings: { get: async () => ({ activeNetwork: 'mainnet', blockedOrigins: [] }) },
+        };
+        const { approvals, calls } = fakeApprovals({ signAction: { approved: true, password: 'pw' } });
+        const resp = await runParallel(offNetwork, approvals, [
+            { chainId: 'bitcoin-regtest', action: 'ISSUE', params: {} },
+            { chainId: 'bitcoin-regtest', action: 'SEND', params: { from: 'x' } },
+        ]);
+
+        expect(resp.ok).toBe(true);
+        expect(resp.result[0].error).toBe('UNSUPPORTED_ACTION');
+        expect(resp.result[1].ok).toBe(false);
+        expect(resp.result[1].error).toBe('CHAIN_NOT_SUPPORTED');
+        expect(resp.result[1].message).toMatch(/CHAIN_NOT_PERMITTED/);
+        expect(calls.signAction).toHaveLength(0);
+    });
+
+    it('keeps the never-policy refusal for an action on an inactive network', async () => {
+        const neverSite = fakeSite({ canSignAction: { SEND: 'never' } });
+        const offNetwork = {
+            ...fakeVault(neverSite),
+            settings: { get: async () => ({ activeNetwork: 'mainnet', blockedOrigins: [] }) },
+        };
+        const { approvals, calls } = fakeApprovals({ signAction: { approved: true, password: 'pw' } });
+        const resp = await runParallel(offNetwork, approvals, [
+            { chainId: 'bitcoin-regtest', action: 'SEND', params: { from: 'x' } },
+        ]);
+
+        expect(resp.result[0].ok).toBe(false);
+        expect(resp.result[0].message).toMatch(/ACTION_REJECTED_BY_POLICY/);
+        expect(calls.signAction).toHaveLength(0);
     });
 
     it('an action never override the approved chainId is enforced in one shared code path', () => {
