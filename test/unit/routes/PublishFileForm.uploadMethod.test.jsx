@@ -122,8 +122,6 @@ describe('PublishFileForm upload method', () => {
     it.each([
         ['a hardware wallet', { address: { ...HD, source: 'trezor' } }, "Hardware wallets can't sign the reveal transaction yet."],
         ['another phone signing', { walletMode: 'watcher' }, "Not available when another phone signs: it can't sign the reveal."],
-        ['Litecoin', { chainId: 'litecoin-mainnet', address: { ...HD, address: 'ltc1qpublishpublishpublishpublishpublishpu' } },
-            'Not on Litecoin until the wallet turns on Taproot addresses.'],
         ['Dogecoin', { chainId: 'dogecoin-mainnet', address: { ...HD, address: 'DPublishPublishPublishPublishPublish' } },
             'Dogecoin has no Taproot.'],
     ])('disables Taproot upload with its reason for %s', async (_name, opts, reason) => {

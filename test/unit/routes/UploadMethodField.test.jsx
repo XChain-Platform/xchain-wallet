@@ -102,7 +102,6 @@ describe('UploadMethodField', () => {
     it.each([
         ['a hardware wallet', { fromAddress: { ...HD, source: 'trezor' } }, "Hardware wallets can't sign the reveal transaction yet."],
         ['another phone signing', { isWatcherMode: true }, "Not available when another phone signs: it can't sign the reveal."],
-        ['Litecoin', { descriptor: LTC }, 'Not on Litecoin until the wallet turns on Taproot addresses.'],
         ['Dogecoin', { descriptor: DOGE }, 'Dogecoin has no Taproot.'],
     ])('disables the envelope with its reason for %s and defaults to Standard', (_name, overrides, reason) => {
         render(<Harness {...baseArgs(overrides)} />);

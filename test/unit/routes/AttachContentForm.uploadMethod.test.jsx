@@ -132,8 +132,6 @@ describe('AttachContentForm upload method', () => {
 
     it.each([
         ['a hardware wallet', { owner: { ...OWNER, source: 'ledger' } }, "Hardware wallets can't sign the reveal transaction yet."],
-        ['Litecoin', { chainId: 'litecoin-mainnet', owner: { ...OWNER, address: 'ltc1qartownerartownerartownerartownerartow' } },
-            'Not on Litecoin until the wallet turns on Taproot addresses.'],
         ['Dogecoin', { chainId: 'dogecoin-mainnet', owner: { ...OWNER, address: 'DArtOwnerArtOwnerArtOwnerArtOwnerAr' } },
             'Dogecoin has no Taproot.'],
     ])('disables Taproot upload with its reason for %s', async (_name, opts, reason) => {

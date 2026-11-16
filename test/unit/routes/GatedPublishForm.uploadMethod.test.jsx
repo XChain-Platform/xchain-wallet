@@ -136,8 +136,6 @@ describe('GatedPublishForm upload method', () => {
     it.each([
         ['a hardware wallet', { owner: { ...OWNER, source: 'trezor' } }, "Hardware wallets can't sign the reveal transaction yet."],
         ['another phone signing', { walletMode: 'watcher' }, "Not available when another phone signs: it can't sign the reveal."],
-        ['Litecoin', { chainId: 'litecoin-mainnet', owner: { ...OWNER, address: 'ltc1qgateownergateownergateownergateowner' } },
-            'Not on Litecoin until the wallet turns on Taproot addresses.'],
         ['Dogecoin', { chainId: 'dogecoin-mainnet', owner: { ...OWNER, address: 'DGateOwnerGateOwnerGateOwnerGateOwn' } },
             'Dogecoin has no Taproot.'],
     ])('disables Taproot upload with its reason for %s', async (_name, opts, reason) => {

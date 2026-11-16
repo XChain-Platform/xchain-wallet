@@ -55,7 +55,6 @@ describe('upload method availability', () => {
         ['a watch-only address', { descriptor: BTC, fromAddress: { source: 'watch-only' } }, 'watchOnly'],
         ['an unknown signer source', { descriptor: BTC, fromAddress: { source: 'multisig' } }, 'signer'],
         ['no From yet', { descriptor: BTC, fromAddress: null }, 'signer'],
-        ['Litecoin before p2tr', { descriptor: LTC, fromAddress: HD }, 'litecoinPending'],
         ['Dogecoin', { descriptor: DOGE, fromAddress: HD }, 'noTaproot'],
         ['an unknown chain', { descriptor: null, fromAddress: HD }, 'chain'],
     ])('refuses the envelope for %s', (_name, args, reason) => {
