@@ -106,11 +106,22 @@ describe('multipart funding quotes', () => {
             parts: 26,
             transactions: 55,
             outputs: expect.arrayContaining([expect.any(Number)]),
-            fundingTotal: 25_036_234,
-            fee: 25_006_750,
+            fundingTotal: 25_037_076,
+            fee: 25_007_592,
         });
         expect(quote.outputs).toHaveLength(27);
         expect(quote.outputs.reduce((sum, value) => sum + value, 0)).toBe(quote.fundingTotal);
+    });
+
+    it('floors a small envelope piece at the encoder dust floors, plus the Litecoin pad', () => {
+        const plan = { parts: [{ bytes: new Uint8Array(10) }], totalParts: 1 };
+        const sizes = { envelopePairVbytes: () => 434, standardPairBytes: () => { throw new Error('wrong lane'); } };
+        // The rail refusals: bitcoin needed 1,638 at rate 1, litecoin 21,840 at rate 1.
+        const bitcoin = quoteMultipartFile(plan, 1, { type: 'envelope', outputFloor: 546 }, sizes);
+        expect(bitcoin.outputs).toEqual([2_184, 2_184]);
+        const litecoin = quoteMultipartFile(plan, 1, { type: 'envelope', outputFloor: 5_460, revealPad: true }, sizes);
+        expect(litecoin.outputs).toEqual([27_300, 27_300]);
+        expect(litecoin.outputs[0]).toBeGreaterThanOrEqual(21_840);
     });
 
     it('adds one output floor per Standard chunk plus the reveal output', () => {

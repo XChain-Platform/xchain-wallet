@@ -256,7 +256,8 @@ function quoteFor(opts, plan, rate, lane) {
     const descriptor = opts.chainRegistry?.get?.(opts.chainId);
     const outputFloor = opts.outputFloor
         ?? (descriptor?.coin === 'dogecoin' ? 1_000_000 : descriptor?.dustThreshold);
-    return quoteMultipartFile(plan, rate, { type: lane, outputFloor }, opts.sizes || {});
+    const revealPad = descriptor?.coin === 'litecoin';
+    return quoteMultipartFile(plan, rate, { type: lane, outputFloor, revealPad }, opts.sizes || {});
 }
 
 async function waitForFunding(ctx, txid) {

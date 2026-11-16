@@ -59,7 +59,7 @@ function harness({ lane = 'envelope', buildMode = 'one_call', multipart = 'compl
     let signedNumber = 0;
     let actionIndex = 40;
     const outputs = [0, 1, 2].map((vout) => ({
-        vout, address: SOURCE.address, value: 210, scriptPubKey: `script-${vout}`,
+        vout, address: SOURCE.address, value: 400, scriptPubKey: `script-${vout}`,
     }));
     const encoder = {
         createTx: vi.fn(async (opts) => {
@@ -130,7 +130,7 @@ function resumedRecord() {
         originalSha256: originalDigest(), fileHash: HASH, meta: {}, gate: null,
         compression: '', totalParts: 2, totalBytes: 4, partDigests: DIGESTS,
         fundingOutputs: [0, 1, 2].map((vout) => ({
-            txid: txid(90), vout, value: 210, scriptPubKey: `script-${vout}`,
+            txid: txid(90), vout, value: 400, scriptPubKey: `script-${vout}`,
         })),
         linkTarget: null,
     });
@@ -150,7 +150,7 @@ describe('multipart publish funding and envelope delivery', () => {
         const result = await publishMultipartFile(options(h));
         expect(result.record.stage).toBe('complete');
         expect(result.multipart.status).toBe('complete');
-        expect(result.quote.outputs).toEqual([210, 210, 210]);
+        expect(result.quote.outputs).toEqual([400, 400, 400]);
         expect(h.broadcasts).toHaveLength(7);
         expect(h.events.indexOf('put:funding:empty')).toBeLessThan(h.events.indexOf('create:funding'));
         const firstPieceBuild = h.events.indexOf('create:piece');

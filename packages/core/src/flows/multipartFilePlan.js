@@ -202,7 +202,7 @@ function quoteLane(lane, sizes) {
     if (!Number.isSafeInteger(outputFloor) || outputFloor <= 0) {
         throw new TypeError('quoteMultipartFile: lane.outputFloor must be a positive integer');
     }
-    return { type, outputFloor };
+    return { type, outputFloor, revealPad: lane?.revealPad === true };
 }
 
 function pieceLengths(plan) {
@@ -230,10 +230,14 @@ export function quoteMultipartFile(plan, rate, lane, sizes = {}) {
         if (!Number.isFinite(pairBytes) || pairBytes < 0) {
             throw new TypeError('quoteMultipartFile: pair-size estimator returned an invalid size');
         }
-        const pieceFee = Math.ceil(1.25 * feeRate * pairBytes);
+        // The encoder floors an envelope commit fee and its reveal fee at the dust
+        // floor each, and Litecoin adds a stripped-size pad output to the reveal.
+        const pairFee = Math.ceil(1.25 * feeRate * pairBytes);
+        const pieceFee = selected.type === 'standard'
+            ? pairFee : Math.max(pairFee, 2 * selected.outputFloor);
         const floorCount = selected.type === 'standard'
             ? Math.ceil(partBytes / 476) + 1
-            : 2;
+            : 2 + (selected.revealPad ? 1 : 0);
         fee += pieceFee;
         return pieceFee + floorCount * selected.outputFloor;
     });
