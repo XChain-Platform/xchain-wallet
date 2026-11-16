@@ -1626,7 +1626,9 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 fileInput={multipartPanel.fileInput}
                 resumeReason={multipartPanel.resumeReason}
                 error={multipartPanel.error}
-                listError={multipartPanel.listError}
+                // The page status already names a failed issuer check or form error;
+                // a resume-list failure under it would stack a second page message.
+                listError={formError || issuerEligibility.error ? null : multipartPanel.listError}
                 fallbackMessage="The multi-part upload could not continue."
             />
             <div className={inputStyles.field}>

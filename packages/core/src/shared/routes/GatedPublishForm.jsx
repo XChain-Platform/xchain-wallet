@@ -965,6 +965,9 @@ export function GatedPublishForm({
             <UploadMethodField upload={upload} disabled={ownerMissing} />
             <MultipartUploadSection
                 {...multipartUpload}
+                // The page status already names a failed issuer check or form error;
+                // a resume-list failure under it would stack a second page message.
+                listError={formError || ownerMissing ? null : multipartUpload.listError}
                 fallbackMessage="Could not continue the multipart upload."
             />
             <Input
