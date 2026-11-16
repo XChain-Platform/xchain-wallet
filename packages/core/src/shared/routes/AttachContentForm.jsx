@@ -29,6 +29,7 @@ import {
     estimateNativeSendFeeTiers,
     customFeeEstimate,
     displayRateToSettingsCustom,
+    displayRateToPerByte,
 } from '../../flows/feeEstimate.js';
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
@@ -43,7 +44,21 @@ import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { imagePreviewDataUrl, publishFileType } from '../utils/publishingFile.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { UploadMethodField, UploadMethodReviewRows, useUploadMethod } from '../components/UploadMethodField.jsx';
-import { publicFileCompiledBytes } from '../../flows/uploadMethod.js';
+import {
+    publicFileCompiledBytes,
+    standardUnavailableReason,
+    taprootUnavailableReason,
+    uploadMethodSizes,
+} from '../../flows/uploadMethod.js';
+import { MultipartUploadSection } from '../components/MultipartUploadSection.jsx';
+import { useMultipartArtworkLink } from '../hooks/useMultipartArtworkLink.js';
+import { useMultipartUploadMethod } from '../hooks/useMultipartUploadMethod.js';
+import { useMultipartUploadPanel } from '../hooks/useMultipartUploadPanel.js';
+import { fileUploadStart } from '../../flows/fileUploadStart.js';
+import { multipartQuoteLanes } from '../../flows/multipartQuoteLanes.js';
+import { multipartResumeRequestBuilder } from '../../flows/multipartResumeRequest.js';
+import { multipartSupportForMethod } from '../../flows/multipartMethodSupport.js';
+import { MULTIPART_FILE_MAX_BYTES } from '../../flows/fileSizeLimits.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -56,6 +71,90 @@ const MAX_DROP_BYTES = 32 * 1024;
 /** The compiled action-plus-file push of the artwork FILE leg, for the Upload method fees. */
 function artworkUploadBytes(file, { title, memo }) {
     return publicFileCompiledBytes({ name: file.name, type: file.type, title, memo }, file.bytes.length);
+}
+
+function multipartSource(address) {
+    return {
+        address: address?.address,
+        publicKey: address?.publicKey,
+        derivationPath: address?.derivationPath,
+        addressId: address?.id,
+        source: address?.source,
+        signerId: address?.signerId,
+    };
+}
+
+function methodSupport(method, descriptor, address, isWatcherMode) {
+    try {
+        return multipartSupportForMethod({
+            method,
+            descriptor,
+            addressRecord: address,
+            addressType: address?.addressType || descriptor?.defaultAddressType,
+            isWatcherMode,
+        });
+    } catch {
+        return { supported: false, reason: 'signer' };
+    }
+}
+
+function quoteLanes(descriptor) {
+    try {
+        return multipartQuoteLanes({ descriptor });
+    } catch {
+        return null;
+    }
+}
+
+function quoteSizes(descriptor) {
+    return {
+        envelopePairVbytes: (bytes) => uploadMethodSizes({ compiledBytes: bytes, descriptor }).taproot,
+        standardPairBytes: (bytes) => uploadMethodSizes({ compiledBytes: bytes, descriptor }).standard,
+    };
+}
+
+function artworkDraftError({
+    fromAddress, issuerEligibility, tick, fileMeta, fileParams, title, memo,
+    setAsTokenInfo, previewUrl, attachmentLimitFor,
+}) {
+    if (!fromAddress) return 'No signing address available on this network.';
+    if (issuerEligibility.pending) return `Wait for the wallet to verify the current owner of ${tick}.`;
+    if (issuerEligibility.error) return issuerEligibility.error;
+    if (!fileMeta) return 'Pick a file first.';
+    if (!fileParams?.NAME) return 'The file name cannot be empty. Rename the file and choose it again.';
+    if (!fileParams.TYPE) return 'The file content type cannot be empty. Choose the file again.';
+    if ((title && /[|;]/.test(title)) || (memo && /[|;]/.test(memo))
+        || /[|;]/.test(fileMeta.name)) {
+        return 'File name, title, and memo cannot contain | or ; characters.';
+    }
+    const unsafeMetadata = actionTextSafetyError(fileMeta.name, 'File name')
+        || actionTextSafetyError(title, 'Title');
+    if (unsafeMetadata) return unsafeMetadata;
+    if (fileParams.TITLE.length > MAX_TITLE_LENGTH) {
+        return `Title cannot be longer than ${MAX_TITLE_LENGTH} characters.`;
+    }
+    const memoTooLong = memoLengthError(fileParams.MEMO);
+    if (memoTooLong) return memoTooLong;
+    if (setAsTokenInfo && !previewUrl) {
+        return 'Choose an image file before making it the token picture.';
+    }
+    const cap = attachmentLimitFor(fileMeta.name, fileMeta.type);
+    if (fileMeta.bytes.length > cap) {
+        return `With this title and memo the on-chain ceiling is ${cap.toLocaleString()} bytes and the file is ${fileMeta.bytes.length.toLocaleString()} bytes. Shorten the title or memo.`;
+    }
+    return null;
+}
+
+function artworkSourceError(fromAddress, descriptor) {
+    if (!fromAddress.id || typeof fromAddress.id !== 'string') {
+        return 'The selected signing address is missing its wallet ID. Choose another address.';
+    }
+    if (!descriptor?.coin || !descriptor?.networkKind || !isValidAddressForChain(
+        fromAddress.address,
+        descriptor.coin,
+        descriptor.networkKind,
+    )) return 'The selected signing address is not valid for this network.';
+    return null;
 }
 const MAX_TITLE_LENGTH = 100;
 const POSITIVE_ACTION_INDEX = /^[1-9]\d*$/;
@@ -183,6 +282,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     const [queuedLeg, setQueuedLeg] = useState(/** @type {any | null} */ (null));
     const [fileTxid, setFileTxid] = useState(/** @type {string | null} */ (null));
     const [fileActionIndex, setFileActionIndex] = useState(/** @type {string | null} */ (null));
+    const [multipartRetry, setMultipartRetry] = useState(0);
     const [linkTxid, setLinkTxid] = useState(/** @type {string | null} */ (null));
     const [waitElapsed, setWaitElapsed] = useState(0);
     const [indexLookupError, setIndexLookupError] = useState(/** @type {string | null} */ (null));
@@ -365,6 +465,43 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
     const { isWatcherMode } = useWalletMode();
+    const uploadMeta = useMemo(() => ({
+        name: fileMeta?.name || 'file.bin',
+        type: fileMeta?.type || 'application/octet-stream',
+        title,
+        memo,
+    }), [fileMeta, title, memo]);
+    const singleCaps = useMemo(() => ({
+        taproot: flowsLib.maxPublicFileBytes(uploadMeta, { encoding: 'TAPROOT' }),
+        standard: flowsLib.maxPublicFileBytes(uploadMeta, {}),
+    }), [uploadMeta]);
+    const singleReasons = {
+        taproot: taprootUnavailableReason({ descriptor, fromAddress, isWatcherMode }),
+        standard: standardUnavailableReason({
+            fileBytes: fileMeta?.bytes?.length ?? null,
+            standardCap: singleCaps.standard,
+        }),
+    };
+    const singleFits = {
+        taproot: !fileMeta || fileMeta.bytes.length <= singleCaps.taproot,
+        standard: !fileMeta || fileMeta.bytes.length <= singleCaps.standard,
+    };
+    const multipartRate = feeEstimate?.unit
+        ? displayRateToPerByte(feeEstimate.unit, Number(feeEstimate.rateValue)) || null
+        : null;
+    const multipartMethod = useMultipartUploadMethod({
+        bytes: fileMeta?.bytes ?? null,
+        meta: uploadMeta,
+        rate: multipartRate,
+        descriptor,
+        addressRecord: fromAddress,
+        addressType: fromAddress?.addressType || descriptor?.defaultAddressType,
+        isWatcherMode,
+        singleReasons,
+        singleFits,
+        lanes: useMemo(() => quoteLanes(descriptor), [descriptor]),
+        sizes: useMemo(() => quoteSizes(descriptor), [descriptor]),
+    });
 
     // The Upload method Publish file offers (flows/uploadMethod.js): Taproot
     // envelope by default where a signer can sign the reveal (never hardware)
@@ -381,11 +518,65 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         file: fileMeta,
         metadata: { title, memo },
         compiledBytesFor: artworkUploadBytes,
-        standardCap: fileMeta
-            ? flowsLib.maxPublicFileBytes({ name: fileMeta.name, type: fileMeta.type, title, memo }, {})
-            : null,
+        standardCap: fileMeta ? singleCaps.standard : null,
+        multipart: multipartMethod,
     });
     const envelopePicked = upload.method === 'taproot';
+    const selectedSupport = useMemo(() => methodSupport(
+        upload.method, descriptor, fromAddress, isWatcherMode,
+    ), [upload.method, descriptor, fromAddress, isWatcherMode]);
+    const uploadFrom = useMemo(() => multipartSource(fromAddress), [fromAddress]);
+    const selectedSingleCap = singleCaps[upload.method];
+    const buildResumeRequest = useMemo(() => multipartResumeRequestBuilder({
+        walletId,
+        chainId,
+        from: uploadFrom,
+        singleTransactionCap: selectedSingleCap,
+        support: selectedSupport,
+        rate: multipartRate || undefined,
+    }), [walletId, chainId, uploadFrom, selectedSingleCap, selectedSupport, multipartRate]);
+    const multipartPanel = useMultipartUploadPanel({
+        messaging,
+        walletId,
+        chainId,
+        sourceAddress: fromAddress?.address || '',
+        gated: false,
+        buildResumeRequest,
+    });
+    const multipartExplorer = useMemo(() => ({
+        getTransaction: (txid) => messaging.getActionByTxid({ chainId, txid }),
+        getAction: (actionIndex) => messaging.getActionByIndex({ chainId, actionIndex }),
+    }), [chainId, messaging]);
+    const multipartLink = useMultipartArtworkLink({
+        explorer: multipartExplorer,
+        tick,
+        coinTicker,
+        maxAttempts: 1,
+        waitMs: 0,
+    });
+
+    useEffect(() => {
+        const result = multipartPanel.result;
+        if (!result?.txid) return undefined;
+        let active = true;
+        multipartLink.check({ txid: result.txid, linkTarget: result.upload?.linkTarget })
+            .then((outcome) => {
+                if (!active || !outcome?.ok) return;
+                setFileTxid(result.txid);
+                setFileActionIndex(outcome.fields.coin1ActionIndex);
+                setIssueActionIndex(outcome.fields.coin2ActionIndex);
+                setIndexLookupError(null);
+                setPassword('');
+                setStage('review-link');
+            });
+        return () => { active = false; };
+    }, [multipartPanel.result, multipartLink.check, multipartRetry]);
+
+    useEffect(() => {
+        if (!multipartPanel.result?.txid || multipartLink.notice?.retryable !== true) return undefined;
+        const timer = setTimeout(() => setMultipartRetry((value) => value + 1), POLL_INTERVAL_MS);
+        return () => clearTimeout(timer);
+    }, [multipartLink.notice, multipartPanel.result]);
 
     // §5.6: all four legs sign through the shared confirm lane. The ISSUE
     // leg is the sharpest case, token administration signed against a
@@ -505,9 +696,15 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         ),
         [title, memo, envelopePicked],
     );
+    const attachmentLimitFor = useCallback(
+        (name, type) => selectedSupport.supported
+            ? Math.max(attachmentCapFor(name, type), MULTIPART_FILE_MAX_BYTES)
+            : attachmentCapFor(name, type),
+        [attachmentCapFor, selectedSupport],
+    );
     // The legacy ceiling is small enough that a URL is the honest way to
     // carry larger artwork; at the envelope ceiling that advice would mislead.
-    const largerArtworkAdvice = envelopePicked
+    const largerArtworkAdvice = selectedSupport.supported
         ? ''
         : ' For larger artwork, put an image URL in the token\'s description instead.';
 
@@ -523,7 +720,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             setFormError('That file is empty.');
             return;
         }
-        const cap = attachmentCapFor(file.name || 'file', type);
+        const cap = attachmentLimitFor(file.name || 'file', type);
         if (bytes.length > cap) {
             setFormError(
                 `That file is ${bytes.length.toLocaleString()} bytes; with this title and memo the on-chain ceiling is ${cap.toLocaleString()} bytes.${largerArtworkAdvice}`,
@@ -537,7 +734,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             type,
             bytes,
         });
-    }, [attachmentCapFor, largerArtworkAdvice]);
+    }, [attachmentLimitFor, largerArtworkAdvice]);
 
     const handleFilePick = useCallback((event) => {
         const file = event.target?.files?.[0];
@@ -572,9 +769,11 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         accept: ARTWORK_ACCEPT,
         // The envelope ceiling is far above the legacy one, so a drop that
         // fits it still reaches the exact metadata-aware check.
-        maxBytes: envelopePicked
-            ? attachmentCapFor('file.bin', 'application/octet-stream') + MAX_DROP_BYTES
-            : MAX_DROP_BYTES,
+        maxBytes: selectedSupport.supported
+            ? MULTIPART_FILE_MAX_BYTES
+            : (envelopePicked
+                ? attachmentCapFor('file.bin', 'application/octet-stream') + MAX_DROP_BYTES
+                : MAX_DROP_BYTES),
         onError: (msg) => { setFileMeta(null); setFormError(msg); },
         onFile: ({ file, content }) => {
             if (content instanceof ArrayBuffer) acceptFile(file, content);
@@ -585,72 +784,13 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         event.preventDefault();
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
         if (feeStop) { setFormError(feeStop.formError); return; }
-        if (!fromAddress) {
-            setFormError('No signing address available on this network.');
-            return;
-        }
-        if (issuerEligibility.pending) {
-            setFormError(`Wait for the wallet to verify the current owner of ${tick}.`);
-            return;
-        }
-        if (issuerEligibility.error) {
-            setFormError(issuerEligibility.error);
-            return;
-        }
-        if (!fileMeta) {
-            setFormError('Pick a file first.');
-            return;
-        }
-        if (!fileParams?.NAME) {
-            setFormError('The file name cannot be empty. Rename the file and choose it again.');
-            return;
-        }
-        if (!fileParams.TYPE) {
-            setFormError('The file content type cannot be empty. Choose the file again.');
-            return;
-        }
-        if ((title && /[|;]/.test(title)) || (memo && /[|;]/.test(memo)) || /[|;]/.test(fileMeta.name)) {
-            setFormError('File name, title, and memo cannot contain | or ; characters.');
-            return;
-        }
-        const unsafeMetadata = actionTextSafetyError(fileMeta.name, 'File name')
-            || actionTextSafetyError(title, 'Title');
-        if (unsafeMetadata) {
-            setFormError(unsafeMetadata);
-            return;
-        }
-        if (fileParams.TITLE.length > MAX_TITLE_LENGTH) {
-            setFormError(`Title cannot be longer than ${MAX_TITLE_LENGTH} characters.`);
-            return;
-        }
-        const memoTooLong = memoLengthError(fileParams.MEMO);
-        if (memoTooLong) {
-            setFormError(memoTooLong);
-            return;
-        }
-        if (setAsTokenInfo && !previewUrl) {
-            setFormError('Choose an image file before making it the token picture.');
-            return;
-        }
-        const cap = attachmentCapFor(fileMeta.name, fileMeta.type);
-        if (fileMeta.bytes.length > cap) {
-            setFormError(
-                `With this title and memo the on-chain ceiling is ${cap.toLocaleString()} bytes and the file is ${fileMeta.bytes.length.toLocaleString()} bytes. Shorten the title or memo.`,
-            );
-            return;
-        }
-        if (!fromAddress.id || typeof fromAddress.id !== 'string') {
-            setFormError('The selected signing address is missing its wallet ID. Choose another address.');
-            return;
-        }
-        if (!descriptor?.coin || !descriptor?.networkKind || !isValidAddressForChain(
-            fromAddress.address,
-            descriptor.coin,
-            descriptor.networkKind,
-        )) {
-            setFormError('The selected signing address is not valid for this network.');
-            return;
-        }
+        const draftError = artworkDraftError({
+            fromAddress, issuerEligibility, tick, fileMeta, fileParams, title, memo,
+            setAsTokenInfo, previewUrl, attachmentLimitFor,
+        });
+        if (draftError) { setFormError(draftError); return; }
+        const sourceError = artworkSourceError(fromAddress, descriptor);
+        if (sourceError) { setFormError(sourceError); return; }
         setGenesisRefreshing(true);
         const latestGenesis = await fetchGenesisActionIndex(messaging, chainId, tick);
         setGenesisRefreshing(false);
@@ -663,11 +803,50 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         setStage('review-file');
     }
 
+    function pickedFileUpload() {
+        return fileUploadStart({
+            walletId,
+            chainId,
+            from: uploadFrom,
+            bytes: fileMeta.bytes,
+            meta: {
+                name: fileMeta.name,
+                type: fileMeta.type,
+                title: title.trim(),
+                memo: memo.trim(),
+            },
+            singleTransactionCap: selectedSingleCap,
+            support: selectedSupport,
+            linkTarget: { tick, issueActionIndex },
+            rate: multipartRate || undefined,
+        });
+    }
+
+    async function runMultipartUpload(planned) {
+        setIndexLookupError(null);
+        setStage('wait-index');
+        try {
+            await multipartPanel.start(planned.request, planned.match);
+        } catch {
+            return false;
+        }
+        return true;
+    }
+
     async function handleSignFile(event) {
         event.preventDefault();
-        if (submitting || !fileMeta || !fileParams) return;
+        if (submitting || multipartPanel.running || !fileMeta || !fileParams) return;
         if (!hw && (!signerReady && password.length === 0)) return;
         if (hw && hwStatus !== 'available') return;
+        const planned = pickedFileUpload();
+        if (planned.path === 'multipart') {
+            await runMultipartUpload(planned);
+            return;
+        }
+        if (planned.path !== 'single') {
+            setSubmitError('This file does not fit the selected upload method. Choose another method or a smaller file.');
+            return;
+        }
         const rawData = latin1Of(fileMeta.bytes);
         await runLegThroughConfirm({
             // The same params flows/fileAction.js builds, so the previewed
@@ -961,6 +1140,30 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     if (stage === 'wait-index') {
         const minutes = Math.floor(waitElapsed / 60);
         const slow = minutes >= 5;
+        const multipartNotice = multipartLink.notice?.message
+            || (multipartLink.error ? 'The file\'s completed manifest could not be verified. Try again in a moment.' : null);
+        if (!fileTxid) {
+            return wrap(
+                <>
+                    <h2 className={styles.successTitle}>File is on its way</h2>
+                    <MultipartUploadSection
+                        panelProps={multipartPanel.panelProps}
+                        fileInput={multipartPanel.fileInput}
+                        resumeReason={multipartPanel.resumeReason}
+                        error={multipartPanel.error}
+                        listError={multipartPanel.listError}
+                        fallbackMessage="The multi-part upload could not continue."
+                    />
+                    {multipartLink.checking ? (
+                        <p className={styles.hint}>Verifying that every file part is complete before the link review.</p>
+                    ) : null}
+                    {multipartNotice ? <StatusMessage variant="error">{multipartNotice}</StatusMessage> : null}
+                    <div className={styles.actions}>
+                        <Button variant="ghost" icon={<Icon.XIcon />} onClick={onBack}>Close (keep waiting)</Button>
+                    </div>
+                </>,
+            );
+        }
         return wrap(
             <>
                 <h2 className={styles.successTitle}>File is on its way</h2>
@@ -1187,7 +1390,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                                 event.preventDefault();
                                 setStage('compose');
                             }}
-                            disabled={submitting}
+                            disabled={submitting || multipartPanel.running}
                         >
                             Back
                         </Button>
@@ -1195,8 +1398,8 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                             type="submit"
                             variant="success"
                             icon={<Icon.UploadIcon />}
-                            loading={submitting}
-                            disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
+                            loading={submitting || multipartPanel.running}
+                            disabled={multipartPanel.running || (hw ? hwStatus !== 'available' : (!signerReady && password.length === 0))}
                         >
                             Upload file
                         </Button>
@@ -1359,8 +1562,8 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     // The live cap under the chooser: the title and memo share the file's
     // on-chain record, so every character typed there lowers it.
     const fileLimitBytes = fileMeta
-        ? attachmentCapFor(fileMeta.name, fileMeta.type)
-        : attachmentCapFor('file.bin', 'application/octet-stream');
+        ? attachmentLimitFor(fileMeta.name, fileMeta.type)
+        : attachmentLimitFor('file.bin', 'application/octet-stream');
 
     // stage === 'compose' (also the fallback if review stages lose
     // their prerequisites, e.g. addresses reloaded)
@@ -1378,7 +1581,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     variant="success"
                     icon={<Icon.UploadIcon />}
                     loading={genesisRefreshing}
-                    disabled={genesisRefreshing || issuerEligibility.pending || !!issuerEligibility.error}
+                    disabled={genesisRefreshing || !multipartMethod.ready || issuerEligibility.pending || !!issuerEligibility.error}
                 >
                     Attach artwork
                 </Button>
@@ -1413,6 +1616,14 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             {/* How the bytes ride the chain, before the file: the pick sets the
                 ceiling the file field names. */}
             <UploadMethodField upload={upload} />
+            <MultipartUploadSection
+                panelProps={multipartPanel.panelProps}
+                fileInput={multipartPanel.fileInput}
+                resumeReason={multipartPanel.resumeReason}
+                error={multipartPanel.error}
+                listError={multipartPanel.listError}
+                fallbackMessage="The multi-part upload could not continue."
+            />
             <div className={inputStyles.field}>
                 <div className={inputStyles.labelRow}>
                     <span id={fileFieldLabelId} className={inputStyles.label}>Artwork file</span>

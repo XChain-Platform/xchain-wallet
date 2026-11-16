@@ -81,6 +81,47 @@ async function review() {
     fireEvent.click(screen.getByRole('button', { name: 'Attach artwork' }));
 }
 
+function compositionClient() {
+    return messagingFor({
+        overrides: {
+            composeForConfirm: vi.fn().mockResolvedValue({
+                psbt: 'aa00',
+                encoding: 'psbt',
+                version: 1,
+                chainId: CHAIN,
+                actionString: 'encoded action',
+                decoded: { summary: 'Review action', details: [], warnings: [] },
+            }),
+            preflight: vi.fn().mockResolvedValue({ verdict: 'pass', findings: [] }),
+            fileAction: vi.fn().mockResolvedValue({ txid: 'file-tx' }),
+            linkAction: vi.fn().mockResolvedValue({ txid: 'link-tx' }),
+            getActionByTxid: vi.fn().mockResolvedValue({ action_index: 12 }),
+        },
+    });
+}
+
+async function reachTokenInfoReview(client) {
+    globalThis.FileReader = PngFileReader;
+    mount(client);
+    await chooseFile('art.png', 'image/png');
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: ' Gallery ' } });
+    fireEvent.click(screen.getByRole('checkbox'));
+    await review();
+    await screen.findByRole('form', { name: 'Review artwork upload' });
+    fireEvent.click(screen.getByRole('button', { name: 'Upload file' }));
+    let approve = await screen.findByTestId('confirm-approve');
+    await waitFor(() => expect(approve).toBeEnabled());
+    fireEvent.click(approve);
+    await screen.findByRole('form', { name: 'Review artwork link' });
+    expect(screen.getByText('Artwork file record').nextElementSibling).toHaveTextContent('BTC#12');
+    expect(screen.getByText('Token creation record').nextElementSibling).toHaveTextContent('BTC#7');
+    fireEvent.click(screen.getByRole('button', { name: 'Link artwork to ART' }));
+    approve = await screen.findByTestId('confirm-approve');
+    await waitFor(() => expect(approve).toBeEnabled());
+    fireEvent.click(approve);
+    await screen.findByRole('form', { name: 'Upload token info' });
+}
+
 beforeEach(() => {
     OriginalFileReader = globalThis.FileReader;
     globalThis.FileReader = ImmediateFileReader;
@@ -129,7 +170,9 @@ describe('AttachContentForm validation and review', () => {
             element?.tagName === 'DD' && element.textContent === ' art.png '
         ))).toBeInTheDocument();
     });
+});
 
+describe('AttachContentForm metadata validation', () => {
     it('refuses a memo beyond the network character limit before review', async () => {
         mount();
         await chooseFile();
@@ -144,7 +187,9 @@ describe('AttachContentForm validation and review', () => {
         );
         expect(screen.queryByRole('form', { name: 'Review artwork upload' })).toBeNull();
     });
+});
 
+describe('AttachContentForm title safety', () => {
     it('refuses a title beyond its field limit before review', async () => {
         mount();
         await chooseFile();
@@ -172,7 +217,9 @@ describe('AttachContentForm validation and review', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(message);
         expect(screen.queryByRole('form', { name: 'Review artwork upload' })).toBeNull();
     });
+});
 
+describe('AttachContentForm custom fee validation', () => {
     it.each([
         ['', 'Enter a custom fee rate.'],
         ['0', 'Custom fee rate must be greater than zero.'],
@@ -196,7 +243,9 @@ describe('AttachContentForm validation and review', () => {
         expect(await screen.findAllByText(message)).toHaveLength(1);
         expect(screen.queryByRole('form', { name: 'Review artwork upload' })).toBeNull();
     });
+});
 
+describe('AttachContentForm refreshed genesis', () => {
     it('refreshes the token creation record and refuses a stale result', async () => {
         const genesis = vi.fn()
             .mockResolvedValueOnce({ action_index: 7 })
@@ -213,7 +262,9 @@ describe('AttachContentForm validation and review', () => {
         expect(client.getGenesisForToken).toHaveBeenCalledTimes(2);
         expect(screen.queryByRole('form', { name: 'Review artwork upload' })).toBeNull();
     });
+});
 
+describe('AttachContentForm malformed genesis index', () => {
     it('refuses a malformed refreshed token action number', async () => {
         const genesis = vi.fn()
             .mockResolvedValueOnce({ action_index: 7 })
@@ -228,7 +279,9 @@ describe('AttachContentForm validation and review', () => {
         );
         expect(screen.queryByRole('form', { name: 'Review artwork upload' })).toBeNull();
     });
+});
 
+describe('AttachContentForm signing address validation', () => {
     it('refuses a malformed selected signing address', async () => {
         mount(messagingFor({ source: { ...SOURCE, address: 'not-an-address' } }), 'not-an-address');
         await chooseFile();
@@ -252,7 +305,9 @@ describe('AttachContentForm validation and review', () => {
         )).toBeInTheDocument();
         expect(screen.queryByRole('form', { name: 'Review artwork upload' })).toBeNull();
     });
+});
 
+describe('AttachContentForm indexed file validation', () => {
     it('keeps polling and shows plain copy for a malformed indexed file number', async () => {
         const client = messagingFor({
             overrides: {
@@ -287,54 +342,18 @@ describe('AttachContentForm validation and review', () => {
             txid: 'file-tx',
         });
     });
+});
 
+describe('AttachContentForm composed follow-up values', () => {
     it('shows the exact LINK and token-info values passed to composition', async () => {
-        globalThis.FileReader = PngFileReader;
-        const client = messagingFor({
-            overrides: {
-                composeForConfirm: vi.fn().mockResolvedValue({
-                    psbt: 'aa00',
-                    encoding: 'psbt',
-                    version: 1,
-                    chainId: CHAIN,
-                    actionString: 'encoded action',
-                    decoded: { summary: 'Review action', details: [], warnings: [] },
-                }),
-                preflight: vi.fn().mockResolvedValue({ verdict: 'pass', findings: [] }),
-                fileAction: vi.fn().mockResolvedValue({ txid: 'file-tx' }),
-                linkAction: vi.fn().mockResolvedValue({ txid: 'link-tx' }),
-                getActionByTxid: vi.fn().mockResolvedValue({ action_index: 12 }),
-            },
-        });
-        mount(client);
-        await chooseFile('art.png', 'image/png');
-        fireEvent.change(screen.getByLabelText('Title'), {
-            target: { value: ' Gallery ' },
-        });
-        fireEvent.click(screen.getByRole('checkbox'));
-        await review();
-        await screen.findByRole('form', { name: 'Review artwork upload' });
-
-        fireEvent.click(screen.getByRole('button', { name: 'Upload file' }));
-        let approve = await screen.findByTestId('confirm-approve');
-        await waitFor(() => expect(approve).toBeEnabled());
-        fireEvent.click(approve);
-
-        await screen.findByRole('form', { name: 'Review artwork link' });
-        expect(screen.getByText('Artwork file record').nextElementSibling).toHaveTextContent('BTC#12');
-        expect(screen.getByText('Token creation record').nextElementSibling).toHaveTextContent('BTC#7');
-        fireEvent.click(screen.getByRole('button', { name: 'Link artwork to ART' }));
-        approve = await screen.findByTestId('confirm-approve');
-        await waitFor(() => expect(approve).toBeEnabled());
-        fireEvent.click(approve);
-
+        const client = compositionClient();
+        await reachTokenInfoReview(client);
         const expectedJson = JSON.stringify({
             tick: 'ART',
             categories: [{ type: 'main', data: 'NFT' }],
             images: [{ data_ref: 'action:12', type: 'image/png', name: 'art.png' }],
             name: 'Gallery',
         });
-        await screen.findByRole('form', { name: 'Upload token info' });
         expect(screen.getByText('Document').nextElementSibling).toHaveTextContent('ART.json');
         expect(screen.getByText('Type').nextElementSibling).toHaveTextContent('application/json');
         expect(screen.getByText('Title').nextElementSibling).toHaveTextContent('Token information');
