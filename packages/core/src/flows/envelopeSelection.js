@@ -86,13 +86,14 @@ export function chainCarriesEnvelope(descriptor) {
 /**
  * Whether this chain and signer can carry a Taproot envelope at all.
  *
- * @param {{ addressTypes?: string[] }|null|undefined} descriptor  chain descriptor
+ * @param {{ taprootEnvelope?: boolean, addressTypes?: string[] }|null|undefined} descriptor chain descriptor
  * @param {{ source?: string, kind?: string }|null|undefined} signer the spending Address record or live Signer
  * @returns {boolean}
  */
 export function envelopeAvailableFor(descriptor, signer) {
-    // The chain half: `p2tr` is the descriptor's own statement that it does Taproot.
-    if (!Array.isArray(descriptor?.addressTypes) || !descriptor.addressTypes.includes('p2tr')) return false;
+    const addressTypeCarriesEnvelope = Array.isArray(descriptor?.addressTypes)
+        && descriptor.addressTypes.includes('p2tr');
+    if (!chainCarriesEnvelope(descriptor) && !addressTypeCarriesEnvelope) return false;
     // The signer half: a reveal nobody can sign would strand the commit.
     return signerSupportsTapscript(signer) || liveSignerSupportsTapscript(signer);
 }
