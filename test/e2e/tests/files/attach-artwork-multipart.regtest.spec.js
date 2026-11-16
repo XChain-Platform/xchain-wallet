@@ -20,6 +20,7 @@ import {
     test,
 } from '../../fixtures/wallet.js';
 import {
+    EXPLORER_URL,
     explorerJson,
     expectConfirmModal,
     fundAddress,
@@ -168,11 +169,21 @@ async function manifestDetail(source) {
     return detail?.multipart ? detail : null;
 }
 
-async function waitForCompletion(source, issueIndex) {
+// The screen's own refusal, so a run the wallet gave up on fails at once with
+// its words instead of after the whole completion deadline.
+async function expectNoUploadRefusal(page) {
+    const alert = page.getByRole('main').getByRole('alert').first();
+    if (!(await alert.isVisible().catch(() => false))) return;
+    const said = ((await alert.innerText().catch(() => '')) || '').trim().replace(/\s+/g, ' ');
+    throw new Error(`the multipart artwork upload stopped, and the screen says: ${said}`);
+}
+
+async function waitForCompletion(page, source, issueIndex) {
     const deadline = Date.now() + 900_000;
     let mined = 0;
     let last = null;
     while (Date.now() < deadline) {
+        await expectNoUploadRefusal(page);
         const detail = await manifestDetail(source);
         last = detail?.multipart || last;
         if (detail?.multipart?.status === 'complete') {
@@ -192,12 +203,12 @@ async function waitForCompletion(source, issueIndex) {
     throw new Error(`multipart artwork did not complete after ${mined} mined blocks: ${JSON.stringify(last)}`);
 }
 
+// A multi-part upload opens no confirm modal: the review's unlock and its
+// Upload file click approve the funding and every piece, so the run is
+// watched on chain while the screen is read for a refusal.
 async function approveUpload(page, source, issueIndex) {
-    await expectConfirmModal(page, 'the multipart artwork upload', 300_000);
-    await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 300_000 });
-    await page.getByTestId('confirm-approve').click();
     await assertNoArtworkLink(source, issueIndex);
-    return waitForCompletion(source, issueIndex);
+    return waitForCompletion(page, source, issueIndex);
 }
 
 async function approveLink(page, source, issueIndex, manifestIndex) {
@@ -217,24 +228,15 @@ async function approveLink(page, source, issueIndex, manifestIndex) {
     expect(String(linked.coin2_action_index)).toBe(issueIndex);
 }
 
-async function assertTokenPageRaw(page, manifestIndex, sourceHash) {
-    const rawPath = `/${REGTEST_COIN}/api/file/${manifestIndex}/raw`;
-    const responsePromise = page.waitForResponse((response) => {
-        return new URL(response.url()).pathname.endsWith(rawPath);
-    }, { timeout: 300_000 });
-    await openPaletteCommand(page, 'My tokens');
-    const main = page.getByRole('main');
-    const search = main.getByLabel('Search your tokens by ticker or description');
-    await expect(search).toBeVisible({ timeout: 30_000 });
-    await search.fill(TICK);
-    const row = main.getByRole('button', { name: `Open ${TICK} token details`, exact: true }).first();
-    await expect(row).toBeVisible({ timeout: 120_000 });
-    await row.click();
-    await expect(main.getByRole('heading', { name: TICK, exact: true })).toBeVisible({ timeout: 60_000 });
-    const response = await responsePromise;
-    expect(response.ok(), `token artwork raw endpoint returned ${response.status()}`).toBe(true);
-    expect(response.headers()['content-type']).toContain('image/png');
-    expect(sha256(await response.body())).toBe(sourceHash);
+// The token page shows artwork only through Set as token info (a TIS document
+// and a description update), which a random-byte PNG cannot take because it has
+// no preview, so the LINKed manifest's assembled body is read from the explorer.
+async function assertLinkedRaw(manifestIndex, sourceHash) {
+    const url = `${EXPLORER_URL}/${REGTEST_COIN}/api/file/${manifestIndex}/raw`;
+    const response = await fetch(url, { signal: AbortSignal.timeout(120_000) });
+    expect(response.ok, `artwork raw endpoint returned ${response.status}`).toBe(true);
+    expect(response.headers.get('content-type')).toContain('image/png');
+    expect(sha256(Buffer.from(await response.arrayBuffer()))).toBe(sourceHash);
 }
 
 async function attachMultipartArtwork({ page }) {
@@ -247,7 +249,7 @@ async function attachMultipartArtwork({ page }) {
     expect(manifest.multipart.status).toBe('complete');
     const manifestIndex = String(manifest.action_index);
     await approveLink(page, source, issueIndex, manifestIndex);
-    await assertTokenPageRaw(page, manifestIndex, sourceHash);
+    await assertLinkedRaw(manifestIndex, sourceHash);
 }
 
 test.describe(`multipart artwork attachment on ${REGTEST_CHAIN_LABEL}`, () => {
