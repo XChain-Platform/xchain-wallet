@@ -124,15 +124,25 @@ describe('multipart funding quotes', () => {
         expect(litecoin.outputs[0]).toBeGreaterThanOrEqual(21_840);
     });
 
+    it('floors a small Standard piece fee at the dust floor', () => {
+        const plan = { parts: [{ bytes: new Uint8Array(10) }], totalParts: 1 };
+        const quote = quoteMultipartFile(plan, 1, { type: 'standard', outputFloor: 1_000_000 }, {
+            envelopePairVbytes: () => { throw new Error('wrong lane'); },
+            standardPairBytes: () => 300,
+        });
+        // fee 1,000,000 (floor) + (chunks + 1) floors: manifest 1 chunk-free piece, part 1 chunk.
+        expect(quote.outputs).toEqual([2_000_000, 3_000_000]);
+    });
+
     it('adds one output floor per Standard chunk plus the reveal output', () => {
         const plan = { parts: [{ bytes: new Uint8Array(477) }], totalParts: 1 };
         const quote = quoteMultipartFile(plan, 4, { type: 'standard', outputFloor: 1_000 }, {
             envelopePairVbytes: () => { throw new Error('wrong lane'); },
             standardPairBytes: (partBytes) => partBytes + 10,
         });
-        expect(quote.outputs).toEqual([1_050, 5_435]);
-        expect(quote.fee).toBe(2_485);
-        expect(quote.fundingTotal).toBe(6_485);
+        expect(quote.outputs).toEqual([2_000, 5_435]);
+        expect(quote.fee).toBe(3_435);
+        expect(quote.fundingTotal).toBe(7_435);
         expect(quote.transactions).toBe(5);
     });
 });

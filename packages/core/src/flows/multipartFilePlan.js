@@ -233,8 +233,9 @@ export function quoteMultipartFile(plan, rate, lane, sizes = {}) {
         // The encoder floors an envelope commit fee and its reveal fee at the dust
         // floor each, and Litecoin adds a stripped-size pad output to the reveal.
         const pairFee = Math.ceil(1.25 * feeRate * pairBytes);
+        // A Standard commit fee is floored at dust beside its P2SH legs.
         const pieceFee = selected.type === 'standard'
-            ? pairFee : Math.max(pairFee, 2 * selected.outputFloor);
+            ? Math.max(pairFee, selected.outputFloor) : Math.max(pairFee, 2 * selected.outputFloor);
         const floorCount = selected.type === 'standard'
             ? Math.ceil(partBytes / 476) + 1
             : 2 + (selected.revealPad ? 1 : 0);
