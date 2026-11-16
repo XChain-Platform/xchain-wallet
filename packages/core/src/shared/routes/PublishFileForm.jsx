@@ -26,6 +26,7 @@ import { GatedPublishForm } from './GatedPublishForm.jsx';
 import {
     estimateNativeSendFeeTiers,
     customFeeEstimate,
+    displayRateToPerByte,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
@@ -39,8 +40,18 @@ import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { imagePreviewDataUrl, publishFileType } from '../utils/publishingFile.js';
 import { ForwardIcon, UploadIcon } from '../../ui/icons/index.jsx';
-import { publicFileCompiledBytes } from '../../flows/uploadMethod.js';
+import {
+    publicFileCompiledBytes,
+    standardUnavailableReason,
+    taprootUnavailableReason,
+} from '../../flows/uploadMethod.js';
 import { UploadMethodField, UploadMethodReviewRows, useUploadMethod } from '../components/UploadMethodField.jsx';
+import { useMultipartUploadMethod } from '../hooks/useMultipartUploadMethod.js';
+import { useFormMultipartUpload } from '../hooks/useFormMultipartUpload.js';
+import { MultipartUploadSection } from '../components/MultipartUploadSection.jsx';
+import { multipartQuoteLanes } from '../../flows/multipartQuoteLanes.js';
+import { multipartSupportForMethod } from '../../flows/multipartMethodSupport.js';
+import { multipartPublishResult } from '../../flows/multipartPublishResult.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -59,6 +70,106 @@ function latin1Of(bytes) {
 /** The compiled action-plus-file push of a public FILE upload, for the Upload method fees. */
 function publicUploadBytes(file, { title, memo }) {
     return publicFileCompiledBytes({ name: file.name, type: file.type, title, memo }, file.bytes.length);
+}
+
+function safeMultipartLanes(descriptor) {
+    if (!descriptor) return {};
+    try {
+        return multipartQuoteLanes({ descriptor });
+    } catch {
+        return {};
+    }
+}
+
+function usePublicMultipartMethod({
+    descriptor, fromAddress, isWatcherMode, file, title, memo, feeEstimate,
+}) {
+    const meta = { name: file?.name || 'file.bin', type: file?.type || 'application/octet-stream', title, memo };
+    const taprootCap = flowsLib.maxPublicFileBytes(meta, { encoding: 'TAPROOT' });
+    const standardCap = flowsLib.maxPublicFileBytes(meta, {});
+    const singleReasons = {
+        taproot: taprootUnavailableReason({ descriptor, fromAddress, isWatcherMode }),
+        standard: standardUnavailableReason({
+            fileBytes: file?.bytes?.length ?? null,
+            standardCap,
+        }),
+    };
+    const singleFits = {
+        taproot: !file || file.bytes.length <= taprootCap,
+        standard: !file || file.bytes.length <= standardCap,
+    };
+    const rate = feeEstimate?.unit
+        ? displayRateToPerByte(feeEstimate.unit, Number(feeEstimate.rateValue))
+        : null;
+    return useMultipartUploadMethod({
+        bytes: file?.bytes || null,
+        meta,
+        rate: Number.isFinite(rate) && rate > 0 ? rate : null,
+        descriptor,
+        addressRecord: fromAddress,
+        addressType: fromAddress?.addressType || fromAddress?.type,
+        isWatcherMode,
+        singleReasons,
+        singleFits,
+        lanes: safeMultipartLanes(descriptor),
+    });
+}
+
+function selectedMultipartSupport(method, descriptor, fromAddress, isWatcherMode) {
+    if (!descriptor || !fromAddress) return { supported: false, reason: 'signer' };
+    try {
+        return multipartSupportForMethod({
+            method,
+            descriptor,
+            addressRecord: fromAddress,
+            addressType: fromAddress.addressType || fromAddress.type,
+            isWatcherMode,
+        });
+    } catch {
+        return { supported: false, reason: 'signer' };
+    }
+}
+
+function multipartFrom(fromAddress) {
+    if (!fromAddress) return { address: '', publicKey: '' };
+    return {
+        address: fromAddress.address,
+        publicKey: fromAddress.publicKey,
+        derivationPath: fromAddress.derivationPath,
+        addressId: fromAddress.id,
+        source: fromAddress.source,
+        signerId: fromAddress.signerId,
+        type: fromAddress.addressType || fromAddress.type,
+    };
+}
+
+function hasMultipartMessaging(messaging) {
+    return 'fileMultipart' in messaging && 'listPendingFileUploads' in messaging;
+}
+
+function publishReviewStop({
+    fileMeta, fromAddress, title, memo, feePick, feeTiers, feeCustomEstimate, publicCapFor, ackForever,
+}) {
+    if (!fileMeta) return { formError: 'Pick a file first.' };
+    if (!fromAddress) return { formError: 'No signing address available on this network.' };
+    if ((title && /[|;]/.test(title)) || (memo && /[|;]/.test(memo)) || /[|;]/.test(fileMeta.name)) {
+        return { formError: 'File name, title, and memo cannot contain | or ; characters.' };
+    }
+    const unsafeMetadata = actionTextSafetyError(fileMeta.name, 'File name')
+        || actionTextSafetyError(title, 'Title');
+    if (unsafeMetadata) return { formError: unsafeMetadata };
+    const memoError = memoLengthError(memo);
+    if (memoError) return { formError: memoError };
+    const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+    if (feeStop) return feeStop;
+    const cap = publicCapFor(fileMeta.name, fileMeta.type);
+    if (fileMeta.bytes.length > cap) {
+        return {
+            formError: `With this title/memo the on-chain ceiling is ${cap.toLocaleString()} bytes `
+                + `and the file is ${fileMeta.bytes.length.toLocaleString()}. Shorten the title or memo.`,
+        };
+    }
+    return ackForever ? null : { formError: 'Confirm you understand the publish is permanent.' };
 }
 
 /**
@@ -275,6 +386,16 @@ export function PublishFileForm({ walletId, onBack }) {
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
+    const multipartAvailable = hasMultipartMessaging(messaging);
+    const multipartMethod = usePublicMultipartMethod({
+        descriptor,
+        fromAddress,
+        isWatcherMode,
+        file: mode === 'public' ? fileMeta : null,
+        title,
+        memo,
+        feeEstimate,
+    });
 
     // The Upload method the user picks (flows/uploadMethod.js). The Taproot
     // envelope is offered only where a reveal can be signed and carried: a
@@ -294,18 +415,53 @@ export function PublishFileForm({ walletId, onBack }) {
         standardCap: fileMeta
             ? flowsLib.maxPublicFileBytes({ name: fileMeta.name, type: fileMeta.type, title, memo }, {})
             : null,
+        multipart: multipartAvailable ? multipartMethod : null,
         picked: uploadPick,
         onPick: setUploadPick,
     });
     const envelopePicked = upload.method === 'taproot';
+    const multipartSupport = multipartAvailable
+        ? selectedMultipartSupport(upload.method, descriptor, fromAddress, isWatcherMode)
+        : { supported: false, reason: 'signer' };
+    const selectedSingleCap = flowsLib.maxPublicFileBytes(
+        {
+            name: fileMeta?.name || 'file.bin',
+            type: fileMeta?.type || 'application/octet-stream',
+            title,
+            memo,
+        },
+        upload.ceilingOpts,
+    );
+    const multipartUpload = useFormMultipartUpload({
+        messaging,
+        walletId,
+        chainId: chainId || '',
+        from: multipartFrom(fromAddress),
+        singleTransactionCap: selectedSingleCap,
+        support: multipartSupport,
+        rate: feeEstimate?.unit
+            ? displayRateToPerByte(feeEstimate.unit, Number(feeEstimate.rateValue))
+            : undefined,
+    });
 
     // Size the ceiling from the encoding the compose actually requests (PC-28):
     // the envelope ceiling when the picked method asks for AUTO below, the
     // legacy compiled ceiling for Standard.
-    const publicCapFor = (name, type) => flowsLib.maxPublicFileBytes(
-        { name, type, title, memo },
-        upload.ceilingOpts,
-    );
+    const publicCapFor = (name, type) => (multipartSupport.supported
+        ? multipartUpload.maxBytes
+        : flowsLib.maxPublicFileBytes({ name, type, title, memo }, upload.ceilingOpts));
+
+    useEffect(() => {
+        const reply = multipartUpload.result;
+        if (!reply) return;
+        try {
+            const originalBytes = fileMeta?.bytes?.length || reply.multipart?.total_bytes;
+            setResult(multipartPublishResult(reply, { originalBytes }));
+            setStage('done');
+        } catch (error) {
+            setFormError(submitFailureMessage(error, { fallback: 'Publish failed.' }));
+        }
+    }, [multipartUpload.result, fileMeta]);
 
     useEffect(() => {
         if (stage === 'review') setTimeout(() => passwordRef.current?.focus(), 0);
@@ -434,39 +590,47 @@ export function PublishFileForm({ walletId, onBack }) {
         }
     }
 
-    function handleReview(event) {
+    async function handleReview(event) {
         event.preventDefault();
-        if (!fileMeta) { setFormError('Pick a file first.'); return; }
-        if (!fromAddress) { setFormError('No signing address available on this network.'); return; }
-        if ((title && /[|;]/.test(title)) || (memo && /[|;]/.test(memo)) || /[|;]/.test(fileMeta.name)) {
-            setFormError('File name, title, and memo cannot contain | or ; characters.');
-            return;
-        }
-        const unsafeMetadata = actionTextSafetyError(fileMeta.name, 'File name')
-            || actionTextSafetyError(title, 'Title');
-        if (unsafeMetadata) { setFormError(unsafeMetadata); return; }
-        const memoError = memoLengthError(memo);
-        if (memoError) { setFormError(memoError); return; }
-        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        if (feeStop) { setFormError(feeStop.formError); return; }
-        // Re-check with the FINAL metadata: a title/memo typed after the
-        // pick shrinks the byte budget.
-        const cap = publicCapFor(fileMeta.name, fileMeta.type);
-        if (fileMeta.bytes.length > cap) {
-            setFormError(
-                `With this title/memo the on-chain ceiling is ${cap.toLocaleString()} bytes `
-                + `and the file is ${fileMeta.bytes.length.toLocaleString()}. Shorten the title or memo.`,
-            );
-            return;
-        }
-        if (!ackForever) {
-            setFormError('Confirm you understand the publish is permanent.');
-            return;
-        }
+        const reviewStop = publishReviewStop({
+            fileMeta,
+            fromAddress,
+            title,
+            memo,
+            feePick,
+            feeTiers,
+            feeCustomEstimate,
+            publicCapFor,
+            ackForever,
+        });
+        if (reviewStop) { setFormError(reviewStop.formError); return; }
         setFormError(null);
         setSubmitError(null);
-        if (singleEncode) { openConfirmScreen(); return; }
-        setStage('review');
+        if (fileMeta.bytes.length <= selectedSingleCap) {
+            if (singleEncode) { openConfirmScreen(); return; }
+            setStage('review');
+            return;
+        }
+        try {
+            const started = await multipartUpload.startFile({
+                bytes: fileMeta.bytes,
+                meta: { name: fileMeta.name, type: fileMeta.type, title, memo },
+            });
+            if (started.path === 'multipart') {
+                setResult(multipartPublishResult(started.reply, {
+                    originalBytes: fileMeta.bytes.length,
+                }));
+                setStage('done');
+                return;
+            }
+            if (started.path === 'refused') {
+                setFormError('This account cannot publish a multi-part file with this upload method.');
+                return;
+            }
+        } catch (error) {
+            setFormError(submitFailureMessage(error, { fallback: 'Publish failed.' }));
+            return;
+        }
     }
 
     async function handleSubmit(event) {
@@ -635,6 +799,12 @@ export function PublishFileForm({ walletId, onBack }) {
                     <>
                         <p className={styles.successLabel}>Transaction</p>
                         <code className={styles.txid}>{txid}</code>
+                    </>
+                ) : null}
+                {result?.actionIndex ? (
+                    <>
+                        <p className={styles.successLabel}>Action index</p>
+                        <code className={styles.txid}>{result.actionIndex}</code>
                     </>
                 ) : null}
                 {storedLine ? (
@@ -843,10 +1013,12 @@ export function PublishFileForm({ walletId, onBack }) {
                     type="submit"
                     variant="success"
                     icon={<UploadIcon />}
-                    loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
+                    loading={actionConfirm.composing || multipartUpload.running}
+                    disabled={actionConfirm.composing || multipartUpload.running}
                 >
-                    {actionConfirm.composing
+                    {multipartUpload.running
+                        ? 'Publishing file…'
+                        : actionConfirm.composing
                         ? 'Preparing review…'
                         : 'Publish file'}
                 </Button>
@@ -938,6 +1110,12 @@ export function PublishFileForm({ walletId, onBack }) {
                     {/* How the bytes ride the chain, before the file: the pick sets the
                         ceiling the file field names. */}
                     <UploadMethodField upload={upload} />
+                    {multipartAvailable ? (
+                        <MultipartUploadSection
+                            {...multipartUpload.sectionProps}
+                            fallbackMessage="The multi-part upload could not continue. Try again or use Unfinished uploads."
+                        />
+                    ) : null}
                     <Input
                         type="file"
                         label={`File (up to ${capHint.toLocaleString()} bytes)`}
