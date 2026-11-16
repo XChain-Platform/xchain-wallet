@@ -12,8 +12,10 @@ import { createHash } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../../packages/core/src/flows/payloadCompression.js', () => ({
-    resolveGatedCompression: vi.fn(async () => null),
     inflateGatedPlaintext: vi.fn(async (bytes) => ({ bytes })),
+}));
+vi.mock('../../../packages/core/src/flows/gatedInflateLimit.js', () => ({
+    resolveGatedInflate: vi.fn(async () => ({ declared: '', options: {} })),
 }));
 
 import {
@@ -21,10 +23,8 @@ import {
     unlockGatedFile,
     unlockGatedFileForAddress,
 } from '../../../packages/core/src/flows/gatedContent.js';
-import {
-    inflateGatedPlaintext,
-    resolveGatedCompression,
-} from '../../../packages/core/src/flows/payloadCompression.js';
+import { inflateGatedPlaintext } from '../../../packages/core/src/flows/payloadCompression.js';
+import { resolveGatedInflate } from '../../../packages/core/src/flows/gatedInflateLimit.js';
 
 const KEY = Buffer.alloc(32, 5);
 const KEY_HASH = createHash('sha256').update(KEY).digest('hex');
@@ -128,7 +128,7 @@ describe('gated ciphertext not-ready errors', () => {
         expect(error).toMatchObject({ code: 'GATED_FILE_NOT_READY', reason, status });
         expect(error.message).toBe(message);
         expect(sdk.gatedFile.decryptFileBytes).not.toHaveBeenCalled();
-        expect(resolveGatedCompression).not.toHaveBeenCalled();
+        expect(resolveGatedInflate).not.toHaveBeenCalled();
         expect(inflateGatedPlaintext).not.toHaveBeenCalled();
     });
 });
@@ -152,8 +152,8 @@ describe('gated ciphertext ready bytes', () => {
         await run(sdk);
 
         expect(sdk.gatedFile.decryptFileBytes).toHaveBeenCalledWith(CIPHERTEXT, KEY);
-        expect(resolveGatedCompression).toHaveBeenCalledTimes(1);
-        expect(inflateGatedPlaintext).toHaveBeenCalledWith(PLAINTEXT, null);
+        expect(resolveGatedInflate).toHaveBeenCalledTimes(1);
+        expect(inflateGatedPlaintext).toHaveBeenCalledWith(PLAINTEXT, '', {});
     });
 });
 
