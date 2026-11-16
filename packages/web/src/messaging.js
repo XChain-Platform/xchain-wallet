@@ -940,24 +940,9 @@ export function deployChunkedHw(opts) {
     return /** @type {any} */ (sendMessage('action.deployChunked.hw', opts));
 }
 
-/** @param {object} opts */
-export function fileMultipart(opts) {
-    return /** @type {any} */ (sendMessage('action.fileMultipart', opts));
-}
-
 /** PC-38: in-flight chunked deploys (chunks already paid for on chain). */
 export function listPendingDeploys(req) {
     return /** @type {any} */ (sendMessage('pendingDeploys.listForWallet', req));
-}
-
-/** @param {object} req */
-export function listPendingFileUploads(req) {
-    return /** @type {any} */ (sendMessage('pendingFileUploads.listForWallet', req));
-}
-
-/** @param {object} req */
-export function discardPendingFileUpload(req) {
-    return /** @type {any} */ (sendMessage('pendingFileUploads.discard', req));
 }
 
 /** @param {{ id: string }} req */
