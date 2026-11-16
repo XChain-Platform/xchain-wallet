@@ -48,6 +48,7 @@ describe('public multipart request', () => {
         const request = call({ meta: { name: 'plain.bin' } });
         expect(request).toEqual({
             walletId: 'wallet-1', chainId: 'btc:regtest',
+            sourceAddress: 'bcrt1source',
             from: {
                 address: 'bcrt1source', publicKey: PUBLIC_KEY,
                 type: 'p2wpkh', sourceAddress: 'bcrt1source',
@@ -56,7 +57,6 @@ describe('public multipart request', () => {
             meta: { name: 'plain.bin', type: '', title: '', memo: '' },
             lane: 'envelope', buildMode: 'one_call', linkTarget: null, gate: null,
         });
-        expect(request).not.toHaveProperty('sourceAddress');
         expect(request).not.toHaveProperty('bytes');
         expect(request).not.toHaveProperty('resumeId');
         expect(request).not.toHaveProperty('rate');
