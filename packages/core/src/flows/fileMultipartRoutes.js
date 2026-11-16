@@ -30,6 +30,25 @@ function uploadCounts(record) {
     };
 }
 
+function pendingUploadSummary(record) {
+    return {
+        id: record.id,
+        name: record.meta?.name ?? '',
+        chainId: record.chainId,
+        sourceAddress: record.sourceAddress,
+        originalSha256: record.originalSha256,
+        createdAt: record.createdAt,
+        linkTarget: record.linkTarget == null ? null : {
+            tick: record.linkTarget.tick,
+            issueActionIndex: record.linkTarget.issueActionIndex,
+        },
+        gated: record.gate !== null,
+        ...uploadCounts(record),
+        totalParts: record.totalParts,
+        stage: record.stage,
+    };
+}
+
 function routeError(code, message) {
     const error = new Error(message);
     error.code = code;
@@ -58,15 +77,7 @@ export async function handleFileMultipart(req, deps) {
 export async function handleListPendingFileUploads(req, { vault }) {
     requireText(req?.walletId, 'walletId', 'handleListPendingFileUploads');
     const records = await vault.pendingFileUploads.listForWallet(req.walletId);
-    return {
-        uploads: records.map((record) => ({
-            id: record.id,
-            name: record.meta?.name ?? '',
-            ...uploadCounts(record),
-            totalParts: record.totalParts,
-            stage: record.stage,
-        })),
-    };
+    return { uploads: records.map(pendingUploadSummary) };
 }
 
 export async function handleDiscardPendingFileUpload(req, { vault }) {
