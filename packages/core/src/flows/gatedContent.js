@@ -23,6 +23,7 @@
 
 import { exportPrivateKey } from './exportPrivateKey.js';
 import { inflateGatedPlaintext, resolveGatedCompression } from './payloadCompression.js';
+import { readRawFile } from './rawFileRead.js';
 import { createGatedKey, gatedKeyId } from '../schemas/gatedKey.js';
 import {
     getDemoGatedGroupsForTick,
@@ -41,6 +42,23 @@ const PT_CACHE  = /** @type {Map<string, Uint8Array>} */ (new Map());
 
 function keyKey(address, keyHash) { return address + '|' + String(keyHash).toLowerCase(); }
 function ptKey(address, actionIndex) { return address + '|' + String(actionIndex); }
+async function readGatedCiphertext(sdk, actionIndex) {
+    const result = await readRawFile(sdk, actionIndex);
+    if (result.state === 'ready') return result.bytes;
+    if (result.state === 'missing') {
+        const err = new Error('Gated file ciphertext not available from explorer.');
+        err.code = 'GATED_FILE_NOT_FOUND';
+        throw err;
+    }
+    const message = result.status === 409
+        ? 'Gated file is still being assembled.'
+        : 'Gated file parts do not match its manifest.';
+    const err = new Error(message);
+    err.code = 'GATED_FILE_NOT_READY';
+    err.reason = result.reason;
+    err.status = result.status;
+    throw err;
+}
 function sha256Hex(buf) {
     // Copy into the ambient Uint8Array class before hashing: @noble/hashes
     // type-checks its input against it, and a Buffer is not a subclass of
@@ -162,12 +180,7 @@ export async function unlockGatedFile({ sdk, address, wif, actionIndex, keyHash,
     }
 
     // Fetch the ciphertext bytes from the explorer.
-    const ciphertext = await sdk.getGatedFileRaw(actionIndex);
-    if (!ciphertext || !Buffer.isBuffer(ciphertext) || ciphertext.length === 0) {
-        const err = new Error('Gated file ciphertext not available from explorer.');
-        err.code = 'GATED_FILE_NOT_FOUND';
-        throw err;
-    }
+    const ciphertext = await readGatedCiphertext(sdk, actionIndex);
 
     // Decrypt. GCM auth tag mismatch surfaces as a typed SDK error.
     const decrypted = sdk.gatedFile.decryptFileBytes(ciphertext, key);
@@ -328,12 +341,7 @@ export async function unlockGatedFileForAddress({
                 const cacheAddr = `vault:${walletId}`;
                 let plaintext = PT_CACHE.get(ptKey(cacheAddr, actionIndex));
                 if (!plaintext) {
-                    const ciphertext = await sdk.getGatedFileRaw(actionIndex);
-                    if (!ciphertext || !Buffer.isBuffer(ciphertext) || ciphertext.length === 0) {
-                        const err = new Error('Gated file ciphertext not available from explorer.');
-                        err.code = 'GATED_FILE_NOT_FOUND';
-                        throw err;
-                    }
+                    const ciphertext = await readGatedCiphertext(sdk, actionIndex);
                     const decrypted = sdk.gatedFile.decryptFileBytes(ciphertext, key);
                     // Inflate-after-decrypt, same rule as unlockGatedFile (§5.4).
                     const declared = await resolveGatedCompression({ sdk, actionIndex, declared: compression });
