@@ -76,6 +76,9 @@ export const QUIT_DEFERRING_MESSAGE_TYPES = new Set([
     'broadcast.queue.broadcast',
     'broadcast.queue.enqueue',
     'multisigSign.finalize',
+    // A multipart upload broadcasts its funding and every piece; software signers
+    // only, so it has no hardware twin.
+    'action.fileMultipart',
 ]);
 
 /**
