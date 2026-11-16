@@ -22,6 +22,7 @@ const messages = {
     'uploadMethod.standardDescription': 'The original lane: the file split into small script outputs.',
     'uploadMethod.cheapest': 'Cheapest',
     'uploadMethod.fee': 'Network fee about {amount} {ticker}',
+    'uploadMethod.multipartPending': 'Working out the parts and the fee.',
     'uploadMethod.reason.hardware': "Hardware wallets can't sign the reveal transaction yet.",
     'uploadMethod.reason.watcher': "Not available when another phone signs: it can't sign the reveal.",
     'uploadMethod.reason.watchOnly': "A watch-only address can't sign the reveal transaction.",
@@ -30,6 +31,7 @@ const messages = {
     'uploadMethod.reason.noTaproot': 'Dogecoin has no Taproot.',
     'uploadMethod.reason.chain': 'This network has no Taproot.',
     'uploadMethod.reason.tooLarge': 'This file is too large for it: Standard carries up to {cap}.',
+    'uploadMethod.reason.tooLargeFor': 'Too large for this method: it carries up to {cap}.',
     'uploadMethod.review.fee': 'Estimated upload fee',
     'uploadMethod.confirmLine': 'Upload method: {method}.',
 };
