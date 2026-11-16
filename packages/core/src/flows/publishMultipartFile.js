@@ -411,7 +411,7 @@ function laneConfig(opts) {
     return { lane, buildMode };
 }
 
-async function initialRecord(opts, source, plan, quote, originalSha256) {
+async function initialRecord(opts, source, plan, quote, originalSha256, config) {
     const record = createPendingFileUpload({
         walletId: opts.walletId,
         chainId: opts.chainId,
@@ -419,6 +419,8 @@ async function initialRecord(opts, source, plan, quote, originalSha256) {
         originalSha256,
         fileHash: plan.fileHash,
         meta: opts.meta || {},
+        lane: config.lane,
+        buildMode: config.buildMode,
         gate: recordGateOf(opts.gate, plan),
         compression: plan.compression || '',
         totalParts: plan.totalParts,
@@ -444,8 +446,10 @@ function planningGate(opts, record) {
     return resumeGateOf(record.gate, opts.gate?.key);
 }
 
-async function recordForRun(opts, record, source, plan, quote, originalSha256) {
-    if (!opts.resumeId) return initialRecord(opts, source, plan, quote, originalSha256);
+async function recordForRun(opts, record, source, plan, quote, originalSha256, config) {
+    if (!opts.resumeId) {
+        return initialRecord(opts, source, plan, quote, originalSha256, config);
+    }
     if (record.originalSha256 !== originalSha256) {
         const error = new Error('Resume pick does not match the original file.');
         error.code = 'RESUME_ORIGINAL_MISMATCH';
@@ -457,6 +461,29 @@ async function recordForRun(opts, record, source, plan, quote, originalSha256) {
         sourceAddress: source.address,
     });
     return record;
+}
+
+function runConfig(opts, record) {
+    if (record?.lane) {
+        return { lane: record.lane, buildMode: record.buildMode, meta: record.meta };
+    }
+    return { ...laneConfig(opts), meta: opts.meta || {} };
+}
+
+async function prepareRun(opts, source, sdk) {
+    const savedRecord = await resumeRecord(opts);
+    const config = runConfig(opts, savedRecord);
+    const effectiveOpts = { ...opts, ...config };
+    const gate = planningGate(effectiveOpts, savedRecord);
+    const planner = opts.planMultipartFile || planMultipartFile;
+    const plan = await planner(opts.bytes, config.meta, { carrier: config.lane, gate });
+    const rate = await feeRate(opts, sdk);
+    const quote = quoteFor(opts, plan, rate, config.lane);
+    const originalSha256 = bytesToHex(sha256(opts.bytes));
+    const record = await recordForRun(
+        effectiveOpts, savedRecord, source, plan, quote, originalSha256, config,
+    );
+    return { config, effectiveOpts, plan, quote, rate, record };
 }
 
 function assertInputs(opts) {
@@ -497,7 +524,6 @@ export async function publishMultipartFile(opts) {
     };
     const source = normalizeSource(sourceInput, 'publishMultipartFile');
     const sdk = opts.sdkRegistry.get(opts.chainId);
-    const runOpts = withManifestActionData(opts, sdk, source);
     const tip = await chainTipBlockTime({
         sdkRegistry: opts.sdkRegistry, chainId: opts.chainId, withProtocolTime: true,
     });
@@ -506,22 +532,16 @@ export async function publishMultipartFile(opts) {
         tip,
         activationTimes: opts.activationTimes || FILE_MULTIPART_ACTIVATION_TIME,
     });
-    const { lane, buildMode } = laneConfig(opts);
-    const savedRecord = await resumeRecord(opts);
-    const gate = planningGate(opts, savedRecord);
-    const planner = opts.planMultipartFile || planMultipartFile;
-    const plan = await planner(opts.bytes, opts.meta || {}, {
-        carrier: lane, gate,
-    });
-    const rate = await feeRate(opts, sdk);
-    const quote = quoteFor(opts, plan, rate, lane);
-    const originalSha256 = bytesToHex(sha256(opts.bytes));
-    let record = await recordForRun(opts, savedRecord, source, plan, quote, originalSha256);
+    const run = await prepareRun(opts, source, sdk);
+    const { config, plan, quote, rate } = run;
+    const runOpts = withManifestActionData(run.effectiveOpts, sdk, source);
+    let { record } = run;
     const save = async (next) => opts.vault.pendingFileUploads.put(next);
     const waitForTxid = opts.waitForTxid
         || ((txid, waitOpts) => sdk.waitForAction(txid, waitOpts));
     const ctx = {
-        opts: runOpts, sdk, source, lane, buildMode, plan, rate, record, save, waitForTxid,
+        opts: runOpts, sdk, source, lane: config.lane, buildMode: config.buildMode,
+        plan, rate, record, save, waitForTxid,
         signer: opts.signer, chainId: opts.chainId,
     };
     if (!record.fundingTxid) await fundUpload(ctx, quote);
