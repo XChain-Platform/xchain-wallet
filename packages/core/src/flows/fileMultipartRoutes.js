@@ -70,6 +70,12 @@ function requestBytes(req) {
     return hasBytes ? req.bytes : bytesFromLatin1(req?.rawData);
 }
 
+function requestCarriesGateKey(req) {
+    const gate = Object(req?.gate);
+    return Object.prototype.hasOwnProperty.call(gate, 'key')
+        || Object.prototype.hasOwnProperty.call(gate, 'keyHex');
+}
+
 function multipartReply(result) {
     if (!result || !Object.prototype.hasOwnProperty.call(result, 'record')) return result;
     const { record, ...reply } = result;
@@ -84,7 +90,7 @@ export async function handleFileMultipart(req, deps) {
     requireBytes(bytes);
 
     const { publishMultipartFile, vault, sdkRegistry, chainRegistry, signer, onBroadcastFailure } = deps;
-    const sdk = sdkRegistry.get(req.chainId);
+    const sdk = requestCarriesGateKey(req) ? undefined : sdkRegistry.get(req.chainId);
     const request = await gatedMultipartRequest({ ...req, bytes }, { sdk, vault });
     delete request.rawData;
     const result = await publishMultipartFile({

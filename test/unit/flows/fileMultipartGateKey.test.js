@@ -147,6 +147,7 @@ describe('request-supplied multipart key refusals', () => {
         expect(h.pendingFileUploads.get).not.toHaveBeenCalled();
         expect(h.gatedKeys.get).not.toHaveBeenCalled();
         expect(h.gatedKeys.put).not.toHaveBeenCalled();
+        expect(h.deps.sdkRegistry.get).not.toHaveBeenCalled();
         expect(generateKey).not.toHaveBeenCalled();
         expect(h.publishMultipartFile).not.toHaveBeenCalled();
     });
