@@ -95,7 +95,7 @@ async function signAndVerify(page, viewportName) {
     await switchToRegtest(page, PASSWORD);
     const address = await readReceiveAddress(page);
 
-    await openPaletteRoute(page, 'Sign a message', 'Sign message', 'Sign message');
+    await openPaletteRoute(page, 'Sign message', 'Sign message', 'Sign message');
     const signForm = page.getByRole('form', { name: 'Sign message', exact: true });
     await selectVenueChain(signForm, 'Network');
     const addressField = signForm.getByLabel('Address', { exact: true });
