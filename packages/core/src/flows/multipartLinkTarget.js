@@ -28,6 +28,16 @@ function transactionVerdict(value) {
     return { actionIndex: String(actionIndex) };
 }
 
+function validMultipartDetail(multipart) {
+    if (typeof multipart?.file_hash !== 'string' || multipart.file_hash.trim() === '') return false;
+    const counts = [multipart.total_parts, multipart.parts_received, multipart.total_bytes];
+    if (!counts.every((value) => Number.isSafeInteger(value) && value >= 0)) return false;
+    if (multipart.total_parts < 1 || multipart.parts_received > multipart.total_parts) return false;
+    if (String(multipart.status).toLowerCase() === 'complete'
+        && multipart.parts_received !== multipart.total_parts) return false;
+    return true;
+}
+
 function actionVerdict(value, actionIndex) {
     const action = unwrap(value);
     const kind = String(action?.action || '').toUpperCase();
@@ -41,6 +51,7 @@ function actionVerdict(value, actionIndex) {
     if (typeof action.multipart !== 'object' || Array.isArray(action.multipart)) {
         return { ready: false, reason: 'unreadable' };
     }
+    if (!validMultipartDetail(action.multipart)) return { ready: false, reason: 'unreadable' };
     const status = String(action.multipart.status).toLowerCase();
     if (status === 'complete') return { ready: true, actionIndex };
     if (status === 'pending' || status === 'mismatch') return { ready: false, reason: status };

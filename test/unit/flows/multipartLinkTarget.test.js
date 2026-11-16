@@ -123,6 +123,16 @@ describe('unreadable multipart link target', () => {
             explorer, txid: TXID, coin: 'BTC', maxAttempts: 5, waitMs: 1, sleep: vi.fn(),
         })).resolves.toEqual({ ready: false, reason: 'unreadable' });
     });
+
+    it('rejects a complete status without the required manifest detail', async () => {
+        const explorer = explorerOf({
+            transactions: [tx()],
+            details: [{ action: 'FILE', action_format: 1, status: 'valid', multipart: { status: 'complete' } }],
+        });
+        await expect(resolveMultipartLinkTarget({
+            explorer, txid: TXID, coin: 'BTC', maxAttempts: 1, waitMs: 0, sleep: vi.fn(),
+        })).resolves.toEqual({ ready: false, reason: 'unreadable' });
+    });
 });
 
 describe('single-part FILE link target', () => {
