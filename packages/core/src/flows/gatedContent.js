@@ -22,7 +22,8 @@
 // Caches are in-memory, per-process. Clearing happens on wallet lock.
 
 import { exportPrivateKey } from './exportPrivateKey.js';
-import { inflateGatedPlaintext, resolveGatedCompression } from './payloadCompression.js';
+import { inflateGatedPlaintext } from './payloadCompression.js';
+import { resolveGatedInflate } from './gatedInflateLimit.js';
 import { readRawFile } from './rawFileRead.js';
 import { createGatedKey, gatedKeyId } from '../schemas/gatedKey.js';
 import {
@@ -190,8 +191,8 @@ export async function unlockGatedFile({ sdk, address, wif, actionIndex, keyHash,
     // recovered: the serving layer holds no key and never inflates ciphertext.
     // Fail-closed: an invalid stream or a tripped ratio guard yields the
     // decrypted bytes as stored-form, never partial output and never a throw.
-    const declared = await resolveGatedCompression({ sdk, actionIndex, declared: compression });
-    const result = await inflateGatedPlaintext(decrypted, declared);
+    const inflate = await resolveGatedInflate({ sdk, actionIndex, declared: compression });
+    const result = await inflateGatedPlaintext(decrypted, inflate.declared, inflate.options);
     const plaintext = Buffer.from(result.bytes);
 
     // Cache the FINAL bytes so a repeat unlock neither re-inflates nor re-probes.
@@ -344,8 +345,10 @@ export async function unlockGatedFileForAddress({
                     const ciphertext = await readGatedCiphertext(sdk, actionIndex);
                     const decrypted = sdk.gatedFile.decryptFileBytes(ciphertext, key);
                     // Inflate-after-decrypt, same rule as unlockGatedFile (§5.4).
-                    const declared = await resolveGatedCompression({ sdk, actionIndex, declared: compression });
-                    const inflatedResult = await inflateGatedPlaintext(decrypted, declared);
+                    const inflate = await resolveGatedInflate({ sdk, actionIndex, declared: compression });
+                    const inflatedResult = await inflateGatedPlaintext(
+                        decrypted, inflate.declared, inflate.options,
+                    );
                     plaintext = Buffer.from(inflatedResult.bytes);
                     PT_CACHE.set(ptKey(cacheAddr, actionIndex), plaintext);
                 }
