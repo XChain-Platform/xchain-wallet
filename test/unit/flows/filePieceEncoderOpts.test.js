@@ -50,6 +50,9 @@ const REQUEST_CASES = [
     ['envelope one-call commit', 'envelope', 'one_call', 'commit', {
         exactInputs: true, signerSupportsTapscript: true,
     }],
+    ['envelope one-call reveal', 'envelope', 'one_call', 'reveal', {
+        exactInputs: true, signerSupportsTapscript: true,
+    }],
     ['envelope two-step commit', 'envelope', 'two_step', 'commit', {
         exactInputs: true, signerSupportsTapscript: true, twoStepEnvelope: true,
     }],
@@ -57,6 +60,9 @@ const REQUEST_CASES = [
         envelopeCommitHex: 'aabb', signerSupportsTapscript: true,
     }],
     ['standard one-call commit', 'standard', 'one_call', 'commit', {
+        exactInputs: true,
+    }],
+    ['standard one-call reveal', 'standard', 'one_call', 'reveal', {
         exactInputs: true,
     }],
 ];
