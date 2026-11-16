@@ -452,6 +452,11 @@ const messages = {
     'components.durationSlider.emptyCustomHint': '1 block is ~{perBlock} on this network.',
     'components.placeOrderPanel.weMonitorForMatchesOn':
         'We monitor for matches on your orders and send payment for them automatically.',
+    'components.multipartUploadPanel.partsAndTransactions': '{parts} parts, {transactions} transactions',
+    'components.multipartUploadPanel.partsUploaded': '{done} of {total} parts uploaded',
+    'components.multipartUploadPanel.chooseSameFile': 'Choose the same file to continue this upload.',
+    'components.multipartUploadPanel.discard': 'Discard ({paid})',
+    'components.multipartUploadPanel.unfinishedUploads': 'Unfinished uploads',
 };
 
 addEnglish(messages);

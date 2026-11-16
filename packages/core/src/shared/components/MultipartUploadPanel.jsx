@@ -8,6 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 import { Button } from '../../ui/Button.jsx';
 import cardStyles from '../../ui/Card.module.css';
 
@@ -56,7 +58,7 @@ function ActiveUpload({ totalParts, transactions, currentPart, stage }) {
                 <h2 style={heading}>{title}</h2>
                 <p style={copy}>{detail}</p>
                 {stage === 'assembling' ? (
-                    <p style={copy}>{totalParts} parts, {transactions} transactions</p>
+                    <p style={copy}>{t('components.multipartUploadPanel.partsAndTransactions', { parts: totalParts, transactions })}</p>
                 ) : null}
             </div>
         </section>
@@ -72,15 +74,15 @@ function UnfinishedUpload({ upload, onContinue, onDiscard }) {
         <article className={cardStyles.card} style={cardLayout} aria-label={upload.name}>
             <div style={body}>
                 <h3 style={heading}>{upload.name}</h3>
-                <p style={copy}>{upload.partsSent} of {upload.totalParts} parts uploaded</p>
-                <p style={copy}>Choose the same file to continue this upload.</p>
+                <p style={copy}>{t('components.multipartUploadPanel.partsUploaded', { done: upload.partsSent, total: upload.totalParts })}</p>
+                <p style={copy}>{t('components.multipartUploadPanel.chooseSameFile')}</p>
             </div>
             <div style={actions}>
                 <Button size="sm" variant="primary" onClick={() => onContinue?.(upload.id)}>
-                    Continue
+                    {t('adsNotice.continue')}
                 </Button>
                 <Button size="sm" variant="secondary" onClick={() => onDiscard?.(upload.id)}>
-                    Discard ({paidTransactionText(upload.paidTransactions)})
+                    {t('components.multipartUploadPanel.discard', { paid: paidTransactionText(upload.paidTransactions) })}
                 </Button>
             </div>
         </article>
@@ -90,8 +92,8 @@ function UnfinishedUpload({ upload, onContinue, onDiscard }) {
 function UnfinishedUploads({ unfinished, onContinue, onDiscard }) {
     if (!unfinished?.length) return null;
     return (
-        <section style={layout} aria-label="Unfinished uploads">
-            <h2 style={heading}>Unfinished uploads</h2>
+        <section style={layout} aria-label={t('components.multipartUploadPanel.unfinishedUploads')}>
+            <h2 style={heading}>{t('components.multipartUploadPanel.unfinishedUploads')}</h2>
             {unfinished.map((upload) => (
                 <UnfinishedUpload
                     key={upload.id}
