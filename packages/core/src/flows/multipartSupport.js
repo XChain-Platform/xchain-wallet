@@ -36,6 +36,7 @@ export function multipartSupportFor({
         return { supported: true, lane: 'envelope', buildMode };
     }
 
+    if (addressType === 'p2tr') return { supported: false, reason: 'sourceType' };
     const buildMode = STANDARD_ONE_CALL_TYPES.has(addressType) ? 'one_call' : 'sourceType';
     return { supported: true, lane: 'standard', buildMode };
 }
