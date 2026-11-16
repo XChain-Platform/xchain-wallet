@@ -127,7 +127,7 @@ async function openArtwork(page) {
     // Token details carry the manage actions on an Actions tab now.
     await expect(main.getByRole('tab', { name: 'Actions' })).toBeVisible({ timeout: 30_000 });
     await clickManageTokenAction(main, 'Artwork');
-    await expect(main.getByText(`Attach artwork to ${TICK}`)).toBeVisible({ timeout: 30_000 });
+    await expect(main.getByRole('form', { name: 'Attach artwork' })).toBeVisible({ timeout: 30_000 });
 }
 
 async function reviewArtwork(page, bytes) {
