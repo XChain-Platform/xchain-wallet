@@ -32,6 +32,7 @@ import { normalizeSource } from './sendToken.js';
 import { utxoListOf } from './txInclusionProbe.js';
 import { isAlreadyOnNetworkRejection } from './broadcastPermanence.js';
 import { gatedManifestActionData } from './gatedMultipartManifest.js';
+import { recordGateOf, resumeGateOf } from './gatedUploadGate.js';
 
 const TXID = /^[0-9a-f]{64}$/i;
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
@@ -418,7 +419,7 @@ async function initialRecord(opts, source, plan, quote, originalSha256) {
         originalSha256,
         fileHash: plan.fileHash,
         meta: opts.meta || {},
-        gate: opts.gate || null,
+        gate: recordGateOf(opts.gate, plan),
         compression: plan.compression || '',
         totalParts: plan.totalParts,
         totalBytes: plan.totalBytes,
@@ -430,10 +431,21 @@ async function initialRecord(opts, source, plan, quote, originalSha256) {
     return record;
 }
 
-async function recordForRun(opts, source, plan, quote, originalSha256) {
-    if (!opts.resumeId) return initialRecord(opts, source, plan, quote, originalSha256);
+async function resumeRecord(opts) {
+    if (!opts.resumeId) return null;
     const record = await opts.vault.pendingFileUploads.get(opts.resumeId);
     if (!record) throw new Error(`publishMultipartFile: no pending upload "${opts.resumeId}"`);
+    return record;
+}
+
+function planningGate(opts, record) {
+    if (!record) return opts.gate || null;
+    if (record.gate === null) return null;
+    return resumeGateOf(record.gate, opts.gate?.key);
+}
+
+async function recordForRun(opts, record, source, plan, quote, originalSha256) {
+    if (!opts.resumeId) return initialRecord(opts, source, plan, quote, originalSha256);
     if (record.originalSha256 !== originalSha256) {
         const error = new Error('Resume pick does not match the original file.');
         error.code = 'RESUME_ORIGINAL_MISMATCH';
@@ -495,14 +507,16 @@ export async function publishMultipartFile(opts) {
         activationTimes: opts.activationTimes || FILE_MULTIPART_ACTIVATION_TIME,
     });
     const { lane, buildMode } = laneConfig(opts);
+    const savedRecord = await resumeRecord(opts);
+    const gate = planningGate(opts, savedRecord);
     const planner = opts.planMultipartFile || planMultipartFile;
     const plan = await planner(opts.bytes, opts.meta || {}, {
-        carrier: lane, gate: opts.gate || null,
+        carrier: lane, gate,
     });
     const rate = await feeRate(opts, sdk);
     const quote = quoteFor(opts, plan, rate, lane);
     const originalSha256 = bytesToHex(sha256(opts.bytes));
-    let record = await recordForRun(opts, source, plan, quote, originalSha256);
+    let record = await recordForRun(opts, savedRecord, source, plan, quote, originalSha256);
     const save = async (next) => opts.vault.pendingFileUploads.put(next);
     const waitForTxid = opts.waitForTxid
         || ((txid, waitOpts) => sdk.waitForAction(txid, waitOpts));
