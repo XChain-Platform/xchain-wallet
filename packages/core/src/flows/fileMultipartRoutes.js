@@ -8,6 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { bytesFromLatin1 } from './latin1Bytes.js';
+
 function requireText(value, field, caller) {
     if (typeof value !== 'string' || value.trim().length === 0) {
         throw new Error(`${caller}: ${field} is required`);
@@ -55,16 +57,37 @@ function routeError(code, message) {
     return error;
 }
 
+function requestBytes(req) {
+    const hasBytes = req?.bytes !== undefined;
+    const hasRawData = req?.rawData !== undefined;
+    if (hasBytes && hasRawData) {
+        throw routeError(
+            'FILE_BYTES_AMBIGUOUS',
+            'handleFileMultipart: provide bytes or rawData, not both',
+        );
+    }
+    return hasBytes ? req.bytes : bytesFromLatin1(req?.rawData);
+}
+
+function multipartReply(result) {
+    if (!result || !Object.prototype.hasOwnProperty.call(result, 'record')) return result;
+    const { record, ...reply } = result;
+    return record == null ? reply : { ...reply, upload: pendingUploadSummary(record) };
+}
+
 export async function handleFileMultipart(req, deps) {
     requireText(req?.walletId, 'walletId', 'handleFileMultipart');
     requireText(req?.chainId, 'chainId', 'handleFileMultipart');
     requireText(req?.sourceAddress, 'sourceAddress', 'handleFileMultipart');
-    requireBytes(req?.bytes);
+    const bytes = requestBytes(req);
+    requireBytes(bytes);
 
     const { publishMultipartFile, vault, sdkRegistry, chainRegistry, signer, onBroadcastFailure } = deps;
     const sdk = sdkRegistry.get(req.chainId);
-    return publishMultipartFile({
-        ...req,
+    const request = { ...req, bytes };
+    delete request.rawData;
+    const result = await publishMultipartFile({
+        ...request,
         signer,
         vault,
         chainRegistry,
@@ -72,6 +95,7 @@ export async function handleFileMultipart(req, deps) {
         onBroadcastFailure,
         waitForTxid: (txid, options) => sdk.waitForAction(txid, options),
     });
+    return multipartReply(result);
 }
 
 export async function handleListPendingFileUploads(req, { vault }) {
