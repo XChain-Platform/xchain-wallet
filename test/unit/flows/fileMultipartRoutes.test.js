@@ -87,10 +87,10 @@ describe('handleFileMultipart validation', () => {
 
 describe('handleListPendingFileUploads', () => {
     it('returns only the panel summary and excludes the manifest from parts sent', async () => {
-        const listForWallet = vi.fn(async () => [upload(), upload({
+        const findBy = vi.fn(async () => [upload(), upload({
             id: 'upload-2', meta: {}, pieces: [], fundingTxid: null, stage: 'funding',
         })]);
-        const vault = { pendingFileUploads: { listForWallet } };
+        const vault = { pendingFileUploads: { findBy } };
         await expect(handleListPendingFileUploads({ walletId: 'wallet-1' }, { vault })).resolves.toEqual({
             uploads: [
                 {
@@ -107,14 +107,14 @@ describe('handleListPendingFileUploads', () => {
                 },
             ],
         });
-        expect(listForWallet).toHaveBeenCalledWith('wallet-1');
+        expect(findBy).toHaveBeenCalledWith('walletId', 'wallet-1');
     });
 });
 
 describe('handleDiscardPendingFileUpload', () => {
     it('removes an owned record and reports transactions already paid', async () => {
         const remove = vi.fn(async () => true);
-        const vault = { pendingFileUploads: { get: vi.fn(async () => upload()), remove } };
+        const vault = { pendingFileUploads: { get: vi.fn(async () => upload()), delete: remove } };
         await expect(handleDiscardPendingFileUpload(
             { walletId: 'wallet-1', id: 'upload-1' }, { vault },
         )).resolves.toEqual({ removed: true, paidTransactions: 5 });
@@ -126,7 +126,7 @@ describe('handleDiscardPendingFileUpload', () => {
         ['FILE_UPLOAD_WALLET_MISMATCH', upload({ walletId: 'wallet-2' })],
     ])('refuses %s without removing the record', async (code, record) => {
         const remove = vi.fn();
-        const vault = { pendingFileUploads: { get: vi.fn(async () => record), remove } };
+        const vault = { pendingFileUploads: { get: vi.fn(async () => record), delete: remove } };
         await expect(handleDiscardPendingFileUpload(
             { walletId: 'wallet-1', id: 'upload-1' }, { vault },
         )).rejects.toMatchObject({ code });

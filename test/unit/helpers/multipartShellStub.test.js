@@ -33,7 +33,7 @@ describe('seeded multipart record listing', () => {
         const record = multipartRecordFixture({ id: 'seeded-upload' });
         const expected = await handleListPendingFileUploads(
             { walletId: record.walletId },
-            { vault: { pendingFileUploads: { listForWallet: async () => [record] } } },
+            { vault: { pendingFileUploads: { findBy: async () => [record] } } },
         );
         const stub = createMultipartShellStub({ records: [record] });
         await expect(stub.messaging.listPendingFileUploads({ walletId: record.walletId }))
