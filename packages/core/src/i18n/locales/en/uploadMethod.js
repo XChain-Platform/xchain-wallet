@@ -33,6 +33,7 @@ const messages = {
     'uploadMethod.reason.tooLarge': 'This file is too large for it: Standard carries up to {cap}.',
     'uploadMethod.reason.tooLargeFor': 'Too large for this method: it carries up to {cap}.',
     'uploadMethod.review.fee': 'Estimated upload fee',
+    'uploadMethod.review.multipartMethod': '{method}, {summary}',
     'uploadMethod.confirmLine': 'Upload method: {method}.',
 };
 

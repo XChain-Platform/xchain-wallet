@@ -245,15 +245,30 @@ function fieldOption(upload, value) {
  * @param {string} [props.labelClassName]
  * @param {string} [props.valueClassName]
  */
+// A multipart pick names its parts and transactions and reviews the whole
+// upload's fee; a single-transaction pick keeps the method name and its fee.
+function reviewCopy(upload) {
+    const picked = upload.multipart?.options?.[upload.method] ?? null;
+    if (!picked?.multipart || !picked.summary) return { method: upload.label, fee: upload.feeText };
+    const fee = Number.isFinite(picked.fee)
+        ? `${satsToCoinDecimal(picked.fee)} ${upload.coinTicker}`.trim()
+        : upload.feeText;
+    return {
+        method: t('uploadMethod.review.multipartMethod', { method: upload.label, summary: picked.summary }),
+        fee,
+    };
+}
+
 export function UploadMethodReviewRows({ upload, labelClassName, valueClassName }) {
+    const copy = reviewCopy(upload);
     return (
         <>
             <dt className={labelClassName}>{t('uploadMethod.label')}</dt>
-            <dd className={valueClassName} data-testid="review-upload-method">{upload.label}</dd>
-            {upload.feeText ? (
+            <dd className={valueClassName} data-testid="review-upload-method">{copy.method}</dd>
+            {copy.fee ? (
                 <>
                     <dt className={labelClassName}>{t('uploadMethod.review.fee')}</dt>
-                    <dd className={valueClassName} data-testid="review-upload-fee">{upload.feeText}</dd>
+                    <dd className={valueClassName} data-testid="review-upload-fee">{copy.fee}</dd>
                 </>
             ) : null}
         </>

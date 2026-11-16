@@ -9,6 +9,7 @@ import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 import { estimateNativeSendFeeTiers } from '../../../packages/core/src/flows/feeEstimate.js';
 import {
     UploadMethodField,
+    UploadMethodReviewRows,
     useUploadMethod,
 } from '../../../packages/core/src/shared/components/UploadMethodField.jsx';
 
@@ -111,5 +112,30 @@ describe('multipart option reason fallback', () => {
         expect(taproot).toHaveAttribute('aria-disabled', 'true');
         expect(standard).not.toHaveAttribute('aria-disabled');
         expect(standard).toHaveTextContent('3 parts, 9 transactions');
+    });
+});
+
+function ReviewHarness({ quote }) {
+    const upload = useUploadMethod(baseArgs(quote));
+    return <dl><UploadMethodReviewRows upload={upload} /></dl>;
+}
+
+describe('multipart review rows', () => {
+    it('names the parts and transactions of a multipart pick and its whole fee', () => {
+        const quote = multipart(
+            option({ summary: '26 parts, 55 transactions', fee: 12_345 }),
+            option({ reason: 'tooLarge', cap: 122_880 }),
+        );
+        render(<ReviewHarness quote={quote} />);
+
+        expect(screen.getByTestId('review-upload-method')).toHaveTextContent('Taproot upload, 26 parts, 55 transactions');
+        expect(screen.getByTestId('review-upload-fee')).toHaveTextContent('0.00012345 BTC');
+    });
+
+    it('keeps the method name alone for a single-transaction pick', () => {
+        const quote = multipart(option(), option());
+        render(<ReviewHarness quote={quote} />);
+
+        expect(screen.getByTestId('review-upload-method').textContent).toMatch(/^(Taproot upload|Standard)$/);
     });
 });
