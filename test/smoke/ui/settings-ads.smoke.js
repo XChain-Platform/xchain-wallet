@@ -18,9 +18,11 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 const sectionPath = join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'settings', 'AdsSection.jsx');
+const chainsPath = join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'settings', 'adsChains.js');
 const settingsPath = join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'Settings.jsx');
 
 const src = readFileSync(sectionPath, 'utf8');
+const chainsSrc = readFileSync(chainsPath, 'utf8');
 const settingsSrc = readFileSync(settingsPath, 'utf8');
 
 assert.match(src, /import \{ useSettings \}/, 'imports useSettings');
@@ -68,7 +70,8 @@ assert.match(src, /aria-description=\{t\('settings\.ads\.donationAddressArrivesL
 assert.match(src, /disabled=\{!settings\.ads\.enabled\}/, 'inputs disable when ADS is off');
 
 // Regtest filtering goes through the shared visibility helper.
-assert.match(src, /registryLib\.isChainVisibleToUser\(d, settings\)/, 'regtest filter via shared helper');
+assert.match(chainsSrc, /isChainVisibleToUser\(descriptor, settings\)/, 'regtest filter via shared helper');
+assert.match(src, /adsChainIdsForUser\(settings, chainRegistry\)/, 'panel uses shared ADS chain selector');
 
 // Settings.jsx wiring
 assert.match(settingsSrc, /import \{ AdsSection \}/, 'Settings.jsx imports AdsSection');

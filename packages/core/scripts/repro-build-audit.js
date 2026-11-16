@@ -40,7 +40,7 @@
 // That doc left this repo in and now lives in the sibling
 //      xchain-documentation checkout, published at
 //      https://docs.xchain.io/components/wallet/reproducible-builds. When the
-//      sibling is absent (an isolated single-repo CI checkout) the three doc
+//      sibling is absent (an isolated single-repo CI checkout) the two doc
 //      rules are OMITTED rather than failed: they guard documentation parity,
 //      not shipped build behavior.
 

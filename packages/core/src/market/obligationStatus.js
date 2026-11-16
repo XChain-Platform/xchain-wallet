@@ -140,3 +140,56 @@ export function baseUnitsToCoinText(raw) {
     const frac = String(fracPart).padStart(8, '0').replace(/0+$/, '');
     return `${intPart}.${frac}`;
 }
+
+/** The status literal an obligation carries while its payment is still owed. */
+export const PENDING_COINPAY_STATUS = 'pending_coinpay';
+
+/**
+ * One obligation row's status, read the same way by every consumer.
+ *
+ * The explorer serves `coinpay_status`; `coinpayStatus` and a bare `status` are
+ * accepted spellings of the same field. The first spelling that is present wins
+ * (an empty string is present, so a row that blanks the field is not rescued by
+ * a later spelling), and the value is trimmed and lowercased so a recased
+ * literal reads the same everywhere. A row with no status at all reads as ''.
+ *
+ * @param {unknown} row
+ * @returns {string}
+ */
+export function obligationStatus(row) {
+    if (!row || typeof row !== 'object') return '';
+    for (const key of ['coinpay_status', 'coinpayStatus', 'status']) {
+        const value = row[key];
+        if (value !== undefined && value !== null) return String(value).trim().toLowerCase();
+    }
+    return '';
+}
+
+/** True only for a row whose status reads exactly as pending; a missing status is not payable. */
+export function isPendingObligation(row) {
+    return obligationStatus(row) === PENDING_COINPAY_STATUS;
+}
+
+/** A pending obligation this address owes as the payer. */
+export function isPendingForPayer(row, address) {
+    if (!isPendingObligation(row)) return false;
+    const payer = row.payer_address || row.payerAddress;
+    return typeof payer === 'string' && payer === address;
+}
+
+/**
+ * The obligation rows inside an explorer reply. The explorer has returned them
+ * under several envelope shapes over time; every one is accepted so a reply is
+ * never read as zero rows.
+ *
+ * @param {unknown} resp
+ * @returns {any[]}
+ */
+export function extractObligationRows(resp) {
+    if (!resp) return [];
+    if (Array.isArray(resp)) return resp;
+    for (const key of ['data', 'rows', 'obligations', 'coinpay_obligations']) {
+        if (Array.isArray(resp[key])) return resp[key];
+    }
+    return [];
+}

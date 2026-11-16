@@ -31,6 +31,7 @@
 // close the gap early and leave funds hidden behind a "done".
 
 import { createAddress } from '../schemas/address.js';
+import { addressSourceForSignerKind } from '../schemas/constants.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 import {
     BATCH_FEATURE_BALANCES,
@@ -58,8 +59,6 @@ export const DISCOVERY_READ_TIMEOUT_MS = 30000;
 
 const RECEIVE_BRANCH = 0;
 const CHANGE_BRANCH = 1;
-const HD_SOURCES = new Set(['hd', 'trezor', 'ledger']);
-
 /** An explorer answer the flow cannot read as used or unused. */
 export class UnrecognizedExplorerReplyError extends Error {
     constructor(address, reason) {
@@ -288,7 +287,7 @@ export async function discoverWalletAddresses({
                                 accountId: account.id,
                                 chain: descriptor.coin,
                                 network: descriptor.networkKind,
-                                source: signer.kind === 'software' ? 'hd' : signer.kind,
+                                source: addressSourceForSignerKind(signer.kind),
                                 addressType,
                                 derivationPath: derived.path,
                                 address: derived.address,
@@ -331,7 +330,9 @@ async function discoveryPlan({ vault, walletId, chainRegistry, activeNetwork }) 
     const heldIndices = new Map();
     for (const a of await vault.addresses.list()) {
         const account = a.accountId ? accountById.get(a.accountId) : null;
-        if (!account || !HD_SOURCES.has(a.source)) continue;
+        // Discovery runs with the wallet seed signer, which cannot derive a
+        // hardware account's independent key material.
+        if (!account || a.source !== 'hd') continue;
         const chainId = chainRegistry.chainIdFor(a.chain, a.network);
         if (!chainId) continue;
         const descriptor = chainRegistry.descriptorFor(chainId);

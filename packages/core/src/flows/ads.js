@@ -160,9 +160,9 @@ export function resolveAdsPlanForNextTx(settings, chainId, chainRegistry) {
  * - `donationIncluded = false` (normal): accumulator += the resolved
  *   per-tx amount; lifetimeTxCount += 1.
  * - `donationIncluded = true`: the tx we just broadcast carried the
- *   donation. lifetimeDonatedSats += the pre-reset accumulator;
- *   accumulator resets to the resolved per-tx amount (this tx's own
- *   contribution toward the next cycle); lifetimeTxCount += 1.
+ *   donation. The compose-time `donationAmount` is credited and removed
+ *   from the live accumulator before this tx contributes its per-tx amount.
+ *   Old verdicts without an amount keep the pre-reset behavior.
  *
  * The per-tx amount resolves against the chain descriptor when
  * `chainRegistry` is passed (§36.6: stored null = follow the release
@@ -170,10 +170,10 @@ export function resolveAdsPlanForNextTx(settings, chainId, chainRegistry) {
  *
  * @param {import('../schemas/settings.js').Settings} settings
  * @param {string} chainId
- * @param {{ donationIncluded: boolean, chainRegistry?: import('../registry/index.js').ChainRegistry }} params
+ * @param {{ donationIncluded: boolean, donationAmount?: number, chainRegistry?: import('../registry/index.js').ChainRegistry }} params
  * @returns {import('../schemas/settings.js').Settings}
  */
-export function stepAdsAccumulator(settings, chainId, { donationIncluded, chainRegistry }) {
+export function stepAdsAccumulator(settings, chainId, { donationIncluded, donationAmount, chainRegistry }) {
     if (!settings || !settings.ads || !settings.ads.enabled) return settings;
     const state = settings.ads.perChain?.[chainId];
     if (!state) return settings;
@@ -185,8 +185,13 @@ export function stepAdsAccumulator(settings, chainId, { donationIncluded, chainR
         lifetimeTxCount: state.lifetimeTxCount + 1,
     };
     if (donationIncluded) {
-        nextState.lifetimeDonatedSats = state.lifetimeDonatedSats + prior;
-        nextState.accumulatedSats = perTxAmountSats;
+        const paid = Number.isSafeInteger(donationAmount) && donationAmount > 0
+            ? donationAmount
+            : null;
+        nextState.lifetimeDonatedSats = state.lifetimeDonatedSats + (paid ?? prior);
+        nextState.accumulatedSats = paid === null
+            ? perTxAmountSats
+            : Math.max(prior - paid, 0) + perTxAmountSats;
     } else {
         nextState.accumulatedSats = prior + perTxAmountSats;
     }
@@ -208,18 +213,21 @@ export function stepAdsAccumulator(settings, chainId, { donationIncluded, chainR
  * @param {import('../storage/Vault.js').Vault} opts.vault
  * @param {string} opts.chainId
  * @param {boolean} opts.donationIncluded
+ * @param {number} [opts.donationAmount]  amount fixed into the signed transaction
  * @param {import('../registry/index.js').ChainRegistry} [opts.chainRegistry]  resolves the per-tx amount against the descriptor (§36.6)
  * @returns {Promise<import('../schemas/settings.js').Settings | null>}
  */
-export async function commitAdsStep({ vault, chainId, donationIncluded, chainRegistry }) {
+export async function commitAdsStep({ vault, chainId, donationIncluded, donationAmount, chainRegistry }) {
     if (!vault) throw new Error('commitAdsStep: vault is required');
-    return serializeSettingsWrites(vault, () => commitAdsStepNow({ vault, chainId, donationIncluded, chainRegistry }));
+    return serializeSettingsWrites(vault, () => commitAdsStepNow({
+        vault, chainId, donationIncluded, donationAmount, chainRegistry,
+    }));
 }
 
-async function commitAdsStepNow({ vault, chainId, donationIncluded, chainRegistry }) {
+async function commitAdsStepNow({ vault, chainId, donationIncluded, donationAmount, chainRegistry }) {
     const settings = await vault.settings.get();
     if (!settings) return null;
-    const next = stepAdsAccumulator(settings, chainId, { donationIncluded, chainRegistry });
+    const next = stepAdsAccumulator(settings, chainId, { donationIncluded, donationAmount, chainRegistry });
     if (next !== settings) {
         await vault.settings.put(next);
     }

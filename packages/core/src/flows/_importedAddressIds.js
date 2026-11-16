@@ -34,12 +34,27 @@ export async function importedAddressIdsFor(vault, walletId) {
     if (!vault?.wallets || typeof walletId !== 'string' || walletId.length === 0) {
         return new Set();
     }
-    let wallet;
     try {
-        wallet = await vault.wallets.get(walletId);
+        return await importedAddressIdsForStrict(vault, walletId);
     } catch {
         return new Set();
     }
+}
+
+/**
+ * Resolve imported address ids without hiding an unreadable wallet record.
+ * Callers that must not act on a partial inventory use this variant.
+ *
+ * @param {import('../storage/Vault.js').Vault} vault
+ * @param {string} walletId
+ * @returns {Promise<Set<string>>} address ids of this wallet's imported keys
+ */
+export async function importedAddressIdsForStrict(vault, walletId) {
+    if (typeof vault?.wallets?.get !== 'function') {
+        throw new Error('importedAddressIdsForStrict: wallet collection is unreadable');
+    }
+    if (typeof walletId !== 'string' || walletId.length === 0) return new Set();
+    const wallet = await vault.wallets.get(walletId);
     const keys = Array.isArray(wallet?.importedKeys) ? wallet.importedKeys : [];
     return new Set(
         keys

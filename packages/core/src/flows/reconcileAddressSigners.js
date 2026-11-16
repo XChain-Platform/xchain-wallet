@@ -18,6 +18,8 @@
 // Signers must be unlocked. The caller holds the unlock(s); we don't
 // touch lock/unlock state. A typical use is `withUnlocked(..., async
 // (signer) => reconcileAddressSigners({ ..., signers: [signer] }))`.
+// This is an explicit library operation; no shell currently invokes it,
+// so migration-created null signerIds are not reconciled automatically.
 //
 // The function is idempotent: addresses already linked to a signer are
 // not touched. Addresses with `derivationPath === null` (imported-WIF,

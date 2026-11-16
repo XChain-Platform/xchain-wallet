@@ -153,4 +153,33 @@ describe('orders and sales claim what they spend', () => {
         await expect(host.handle(request('action.order', 'psbt-c', { ...SALE, GIVE_TICK: 'BETA' })))
             .resolves.toEqual({ ok: true, result: { txid: 'tx-c' } });
     });
+
+    it('keeps a queued sale name guarded until its entry is discarded', async () => {
+        orderActionMock.mockImplementationOnce(async (opts) => {
+            await opts.onBroadcastFailure({
+                chainId: 'bitcoin-mainnet',
+                signedTxHex: 'signed-sale',
+                txid: 'queued-sale',
+                soldNames: ['ALPHA'],
+            });
+            throw Object.assign(new Error('broadcast failed (phase1): timeout'), {
+                name: 'BroadcastFailedTransientError',
+            });
+        }).mockResolvedValueOnce({ txid: 'tx-b' });
+        const host = makeHost();
+
+        await expect(host.handle(request('action.order', 'psbt-a', SALE)))
+            .resolves.toMatchObject({ ok: false, error: { name: 'BroadcastFailedTransientError' } });
+        await expect(host.handle(request('action.order', 'psbt-c', SALE)))
+            .resolves.toMatchObject({ ok: false, error: { name: 'NameSaleInFlightError' } });
+        const listed = await host.handle({
+            type: 'broadcast.queue.list', request: { walletId: 'wallet-one' },
+        });
+        await host.handle({
+            type: 'broadcast.queue.discard',
+            request: { walletId: 'wallet-one', id: listed.result[0].id },
+        });
+        await expect(host.handle(request('action.order', 'psbt-c', SALE)))
+            .resolves.toEqual({ ok: true, result: { txid: 'tx-b' } });
+    });
 });

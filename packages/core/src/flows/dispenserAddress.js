@@ -34,11 +34,12 @@
 // tag and default label.
 
 import { createAddress } from '../schemas/address.js';
+import { addressSourceForSignerKind } from '../schemas/constants.js';
 import { NoMatchingAccountError } from './receiveAddress.js';
 import { unlockWallet } from './unlockWallet.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { defaultAddressTypeForWallet } from './_defaultAddressType.js';
-import { indexSpaceSharedForWallet } from './_addressIndexSpace.js';
+import { indexSpaceSharedForAccount } from './_addressIndexSpace.js';
 import { sdkSupportedAddressTypes } from './sdkAddressTypes.js';
 
 const MAX_DERIVATION_INDEX = 0x7fffffff;
@@ -175,8 +176,10 @@ export async function dispenserAddress({
     // below must not apply. Partitioning by type there would hand the
     // dispenser the key already in use as a personal receive address -
     // the exact collision the "never collides" note above rules out.
-    const sharedIndexSpace = await indexSpaceSharedForWallet(vault, walletId);
     const allAddresses = await vault.addresses.list();
+    const sharedIndexSpace = await indexSpaceSharedForAccount(vault, walletId, {
+        account, addresses: allAddresses, signerKind: providedSigner?.kind,
+    });
     const held = new Set();
     let highest = -1;
     let dispenserCount = 0;
@@ -217,9 +220,9 @@ export async function dispenserAddress({
         });
     const ownsSigner = !providedSigner;
     const signerKind = signer.kind;
-    const addressSource = signerKind === 'software' ? 'hd' : signerKind;
 
     try {
+        const addressSource = addressSourceForSignerKind(signerKind);
         // Fill the lowest gap below `highest` whose address the chain has
         // never funded; a gap the chain shows was actually used stays
         // skipped, same as `held`, so the range grows past it instead.

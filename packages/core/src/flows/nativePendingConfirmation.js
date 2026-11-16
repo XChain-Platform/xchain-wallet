@@ -50,7 +50,7 @@ import { markPendingTxIndexed, markPendingTxMempoolSeen } from '../notifications
 import { isLivePendingStatus, NETWORK_SEEN_WINDOW_MS } from '../shared/utils/pendingHistory.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { parseRawTx } from '../signers/verifySignedTx.js';
-import { probeTxInclusion } from './txInclusionProbe.js';
+import { probeTxInclusion, utxoListOf } from './txInclusionProbe.js';
 
 /**
  * @typedef {{ txid?: string, confirmations?: number | string, height?: number | string }} TrackerUtxo
@@ -137,19 +137,7 @@ export function nativeSendVerdict({ txid, utxosByAddress }) {
     return { verdict: deepest >= 1 ? 'confirmed' : 'seen', confirmations: deepest, blockIndex };
 }
 
-/**
- * The UTXO list out of an encoder `get_utxos` reply, in either shape the
- * SDK client documents (`{ utxos: [...] }` today, a bare array on older
- * encoders). Anything else is "did not answer".
- *
- * @param {unknown} res
- * @returns {TrackerUtxo[] | null}
- */
-export function utxoListOf(res) {
-    if (Array.isArray(res)) return res;
-    const list = /** @type {any} */ (res)?.utxos;
-    return Array.isArray(list) ? list : null;
-}
+export { utxoListOf };
 
 /**
  * The transactions among `txids` that a confirmed record in `siblings`

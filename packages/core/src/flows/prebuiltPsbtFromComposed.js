@@ -19,6 +19,7 @@
  * @returns {import('../sdk/submitWithSigner.js').PrebuiltPsbt}
  */
 export function prebuiltPsbtFromComposed(composed) {
+    const donationIncluded = !!composed.adsPlan?.canSubmit;
     return {
         psbtHex: composed.psbt,
         encoding: composed.encoding,
@@ -38,7 +39,10 @@ export function prebuiltPsbtFromComposed(composed) {
         envelope: composed.envelope || null,
         // The donation verdict these bytes actually carry, so the submit path
         // books from compose time rather than a fresh settings snapshot.
-        adsDonation: { included: !!composed.adsPlan?.canSubmit },
+        adsDonation: {
+            included: donationIncluded,
+            donationAmount: donationIncluded ? composed.adsPlan.donationAmount : 0,
+        },
         // The encoder's compression report for these exact bytes, so the
         // success screen can state the size actually stored on chain.
         compression: composed.compression || null,

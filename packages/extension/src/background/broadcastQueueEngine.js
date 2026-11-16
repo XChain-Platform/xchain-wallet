@@ -21,6 +21,7 @@ import {
     sealBroadcastQueueStore,
 } from './broadcastQueueStore.js';
 import { toStoredQueueSnapshot } from './broadcast_queue_snapshot.js';
+import { soldNames } from './ownSpends.js';
 
 /**
  * Carry the commit-landed marker of a queued reveal or phase-2 spend onto a queue
@@ -51,6 +52,17 @@ function queuedRevealFields(source) {
     return {
         revealTxHex: source.revealTxHex,
         ...(typeof source.revealTxid === 'string' && source.revealTxid ? { revealTxid: source.revealTxid } : {}),
+    };
+}
+
+function normalizedAdsCommit(verdict) {
+    if (!verdict || typeof verdict !== 'object') return null;
+    if (typeof verdict.chainId !== 'string' || typeof verdict.donationIncluded !== 'boolean') return null;
+    const donationAmount = verdict.donationAmount;
+    return {
+        chainId: verdict.chainId,
+        donationIncluded: verdict.donationIncluded,
+        ...(Number.isSafeInteger(donationAmount) && donationAmount > 0 ? { donationAmount } : {}),
     };
 }
 
@@ -146,13 +158,25 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
     function adoptSnapshotVerdict(live, persisted) {
         if (live.signedTxHex !== persisted.signedTxHex) return;
         mergePendingTxIds(live, persisted);
+        if ((!Array.isArray(live.soldNames) || live.soldNames.length === 0)
+            && Array.isArray(persisted.soldNames) && persisted.soldNames.length > 0) {
+            live.soldNames = persisted.soldNames.slice();
+        }
         const link = persisted.rbfReplacesPendingTxId;
         if (!live.rbfReplacesPendingTxId && typeof link === 'string' && link) live.rbfReplacesPendingTxId = link;
-        const verdict = persisted.adsCommit;
-        if (live.adsCommit) return;
-        if (!verdict || typeof verdict !== 'object') return;
-        if (typeof verdict.chainId !== 'string' || typeof verdict.donationIncluded !== 'boolean') return;
-        live.adsCommit = { chainId: verdict.chainId, donationIncluded: verdict.donationIncluded };
+        const normalized = normalizedAdsCommit(persisted.adsCommit);
+        if (!normalized) return;
+        if (!live.adsCommit) {
+            live.adsCommit = normalized;
+            return;
+        }
+        const amount = normalized.donationAmount;
+        if (!Number.isSafeInteger(live.adsCommit.donationAmount)
+            && Number.isSafeInteger(amount)
+            && live.adsCommit.chainId === normalized.chainId
+            && live.adsCommit.donationIncluded === normalized.donationIncluded) {
+            live.adsCommit = { ...live.adsCommit, donationAmount: amount };
+        }
     }
     async function ensureQueueLoaded() {
         // A sealed store serves nothing: a host built on it during a wipe must
@@ -555,6 +579,8 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         const accountIds = new Set(
             (Array.isArray(accounts) ? accounts : []).map((a) => a?.id).filter(Boolean),
         );
+        // This injected resolver must reject unreadable wallet records. A
+        // narrowed set would let the restore latch a partial inventory.
         const importedIds = await importedAddressIdsFor(vault, walletId);
         const all = await vault.addresses.list();
         /** @type {Set<string>} */
@@ -689,6 +715,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                 signedAt: Date.parse(record.createdAt) || Date.now(),
                 txid: record.txid,
                 pendingTxId: record.id,
+                soldNames: soldNames(record.params),
                 ...(resumedClaim ? { resumedClaim: true } : {}),
                 ...commitLandedFields(record),
                 // A two-phase record checkpointed before its commit went out
@@ -940,7 +967,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      * `revealTxHex` is the signed reveal of a two-phase action whose commit is
      * `signedTxHex`: the broadcast route sends the commit and then the reveal.
      *
-     * @param {{ chainId: string, signedTxHex: string, summary?: string, signedAt?: number, txid?: string, pendingTxId?: string | null, siblingPendingTxIds?: string[], resumedClaim?: boolean, rbfReplacesPendingTxId?: string, commitLanded?: true, commitTxid?: string | null, revealTxHex?: string, revealTxid?: string, adsCommit?: { chainId: string, donationIncluded: boolean } | null }} entry
+     * @param {{ chainId: string, signedTxHex: string, summary?: string, signedAt?: number, txid?: string, pendingTxId?: string | null, siblingPendingTxIds?: string[], soldNames?: string[], resumedClaim?: boolean, rbfReplacesPendingTxId?: string, commitLanded?: true, commitTxid?: string | null, revealTxHex?: string, revealTxid?: string, adsCommit?: { chainId: string, donationIncluded: boolean, donationAmount?: number } | null }} entry
      * @returns {import('./broadcastQueueStorage.js').QueueEntry}
      */
     function pushQueueEntry(walletId, entry) {
@@ -954,7 +981,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
             return sameTx;
         }
         const id = `q-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        const adsCommit = entry.adsCommit;
+        const adsCommit = normalizedAdsCommit(entry.adsCommit);
         const stored = {
             id,
             chainId: entry.chainId,
@@ -967,18 +994,16 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
             ...(typeof entry.pendingTxId === 'string' && entry.pendingTxId
                 ? { pendingTxId: entry.pendingTxId }
                 : {}),
+            ...(Array.isArray(entry.soldNames) && entry.soldNames.length > 0
+                ? { soldNames: entry.soldNames.filter(Boolean).map((name) => String(name).toUpperCase()) }
+                : {}),
             ...(entry.resumedClaim === true ? { resumedClaim: true } : {}),
             ...(typeof entry.rbfReplacesPendingTxId === 'string' && entry.rbfReplacesPendingTxId
                 ? { rbfReplacesPendingTxId: entry.rbfReplacesPendingTxId }
                 : {}),
             ...commitLandedFields(entry),
             ...queuedRevealFields(entry),
-            ...(adsCommit
-                && typeof adsCommit === 'object'
-                && typeof adsCommit.chainId === 'string'
-                && typeof adsCommit.donationIncluded === 'boolean'
-                ? { adsCommit: { chainId: adsCommit.chainId, donationIncluded: adsCommit.donationIncluded } }
-                : {}),
+            ...(adsCommit ? { adsCommit } : {}),
         };
         getQueue(walletId).push(stored);
         // Start a background save for the vault rebuild, which pushes in a loop.

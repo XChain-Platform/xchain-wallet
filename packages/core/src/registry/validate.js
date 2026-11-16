@@ -106,7 +106,7 @@ export const FEE_STRATEGY_NAMES = /** @type {const} */ ([
  * @property {string} uriScheme                   e.g. 'bitcoin' for BIP21
  * @property {number} wifVersionByte              leading byte for WIF-encoded private keys on this network
  * @property {string} [nativeTicker]              display ticker override for a custom chain
- * @property {number} [nativeDecimals]            decimal places in one native coin unit; defaults to 8
+ * @property {number} [nativeDecimals]            decimal places in one native coin unit; defaults to 8 and, when present, must be 8
  * @property {number|string} [smallBalanceBaseUnits] display-only small-balance threshold in native base units
  * @property {Array<{ id: string, label: string, url: string, iconImg?: string }>} [transactionExplorers] HTTPS transaction URL templates containing `{txid}`
  * @property {EndpointConfig} explorer
@@ -371,6 +371,12 @@ export function validateChainDescriptor(record) {
     check(errors, 'uriScheme', isString(r.uriScheme) && URI_SCHEME_RE.test(r.uriScheme) && !BLOCKED_URI_SCHEMES.has(r.uriScheme), 'must be a lowercase URI scheme that is not a web, script or file scheme');
     if (r.nativeTicker !== undefined) {
         check(errors, 'nativeTicker', isNonEmptyString(r.nativeTicker) && r.nativeTicker.length <= 12, 'must be a non-empty string of at most 12 characters');
+    }
+    // The tracker, encoder and the wallet's balance and compose paths all carry
+    // native amounts at 10^8 scale, so a descriptor claiming another precision
+    // would show one amount and sign another.
+    if (r.nativeDecimals !== undefined) {
+        check(errors, 'nativeDecimals', r.nativeDecimals === 8, 'must be 8 (every native amount is carried at 10^8 scale)');
     }
     check(
         errors,

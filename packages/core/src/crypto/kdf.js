@@ -10,9 +10,10 @@
 
 // Argon2id KDF for the wallet master key (§11.4).
 //
-// Parameters are tuned per-device at wallet creation to target ~1s of
-// work on the user's machine. The tuning helper is exported; callers
-// store the resulting params alongside the ciphertext (per Wallet.kdfParams).
+// Shell callers pass the floor parameters below at wallet creation and
+// import. The tuning helper remains available to core flows when a caller
+// supplies no parameters. Callers store the selected params alongside the
+// ciphertext (per Wallet.kdfParams).
 //
 // The mobile shells register a native Argon2id (setNativeArgon2id) that
 // computes the same bytes many times faster; the JS implementation below
@@ -364,8 +365,9 @@ export function makeFreshKdfParams(overrides = {}) {
 
 /**
  * Pick the `iterations` that hits `targetMs` on this device, holding
- * memory and parallelism fixed. Called once at wallet creation to
- * populate per-device params.
+ * memory and parallelism fixed. Core creation and import flows call this
+ * only when the caller supplies no KDF parameters; current shell callers
+ * supply the floor parameters directly.
  *
  * Argon2id time is linear in its pass count, so one single-pass probe is
  * enough to size the real run. Probing at the full floor instead cost a

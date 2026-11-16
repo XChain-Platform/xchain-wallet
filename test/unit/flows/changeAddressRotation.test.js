@@ -252,6 +252,23 @@ describe('deriveChangeAddress', () => {
         expect(record.source).toBe('trezor');
     });
 
+    it('keeps hardware change branches separate inside a legacy wallet', async () => {
+        const rows = [
+            sourceRecord({ source: 'trezor' }),
+            sourceRecord({
+                source: 'trezor', address: 'legacy-change-9', addressType: 'p2pkh',
+                derivationPath: "m/44'/1'/0'/1/9", role: 'change',
+            }),
+        ];
+        const hwVault = makeVault({
+            addresses: rows, wallet: { id: 'w1', format: 'counterwallet-legacy' },
+        });
+        const hw = makeSigner('trezor');
+        const record = await deriveChangeAddress(opts(hwVault, hw));
+
+        expect(record.derivationPath).toBe("m/84'/1'/0'/1/0");
+    });
+
     it('returns null for an imported-WIF source, which has no branch to rotate onto', async () => {
         const wifVault = makeVault({
             addresses: [sourceRecord({ source: 'imported-wif', derivationPath: null, address: 'wif-addr' })],

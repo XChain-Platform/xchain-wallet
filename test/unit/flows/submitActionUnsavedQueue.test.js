@@ -62,14 +62,19 @@ function broadcastFailure() {
     });
 }
 
-function run(h, { pending = false, queueSaved }) {
+function run(h, {
+    pending = false,
+    queueSaved,
+    actionData = { action: 'BROADCAST', params: { MESSAGE: 'hello' } },
+    onBroadcastFailure = vi.fn(async () => queueSaved),
+}) {
     return submitAction({
         vault: h.vault,
         walletId: 'wallet-1',
         chainRegistry: h.chainRegistry,
         sdkRegistry: {},
         chainId: 'bitcoin-regtest',
-        actionData: { action: 'BROADCAST', params: { MESSAGE: 'hello' } },
+        actionData,
         encoderOpts: { pubkey: 'ab' },
         prebuiltPsbt: {
             psbtHex: 'psbt',
@@ -89,7 +94,7 @@ function run(h, { pending = false, queueSaved }) {
                 actionSummary: 'Broadcast',
             },
         } : {}),
-        onBroadcastFailure: vi.fn(async () => queueSaved),
+        onBroadcastFailure,
     });
 }
 
@@ -131,5 +136,31 @@ describe('submitAction transient broadcast durability verdict', () => {
 
         expect(error.name).toBe(BROADCAST_FAILED_TRANSIENT_UNSAVED_NAME);
         expect(error.pendingTxWriteError).toMatch(/vault refused/);
+    });
+
+    it('does not label an ordinary queued order as a sold name', async () => {
+        const onBroadcastFailure = vi.fn(async () => true);
+        const actionData = {
+            action: 'ORDER',
+            params: { GIVE_TICK: 'ALPHA', GIVE_AMOUNT: '10', GIVE_OWNERSHIP: '0' },
+        };
+
+        await run(harness(), { queueSaved: true, actionData, onBroadcastFailure }).catch(() => {});
+
+        expect(onBroadcastFailure).toHaveBeenCalledTimes(1);
+        expect(onBroadcastFailure.mock.calls[0][0].soldNames).toEqual([]);
+    });
+
+    it.each(['ORDER', 'DISPENSER'])('labels a queued %s ownership sale with its normalized source name', async (action) => {
+        const onBroadcastFailure = vi.fn(async () => true);
+        const actionData = {
+            action,
+            params: { GIVE_TICK: '  ALPHA  ', GIVE_OWNERSHIP: '1' },
+        };
+
+        await run(harness(), { queueSaved: true, actionData, onBroadcastFailure }).catch(() => {});
+
+        expect(onBroadcastFailure).toHaveBeenCalledTimes(1);
+        expect(onBroadcastFailure.mock.calls[0][0].soldNames).toEqual(['ALPHA']);
     });
 });
