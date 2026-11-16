@@ -19,7 +19,11 @@ function upload(overrides = {}) {
     return {
         id: 'upload-1',
         walletId: 'wallet-1',
+        chainId: 'btc:regtest',
+        sourceAddress: 'bcrt1source',
+        originalSha256: 'a'.repeat(64),
         meta: { name: 'photo.png' },
+        gate: null,
         pieces: [
             { index: 0, txid: 'part-0' },
             { index: 1, txid: null },
@@ -28,6 +32,8 @@ function upload(overrides = {}) {
         fundingTxid: 'funding',
         totalParts: 2,
         stage: 'sending',
+        linkTarget: null,
+        createdAt: '2026-11-15T08:00:00.000Z',
         ...overrides,
     };
 }
@@ -87,8 +93,18 @@ describe('handleListPendingFileUploads', () => {
         const vault = { pendingFileUploads: { listForWallet } };
         await expect(handleListPendingFileUploads({ walletId: 'wallet-1' }, { vault })).resolves.toEqual({
             uploads: [
-                { id: 'upload-1', name: 'photo.png', partsSent: 1, totalParts: 2, paidTransactions: 5, stage: 'sending' },
-                { id: 'upload-2', name: '', partsSent: 0, totalParts: 2, paidTransactions: 0, stage: 'funding' },
+                {
+                    id: 'upload-1', name: 'photo.png', chainId: 'btc:regtest',
+                    sourceAddress: 'bcrt1source', originalSha256: 'a'.repeat(64),
+                    createdAt: '2026-11-15T08:00:00.000Z', linkTarget: null, gated: false,
+                    partsSent: 1, totalParts: 2, paidTransactions: 5, stage: 'sending',
+                },
+                {
+                    id: 'upload-2', name: '', chainId: 'btc:regtest',
+                    sourceAddress: 'bcrt1source', originalSha256: 'a'.repeat(64),
+                    createdAt: '2026-11-15T08:00:00.000Z', linkTarget: null, gated: false,
+                    partsSent: 0, totalParts: 2, paidTransactions: 0, stage: 'funding',
+                },
             ],
         });
         expect(listForWallet).toHaveBeenCalledWith('wallet-1');
