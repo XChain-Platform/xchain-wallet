@@ -31,6 +31,16 @@ function sdkFor({ block = null, utxos = [], unconfirmed = [] } = {}) {
     };
 }
 
+function sdkWith(surfaces, values = {}) {
+    const full = sdkFor(values);
+    const sdk = {};
+    if (surfaces.includes('block') || surfaces.includes('utxos')) sdk.encoder = {};
+    if (surfaces.includes('block')) sdk.encoder.getTxBlock = full.encoder.getTxBlock;
+    if (surfaces.includes('utxos')) sdk.encoder.getUTXOs = full.encoder.getUTXOs;
+    if (surfaces.includes('unconfirmed')) sdk.getUnconfirmed = full.getUnconfirmed;
+    return sdk;
+}
+
 async function readOne(sdk, record = recordFor()) {
     return readResumeChainState({ sdk, record, address: ADDRESS });
 }
@@ -52,6 +62,28 @@ describe('transaction verdict parity', () => {
 
     it.each(cases)('%s equals legChainStatus on the same SDK', async (_label, makeSdk) => {
         const sdk = makeSdk();
+        const expected = await legChainStatus({ sdk, txid: TX, address: ADDRESS });
+        const result = await readOne(sdk);
+        expect(result.chainStates[TX]).toBe(expected);
+    });
+});
+
+describe('partial read surface parity', () => {
+    const cases = [
+        ['block only confirms', ['block'], { block: { block_height: 12 } }],
+        ['block only cannot drop', ['block'], {}],
+        ['UTXO only confirms', ['utxos'], { utxos: [{ txid: TX, confirmations: 1 }] }],
+        ['UTXO only finds mempool', ['utxos'], { utxos: [{ txid: TX, confirmations: 0 }] }],
+        ['UTXO only cannot drop', ['utxos'], {}],
+        ['unconfirmed only finds mempool', ['unconfirmed'], { unconfirmed: [{ tx_hash: TX }] }],
+        ['unconfirmed only cannot drop', ['unconfirmed'], {}],
+        ['block and UTXO can drop', ['block', 'utxos'], {}],
+        ['block and unconfirmed can drop', ['block', 'unconfirmed'], {}],
+        ['address reads without block cannot drop', ['utxos', 'unconfirmed'], {}],
+    ];
+
+    it.each(cases)('%s exactly as legChainStatus does', async (_label, surfaces, values) => {
+        const sdk = sdkWith(surfaces, values);
         const expected = await legChainStatus({ sdk, txid: TX, address: ADDRESS });
         const result = await readOne(sdk);
         expect(result.chainStates[TX]).toBe(expected);
