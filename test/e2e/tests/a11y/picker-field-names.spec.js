@@ -126,13 +126,13 @@ test.describe('a11y: chip pickers name the field they answer for', () => {
         // picker must exist on a named route would fail the day a form is
         // redesigned, which tests a layout decision rather than the contract.
         // The vacuity guard is the TOTAL below.
-        // Titles are the palette's OWN strings; "Sign message" is not one of
-        // them ("Sign a message" is), and a wrong title fails as "no palette
-        // command matching", not as a picker problem.
+        // Titles are the palette's OWN strings; Sign message is the wallet
+        // menu row's label, and a wrong title fails as "no palette command
+        // matching", not as a picker problem.
         const routes = [
             ['Cross-chain swap', 'Cross-chain swap', 'Cross-chain swap'],
             ['Airdrop', 'Airdrop tokens', 'Token airdrop'],
-            ['Sign a message', 'Sign message', 'Sign message'],
+            ['Sign message', 'Sign message', 'Sign message'],
             ['Verify a signature', 'Verify signature', 'Verify signature'],
             ['Send', 'Send', 'Send'],
         ];

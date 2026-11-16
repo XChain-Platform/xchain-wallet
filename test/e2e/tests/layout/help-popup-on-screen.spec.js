@@ -21,7 +21,7 @@ async function openPaletteRoute(page, title) {
     await expect(palette).toBeHidden();
 }
 
-// The palette titles: Airdrop, Mint supply, Sign a message. Link cross-chain
+// The palette titles: Airdrop, Mint supply, Sign message. Link cross-chain
 // actions has no palette command, so it opens from All actions.
 const FORM_ROUTES = [
     { name: 'send', open: (page) => gotoSection(page, 'Send') },
@@ -34,7 +34,7 @@ const FORM_ROUTES = [
             await page.getByRole('main').getByRole('button', { name: /^Link cross-chain actions/ }).first().click();
         },
     },
-    { name: 'sign-message', open: (page) => openPaletteRoute(page, 'Sign a message') },
+    { name: 'sign-message', open: (page) => openPaletteRoute(page, 'Sign message') },
     { name: 'publish-file', open: (page) => openPaletteRoute(page, 'Publish file') },
     { name: 'multisig-create', open: (page) => openPaletteRoute(page, 'Multisig') },
 ];
