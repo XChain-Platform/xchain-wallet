@@ -32,6 +32,10 @@
             "count": 4,
             "reason": "The developer log console draws its own dense toolbar; it is not a user screen."
         },
+        "packages/core/src/shared/components/MultipartUploadSection.jsx": {
+            "count": 1,
+            "reason": "A hidden native file input opened through its ref by the upload panel; the kit has no file-input primitive."
+        },
         "packages/core/src/shared/components/NetworkFilter.jsx": {
             "count": 4,
             "reason": "A popover search field, option rows and the field-style trigger inside the chain filter."
