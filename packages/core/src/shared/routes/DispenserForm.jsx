@@ -104,6 +104,7 @@ import {
 } from '../../flows/dispenserAddressStanding.js';
 import { listInBothSlots, listInBothSlotsMessage } from '../../flows/accessListSlots.js';
 import { exceedsBalance } from '../utils/dividendPerUnit.js';
+import { tickAmountOf } from '../utils/walletBalanceShape.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -562,17 +563,24 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     const entries = byChain[chainId] || [];
                     let bestAddress = null;
                     let bestAmount = '0';
+                    // An address whose balance could not be read might hold the
+                    // most, so no other address is picked over the default.
+                    let anyUnreadable = false;
                     for (const entry of entries) {
-                        if (!entry || !entry.balances) continue;
+                        if (!entry) continue;
                         const rows = decoderLib.balancesFromSdk(entry.balances) || [];
                         const match = rows.find((b) => String(b.tick) === tick);
-                        const amount = match ? String(match.amount) : '0';
+                        const amount = tickAmountOf(entry, match);
+                        if (amount === null) {
+                            anyUnreadable = true;
+                            continue;
+                        }
                         if (compareDecimalStrings(amount, bestAmount) === 1) {
                             bestAmount = amount;
                             bestAddress = entry.address;
                         }
                     }
-                    if (bestAddress) {
+                    if (bestAddress && !anyUnreadable) {
                         const holder = (addressesByChain[chainId] || [])
                             .find((a) => a.address === bestAddress);
                         if (holder) setFromAddressId(holder.id);
@@ -767,7 +775,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     const entry = entries.find((e) => e && e.address === sourceAddress.address);
                     const rows = entry ? decoderLib.balancesFromSdk(entry.balances) || [] : [];
                     const match = rows.find((b) => String(b.tick) === tick);
-                    setSourceTickBalance(match ? String(match.amount) : '0');
+                    setSourceTickBalance(tickAmountOf(entry, match));
                 })
                 .catch(() => { /* footer just stays empty on failure */ });
         }, 400);

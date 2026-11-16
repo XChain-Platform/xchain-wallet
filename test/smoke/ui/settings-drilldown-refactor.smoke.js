@@ -95,7 +95,8 @@ assert.match(src, /offByDefault\.filter\(\(k\) => p\[k\] === true\)\.length/, 'p
 assert.match(src, /strategy === 'custom'/, 'fees summary detects custom strategy');
 // endpoints: counts custom flag
 assert.match(src, /Object\.values\(eps\)\.filter\(\(e\) => e\?\.custom\)\.length/, 'endpoints summary counts custom overrides');
-// ads: sums lifetimeDonatedSats across chains
-assert.match(src, /lifetimeDonatedSats/, 'ads summary aggregates lifetimeDonatedSats');
+// ads: formats each visible chain in its own native unit
+assert.match(src, /adsChainIdsForUser/, 'ads summary uses the panel chain selection');
+assert.match(src, /formatNativeBaseUnits/, 'ads summary formats native units per chain');
 
 console.log('settings-drilldown-refactor smoke OK');

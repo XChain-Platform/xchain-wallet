@@ -133,7 +133,7 @@ function makeSdk(createTx) {
     };
 }
 
-function makeHost() {
+function makeHost(sourceRow = SOURCE_ROW) {
     const createTx = vi.fn(async () => ({ psbt: 'PSBTHEX', encoding: 'OP_RETURN' }));
     const vault = {
         wallets: memCollection([{ id: 'w1', schemaVersion: 1, name: 'W', format: 'bip39', importedKeys: [] }]),
@@ -141,7 +141,7 @@ function makeHost() {
             schemaVersion: 2, id: 'acct-1', walletId: 'w1', index: 0, name: 'Main',
             activeAddressByChainId: {}, createdAt: '2026-01-01T00:00:00.000Z',
         }]),
-        addresses: memCollection([SOURCE_ROW]),
+        addresses: memCollection([sourceRow]),
         signers: memCollection(),
         settings: {
             _rec: {
@@ -265,6 +265,28 @@ describe('every confirm-compose route hardens the PSBT for a device source', () 
         });
         expect(createTx.mock.calls[0][0].payFeeInNativeCoin).toBe(false);
         expect(createTx.mock.calls[0][0].attachPrevTx).toBe(true);
+    });
+});
+
+// The request's `from.source` is the client's claim; the vault's record of the
+// address is the truth. A device address whose request omits or misstates the
+// source must still compose a PSBT the device can sign.
+describe('every confirm-compose route hardens from the stored record when the request omits the source', () => {
+    const DEVICE_ROW = { ...SOURCE_ROW, source: 'ledger', signerId: 'signer-1' };
+    for (const [type, build] of Object.entries(ROUTES)) {
+        for (const claim of [undefined, 'hd']) {
+            it(`${type} attaches prev txs for a stored device record with source ${claim ?? 'omitted'}`, async () => {
+                const { host, createTx } = makeHost(DEVICE_ROW);
+                await drive(host, type, build(claim));
+                expect(createTx.mock.calls[0][0].attachPrevTx).toBe(true);
+            });
+        }
+    }
+
+    it('keeps a stored software record unhardened when the request omits the source', async () => {
+        const { host, createTx } = makeHost();
+        await drive(host, 'action.composeForConfirm', ROUTES['action.composeForConfirm'](undefined));
+        expect(createTx.mock.calls[0][0].attachPrevTx).toBeUndefined();
     });
 });
 

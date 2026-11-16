@@ -72,6 +72,7 @@
 // no amount computed here can change it.
 
 import { composeForConfirm } from './composeForConfirm.js';
+import { utxoListOf } from './txInclusionProbe.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 
 /** Encoder's machine-readable reason for "the outputs cost more than the inputs hold". */
@@ -196,7 +197,7 @@ export async function quoteMaxSendable({
     try {
         const hasSelection = Array.isArray(encoderOpts?.utxos);
         const res = hasSelection ? encoderOpts.utxos : await sdk.encoder.getUTXOs(source.trim());
-        const rows = Array.isArray(res) ? res : (Array.isArray(res?.utxos) ? res.utxos : null);
+        const rows = utxoListOf(res);
         if (!rows || rows.length === 0) return null;
         utxoTotal = 0n;
         for (const row of rows) {

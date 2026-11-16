@@ -23,7 +23,6 @@
 // picked, and the panel says so rather than showing the sentinel.
 
 import { useId } from 'react';
-import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
 import { EmptyState, InfoTip, Input, Select } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import {
@@ -33,12 +32,14 @@ import {
     isDonationAddressConfigured,
 } from '../../../registry/validate.js';
 import { resolveAdsChainConfig } from '../../../schemas/settings.js';
+import { defaultRegistry } from '../../../registry/index.js';
 import { t } from '../../../i18n/index.js';
 import '../../../i18n/locales/en/settings.js';
 import { STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
+import { adsChainIdsForUser } from './adsChains.js';
 import styles from './AdsSection.module.css';
 
-const chainRegistry = registryLib.defaultRegistry();
+const chainRegistry = defaultRegistry();
 
 // What the picker calls each stored role. The registry names the third
 // destination EXPLORER; users know it as DONATE3.
@@ -159,14 +160,7 @@ export function AdsSection() {
     if (error) return <SettingsLoadError error={error} />;
     if (!settings) return <Status text={t('common.settingsUnavailable')} tone="error" />;
 
-    const chainIds = Object.keys(settings.ads.perChain).filter((cid) => {
-        const d = chainRegistry.get(cid);
-        if (!d) return true; // surface stale entries so they can be edited away
-        // Chains are named without their network kind, so only the active
-        // network's chains are listed and each chain appears once.
-        return registryLib.isChainVisibleToUser(d, settings)
-            && flowsLib.filterChainIdsByActiveNetwork([cid], settings, chainRegistry).length > 0;
-    }).sort();
+    const chainIds = adsChainIdsForUser(settings, chainRegistry);
 
     // Every network reads the same default, so the threshold sentence is said once
     // above the cards. A network with its own amounts keeps its own sentence.

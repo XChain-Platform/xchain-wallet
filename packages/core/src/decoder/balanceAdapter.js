@@ -56,6 +56,14 @@ export function balancesFromSdk(sdkBalances) {
         }
     }
 
+    if (Array.isArray(sdkBalances.unavailable) && sdkBalances.unavailable.includes('tokens')) {
+        // The token ledger could not be read, so the empty `tokens` list means
+        // "unknown", not "holds none". Like the coin marker above it carries no
+        // tick, so a lookup by tick never matches it; the simulator reads it as
+        // "every token balance unknown".
+        out.push({ tick: '', amount: '', isCoin: false, unknown: true });
+    }
+
     const tokens = Array.isArray(sdkBalances.tokens) ? sdkBalances.tokens : [];
     for (const a of tokens) {
         if (!a || typeof a !== 'object') continue;

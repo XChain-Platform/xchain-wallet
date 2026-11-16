@@ -254,6 +254,16 @@ describe.skipIf(!platformSpecSource)('living spec conformance', () => {
         expect(section).toMatch(/supportedVersions[^\n]*permissions/);
     });
 
+    it('names every SignInParams field in the signIn summary bullet', () => {
+        const section = specSection('### 43.2', '### 43.3');
+        const bullet = section.split('\n').find((line) => line.startsWith('- **`signIn('));
+        expect(bullet, 'section 43.2 has a signIn bullet').toBeTruthy();
+        const signature = bullet.match(/signIn\(\{([^}]*)\}\)/);
+        expect(signature, 'signIn bullet lists its params').not.toBeNull();
+        const listed = signature[1].split(',').map((field) => field.trim().replace(/\?$/, '')).sort();
+        expect(listed).toEqual(interfaceFieldNames('SignInParams'));
+    });
+
     it('keeps the sign-in challenge on the validated v2 format', () => {
         const section = specSection('### 43.6', '### 43.7');
         expect(section).toContain(runtime.SIGN_IN_CHALLENGE_PREFIX);

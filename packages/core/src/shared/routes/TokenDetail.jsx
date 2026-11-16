@@ -164,15 +164,17 @@ function TokenDetailContent({
         messaging.getWalletBalances(walletId, readActiveAccount(walletId) || undefined)
             .then((byChain) => {
                 if (cancelled) return;
-                // A failed address leaves the total short, so the amount is unknown.
-                if (chainReadFailed(byChain, chainId)) setBalanceFailed(true);
+                // A failed address, or an unreadable half this asset lives in,
+                // leaves the total short, so the amount is unknown.
+                const half = kind === 'native' ? 'native' : 'tokens';
+                if (chainReadFailed(byChain, chainId, { half })) setBalanceFailed(true);
                 else setResolvedQuantity(sumTickOnChain(byChain, chainId, tick));
             })
             .catch(() => {
                 if (!cancelled) setBalanceFailed(true);
             });
         return () => { cancelled = true; };
-    }, [messaging, walletId, chainId, tick, suppliedQuantity]);
+    }, [messaging, walletId, chainId, tick, kind, suppliedQuantity]);
     const quantity = resolvedQuantity;
 
     const descriptor = chainRegistry.get(chainId);

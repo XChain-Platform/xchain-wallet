@@ -31,7 +31,7 @@ import {
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { coinpayExpiryText } from '../../market/coinpayExpiry.js';
 import { baseUnitsToCoinText, obligationBaseUnits } from '../../market/obligationStatus.js';
-import { classifyObligation } from '../../market/obligationStatus.js';
+import { classifyObligation, extractObligationRows, isPendingForPayer } from '../../market/obligationStatus.js';
 import { hasAttemptedCoinpay } from '../../market/coinpayPending.js';
 import styles from './IssueTokenForm.module.css';
 import coinpayStyles from './CoinpayForm.module.css';
@@ -165,7 +165,7 @@ function ScopedCoinpayForm({
                         chainId: pair.chainId,
                         address: pair.address,
                     });
-                    const rows = extractRows(resp);
+                    const rows = extractObligationRows(resp);
                     const seenMatches = new Set();
                     for (const row of rows) {
                         if (!isPendingForPayer(row, pair.address)) continue;
@@ -843,20 +843,3 @@ function nativeBalanceBaseUnits(balances, coinTicker) {
     }
 }
 
-function isPendingForPayer(row, address) {
-    if (!row || typeof row !== 'object') return false;
-    const status = String(row.coinpay_status || row.status || '').toLowerCase();
-    if (status !== 'pending_coinpay') return false;
-    const payer = row.payer_address || row.payerAddress;
-    return typeof payer === 'string' && payer === address;
-}
-
-function extractRows(resp) {
-    if (!resp) return [];
-    if (Array.isArray(resp)) return resp;
-    if (Array.isArray(resp.data)) return resp.data;
-    if (Array.isArray(resp.rows)) return resp.rows;
-    if (Array.isArray(resp.obligations)) return resp.obligations;
-    if (Array.isArray(resp.coinpay_obligations)) return resp.coinpay_obligations;
-    return [];
-}

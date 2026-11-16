@@ -21,7 +21,7 @@ vi.mock('../../../packages/core/src/sdk/submitWithSigner.js', async (importOrigi
 
 const { submitAction } = await import('../../../packages/core/src/flows/submitAction.js');
 
-function harness({ refuseStatus = null } = {}) {
+function harness({ refuseStatus = null, sequence = 0xfffffffd } = {}) {
     const records = new Map();
     const pendingTxs = {
         async put(record) {
@@ -32,10 +32,21 @@ function harness({ refuseStatus = null } = {}) {
         async list() { return [...records.values()].map((record) => structuredClone(record)); },
         async findBy(field, value) { return [...records.values()].filter((r) => r[field] === value); },
     };
+    const sdkRegistry = {
+        get: () => ({
+            wallet: {
+                decomposePsbt: () => ({
+                    inputs: [{ sequence, value: 10000 }],
+                    outputs: [{ address: 'bcrt1qsource', value: 9000 }],
+                }),
+            },
+        }),
+    };
     return {
         pendingTxs,
         vault: { pendingTxs, settings: { get: async () => ({}), put: async () => {} } },
         chainRegistry: { get: () => ({ coin: 'bitcoin', networkKind: 'regtest' }) },
+        sdkRegistry,
     };
 }
 
@@ -44,7 +55,7 @@ function run(h) {
         vault: h.vault,
         walletId: 'wallet-1',
         chainRegistry: h.chainRegistry,
-        sdkRegistry: {},
+        sdkRegistry: h.sdkRegistry,
         chainId: 'bitcoin-regtest',
         actionData: { action: 'BROADCAST', params: { MESSAGE: 'hello' } },
         encoderOpts: { pubkey: 'ab' },
@@ -86,5 +97,29 @@ describe('submitAction after the transaction is on the network', () => {
         expect(result.txid).toBe('txid-1');
         expect(result.pendingTxWriteError).toBeUndefined();
         expect((await h.pendingTxs.list()).at(-1)).toMatchObject({ status: 'broadcast', txid: 'txid-1' });
+    });
+
+    it.each([
+        [0xfffffffd, true],
+        [0xffffffff, false],
+    ])('records a hardware PSBT and its bytes-derived rbf flag for sequence %i', async (sequence, rbf) => {
+        const h = harness({ sequence });
+        submitWithSignerMock.mockImplementationOnce(async (opts) => {
+            await opts.beforeBroadcast({
+                signed: { signedPsbtHex: '', txHex: 'signed-transaction', txid: 'txid-1' },
+                revealSigned: null,
+                psbtHex: 'unsigned-hardware-psbt',
+                finalPsbtHex: 'unsigned-hardware-psbt',
+            });
+            return { txid: 'txid-1', signed: { txHex: 'signed-transaction' } };
+        });
+
+        await run(h);
+
+        expect((await h.pendingTxs.list()).at(-1)).toMatchObject({
+            psbtHex: 'unsigned-hardware-psbt',
+            rbf,
+            params: { MESSAGE: 'hello' },
+        });
     });
 });

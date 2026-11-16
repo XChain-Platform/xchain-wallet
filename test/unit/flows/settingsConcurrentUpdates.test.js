@@ -7,11 +7,19 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 import { updateSettings } from '../../../packages/core/src/flows/settings.js';
+import { commitAdsStep } from '../../../packages/core/src/flows/ads.js';
+import { ensureSettings, seedSettingsForChains } from '../../../packages/core/src/flows/seedSettings.js';
+import { activateChain } from '../../../packages/core/src/flows/activateChain.js';
+import {
+    rollbackSettingsSeed,
+    settingsSeedDelta,
+} from '../../../packages/core/src/flows/_persistHdWallet.js';
+import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
 
-function slowVault() {
-    let record = createDefaultSettings();
+function slowVault(initial = createDefaultSettings()) {
+    let record = structuredClone(initial);
     return {
         settings: {
             async get() { await tick(); return structuredClone(record); },
@@ -48,6 +56,65 @@ describe('updateSettings with patches in flight together', () => {
 });
 
 describe('other settings writers share the same queue', () => {
+    const registry = defaultRegistry();
+    const BTC = 'bitcoin-mainnet';
+    const LTC = 'litecoin-mainnet';
+
+    function adsVault() {
+        const initial = seedSettingsForChains(createDefaultSettings(), registry, [BTC]);
+        initial.ads.enabled = true;
+        initial.ads.perChain[BTC].accumulatedSats = 25000;
+        return slowVault(initial);
+    }
+
+    it.each([
+        ['ADS first', (vault) => [
+            commitAdsStep({ vault, chainId: BTC, donationIncluded: false, chainRegistry: registry }),
+            ensureSettings(vault, registry, [BTC, LTC]),
+        ]],
+        ['seeding first', (vault) => [
+            ensureSettings(vault, registry, [BTC, LTC]),
+            commitAdsStep({ vault, chainId: BTC, donationIncluded: false, chainRegistry: registry }),
+        ]],
+    ])('ensureSettings and an ADS step both land when started together: %s', async (_label, operations) => {
+        const vault = adsVault();
+        await Promise.all(operations(vault));
+        expect(vault.read().ads.perChain[BTC]).toMatchObject({ accumulatedSats: 26000, lifetimeTxCount: 1 });
+        expect(vault.read().ads.perChain[LTC]).toBeDefined();
+        expect(vault.read().fees[LTC]).toBeDefined();
+    });
+
+    it('activateChain and an ADS step both land when started together', async () => {
+        const vault = adsVault();
+        vault.wallets = { get: async () => ({ id: 'w1' }) };
+        vault.accounts = { findBy: async () => [] };
+        await Promise.all([
+            activateChain({
+                walletId: 'w1', chainId: LTC, signer: {}, vault, chainRegistry: registry, sdkRegistry: {},
+            }),
+            commitAdsStep({ vault, chainId: BTC, donationIncluded: false, chainRegistry: registry }),
+        ]);
+        expect(vault.read().ads.perChain[BTC]).toMatchObject({ accumulatedSats: 26000, lifetimeTxCount: 1 });
+        expect(vault.read().ads.perChain[LTC]).toBeDefined();
+        expect(vault.read().fees[LTC]).toBeDefined();
+    });
+
+    it('wallet setup rollback removes only unchanged entries it seeded', async () => {
+        const before = seedSettingsForChains(createDefaultSettings(), registry, [BTC]);
+        before.ads.enabled = true;
+        const seeded = seedSettingsForChains(before, registry, [BTC, LTC]);
+        const current = structuredClone(seeded);
+        current.ads.perChain[BTC].accumulatedSats = 26000;
+        current.ads.perChain[BTC].lifetimeTxCount = 1;
+        const vault = slowVault(current);
+
+        await rollbackSettingsSeed(vault, settingsSeedDelta(before, seeded, [BTC, LTC]));
+
+        expect(vault.read().ads.perChain[BTC]).toMatchObject({ accumulatedSats: 26000, lifetimeTxCount: 1 });
+        expect(vault.read().ads.perChain[LTC]).toBeUndefined();
+        expect(vault.read().fees[LTC]).toBeUndefined();
+    });
+
     it('a block and a patch in flight together both land', async () => {
         const { addBlockedOrigin } = await import('../../../packages/core/src/flows/blocklist.js');
         const vault = slowVault();

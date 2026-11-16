@@ -28,6 +28,7 @@ import {
     createDefaultAdsChainState,
     createDefaultSettings,
 } from '../schemas/settings.js';
+import { serializeSettingsWrites } from './settings.js';
 
 /**
  * Return a new Settings object with fees + ads.perChain entries seeded
@@ -89,9 +90,10 @@ export function seedSettingsForChains(settings, chainRegistry, activeChainIds) {
  * @param {import('../registry/index.js').ChainRegistry} chainRegistry
  * @param {string[]} activeChainIds
  * @param {{ activeNetwork?: 'mainnet' | 'testnet' | 'regtest' }} [opts]
- * @returns {Promise<import('../schemas/settings.js').Settings>}
+ * @param {(result: { before: import('../schemas/settings.js').Settings | null, seeded: import('../schemas/settings.js').Settings }) => void} [onPrepared]
+ * @returns {Promise<{ before: import('../schemas/settings.js').Settings | null, seeded: import('../schemas/settings.js').Settings }>}
  */
-export async function ensureSettings(vault, chainRegistry, activeChainIds, opts = {}) {
+export async function ensureSettingsNow(vault, chainRegistry, activeChainIds, opts = {}, onPrepared) {
     if (!vault) throw new Error('ensureSettings: vault is required');
     const existing = await vault.settings.get();
     let current = existing ?? createDefaultSettings();
@@ -99,6 +101,15 @@ export async function ensureSettings(vault, chainRegistry, activeChainIds, opts 
         current = { ...current, activeNetwork: opts.activeNetwork };
     }
     const seeded = seedSettingsForChains(current, chainRegistry, activeChainIds);
+    if (typeof onPrepared === 'function') onPrepared({ before: existing ?? null, seeded });
     await vault.settings.put(seeded);
-    return seeded;
+    return { before: existing ?? null, seeded };
+}
+
+/** Serialized public settings seeder. */
+export async function ensureSettings(vault, chainRegistry, activeChainIds, opts = {}) {
+    const result = await serializeSettingsWrites(vault, () => ensureSettingsNow(
+        vault, chainRegistry, activeChainIds, opts,
+    ));
+    return result.seeded;
 }

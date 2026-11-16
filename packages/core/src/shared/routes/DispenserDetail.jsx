@@ -91,6 +91,7 @@ import {
 import { copyText } from '../clipboard.js';
 import { formatLocalDateTime, formatRelativeTime } from '../utils/dateTime.js';
 import { exceedsBalance } from '../utils/dividendPerUnit.js';
+import { tickAmountOf } from '../utils/walletBalanceShape.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -269,7 +270,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 const entry = entries.find((e) => e && e.address === ownerAddress.address);
                 const rows = entry ? decoderLib.balancesFromSdk(entry.balances) || [] : [];
                 const match = rows.find((b) => String(b.tick).toUpperCase() === tick);
-                setRefillBalance(match ? String(match.amount) : '0');
+                setRefillBalance(tickAmountOf(entry, match));
                 const rawMatch = (entry?.balances?.tokens || [])
                     .find((b) => String(b?.tick || '').toUpperCase() === tick);
                 setRefillDivisibility(rawMatch?.divisibility ?? null);

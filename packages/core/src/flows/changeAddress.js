@@ -37,8 +37,9 @@
 // reason a send cannot be composed.
 
 import { createAddress } from '../schemas/address.js';
+import { addressSourceForSignerKind } from '../schemas/constants.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
-import { indexSpaceSharedForWallet } from './_addressIndexSpace.js';
+import { indexSpaceSharedForAccount } from './_addressIndexSpace.js';
 
 /** BIP44 internal branch. m / purpose' / coin' / account' / 1 / index */
 export const CHANGE_BRANCH = 1;
@@ -191,7 +192,9 @@ export async function deriveChangeAddress({
         return null;
     }
 
-    const sharedIndexSpace = await indexSpaceSharedForWallet(vault, walletId);
+    const sharedIndexSpace = await indexSpaceSharedForAccount(vault, walletId, {
+        account, addresses: allAddresses, signerKind: signer.kind,
+    });
     const { nextIndex, changeCount } = nextChangeIndex(allAddresses, {
         accountId: account.id,
         coin: descriptor.coin,
@@ -223,7 +226,7 @@ export async function deriveChangeAddress({
         accountId: account.id,
         chain: descriptor.coin,
         network: descriptor.networkKind,
-        source: signerKind === 'software' ? 'hd' : signerKind,
+        source: addressSourceForSignerKind(signerKind),
         addressType,
         derivationPath: derived.path,
         address: derived.address,
