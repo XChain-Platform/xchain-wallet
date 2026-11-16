@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { describe, expect, it, vi } from 'vitest';
-import { importedAddressIdsFor } from '../../../packages/core/src/flows/_importedAddressIds.js';
+import {
+    importedAddressIdsFor,
+    importedAddressIdsForStrict,
+} from '../../../packages/core/src/flows/_importedAddressIds.js';
 
 describe('importedAddressIdsFor', () => {
     it.each([
@@ -45,5 +48,13 @@ describe('importedAddressIdsFor', () => {
         };
 
         await expect(importedAddressIdsFor(vault, 'wallet-1')).resolves.toEqual(new Set());
+    });
+
+    it('offers a strict read for callers that require a complete inventory', async () => {
+        const failure = new Error('vault unavailable');
+        const vault = { wallets: { get: vi.fn(async () => { throw failure; }) } };
+
+        await expect(importedAddressIdsForStrict(vault, 'wallet-1')).rejects.toBe(failure);
+        await expect(importedAddressIdsForStrict({}, 'wallet-1')).rejects.toThrow(/unreadable/);
     });
 });

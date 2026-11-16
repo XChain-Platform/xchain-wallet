@@ -68,20 +68,54 @@ export function sumTickOnChain(byChain, chainId, tick, opts = {}) {
  * True when the balance read failed for any address the sum above covers, so
  * its total misses that address's holdings and must not be shown as the
  * balance. getWalletBalances reports a failed address as an entry carrying an
- * `error` instead of rejecting the whole read.
+ * `error` instead of rejecting the whole read, and an address whose coin or
+ * token half alone could not be read as an `unavailable` list with the
+ * missing half left empty.
  *
  * @param {Record<string, Array<any>> | null | undefined} byChain  getWalletBalances' result
  * @param {string} chainId
- * @param {{ address?: string | null }} [opts]           restrict to a single address
+ * @param {{ address?: string | null, half?: 'native' | 'tokens' | null }} [opts]
+ *        `address` restricts to a single address; `half` names the half the
+ *        total depends on, and any unreadable half counts when it is omitted
  * @returns {boolean}
  */
 export function chainReadFailed(byChain, chainId, opts = {}) {
     if (!byChain || typeof byChain !== 'object' || !chainId) return false;
     const entries = Array.isArray(byChain[chainId]) ? byChain[chainId] : [];
     const only = opts.address || null;
+    const half = opts.half || null;
     return entries.some((entry) => Boolean(entry && typeof entry === 'object'
         && (!only || entry.address === only)
-        && entry.error));
+        && (entry.error || halfUnavailable(entry.balances, half))));
+}
+
+/**
+ * One address's amount of one tick, keeping "holds none" apart from "could not
+ * read". `match` is the row `balancesFromSdk` produced for the tick, if any.
+ * An entry that failed, carries no balances or names an unreadable half, and a
+ * row whose quantity could not be scaled, are unknown; an address with no
+ * entry at all is not a failed read and holds none.
+ *
+ * @param {any} entry                                     the address's entry, if any
+ * @param {{ amount?: unknown, unknown?: boolean } | null | undefined} match
+ * @returns {string | null}   decimal amount, '0' for none, null when unknown
+ */
+export function tickAmountOf(entry, match) {
+    if (match) return match.unknown ? null : String(match.amount);
+    if (!entry || typeof entry !== 'object') return '0';
+    if (entry.error || !entry.balances || typeof entry.balances !== 'object') return null;
+    return halfUnavailable(entry.balances, null) ? null : '0';
+}
+
+/**
+ * @param {any} balances  one entry's `balances`
+ * @param {string | null} half
+ * @returns {boolean}
+ */
+function halfUnavailable(balances, half) {
+    const list = balances && typeof balances === 'object' ? balances.unavailable : null;
+    if (!Array.isArray(list)) return false;
+    return half ? list.includes(half) : list.length > 0;
 }
 
 /** @param {any} v */

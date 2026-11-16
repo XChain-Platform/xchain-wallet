@@ -97,15 +97,25 @@ describe('leg wait errors', () => {
 describe('indexerWaitMessage', () => {
     it('says a confirmed chunk is waiting for the indexer', () => {
         expect(indexerWaitMessage({ leg: 1, total: 4, chainState: 'confirmed' })).toBe(
-            'Chunk 2 of 4 confirmed on chain, waiting for the indexer (it can take several minutes on this network).',
+            'Chunk 2 of 4 confirmed on chain; waiting for the service to process it (this can take several minutes on this network).',
         );
     });
 
     it('names the assembling transaction and the mempool case', () => {
         expect(indexerWaitMessage({ leg: null, total: 4, chainState: 'confirmed' }))
-            .toMatch(/^The assembling transaction is confirmed on chain, waiting for the indexer/);
+            .toMatch(/^The assembling transaction is confirmed on chain; waiting for the service/);
         expect(indexerWaitMessage({ leg: 0, total: 4, chainState: 'mempool' }))
-            .toBe('Chunk 1 of 4 is waiting on the network to be confirmed, then for the indexer.');
+            .toBe('Chunk 1 of 4 is waiting on the network to confirm it, then for the service to process it.');
+    });
+
+    it('keeps backend jargon out of wait and timeout copy', () => {
+        const base = { legLabel: 'Chunk 1 of 2', txid: TX, patienceMs: 900000, isChunk: true };
+        for (const chainState of ['confirmed', 'mempool', 'dropped', 'unknown']) {
+            expect(legNotIndexedError({ ...base, chainState }).message).not.toMatch(/\bindex(?:er|ed)?\b/i);
+            expect(indexerWaitMessage({ leg: 0, total: 2, chainState })).not.toMatch(/\bindex(?:er|ed)?\b/i);
+        }
+        expect(indexerWaitMessage({ leg: null, total: 2, chainState: 'confirmed' }))
+            .not.toMatch(/\bindex(?:er|ed)?\b/i);
     });
 
     it('is null with no wait in progress', () => {

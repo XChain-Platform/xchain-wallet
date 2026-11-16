@@ -56,4 +56,63 @@ assert.match(skipped.stderr, /not 'enforced'; refusing to publish v1\.2\.3/);
 const enforced = runGate('enforced');
 assert.equal(enforced.status, 0, `an enforced gate continues: ${enforced.stderr}`);
 
-process.stdout.write('OK: publish dev-mock gate smoke\n');
+const artifactBeginAt = source.indexOf('# artifact list gate begin');
+const artifactEndAt = source.indexOf('# artifact list gate end');
+const pointerGateAt = source.indexOf('pointer-gate.mjs');
+const phaseOneAt = source.indexOf('# --- Phase 1');
+assert.ok(artifactBeginAt > endAt && artifactEndAt > artifactBeginAt,
+    'the artifact gate runs after the manifest gate');
+assert.ok(pointerGateAt > artifactEndAt && phaseOneAt > artifactEndAt,
+    'the artifact gate runs before pointer checks and uploads');
+
+const artifactBlock = source.slice(artifactBeginAt, artifactEndAt).split('\n').slice(1).join('\n');
+const artifactHarness = join(work, 'artifact-gate-harness.sh');
+writeFileSync(artifactHarness, [
+    '#!/usr/bin/env bash',
+    'set -euo pipefail',
+    'xr_header_field() {',
+    '  local manifest="$1" field="$2" line prefix',
+    '  prefix="# ${field}: "',
+    '  while IFS= read -r line; do',
+    '    if [[ "$line" == "$prefix"* ]]; then printf "%s\\n" "${line#"$prefix"}"; return 0; fi',
+    '  done < "$manifest"',
+    '}',
+    'xr_list_artifacts() {',
+    '  if [[ "$XR_LIST_MODE" == fail ]]; then echo "listing failed" >&2; return 2; fi',
+    '  printf "%s\\n" "$XR_LIST_CONTENT"',
+    '}',
+    'BINARIES=()',
+    artifactBlock,
+].join('\n'));
+
+function runArtifactGate({ header, mode = 'ok', list = '' }) {
+    const manifest = join(work, `artifacts-${header ?? 'missing'}-${mode}.txt`);
+    writeFileSync(manifest, header === null ? '# release manifest\n' : `# artifacts: ${header}\n`);
+    return spawnSync('bash', [artifactHarness], {
+        encoding: 'utf8',
+        env: {
+            ...process.env,
+            MANIFEST: manifest,
+            TAG: 'v1.2.3',
+            INPUT_DIR: '/staged/release',
+            XR_LIST_MODE: mode,
+            XR_LIST_CONTENT: list,
+        },
+    });
+}
+
+const listingFailed = runArtifactGate({ header: 3, mode: 'fail' });
+assert.equal(listingFailed.status, 1, 'a failed artifact listing is refused');
+assert.match(listingFailed.stderr, /could not list the artifacts/);
+
+const shortListing = runArtifactGate({ header: 3, list: './one\n./two' });
+assert.equal(shortListing.status, 1, 'a short artifact listing is refused');
+assert.match(shortListing.stderr, /holds 2 artifact\(s\).*covers 3/);
+
+const missingCount = runArtifactGate({ header: null, list: './one' });
+assert.equal(missingCount.status, 1, 'a manifest without an artifact count is refused');
+
+const matching = runArtifactGate({ header: 3, list: './one\n./two\n./three' });
+assert.equal(matching.status, 0, `a matching artifact list continues: ${matching.stderr}`);
+
+process.stdout.write('OK: publish manifest and artifact gates smoke\n');

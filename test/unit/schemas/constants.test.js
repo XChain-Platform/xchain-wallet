@@ -15,6 +15,7 @@ import {
     NETWORKS,
     ACTION_PERMISSIONS,
     ADDRESS_SOURCES,
+    addressSourceForSignerKind,
 } from '../../../packages/core/src/schemas/constants.js';
 
 describe('schemas/constants', () => {
@@ -53,6 +54,21 @@ describe('schemas/constants', () => {
 
         it('has exactly 5 entries', () => {
             expect(ADDRESS_SOURCES).toHaveLength(5);
+        });
+    });
+
+    describe('addressSourceForSignerKind', () => {
+        it.each([
+            ['software', 'hd'],
+            ['trezor', 'trezor'],
+            ['ledger', 'ledger'],
+        ])('maps %s to %s', (kind, source) => {
+            expect(addressSourceForSignerKind(kind)).toBe(source);
+            expect(ADDRESS_SOURCES).toContain(source);
+        });
+
+        it.each(['multisig', 'airgap', 'bogus', undefined])('rejects unmapped kind %s', (kind) => {
+            expect(() => addressSourceForSignerKind(kind)).toThrow(/no Address\.source mapping/);
         });
     });
 });

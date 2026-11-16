@@ -22,6 +22,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { submitAction } from '../../../packages/core/src/flows/submitAction.js';
+import { stepAdsAccumulator } from '../../../packages/core/src/flows/ads.js';
 import { prebuiltPsbtFromComposed } from '../../../packages/core/src/flows/prebuiltPsbtFromComposed.js';
 
 const CHAIN = 'bitcoin-regtest';
@@ -104,6 +105,14 @@ describe('the donation verdict booked is the one the signed bytes carry', () => 
         expect(s.accumulatedSats).toBe(100);
     });
 
+    it('credits the amount carried beside the signed-byte verdict', async () => {
+        const h = makeHarness({ adsDonation: { included: true, donationAmount: 2500 } });
+        await h.run();
+        const s = h.state();
+        expect(s.lifetimeDonatedSats).toBe(2500);
+        expect(s.accumulatedSats).toBe(2600);
+    });
+
     // An envelope from a composer built before the carry keeps today's
     // behaviour: the submit-time snapshot decides.
     it('falls back to the submit-time plan for an envelope with no verdict', async () => {
@@ -122,11 +131,11 @@ describe('the donation verdict booked is the one the signed bytes carry', () => 
 describe('every prebuilt-PSBT builder carries the compose-time verdict', () => {
     it('books the verdict compose resolved, either way', () => {
         const base = { psbt: 'PSBT', encoding: 'OP_RETURN', actionString: 'ISSUE|0|JDOG', version: 0 };
-        expect(prebuiltPsbtFromComposed({ ...base, adsPlan: { canSubmit: true } }).adsDonation)
-            .toEqual({ included: true });
-        expect(prebuiltPsbtFromComposed({ ...base, adsPlan: { canSubmit: false } }).adsDonation)
-            .toEqual({ included: false });
-        expect(prebuiltPsbtFromComposed(base).adsDonation).toEqual({ included: false });
+        expect(prebuiltPsbtFromComposed({ ...base, adsPlan: { canSubmit: true, donationAmount: 2500 } }).adsDonation)
+            .toEqual({ included: true, donationAmount: 2500 });
+        expect(prebuiltPsbtFromComposed({ ...base, adsPlan: { canSubmit: false, donationAmount: 2500 } }).adsDonation)
+            .toEqual({ included: false, donationAmount: 0 });
+        expect(prebuiltPsbtFromComposed(base).adsDonation).toEqual({ included: false, donationAmount: 0 });
     });
 
     it('leaves no route emitting a bare envelope', () => {
@@ -136,5 +145,51 @@ describe('every prebuilt-PSBT builder carries the compose-time verdict', () => {
             .filter((f) => f.endsWith('.jsx'))
             .filter((f) => /prebuiltPsbt(:|\s*=)\s*\{/.test(readFileSync(join(ROUTES, f), 'utf8')));
         expect(bare).toEqual([]);
+    });
+});
+
+describe('donation booking uses the amount paid by the signed transaction', () => {
+    const chainRegistry = { get: () => ({ adsDefaults: { perTxAmountSats: 1000, triggerAmountSats: 25000 } }) };
+    const settings = (accumulatedSats = 25000) => ({
+        ads: {
+            enabled: true,
+            perChain: {
+                [CHAIN]: { accumulatedSats, lifetimeDonatedSats: 0, lifetimeTxCount: 0 },
+            },
+        },
+    });
+
+    it.each([
+        [25000, 25000, 25000, 1000],
+        [26000, 25000, 25000, 2000],
+        [1000, 25000, 25000, 1000],
+    ])('prior %i and paid %i book %i and leave %i', (prior, paid, donated, accumulated) => {
+        const next = stepAdsAccumulator(settings(prior), CHAIN, {
+            donationIncluded: true,
+            donationAmount: paid,
+            chainRegistry,
+        });
+        expect(next.ads.perChain[CHAIN]).toMatchObject({
+            lifetimeDonatedSats: donated,
+            accumulatedSats: accumulated,
+            lifetimeTxCount: 1,
+        });
+    });
+
+    it('keeps legacy booking when an old verdict has no amount', () => {
+        const next = stepAdsAccumulator(settings(26000), CHAIN, {
+            donationIncluded: true,
+            chainRegistry,
+        });
+        expect(next.ads.perChain[CHAIN]).toMatchObject({ lifetimeDonatedSats: 26000, accumulatedSats: 1000 });
+    });
+
+    it('leaves non-donation accrual unchanged', () => {
+        const next = stepAdsAccumulator(settings(26000), CHAIN, {
+            donationIncluded: false,
+            donationAmount: 25000,
+            chainRegistry,
+        });
+        expect(next.ads.perChain[CHAIN]).toMatchObject({ lifetimeDonatedSats: 0, accumulatedSats: 27000 });
     });
 });

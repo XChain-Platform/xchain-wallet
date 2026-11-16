@@ -111,10 +111,17 @@ assert.ok(
     /if \(ownerLane\.open\)[\s\S]*?<ActionConfirmScreen[\s\S]*?\{\.\.\.ownerLane\.confirmProps\}/.test(formSrc),
     'CoinpayForm renders the shared dry-run confirmation screen',
 );
-assert.ok(/pending_coinpay/.test(formSrc),
-    'CoinpayForm filters obligations on pending_coinpay status');
-assert.ok(/payer_address/.test(formSrc),
-    'CoinpayForm filters obligations on payer_address matching the wallet address');
+// The pending and payer rules live in one shared reader; the form must call
+// it per row with the wallet address, and the reader must hold both rules.
+const obligationStatusSrc = readFileSync(
+    join(core, 'src', 'market', 'obligationStatus.js'), 'utf8',
+);
+assert.ok(/if \(!isPendingForPayer\(row, pair\.address\)\) continue;/.test(formSrc),
+    'CoinpayForm filters obligations through isPendingForPayer against the wallet address');
+assert.ok(/PENDING_COINPAY_STATUS = 'pending_coinpay'/.test(obligationStatusSrc),
+    'the shared obligation reader keys pending on the pending_coinpay status');
+assert.ok(/export function isPendingForPayer\b[\s\S]*?isPendingObligation\(row\)[\s\S]*?payer_address[\s\S]*?payer === address/.test(obligationStatusSrc),
+    'the shared obligation reader matches payer_address against the wallet address');
 
 // Review stage: form -> review -> submitting -> done. Signing must not
 // be reachable from the form stage.

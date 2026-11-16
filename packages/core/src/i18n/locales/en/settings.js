@@ -630,7 +630,7 @@ const messages = {
         '{count, plural, one {Activated. Derived # address.} other {Activated. Derived # addresses.}}',
     'settings.display.noFiltersToReset': 'No saved list filters to reset.',
     'settings.page.customChains': '{count, plural, one {# network custom} other {# networks custom}}',
-    'settings.page.donatedOn': 'On · {sats, number} sats donated',
+    'settings.page.donatedOn': 'On · {amounts} donated',
     'settings.page.siteCount': '{count, plural, one {# site} other {# sites}}',
     'settings.about.copiedBytes': 'Copied ({bytes, number} bytes). Paste into your bug report.',
     'settings.thisWallet.extendedPublicKeysFor': 'Extended public keys for {name}',

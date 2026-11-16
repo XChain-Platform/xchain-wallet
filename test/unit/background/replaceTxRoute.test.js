@@ -100,7 +100,9 @@ function harness(initial = [pending(ORIGINAL, 'original-psbt')]) {
         decoder: { decodeActionStringFromPsbt },
         wallet: { decomposePsbt, getBitcoinNetwork: () => networks.regtest },
     };
+    const settings = { activeNetwork: 'regtest' };
     const vault = {
+        wallets: { get: vi.fn(async () => ({ id: WALLET, importedKeys: [] })) },
         accounts: { findBy: vi.fn(async () => [{ id: 'account-1', walletId: WALLET }]) },
         addresses: { list: vi.fn(async () => [{
             id: 'address-1',
@@ -116,7 +118,7 @@ function harness(initial = [pending(ORIGINAL, 'original-psbt')]) {
             findBy: vi.fn(async (field, value) => [...rows.values()].filter((row) => row[field] === value)),
             put,
         },
-        settings: { get: vi.fn(async () => ({})) },
+        settings: { get: vi.fn(async () => ({ ...settings })) },
     };
     const descriptor = {
         id: CHAIN,
@@ -139,6 +141,7 @@ function harness(initial = [pending(ORIGINAL, 'original-psbt')]) {
     });
     return {
         host, rows, put, createTx, broadcastTx, signPsbt, decomposePsbt, decodeActionStringFromPsbt,
+        setActiveNetwork: (network) => { settings.activeNetwork = network; },
     };
 }
 
@@ -226,6 +229,30 @@ describe('tx.replace background route', () => {
         expect(response.error.message).toBe('This transaction is already confirmed.');
         expect(h.signPsbt).not.toHaveBeenCalled();
         expect(h.broadcastTx).not.toHaveBeenCalled();
+    });
+
+    it('leaves preview available after the active network changes', async () => {
+        const h = harness();
+        h.setActiveNetwork('mainnet');
+
+        const response = await call(h.host, { preview: true });
+
+        expect(response).toMatchObject({ ok: true, result: { feeIncrease: '0.00001' } });
+        expect(h.createTx).not.toHaveBeenCalled();
+        expect(h.signPsbt).not.toHaveBeenCalled();
+    });
+
+    it('refuses before build when the active network changed after preview', async () => {
+        const h = harness();
+        h.setActiveNetwork('mainnet');
+
+        const response = await call(h.host, {});
+
+        expect(response).toMatchObject({ ok: false, error: { name: 'ActiveNetworkChangedError' } });
+        expect(h.createTx).not.toHaveBeenCalled();
+        expect(h.signPsbt).not.toHaveBeenCalled();
+        expect(h.broadcastTx).not.toHaveBeenCalled();
+        expect([...h.rows.values()].some((row) => row.txid === REPLACEMENT)).toBe(false);
     });
 
     it('refuses an encoder response that diverts a replacement output', async () => {
@@ -420,6 +447,21 @@ describe('tx.replace under a freeze armed while the signer waits', () => {
             __resetPanicModePersistenceForTests();
             localStorage.clear();
         }
+    });
+
+    it('broadcasts nothing when the active network changes during the sign', async () => {
+        const h = harness();
+        h.signPsbt.mockImplementationOnce(async () => {
+            h.setActiveNetwork('mainnet');
+            return { signedPsbtHex: 'signed-replacement', txHex: SIGNED_TX, txid: REPLACEMENT };
+        });
+
+        const response = await call(h.host, {});
+
+        expect(response).toMatchObject({ ok: false, error: { name: 'ActiveNetworkChangedError' } });
+        expect(h.broadcastTx).not.toHaveBeenCalled();
+        expect([...h.rows.values()].some((row) => row.txid === REPLACEMENT)).toBe(false);
+        expect(h.rows.get('pending-aaaa')).toMatchObject({ status: 'broadcast', rbfReplacement: null });
     });
 });
 

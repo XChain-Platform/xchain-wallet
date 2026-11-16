@@ -198,6 +198,19 @@ describe('createAccount', () => {
         expect(signer.lock).toHaveBeenCalledOnce();
     });
 
+    it('locks a password-owned signer when its kind has no address source', async () => {
+        const vault = makeVault();
+        const signer = makeSigner('airgap');
+        unlockWalletRecord.mockResolvedValue(signer);
+
+        await expect(createAccount(opts(vault, undefined, {
+            password: 'secret',
+            activeChainIds: ['bitcoin-mainnet'],
+        }))).rejects.toThrow(/no Address\.source mapping/);
+        expect(signer.getAddresses).not.toHaveBeenCalled();
+        expect(signer.lock).toHaveBeenCalledOnce();
+    });
+
     it('refuses unknown chains before reading or writing the vault', async () => {
         const vault = makeVault();
 

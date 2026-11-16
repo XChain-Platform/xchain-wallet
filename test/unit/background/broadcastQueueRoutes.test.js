@@ -118,7 +118,10 @@ function makeHost({
         // is the fail-closed default every test below the recovery block wants.
         ...(accounts ? { accounts } : {}),
         ...(addresses ? { addresses } : {}),
-        wallets: wallets ?? { list: async () => [{ id: W, name: 'Main' }] },
+        wallets: wallets ?? {
+            get: async () => ({ id: W, name: 'Main', importedKeys: [] }),
+            list: async () => [{ id: W, name: 'Main' }],
+        },
         settings: {
             get: vi.fn(async () => JSON.parse(JSON.stringify(current))),
             put: vi.fn(async (r) => { current = JSON.parse(JSON.stringify(r)); }),
@@ -373,6 +376,19 @@ describe('broadcast.queue.broadcast books the ADS verdict the entry carries', ()
         });
         expect((await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' })).ok).toBe(true);
         expect(h.vault.settings.put).not.toHaveBeenCalled();
+    });
+
+    it('a resumed claim whose retry lands books its carried amount once', async () => {
+        const h = makeHost({
+            entries: [entry('A', {
+                resumedClaim: true,
+                adsCommit: { chainId: CHAIN, donationIncluded: true, donationAmount: 2500 },
+            })],
+            broadcastTx: vi.fn(async () => ({ txid: 'tx-A' })),
+        });
+        expect((await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' })).ok).toBe(true);
+        expect(h.vault.settings.put).toHaveBeenCalledTimes(1);
+        expect(h.ads()).toMatchObject({ lifetimeDonatedSats: 2500, accumulatedSats: 2600, lifetimeTxCount: 1 });
     });
 
     it('a settings write failure never turns a landed broadcast into an error', async () => {
@@ -848,7 +864,7 @@ describe('submitAction hands the queue what it needs to settle both halves', () 
             encoderOpts: { pubkey: 'pub' },
             prebuiltPsbt: {
                 psbtHex: 'PSBT', encoding: 'OP_RETURN', actionString: 'ISSUE|0|JDOG', version: 0,
-                deferredFeeOutput: null, deferredOutputs: [], adsDonation: { included: true },
+                deferredFeeOutput: null, deferredOutputs: [], adsDonation: { included: true, donationAmount: 5000 },
             },
             pendingTxMeta: { fromAddress: 'from', toAddress: 'to', actionSummary: 'Issue JDOG' },
             signer,
@@ -861,7 +877,7 @@ describe('submitAction hands the queue what it needs to settle both halves', () 
         const [record] = await vault.pendingTxs.list();
         expect(record.status).toBe('queued');
         expect(payload.pendingTxId).toBe(record.id);
-        expect(payload.adsCommit).toEqual({ chainId: CHAIN, donationIncluded: true });
+        expect(payload.adsCommit).toEqual({ chainId: CHAIN, donationIncluded: true, donationAmount: 5000 });
         // Nothing books on the failed attempt: the queued tx is what donates.
         expect(vault.settings.put).not.toHaveBeenCalled();
     });

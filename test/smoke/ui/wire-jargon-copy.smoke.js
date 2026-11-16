@@ -17,7 +17,8 @@
 // only a verb followed by a word inside the same literal is. Done screens
 // label the id row "Transaction ID", never the shorthand "Txid", and pending
 // copy says "the network" where a developer would say "mempool". The deploy
-// wait messages and the transaction simulator notes are read the same way.
+// wait messages are also checked for indexer jargon, and the transaction
+// simulator notes are read the same way.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -70,6 +71,7 @@ const COPY_FILES = [
 ];
 const COPY_RULES = [
     { re: /\b(?:the|in) mempool\b/i, say: 'names the mempool; say "the network"' },
+    { re: /['"`][^'"`]*\b(?:indexer|indexed|to index)\b/i, say: 'names the indexer; say "the service"' },
     { re: /['"`][^'"`]*\bsnapshot block\b/i, say: 'names the snapshot block; say "when this transaction confirms"' },
     { re: /['"`][^'"`]*\bpre-?fetch/i, say: 'says "pre-fetch"; say "work it out ahead of time"' },
 ];

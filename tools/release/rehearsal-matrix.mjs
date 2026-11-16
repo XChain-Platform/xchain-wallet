@@ -426,8 +426,9 @@ export function isAllOsTriggerPath(file) {
  *
  * Most of the download-and-swap code is not ours: electron-updater and its
  * runtime (the per-OS updaters), the Electron shell, and the builders that
- * write each OS's installer. A bump of any of them changes the swap on every
- * OS while touching no path above. Keyed on the lockfile's resolution, not on
+ * write each OS's installer, plus the library that verifies update signatures.
+ * A bump of any of them changes the swap on every OS while touching no path
+ * above. Keyed on the lockfile's resolution, not on
  * packages/desktop/package.json, whose `version` moves on every release.
  */
 export const ALL_OS_TRIGGER_PACKAGES = [
@@ -437,6 +438,7 @@ export const ALL_OS_TRIGGER_PACKAGES = [
     'electron-builder',
     'app-builder-lib',
     'dmg-builder',
+    'openpgp',
 ];
 
 /** @param {string} id */

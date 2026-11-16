@@ -28,6 +28,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { addressSourceForSignerKind } from '../../../packages/core/src/schemas/constants.js';
+
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 const core = join(wsRoot, 'packages', 'core');
@@ -97,9 +99,12 @@ const createAccountFlow = readFileSync(
     join(core, 'src', 'flows', 'createAccount.js'), 'utf8',
 );
 assert.ok(
-    /signerKind\s*===\s*'software'\s*\?\s*'hd'\s*:\s*signerKind/.test(createAccountFlow),
+    /addressSourceForSignerKind\(signerKind\)/.test(createAccountFlow),
     'createAccount picks Address.source from the signer kind (software → hd, HW → trezor/ledger)',
 );
+assert.equal(addressSourceForSignerKind('software'), 'hd', 'software signers derive hd addresses');
+assert.equal(addressSourceForSignerKind('trezor'), 'trezor', 'trezor signers derive trezor addresses');
+assert.equal(addressSourceForSignerKind('ledger'), 'ledger', 'ledger signers derive ledger addresses');
 assert.ok(
     /typeof signer\.lock === 'function'/.test(createAccountFlow),
     'createAccount only calls signer.lock() when the signer implements it (RemoteSigner does not)',
@@ -117,7 +122,7 @@ assert.ok(
     'receiveAddress validates that password is only required when signer is absent',
 );
 assert.ok(
-    /signerKind\s*===\s*'software'\s*\?\s*'hd'\s*:\s*signerKind/.test(receiveFlow),
+    /addressSourceForSignerKind\(signerKind\)/.test(receiveFlow),
     'receiveAddress picks Address.source from the signer kind',
 );
 

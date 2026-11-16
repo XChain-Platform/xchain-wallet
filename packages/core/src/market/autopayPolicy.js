@@ -45,7 +45,12 @@
 // payability on display data). A human can still pay manually from
 // the queue; an engine that pays on garbage cannot be un-paid.
 
-import { AT_RISK_SECONDS, classifyObligation, obligationBaseUnits } from './obligationStatus.js';
+import {
+    AT_RISK_SECONDS,
+    classifyObligation,
+    isPendingObligation,
+    obligationBaseUnits,
+} from './obligationStatus.js';
 
 /** First-attempt cutoff: no depth-confirmed match by T-45min => manual. */
 export const ARMING_CUTOFF_SECONDS = 45 * 60;
@@ -219,8 +224,7 @@ export function evaluateObligation({
     if (!obligation || !consent) return { action: 'skip', reason: 'missing-input' };
 
     // Terminal / foreign states first: nothing to do, nothing to say.
-    const status = obligation.coinpay_status ?? obligation.coinpayStatus;
-    if (status !== 'pending_coinpay') {
+    if (!isPendingObligation(obligation)) {
         return { action: 'skip', reason: 'not-pending' };
     }
     if (consent.autopay !== true) {

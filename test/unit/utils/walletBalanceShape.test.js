@@ -8,7 +8,7 @@
 // walletBalances output shape (see flows/balances.js AddressBalancesEntry).
 
 import { describe, it, expect } from 'vitest';
-import { chainReadFailed, sumTickOnChain } from '../../../packages/core/src/shared/utils/walletBalanceShape.js';
+import { chainReadFailed, sumTickOnChain, tickAmountOf } from '../../../packages/core/src/shared/utils/walletBalanceShape.js';
 
 const CHAIN = 'bitcoin-regtest';
 
@@ -103,6 +103,32 @@ describe('sumTickOnChain', () => {
     });
 });
 
+describe('tickAmountOf', () => {
+    it('returns the matched amount as text', () => {
+        expect(tickAmountOf(entry('a', []), { tick: 'X', amount: 12.5 })).toBe('12.5');
+    });
+
+    it('is unknown for a matched row that could not be scaled', () => {
+        expect(tickAmountOf(entry('a', []), { tick: 'X', amount: '', unknown: true })).toBeNull();
+    });
+
+    it('is zero for a fully read address with no match', () => {
+        expect(tickAmountOf(entry('a', []), undefined)).toBe('0');
+    });
+
+    it('is zero when the address has no entry at all', () => {
+        expect(tickAmountOf(undefined, undefined)).toBe('0');
+    });
+
+    it.each([
+        ['a failed read', { address: 'a', balances: null, error: 'boom' }],
+        ['no balances', { address: 'a', balances: null }],
+        ['an unreadable half', { address: 'a', balances: { tokens: [], unavailable: ['tokens'] } }],
+    ])('is unknown with no match after %s', (_name, bad) => {
+        expect(tickAmountOf(bad, undefined)).toBeNull();
+    });
+});
+
 describe('chainReadFailed', () => {
     it('flags a chain where one address failed to read', () => {
         const failed = { address: 'addrFail', balances: null, error: 'boom' };
@@ -123,5 +149,32 @@ describe('chainReadFailed', () => {
         const byChain = { [CHAIN]: [{ address: 'addrFail', balances: null, error: 'boom' }, entry('addrB', [])] };
         expect(chainReadFailed(byChain, CHAIN, { address: 'addrB' })).toBe(false);
         expect(chainReadFailed(byChain, CHAIN, { address: 'addrFail' })).toBe(true);
+    });
+
+    describe('a half that could not be read', () => {
+        const halfFailed = (unavailable) => ({
+            [CHAIN]: [{ address: 'addrH', error: null, balances: { native: null, tokens: [], unavailable } }],
+        });
+
+        it('flags the half the total depends on', () => {
+            expect(chainReadFailed(halfFailed(['tokens']), CHAIN, { half: 'tokens' })).toBe(true);
+            expect(chainReadFailed(halfFailed(['native']), CHAIN, { half: 'native' })).toBe(true);
+        });
+
+        it('ignores the other half', () => {
+            expect(chainReadFailed(halfFailed(['native']), CHAIN, { half: 'tokens' })).toBe(false);
+            expect(chainReadFailed(halfFailed(['tokens']), CHAIN, { half: 'native' })).toBe(false);
+        });
+
+        it('counts any unreadable half when no half is named', () => {
+            expect(chainReadFailed(halfFailed(['native']), CHAIN)).toBe(true);
+            expect(chainReadFailed(halfFailed([]), CHAIN)).toBe(false);
+        });
+
+        it('scopes the unreadable half to one address', () => {
+            const byChain = { [CHAIN]: [...halfFailed(['tokens'])[CHAIN], entry('addrB', [])] };
+            expect(chainReadFailed(byChain, CHAIN, { address: 'addrB', half: 'tokens' })).toBe(false);
+            expect(chainReadFailed(byChain, CHAIN, { address: 'addrH', half: 'tokens' })).toBe(true);
+        });
     });
 });

@@ -23,6 +23,26 @@ export const ADDRESS_SOURCES = /** @type {const} */ ([
     'ledger',
 ]);
 
+const ADDRESS_SOURCE_BY_SIGNER_KIND = Object.freeze({
+    software: 'hd',
+    trezor: 'trezor',
+    ledger: 'ledger',
+});
+
+/**
+ * Map every signer kind that can derive a persisted address to its source tag.
+ * New signer kinds must be added explicitly with a value from ADDRESS_SOURCES.
+ *
+ * @param {unknown} kind
+ * @returns {typeof ADDRESS_SOURCES[number]}
+ */
+export function addressSourceForSignerKind(kind) {
+    if (typeof kind !== 'string' || !Object.hasOwn(ADDRESS_SOURCE_BY_SIGNER_KIND, kind)) {
+        throw new Error(`Signer kind "${String(kind)}" has no Address.source mapping`);
+    }
+    return /** @type {typeof ADDRESS_SOURCES[number]} */ (ADDRESS_SOURCE_BY_SIGNER_KIND[kind]);
+}
+
 // Derivation role of an HD address (§16). 'receive' and 'change' mirror
 // the BIP44 external/internal branches (change 0/1). 'dispenser' is a
 // metadata tag on a normal external (change=0) address that hosts a

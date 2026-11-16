@@ -11,7 +11,7 @@
 // Transaction inclusion probes, read for one fact: which block.
 
 import { describe, it, expect } from 'vitest';
-import { inclusionOf, probeTxInclusion } from '../../../packages/core/src/flows/txInclusionProbe.js';
+import { inclusionOf, probeTxInclusion, utxoListOf } from '../../../packages/core/src/flows/txInclusionProbe.js';
 
 const A = 'aa'.repeat(32);
 const B = 'bb'.repeat(32);
@@ -125,5 +125,20 @@ describe('probeTxInclusion', () => {
         expect(await probeTxInclusion({ sdk: null, txids: [A] })).toEqual(new Map());
         expect(await probeTxInclusion({ sdk: {}, txids: [A] })).toEqual(new Map());
         expect(await probeTxInclusion({ sdk: sdkOf(), txids: [] })).toEqual(new Map());
+    });
+});
+
+describe('utxoListOf', () => {
+    it('reads the envelope and the bare array', () => {
+        const rows = [{ txid: A, value: 1 }];
+        expect(utxoListOf({ utxos: rows })).toBe(rows);
+        expect(utxoListOf(rows)).toBe(rows);
+        expect(utxoListOf({ utxos: [] })).toEqual([]);
+    });
+
+    it('says null for a reply it does not recognise', () => {
+        for (const reply of [null, undefined, 'x', {}, { utxos: null }, { utxos: {} }, { data: [] }]) {
+            expect(utxoListOf(reply)).toBeNull();
+        }
     });
 });

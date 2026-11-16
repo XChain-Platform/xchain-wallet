@@ -18,6 +18,7 @@
 
 import { recordLastUsedChain } from '../shared/chainSelection.js';
 import { defaultRegistry } from '../registry/index.js';
+import { importedAddressIdsFor } from './_importedAddressIds.js';
 import { updateSettings } from './settings.js';
 
 /**
@@ -93,17 +94,7 @@ export async function resolveActiveAddresses({ vault, walletId, accountId, chain
     // function can never find, and the UI silently keeps the old one -
     // but they stay out of the default pool: an imported key becomes the
     // active address only when the user picks it.
-    /** @type {Set<string>} */
-    let importedIds = new Set();
-    if (account?.walletId) {
-        try {
-            const wallet = await vault.wallets?.get(account.walletId);
-            const keys = Array.isArray(wallet?.importedKeys) ? wallet.importedKeys : [];
-            importedIds = new Set(
-                keys.map((k) => k?.addressId).filter((id) => typeof id === 'string' && id.length > 0),
-            );
-        } catch { /* no wallet record readable: overrides stay account-only */ }
-    }
+    const importedIds = await importedAddressIdsFor(vault, account.walletId);
 
     // Group this account's addresses by chainId.
     const all = await vault.addresses.list();

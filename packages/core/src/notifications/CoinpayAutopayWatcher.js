@@ -63,7 +63,7 @@ import {
     getCoinpayObligationsForAddress,
 } from '../flows/coinpayQueries.js';
 import { estimateNativeSendFeeTiers, displayRateToSettingsCustom } from '../flows/feeEstimate.js';
-import { baseUnitsToCoinText, obligationBaseUnits } from '../market/obligationStatus.js';
+import { baseUnitsToCoinText, isPendingObligation, obligationBaseUnits } from '../market/obligationStatus.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { randomUUID } from '../util/uuid.js';
 import { taggedLogger } from './taggedLogger.js';
@@ -365,8 +365,7 @@ export class CoinpayAutopayWatcher {
 
         // Any obligation leaving pending releases its hold in the
         // terminal sweep; skip early here for non-pending rows.
-        const status = row.coinpay_status ?? row.coinpayStatus;
-        if (status !== 'pending_coinpay') {
+        if (!isPendingObligation(row)) {
             this._terminalMatches = this._terminalMatches || new Set();
             this._terminalMatches.add(matchIndex);
             for (const key of this._notified) {

@@ -24,7 +24,7 @@ import {
 } from 'react';
 import { isDemoWallet } from '../../flows/demoMode.js';
 import { useMessaging } from '../useMessaging.js';
-import { classifyObligation } from '../../market/obligationStatus.js';
+import { classifyObligation, extractObligationRows, isPendingForPayer } from '../../market/obligationStatus.js';
 
 // Home and the app shell mount this hook, so the error-copy tables load only
 // when a sweep actually fails instead of riding in the startup bundle.
@@ -116,7 +116,7 @@ export async function scanCoinpayObligations({ messaging, walletId, accountId })
     }
     const results = await Promise.all(pairs.map((p) =>
         messaging.getCoinpayObligationsForAddress({ chainId: p.chainId, address: p.address })
-            .then((resp) => ({ ...p, rows: extractRows(resp), failed: false }))
+            .then((resp) => ({ ...p, rows: extractObligationRows(resp), failed: false }))
             .catch((error) => ({ ...p, rows: [], failed: true, error }))));
     if (results.length > 0 && results.every((result) => result.failed)) {
         throw results[0].error || new Error('Failed to scan for payments due.');
@@ -327,22 +327,3 @@ export function useSharedCoinpayObligations(walletId, accountId, opts = {}) {
     return provided || own;
 }
 
-// Row filters, shared shape-tolerant readers. Same semantics as the
-// copies in Home.jsx / CoinpayForm.jsx (which predate this hook):
-// pending status + this address on the payer side.
-function isPendingForPayer(row, address) {
-    if (!row || typeof row !== 'object') return false;
-    const status = String(row.coinpay_status || row.status || '').toLowerCase();
-    if (status !== 'pending_coinpay') return false;
-    const payer = row.payer_address || row.payerAddress;
-    return typeof payer === 'string' && payer === address;
-}
-
-function extractRows(resp) {
-    if (!resp) return [];
-    if (Array.isArray(resp)) return resp;
-    for (const key of ['data', 'rows', 'obligations', 'coinpay_obligations']) {
-        if (Array.isArray(resp[key])) return resp[key];
-    }
-    return [];
-}

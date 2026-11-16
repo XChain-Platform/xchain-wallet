@@ -18,7 +18,7 @@ export {
 // the query AddressList actually reads, so it needs the imported-WIF rule
 // as much as any flow does. Exporting it here is what keeps that host from
 // growing a sixth private copy of the rule.
-export { importedAddressIdsFor } from './_importedAddressIds.js';
+export { importedAddressIdsFor, importedAddressIdsForStrict } from './_importedAddressIds.js';
 export { createWallet } from './createWallet.js';
 export { createAccount, LegacySingleAccountError } from './createAccount.js';
 export { activateChain } from './activateChain.js';
