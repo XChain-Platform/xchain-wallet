@@ -56,6 +56,32 @@ export const MAX_COMPILED_ACTION_BYTES = 8192;
  */
 export const ENVELOPE_MAX_PAYLOAD = 390000;
 
+/** Multi-part FILE protocol bounds and exact per-piece stored-byte capacities. */
+export const MULTIPART_FILE_MAX_PARTS = 32;
+export const MULTIPART_FILE_MAX_BYTES = 12_000_000;
+export const MULTIPART_ENVELOPE_PART_CAPACITY = 389_920;
+export const MULTIPART_STANDARD_PART_CAPACITY = 8_114;
+
+export const MULTIPART_FILE_PART_CAPACITY = Object.freeze({
+    envelope: MULTIPART_ENVELOPE_PART_CAPACITY,
+    standard: MULTIPART_STANDARD_PART_CAPACITY,
+});
+
+/** Activation time keyed by the trailing network segment of a chain id. */
+export const FILE_MULTIPART_ACTIVATION_TIME = Object.freeze({
+    mainnet: null,
+    testnet: 1_796_083_200,
+    regtest: 0,
+});
+
+/** @param {string} chainId */
+export function fileMultipartActivationTime(chainId) {
+    const network = String(chainId ?? '').trim().toLowerCase().split('-').pop();
+    return Object.hasOwn(FILE_MULTIPART_ACTIVATION_TIME, network)
+        ? FILE_MULTIPART_ACTIVATION_TIME[network]
+        : undefined;
+}
+
 /**
  * The compiled-push ceiling for an encoding. Anything that is not the Taproot
  * envelope keeps the legacy 8192: §4 raises the ceiling PER-ENCODING precisely
