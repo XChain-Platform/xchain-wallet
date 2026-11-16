@@ -88,12 +88,21 @@ describe('request shapes', () => {
         });
 });
 
+describe('part bytes on the wire', () => {
+    it('sends a byte array part as the binary string the encoder rebuilds', () => {
+        const bytes = Uint8Array.from([0, 1, 127, 128, 200, 255]);
+        const result = call({ rawData: bytes });
+        expect(typeof result.rawData).toBe('string');
+        expect(Buffer.from(result.rawData, 'binary').equals(Buffer.from(bytes))).toBe(true);
+    });
+});
+
 describe('shared request fields', () => {
     it('maps the source, funding output, payload, and fixed fields', () => {
         const args = input();
         const result = filePieceEncoderOpts(args);
         expect(result).toMatchObject({
-            pubkey: PUBLIC_KEY,
+            pubkey: 'bc1qsource',
             compressedPubKey: PUBLIC_KEY,
             sourceAddress: 'bc1qsource',
             change: 'bc1qsource',

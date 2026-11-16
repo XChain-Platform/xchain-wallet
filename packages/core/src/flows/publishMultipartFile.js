@@ -11,7 +11,7 @@ import { assertMultipartActive } from './multipartActivationGate.js';
 import {
     FILE_MULTIPART_ACTIVATION_TIME,
 } from './fileSizeLimits.js';
-import { filePieceEncoderOpts } from './filePieceEncoderOpts.js';
+import { binaryStringOf, filePieceEncoderOpts } from './filePieceEncoderOpts.js';
 import {
     recordPieceBeforeBroadcast,
     recoveryRecordFor,
@@ -153,12 +153,12 @@ async function standardSignedPair(ctx, input) {
     const encoded = await ctx.sdk.encoder.createTx(commitOpts);
     const commit = await signPsbt({ ...ctx, psbt: encoded.psbt });
     const revealBuilt = await ctx.sdk.encoder.spendP2sh({
-        pubkey: ctx.source.publicKey,
+        pubkey: ctx.source.address,
         p2shHash: commit.txid,
         p2shHex: commit.txHex,
         data: input.data,
         encoding: 'P2SH',
-        ...(input.rawData === undefined ? {} : { rawData: input.rawData }),
+        ...(input.rawData === undefined ? {} : { rawData: binaryStringOf(input.rawData) }),
         change: ctx.source.address,
         feePerKb: ctx.rate * 1000,
     });

@@ -8,6 +8,17 @@ const PHASES = new Set(['commit', 'reveal']);
 const COMPRESSED_PUBKEY = /^(02|03)[0-9a-fA-F]{64}$/;
 const HEX = /^[0-9a-fA-F]+$/;
 
+// The encoder RPC takes rawData as a binary (Latin-1) string and rebuilds the bytes
+// with Buffer.from(rawData, 'binary'); a byte array is refused as not a string.
+export function binaryStringOf(bytes) {
+    if (typeof bytes === 'string') return bytes;
+    let out = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+        out += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    }
+    return out;
+}
+
 function invalid(field) {
     const error = new Error(`Invalid file piece encoder field: ${field}`);
     error.code = 'FILE_PIECE_OPTS_INVALID';
@@ -71,7 +82,9 @@ export function filePieceEncoderOpts(args) {
     validateArgs(args);
     const { pieceKind, lane, buildMode, phase, source, fundingOutput, rate, data } = args;
     return {
-        pubkey: source.publicKey,
+        // The encoder selects the source from `pubkey`: an address passes through, while
+        // a bare key resolves to the network default type, wrong for a P2PKH owner.
+        pubkey: source.address,
         compressedPubKey: source.publicKey,
         sourceAddress: source.address,
         change: source.address,
@@ -79,7 +92,7 @@ export function filePieceEncoderOpts(args) {
         compress: false,
         feePerKb: rate * 1000,
         data,
-        ...(pieceKind === 'part' ? { rawData: args.rawData } : {}),
+        ...(pieceKind === 'part' ? { rawData: binaryStringOf(args.rawData) } : {}),
         encoding: lane === 'envelope' ? 'TAPROOT' : 'P2SH',
         options: lane === 'envelope'
             ? envelopeOptions(buildMode, phase, args.signedCommitHex)

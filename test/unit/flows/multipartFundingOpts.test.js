@@ -31,7 +31,7 @@ describe('multipart funding encoder request', () => {
             'pubkey', 'sourceAddress', 'change', 'customOutputs', 'feePerKb',
         ]);
         expect(result).toEqual({
-            pubkey: SOURCE.publicKey,
+            pubkey: SOURCE.address,
             sourceAddress: SOURCE.address,
             change: SOURCE.address,
             customOutputs: pieceValues.map((value) => ({ address: SOURCE.address, value })),

@@ -36,7 +36,9 @@ export function multipartFundingEncoderOpts({ source, pieceValues, rate } = {}) 
     }
 
     return {
-        pubkey: source.publicKey,
+        // The encoder picks the funding UTXOs from `pubkey`; the address keeps a P2PKH
+        // owner's source exact where a bare key would resolve to P2WPKH.
+        pubkey: source.address,
         sourceAddress: source.address,
         change: source.address,
         customOutputs: pieceValues.map((value) => ({ address: source.address, value })),
