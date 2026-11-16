@@ -86,6 +86,7 @@ function mount(client, sourceAddress = SOURCE.address) {
 
 async function pickMultipartFile() {
     await screen.findByLabelText('Choose file to attach');
+    await waitFor(() => expect(screen.getByLabelText('From')).toHaveValue(SOURCE.address));
     fireEvent.drop(screen.getByRole('group', { name: 'Artwork file' }), {
         dataTransfer: { files: [new File([BYTES], 'art.txt', { type: 'text/plain' })] },
     });
@@ -95,6 +96,7 @@ async function pickMultipartFile() {
 
 async function openMultipartLink(client) {
     await pickMultipartFile();
+    expect(screen.getByText('Up to 12,000,000 bytes with the current title and memo.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Attach artwork' }));
     await screen.findByRole('form', { name: 'Review artwork upload' });
     fireEvent.click(screen.getByRole('button', { name: 'Upload file' }));
@@ -117,7 +119,6 @@ describe('new multipart artwork upload', () => {
     it('retains the link target and uses the complete manifest index for LINK', async () => {
         const client = clientFor();
         mount(client);
-        expect(await screen.findByText('Up to 12,000,000 bytes with the current title and memo.')).toBeInTheDocument();
         await openMultipartLink(client);
 
         expect(client.fileMultipart).toHaveBeenCalledWith(expect.objectContaining({

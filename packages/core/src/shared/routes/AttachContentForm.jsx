@@ -522,6 +522,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         multipart: multipartMethod,
     });
     const envelopePicked = upload.method === 'taproot';
+    const multipartPicked = upload.multipart?.options?.[upload.method]?.multipart === true;
     const selectedSupport = useMemo(() => methodSupport(
         upload.method, descriptor, fromAddress, isWatcherMode,
     ), [upload.method, descriptor, fromAddress, isWatcherMode]);
@@ -1559,11 +1560,15 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         );
     }
 
-    // The live cap under the chooser: the title and memo share the file's
-    // on-chain record, so every character typed there lowers it.
-    const fileLimitBytes = fileMeta
-        ? attachmentLimitFor(fileMeta.name, fileMeta.type)
-        : attachmentLimitFor('file.bin', 'application/octet-stream');
+    const fileLimitBytes = multipartPicked
+        ? attachmentLimitFor(
+            fileMeta?.name || 'file.bin',
+            fileMeta?.type || 'application/octet-stream',
+        )
+        : attachmentCapFor(
+            fileMeta?.name || 'file.bin',
+            fileMeta?.type || 'application/octet-stream',
+        );
 
     // stage === 'compose' (also the fallback if review stages lose
     // their prerequisites, e.g. addresses reloaded)
