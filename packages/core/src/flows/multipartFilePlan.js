@@ -8,7 +8,6 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { gcm } from '@noble/ciphers/aes';
 import { sha256 } from '@noble/hashes/sha2';
 import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from '@noble/hashes/utils';
 import pako from 'pako';
@@ -18,11 +17,14 @@ import {
     MULTIPART_FILE_MAX_PARTS,
     MULTIPART_STANDARD_PART_CAPACITY,
 } from './fileSizeLimits.js';
+import {
+    GATED_IV_BYTES,
+    encryptGatedStoredBytes,
+    freshGatedIv,
+} from './gatedStoredBytes.js';
 
 const { deflateRaw } = pako;
 const COMPRESSION_MAX_RATIO = 150;
-const AES_GCM_NONCE_BYTES = 12;
-const AES_GCM_TAG_BYTES = 16;
 
 function asBytes(value, label = 'bytes') {
     if (value instanceof Uint8Array) return new Uint8Array(value);
@@ -55,13 +57,13 @@ function storedPlaintext(original) {
     return { bytes: original, compressed: false, compressionField: '' };
 }
 
-function encryptStored(bytes, key) {
-    const nonce = new Uint8Array(AES_GCM_NONCE_BYTES);
-    crypto.getRandomValues(nonce);
-    const sealed = gcm(key, nonce).encrypt(bytes);
-    const ciphertext = sealed.subarray(0, sealed.length - AES_GCM_TAG_BYTES);
-    const tag = sealed.subarray(sealed.length - AES_GCM_TAG_BYTES);
-    return concatBytes(nonce, tag, ciphertext);
+function gatedIv(value) {
+    if (value === undefined) return freshGatedIv();
+    if (value instanceof Uint8Array && value.length === GATED_IV_BYTES) {
+        return new Uint8Array(value);
+    }
+    if (typeof value === 'string' && /^[0-9a-f]{24}$/.test(value)) return hexToBytes(value);
+    throw rangeError('GATE_IV_INVALID', 'gate.iv must be 24 lowercase hex characters or 12 bytes');
 }
 
 function prepareStoredBytes(original, gate) {
@@ -71,11 +73,13 @@ function prepareStoredBytes(original, gate) {
     }
     const key = asBytes(gate.key, 'gate.key');
     if (key.length !== 32) throw new TypeError('gate.key must be 32 bytes');
+    const iv = gatedIv(gate.iv);
     return {
         ...plain,
-        bytes: encryptStored(plain.bytes, key),
+        bytes: encryptGatedStoredBytes({ stored: plain.bytes, key, iv }),
         key,
         keyHash: bytesToHex(sha256(key)),
+        gateIv: bytesToHex(iv),
         encryptionMethod: field(gate, 'encryptionMethod', 'ENCRYPTION_METHOD', 1),
     };
 }
@@ -188,6 +192,7 @@ export async function planMultipartFile(bytes, meta = {}, options = {}) {
         encryptionMethod: prepared.encryptionMethod,
         key: prepared.key,
         keyHash: prepared.keyHash,
+        gateIv: prepared.gateIv ?? null,
         storedBytes: prepared.bytes,
         manifestParams: manifest,
         manifest: { params: manifest },
