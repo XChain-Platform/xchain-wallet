@@ -147,27 +147,29 @@ function hasMultipartMessaging(messaging) {
     return 'fileMultipart' in messaging && 'listPendingFileUploads' in messaging;
 }
 
-function publishReviewError({
+function publishReviewStop({
     fileMeta, fromAddress, title, memo, feePick, feeTiers, feeCustomEstimate, publicCapFor, ackForever,
 }) {
-    if (!fileMeta) return 'Pick a file first.';
-    if (!fromAddress) return 'No signing address available on this network.';
+    if (!fileMeta) return { formError: 'Pick a file first.' };
+    if (!fromAddress) return { formError: 'No signing address available on this network.' };
     if ((title && /[|;]/.test(title)) || (memo && /[|;]/.test(memo)) || /[|;]/.test(fileMeta.name)) {
-        return 'File name, title, and memo cannot contain | or ; characters.';
+        return { formError: 'File name, title, and memo cannot contain | or ; characters.' };
     }
     const unsafeMetadata = actionTextSafetyError(fileMeta.name, 'File name')
         || actionTextSafetyError(title, 'Title');
-    if (unsafeMetadata) return unsafeMetadata;
+    if (unsafeMetadata) return { formError: unsafeMetadata };
     const memoError = memoLengthError(memo);
-    if (memoError) return memoError;
+    if (memoError) return { formError: memoError };
     const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-    if (feeStop) return feeStop.formError;
+    if (feeStop) return feeStop;
     const cap = publicCapFor(fileMeta.name, fileMeta.type);
     if (fileMeta.bytes.length > cap) {
-        return `With this title/memo the on-chain ceiling is ${cap.toLocaleString()} bytes `
-            + `and the file is ${fileMeta.bytes.length.toLocaleString()}. Shorten the title or memo.`;
+        return {
+            formError: `With this title/memo the on-chain ceiling is ${cap.toLocaleString()} bytes `
+                + `and the file is ${fileMeta.bytes.length.toLocaleString()}. Shorten the title or memo.`,
+        };
     }
-    return ackForever ? null : 'Confirm you understand the publish is permanent.';
+    return ackForever ? null : { formError: 'Confirm you understand the publish is permanent.' };
 }
 
 /**
@@ -590,7 +592,7 @@ export function PublishFileForm({ walletId, onBack }) {
 
     async function handleReview(event) {
         event.preventDefault();
-        const reviewError = publishReviewError({
+        const reviewStop = publishReviewStop({
             fileMeta,
             fromAddress,
             title,
@@ -601,7 +603,7 @@ export function PublishFileForm({ walletId, onBack }) {
             publicCapFor,
             ackForever,
         });
-        if (reviewError) { setFormError(reviewError); return; }
+        if (reviewStop) { setFormError(reviewStop.formError); return; }
         setFormError(null);
         setSubmitError(null);
         if (fileMeta.bytes.length <= selectedSingleCap) {

@@ -106,3 +106,31 @@ describe('PublishFileForm multipart panel', () => {
         expect(screen.getByRole('button', { name: 'Discard (3 transactions already paid)' })).toBeEnabled();
     });
 });
+
+describe('PublishFileForm fee validation with multipart available', () => {
+    it.each([
+        ['', 'Enter a custom fee rate.'],
+        ['1.123456789', 'Custom fee rate can have at most 8 decimal places.'],
+        ['999999999999999999999', 'Enter a rate no higher than 1,000 sat/vB.'],
+    ])('refuses the custom fee %j before starting any publish path', async (rate, message) => {
+        const shell = messaging();
+        mount(shell);
+        const input = await screen.findByLabelText('File (up to 12,000,000 bytes)');
+        fireEvent.change(input, {
+            target: { files: [new File(['abc'], 'small.txt', { type: 'text/plain' })] },
+        });
+        await waitFor(() => expect(document.body.textContent).toContain('small.txt'));
+        fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
+            target: { value: '3' },
+        });
+        fireEvent.change(screen.getByLabelText('Custom fee rate (sat/vB)'), {
+            target: { value: rate },
+        });
+        fireEvent.click(screen.getByRole('checkbox'));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish file' }));
+
+        expect(await screen.findByText(message)).toBeInTheDocument();
+        expect(shell.fileMultipart).not.toHaveBeenCalled();
+        expect(screen.queryByRole('heading', { name: 'Review publish' })).toBeNull();
+    });
+});
