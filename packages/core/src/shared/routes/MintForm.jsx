@@ -377,16 +377,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                         ...(feePerKb != null ? { feePerKb } : {}),
                     },
                 }),
-                // MINT has no protocol fee. Mark that consensus fact in the
-                // report so the generic confirm surface does not show an
-                // unavailable protocol-fee estimate for a deliberately free action.
-                preflight: async (o) => {
-                    const report = await messaging.preflight({ chainId, ...o });
-                    return {
-                        ...report,
-                        quote: { ...(report?.quote || {}), xchainFee: '0' },
-                    };
-                },
+                preflight: (o) => messaging.preflight({ chainId, ...o }),
                 // §4.6: the input-liveness half of the Approve-time re-check,
                 // the same one useActionConfirmFlow.run gives every migrated form.
                 checkInputs: (psbtHex) => messaging.checkInputLiveness({ chainId, psbtHex }),

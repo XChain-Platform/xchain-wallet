@@ -30,8 +30,8 @@
 //   - JSXAttribute "literal"   <input placeholder="x" />   → flagged for
 //     attributes whose names are user-visible: aria-label,
 //     aria-description, aria-roledescription, aria-valuetext, alt,
-//     title, placeholder, label, hint, help, caption, tooltip, heading,
-//     emptyText, actionLabel, backLabel, text, body, ariaLabel,
+//     title, placeholder, label, hint, help, caption, tooltip, data-label,
+//     heading, emptyText, actionLabel, backLabel, text, body, ariaLabel,
 //     iconLabel, aria, headline, statusLabel, allLabel, summaryNoun,
 //     menuHeader, emptyTitle, emptyBody, confirmLabel, cancelLabel,
 //     copyLabel, balanceText, submitLabel, what, prefix, noun, summary,

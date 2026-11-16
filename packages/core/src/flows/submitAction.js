@@ -519,7 +519,13 @@ export async function submitAction({
             // carries only those.
             // The record id rides on the error so a host whose vault refused the
             // stamp below can finish the record once the vault opens again.
-            if (pending && err && typeof err === 'object') err.pendingTxId = pending.id;
+            if (err && typeof err === 'object') {
+                if (pending) err.pendingTxId = pending.id;
+                if (phase1Landed) {
+                    err.commitLanded = true;
+                    err.commitTxid = commitTxid;
+                }
+            }
             const stampPending = async (patch) => {
                 if (!pending) return false;
                 try {

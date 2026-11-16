@@ -69,6 +69,16 @@ async function broadcastSigned(encoder, txHex) {
  * both and sends the commit and then the reveal: a commit queued alone spends
  * its coin into a script that nothing opens.
  *
+ * `phase` names the leg that failed, and the message reads
+ * `broadcast failed (<phase>): ...`:
+ *   - 'phase1': the first (or only) transaction did not broadcast; nothing from
+ *     this attempt is known to have reached the network.
+ *   - 'envelope_reveal': the commit is on the network and the signed reveal
+ *     this error carries did not broadcast.
+ *   - 'phase2': the commit is on the network and the signed phase-2 spend this
+ *     error carries did not broadcast.
+ * Both 'envelope_reveal' and 'phase2' mean the commit already landed.
+ *
  * Cluster G FOLLOWUP 1.
  */
 export class BroadcastFailedError extends Error {
@@ -80,7 +90,7 @@ export class BroadcastFailedError extends Error {
      *   chainId: string,
      *   signedAt: number,
      *   encoding: string,
-     *   phase: 'phase1' | 'phase2',
+     *   phase: 'phase1' | 'envelope_reveal' | 'phase2',
      *   revealTxHex?: string | null,
      *   revealTxid?: string | null,
      * }} fields

@@ -326,6 +326,9 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
         [active, filteredRows, sortBy],
     );
     const tokenQueryTrim = tokenQuery.trim().toLowerCase();
+    // A chain whose token read failed has no way to say so through its token
+    // rows when none were read, so its coin row carries the flag.
+    const tokensUnreadable = filteredRows.some((r) => r.kind === 'native' && r.tokensUnavailable === true);
     // Off for a demo wallet: its rows carry the wallet's real addresses, and
     // a demo wallet's addresses never go to an explorer (issue #82).
     const ownedTokens = useOwnedTokens(
@@ -575,12 +578,16 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                             rows={[]}
                             emptyTitle={tokenQueryTrim
                                 ? t('home.tabs.noMatchingTokens')
-                                : (networkFilter === 'all' ? t('home.tabs.noTokensYet') : t('home.tabs.noTokensOnThisNetwork'))}
+                                : (tokensUnreadable
+                                    ? t('home.tabs.tokensCouldntBeLoaded')
+                                    : (networkFilter === 'all' ? t('home.tabs.noTokensYet') : t('home.tabs.noTokensOnThisNetwork')))}
                             emptyBody={tokenQueryTrim
                                 ? t('home.tabs.matchingTokensAppearHereAfter')
-                                : (networkFilter === 'all'
-                                    ? t('home.tabs.tokensAppearHereAfterYou')
-                                    : t('home.tabs.tokensOnThisNetworkAppear'))}
+                                : (tokensUnreadable
+                                    ? t('home.tabs.tokensCouldntBeLoadedBody')
+                                    : (networkFilter === 'all'
+                                        ? t('home.tabs.tokensAppearHereAfterYou')
+                                        : t('home.tabs.tokensOnThisNetworkAppear')))}
                             emptyActionLabel={tokenQueryTrim && canFilter ? t('home.tabs.clearFilter') : undefined}
                             onEmptyAction={tokenQueryTrim && canFilter ? () => onTokenQueryChange('') : undefined}
                         />

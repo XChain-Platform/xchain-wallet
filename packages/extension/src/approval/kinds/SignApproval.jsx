@@ -1403,6 +1403,14 @@ function CoSignIntentSummary({ loading, error, preview }) {
                     ) : null}
                 </>
             ) : null}
+            {Array.isArray(preview.clockWarnings) && preview.clockWarnings.length > 0 ? (
+                <>
+                    <StatusMessage variant="warning" role="alert">
+                        <ul><li>{t('extension.sign.clockWarning')}</li></ul>
+                    </StatusMessage>
+                    <CoSignTechnicalDetails testId="cosign-clock-details" text={preview.clockWarnings.join('; ')} />
+                </>
+            ) : null}
             {preview.decodeOk && preview.policyOk && preview.needsConfirmation ? (
                 <p className={shared.summaryValue} style={{ whiteSpace: 'normal' }}>
                     {t('extension.sign.confirmThreshold')}

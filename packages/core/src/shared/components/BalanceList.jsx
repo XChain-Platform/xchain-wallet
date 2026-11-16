@@ -605,6 +605,12 @@ export function buildBalanceRows(balances, chainRegistry, activeByChain = null) 
         // stating a number it does not have.
         let nativeUnavailable = false;
         let nativeUnavailableReason = null;
+        // The token half fails separately (`unavailable: ['tokens']`). It leaves
+        // `tokens: []` or only the rows that parsed, so a held token vanishes
+        // or reads low unless the rows built from the answering addresses say so.
+        let tokensUnavailable = false;
+        let tokensUnavailableReason = null;
+        const readTicks = new Set();
         // D-67: sum each distinct ADDRESS once, not each Address RECORD. Two
         // records can name one address - importing a WIF twice makes a second
         // record, and importing a key the wallet already derives collides with
@@ -627,6 +633,13 @@ export function buildBalanceRows(balances, chainRegistry, activeByChain = null) 
                 nativeUnavailable = true;
                 if (!nativeUnavailableReason && b.unavailableReason) {
                     nativeUnavailableReason = String(b.unavailableReason);
+                }
+            }
+
+            if (Array.isArray(b.unavailable) && b.unavailable.includes('tokens')) {
+                tokensUnavailable = true;
+                if (!tokensUnavailableReason && b.unavailableReason) {
+                    tokensUnavailableReason = String(b.unavailableReason);
                 }
             }
 
@@ -669,6 +682,7 @@ export function buildBalanceRows(balances, chainRegistry, activeByChain = null) 
                         tokenAcc.set(a.tick, acc);
                     }
                     acc.quantity += safeBigInt(a.quantity);
+                    readTicks.add(a.tick);
                 }
             }
 
@@ -700,6 +714,8 @@ export function buildBalanceRows(balances, chainRegistry, activeByChain = null) 
             if (!nativeAcc) nativeAcc = row;
         }
 
+        if (tokensUnavailable) markTokenReadFailure(tokenAcc, readTicks, nativeAcc, tokensUnavailableReason);
+
         if (nativeAcc) out.push(nativeAcc);
         for (const acc of tokenAcc.values()) out.push(acc);
     }
@@ -708,6 +724,23 @@ export function buildBalanceRows(balances, chainRegistry, activeByChain = null) 
         quantity: r.quantity.toString(),
         ...(r.pendingQuantity == null ? {} : { pendingQuantity: r.pendingQuantity.toString() }),
     }));
+}
+
+// A token read that failed leaves two cases, mirroring the coin: rows built
+// from the addresses that answered are a floor (partial), and a chain with no
+// such row carries the flag on its coin row so Home can say the tokens could
+// not be read instead of that there are none. The coin row's own
+// `unavailable` stays untouched: its read was fine.
+function markTokenReadFailure(tokenAcc, readTicks, nativeAcc, reason) {
+    for (const [tick, acc] of tokenAcc) {
+        if (!readTicks.has(tick)) continue;
+        acc.unavailable = 'partial';
+        acc.unavailableReason = reason;
+    }
+    if (nativeAcc) {
+        nativeAcc.tokensUnavailable = true;
+        nativeAcc.tokensUnavailableReason = reason;
+    }
 }
 
 /**

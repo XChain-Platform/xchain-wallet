@@ -344,8 +344,12 @@ export class MockXChainProvider implements XChainProvider {
         if (!chainId || !firstAddress) {
             return { ok: false, error: 'ADDRESS_NOT_AUTHORIZED' };
         }
+        const expiresInMs = params.expiresInMs ?? SIGN_IN_DEFAULT_EXPIRY_MS;
+        if (typeof expiresInMs !== 'number' || !Number.isFinite(expiresInMs) || expiresInMs <= 0) {
+            return { ok: false, error: 'INVALID_PARAMS' };
+        }
         const now = Date.now();
-        const expiresAt = now + (params.expiresInMs ?? SIGN_IN_DEFAULT_EXPIRY_MS);
+        const expiresAt = now + expiresInMs;
         const parts = {
             version: SIGN_IN_CHALLENGE_VERSION as 2,
             appId: params.appId,

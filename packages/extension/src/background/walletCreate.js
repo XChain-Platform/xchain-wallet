@@ -342,6 +342,7 @@ async function importBackupFresh(request, deps) {
                 walletPassword,
                 devicePassword: password,
                 mode: 'fresh',
+                chainRegistry: deps.chainRegistry,
                 // Core zeroes the lent buffer when this returns, so keep a copy;
                 // the outer finally zeroes it whether or not the restore succeeds.
                 onDeviceKey: (key, params) => {

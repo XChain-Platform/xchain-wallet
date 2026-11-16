@@ -171,7 +171,8 @@ export async function importWif({
         type,
     });
 
-    // Reject a re-import BEFORE the Argon2id master-key derivation below:
+    // Reject a re-import BEFORE the Argon2id master-key derivation below.
+    // The guarded write repeats this check against the current document.
     // D-50's lesson is that a rejection the user can cause by hand must not
     // cost them a 6-8s freeze first.
     await assertNotAlreadyImported(vault, walletRecord, descriptor, derivedAddress);
@@ -241,6 +242,14 @@ export async function importWif({
             const currentWallet = document.wallets.find((record) => record.id === walletRecord.id);
             if (!currentWallet) throw new WalletNotFoundError(walletRecord.id);
             if (!walletSealMatches(currentWallet, walletRecord)) throw new ImportConflictError();
+            if (hasImportedDuplicate(
+                currentWallet.importedKeys,
+                document.addresses,
+                descriptor,
+                derivedAddress,
+            )) {
+                throw new DuplicateImportError(derivedAddress);
+            }
             if (document.addresses.some((record) => record.id === addressRecord.id)) {
                 throw new Error(`importWif: address id collision "${addressRecord.id}"`);
             }
@@ -298,12 +307,24 @@ async function assertNotAlreadyImported(vault, walletRecord, descriptor, address
         if (typeof k?.addressId !== 'string') continue;
         const existing = await vault.addresses.get(k.addressId);
         if (!existing) continue;
-        if (
-            existing.address === address
-            && existing.chain === descriptor.coin
-            && existing.network === descriptor.networkKind
-        ) {
+        if (matchesImportedAddress(existing, descriptor, address)) {
             throw new DuplicateImportError(address);
         }
     }
+}
+
+function hasImportedDuplicate(importedKeys, addresses, descriptor, address) {
+    const keys = Array.isArray(importedKeys) ? importedKeys : [];
+    for (const key of keys) {
+        if (typeof key?.addressId !== 'string') continue;
+        const existing = addresses.find((record) => record.id === key.addressId);
+        if (existing && matchesImportedAddress(existing, descriptor, address)) return true;
+    }
+    return false;
+}
+
+function matchesImportedAddress(existing, descriptor, address) {
+    return existing.address === address
+        && existing.chain === descriptor.coin
+        && existing.network === descriptor.networkKind;
 }

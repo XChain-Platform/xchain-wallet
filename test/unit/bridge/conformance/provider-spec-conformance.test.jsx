@@ -238,6 +238,27 @@ describe('provider interface conformance', () => {
         await expect(provider.signIn({ appId: 'example' }))
             .resolves.toMatchObject({ ok: true, address: 'btc-address', chainId: 'bitcoin-regtest' });
     });
+
+    it('pins the mock sign-in default expiry to the spec and refuses an invalid window', async () => {
+        const descriptor = BUNDLED_DESCRIPTORS.find((item) => item.id === 'bitcoin-regtest');
+        const provider = new MockXChainProvider({
+            activeChains: ['bitcoin-regtest'],
+            supportedChains: [descriptor],
+            addresses: {
+                'bitcoin-regtest': [{ id: 'btc', accountId: null, chain: 'bitcoin', network: 'regtest', addressType: 'p2wpkh', address: 'btc-address', label: 'BTC' }],
+            },
+        });
+        await provider.connect({ requestedChains: ['bitcoin-regtest'] });
+
+        const signed = await provider.signIn({ appId: 'example' });
+        expect(signed.ok).toBe(true);
+        expect(signed.challengeParts.expiresAt - signed.challengeParts.timestamp)
+            .toBe(runtime.SIGN_IN_DEFAULT_EXPIRY_MS);
+        for (const expiresInMs of [0, -1, Number.NaN, 'abc']) {
+            await expect(provider.signIn({ appId: 'example', expiresInMs }))
+                .resolves.toEqual({ ok: false, error: 'INVALID_PARAMS' });
+        }
+    });
 });
 
 describe.skipIf(!platformSpecSource)('living spec conformance', () => {

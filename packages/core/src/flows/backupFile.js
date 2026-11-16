@@ -81,6 +81,7 @@ import { validateConnectedSite } from '../schemas/connectedSite.js';
 import { validatePendingTx } from '../schemas/pendingTx.js';
 import { validateSettings } from '../schemas/settings.js';
 import { parseBackupPointer } from '../uri/backupPointer.js';
+import { defaultRegistry } from '../registry/index.js';
 import { WalletNotFoundError } from './unlockWallet.js';
 import {
     RESTORE_PASSWORD_LABELS,
@@ -316,6 +317,7 @@ export async function exportBackupFile({
  * @property {DeviceKeyCallback} [onDeviceKey]              lends the re-key's new master key to the shell
  *                                                          so its signer-pool unlock skips a second
  *                                                          Argon2id round on identical inputs
+ * @property {import('../registry/index.js').ChainRegistry} [chainRegistry]
  */
 
 /**
@@ -353,6 +355,7 @@ export async function importBackupFile({
     onConflict = 'error',
     mode = 'fresh',
     onDeviceKey,
+    chainRegistry = defaultRegistry(),
 }) {
     if (!vault) throw new Error('importBackupFile: vault is required');
     if (typeof password !== 'string' || password.length === 0) {
@@ -388,7 +391,7 @@ export async function importBackupFile({
     // Migration or scope errors in a later collection must not turn a restore
     // into a wallet-only partial write, and records for another wallet must
     // not ride in a valid encrypted envelope.
-    prepareDecodedPayload(decoded);
+    prepareDecodedPayload(decoded, { chainRegistry });
 
     // Re-seal the wallet's key material under this device's
     // password BEFORE anything is written. Doing it here rather than at
@@ -514,6 +517,7 @@ export class BackupPointerUnresolvedError extends Error {
  * @property {'overwrite' | 'preserve' | 'error'} [onConflict]   default 'error'
  * @property {'fresh' | 'add'} [mode]                       default 'fresh'
  * @property {DeviceKeyCallback} [onDeviceKey]              passed through to `importBackupFile`
+ * @property {import('../registry/index.js').ChainRegistry} [chainRegistry]
  */
 
 /**
@@ -542,6 +546,7 @@ export async function restoreFromBackupPointer({
     onConflict = 'error',
     mode = 'fresh',
     onDeviceKey,
+    chainRegistry = defaultRegistry(),
 }) {
     if (!vault) throw new Error('restoreFromBackupPointer: vault is required');
     if (typeof password !== 'string' || password.length === 0) {
@@ -570,6 +575,7 @@ export async function restoreFromBackupPointer({
         onConflict,
         mode,
         onDeviceKey,
+        chainRegistry,
     });
 
     return { ...result, pointer: parsed };
@@ -903,7 +909,7 @@ function pendingTxScopeKey(record) {
     return JSON.stringify([record?.chain, record?.network, record?.fromAddress]);
 }
 
-function prepareDecodedPayload(decoded) {
+function prepareDecodedPayload(decoded, { chainRegistry }) {
     decoded.wallet = migrateWallet(decoded.wallet);
     decoded.accounts = migratePayloadRecords(decoded.accounts, 'accounts', migrateAccount);
     decoded.addresses = migratePayloadRecords(decoded.addresses, 'addresses', migrateAddress);
@@ -971,10 +977,34 @@ function prepareDecodedPayload(decoded) {
     // written. Run the same validators here, before the first write.
     assertRecordsValid('accounts', decoded.accounts, validateAccount);
     assertRecordsValid('addresses', decoded.addresses, validateAddress);
+    assertAddressTypesSupported(decoded.addresses, chainRegistry);
     assertRecordsValid('contacts', decoded.contacts, validateContact);
     assertRecordsValid('connectedSites', decoded.connectedSites, validateConnectedSite);
     assertRecordsValid('pendingTxs', decoded.pendingTxs, validatePendingTx);
     if (decoded.settings != null) assertRecordsValid('settings', [decoded.settings], validateSettings);
+}
+
+function assertAddressTypesSupported(addresses, chainRegistry) {
+    for (const [index, address] of addresses.entries()) {
+        if (address.source === 'imported-wif'
+            && /^04[0-9a-f]{128}$/i.test(address.publicKey)
+            && address.addressType !== 'p2pkh') {
+            throw new Error(
+                `importBackupFile: payload addresses[${index}] is an uncompressed key with `
+                + `addressType "${address.addressType}"; an uncompressed key only has a p2pkh address`,
+            );
+        }
+        const chainId = chainRegistry.chainIdFor(address.chain, address.network);
+        if (!chainId) continue;
+        const descriptor = chainRegistry.descriptorFor(chainId);
+        if (descriptor && !descriptor.addressTypes.includes(address.addressType)) {
+            throw new Error(
+                `importBackupFile: payload addresses[${index}] has addressType `
+                + `"${address.addressType}", which chain "${address.chain}" `
+                + `(${address.network}) does not support`,
+            );
+        }
+    }
 }
 
 function assertRecordsValid(name, records, validate) {

@@ -257,7 +257,7 @@ export function chainGateErrorMessage(err) {
 
 function isSecondPhaseBroadcast(err) {
     const message = err && typeof err === 'object' ? String(/** @type {any} */ (err).message || '') : '';
-    return /^broadcast failed \(phase2\)/i.test(message.trim());
+    return /^broadcast failed \((?:phase2|envelope_reveal)\)/i.test(message.trim());
 }
 
 function isNodeSpendConflict(err) {

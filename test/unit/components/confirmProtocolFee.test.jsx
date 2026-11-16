@@ -139,6 +139,14 @@ describe('confirm screen protocol-fee disclosure', () => {
             expect(screen.queryByTestId('confirm-protocol-fee-unavailable')).toBeNull();
         });
 
+        it('shows a protocol fee the host reports for a MINT envelope', () => {
+            render(<ConfirmActionModal {...base({
+                report: REPORT('0.50000000'),
+                composed: { psbt: 'x', networkFeeSats: 1176, xchainFee: null, action: 'MINT' },
+            })} />);
+            expect(screen.getByTestId('confirm-protocol-fee').textContent).toMatch(/0\.5 XCHAIN/);
+        });
+
         it('reads the action from the action string when the name is absent', () => {
             render(<ConfirmActionModal {...noQuote(undefined, { actionString: 'MINT|0|X|1' })} />);
             expect(screen.queryByTestId('confirm-protocol-fee-unavailable')).toBeNull();

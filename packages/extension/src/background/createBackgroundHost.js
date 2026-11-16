@@ -1266,6 +1266,15 @@ export function createBackgroundHost(deps) {
                 kind = 'queued';
             }
             const leg = Array.isArray(req?.legs) && req.legs.length === 1 ? req.legs[0] : req;
+            const commitMark = err
+                && (err.name === flows.BROADCAST_FAILED_TRANSIENT_NAME
+                    || err.name === flows.BROADCAST_FAILED_PERMANENT_NAME)
+                && err.commitLanded === true
+                ? {
+                    commitLanded: true,
+                    commitTxid: typeof err.commitTxid === 'string' ? err.commitTxid : null,
+                }
+                : {};
             await lockedSendOutcomes.record({
                 id: pendingTxId,
                 pendingTxId,
@@ -1277,6 +1286,7 @@ export function createBackgroundHost(deps) {
                 kind,
                 at: Date.now(),
                 finished: false,
+                ...commitMark,
             });
         } catch (noteErr) {
             console.error('[xchain] could not keep a send outcome across the lock:', noteErr);
@@ -1440,8 +1450,8 @@ export function createBackgroundHost(deps) {
             wentOut = Boolean(result?.txid) && !result?.queued;
             return result;
         } catch (err) {
-            // A refused second phase follows a commit that did go out.
-            wentOut = /^broadcast failed \(phase2\)/i.test(String(err?.message || '').trim());
+            // A refused envelope reveal or second-phase spend follows a commit that did go out.
+            wentOut = /^broadcast failed \((?:phase2|envelope_reveal)\)/i.test(String(err?.message || '').trim());
             throw err;
         } finally {
             await route.settle(wentOut);
@@ -2563,7 +2573,7 @@ export function createBackgroundHost(deps) {
     // + conflict policy. Returns the imported walletId + write/skip
     // counts so the shell can surface "Imported wallet 'X' with N
     // addresses" copy.
-    host.register('wallet.importBackup', async (req, { vault, vaultKeyring }) => {
+    host.register('wallet.importBackup', async (req, { vault, vaultKeyring, chainRegistry }) => {
         await assertRestoreDevicePassword(req?.devicePassword, vault, vaultKeyring);
         const r = await importBackupFile({
             vault,
@@ -2576,6 +2586,7 @@ export function createBackgroundHost(deps) {
             devicePassword: req?.devicePassword,
             onConflict: req?.onConflict,
             mode: req?.mode,
+            chainRegistry,
         });
         await publishSurfaceState('wallets', { change: 'added', walletId: r.walletId });
         return {
@@ -2595,7 +2606,7 @@ export function createBackgroundHost(deps) {
     // locations are fetched; on-chain FILE references are a follow-up
     // that needs SDK wiring and are rejected explicitly rather than
     // silently ignored.
-    host.register('wallet.importBackupPointer', async (req, { vault, vaultKeyring }) => {
+    host.register('wallet.importBackupPointer', async (req, { vault, vaultKeyring, chainRegistry }) => {
         await assertRestoreDevicePassword(req?.devicePassword, vault, vaultKeyring);
         const r = await restoreFromBackupPointer({
             vault,
@@ -2605,6 +2616,7 @@ export function createBackgroundHost(deps) {
             devicePassword: req?.devicePassword,
             onConflict: req?.onConflict,
             mode: req?.mode,
+            chainRegistry,
             resolveBackupContent: resolveBackupPointerContent,
         });
         await publishSurfaceState('wallets', { change: 'added', walletId: r.walletId });
@@ -4397,9 +4409,10 @@ export function createBackgroundHost(deps) {
                     if (landed >= 0) q.splice(landed, 1);
                     await persistQueue();
                     await flushOwedSettlements(vault);
-                    // Book ADS only for a never-claimed entry: its failed first attempt booked
-                    // nothing, while an interrupted claim may already have booked its verdict.
-                    if (entry.resumedClaim !== true && entry.adsCommit) {
+                    // Book the carried verdict exactly as the landed exit does. The booking
+                    // runs only after the entry has left the persisted queue, so an entry
+                    // that is still queued, an interrupted claim included, never booked.
+                    if (entry.adsCommit) {
                         try {
                             await flows.commitAdsStep({
                                 vault,

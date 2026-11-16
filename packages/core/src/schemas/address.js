@@ -45,6 +45,14 @@ import { tickerForCoin } from '../registry/coinTicker.js';
 
 export const CURRENT_VERSION = 4;
 
+export const ADDRESS_OWNERSHIP_RULES = Object.freeze({
+    hd: 'required',
+    'imported-wif': 'null',
+    'watch-only': 'paired',
+    trezor: 'required',
+    ledger: 'required',
+});
+
 /**
  * Return the generated name an address receives when it has no custom label.
  * The derivation path's final segment is the zero-based address index.
@@ -89,12 +97,14 @@ export function normalizeAddressLabel(label, record) {
  * @typedef {Object} Address
  * @property {4} schemaVersion
  * @property {string} id
- * @property {string | null} accountId        null for watch-only / imported-WIF
+ * @property {string | null} accountId        required for derived sources, null for imported-WIF,
+ *                                             paired with derivationPath for watch-only
  * @property {string} chain                   coin identifier
  * @property {typeof NETWORKS[number]} network
  * @property {typeof ADDRESS_SOURCES[number]} source
  * @property {string} addressType             script format, e.g. 'p2wpkh'
- * @property {string | null} derivationPath   null for imported/watch-only
+ * @property {string | null} derivationPath   required for derived sources, null for imported-WIF,
+ *                                             paired with accountId for watch-only
  * @property {string} address
  * @property {string} publicKey               hex
  * @property {string} label
@@ -158,7 +168,8 @@ export function validateAddress(record) {
     );
     check(errors, 'chain', isNonEmptyString(r.chain), 'must be a non-empty string');
     check(errors, 'network', isOneOf(r.network, NETWORKS), `must be one of ${NETWORKS.join(', ')}`);
-    check(errors, 'source', isOneOf(r.source, ADDRESS_SOURCES), `must be one of ${ADDRESS_SOURCES.join(', ')}`);
+    const validSource = isOneOf(r.source, ADDRESS_SOURCES);
+    check(errors, 'source', validSource, `must be one of ${ADDRESS_SOURCES.join(', ')}`);
     check(errors, 'addressType', isNonEmptyString(r.addressType), 'must be a non-empty string');
     check(
         errors,
@@ -166,6 +177,7 @@ export function validateAddress(record) {
         r.derivationPath === null || isNonEmptyString(r.derivationPath),
         'must be null or a non-empty string',
     );
+    if (validSource) validateAddressOwnership(errors, r);
     check(errors, 'address', isNonEmptyString(r.address), 'must be a non-empty string');
     check(errors, 'publicKey', isNonEmptyString(r.publicKey), 'must be a non-empty string');
     check(errors, 'label', isString(r.label), 'must be a string');
@@ -180,4 +192,31 @@ export function validateAddress(record) {
     check(errors, 'role', isOneOf(r.role, ADDRESS_ROLES), `must be one of ${ADDRESS_ROLES.join(', ')}`);
     check(errors, 'createdAt', isIsoTimestamp(r.createdAt), 'must be an ISO timestamp');
     return result(errors);
+}
+
+function validateAddressOwnership(errors, record) {
+    const rule = ADDRESS_OWNERSHIP_RULES[record.source];
+    if (!rule) {
+        check(errors, 'source', false, `has no ownership rule for "${record.source}"`);
+        return;
+    }
+    if (rule === 'required') {
+        check(errors, 'accountId', isNonEmptyString(record.accountId),
+            `must be a non-empty string for source "${record.source}"`);
+        check(errors, 'derivationPath', isNonEmptyString(record.derivationPath),
+            `must be a non-empty string for source "${record.source}"`);
+        return;
+    }
+    if (rule === 'null') {
+        check(errors, 'accountId', record.accountId === null,
+            `must be null for source "${record.source}"`);
+        check(errors, 'derivationPath', record.derivationPath === null,
+            `must be null for source "${record.source}"`);
+        return;
+    }
+    const paired = (record.accountId === null) === (record.derivationPath === null);
+    check(errors, 'accountId', paired,
+        `must be null exactly when derivationPath is null for source "${record.source}"`);
+    check(errors, 'derivationPath', paired,
+        `must be null exactly when accountId is null for source "${record.source}"`);
 }

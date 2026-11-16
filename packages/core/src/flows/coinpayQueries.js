@@ -164,7 +164,8 @@ function flushWindow(w) {
  * Obligations touching `address` on `chainId`. The explorer joins
  * `coinpay_obligations` with the current `coinpay_statuses` row, so
  * each item includes the `coinpay_status` column
- * (`pending_coinpay`, `fulfilled`, `expired`, `invalid`). The caller
+ * (`pending_coinpay`, `fulfilled`, `expired`; the indexer writes no other
+ * value, and only `pending_coinpay` is payable). The caller
  * filters to `pending_coinpay` and `payer_address === address` to
  * build the user's outstanding-payment queue.
  *

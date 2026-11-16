@@ -71,6 +71,9 @@ const messages = {
     'home.tabs.noMatchingTokens': 'No matching tokens',
     'home.tabs.noTokensYet': 'No tokens yet',
     'home.tabs.noTokensOnThisNetwork': 'No tokens on this network',
+    'home.tabs.tokensCouldntBeLoaded': "Tokens couldn't be loaded",
+    'home.tabs.tokensCouldntBeLoadedBody':
+        "The token balances couldn't be read right now, so this list may be missing tokens you hold. Try again in a moment.",
     'home.tabs.matchingTokensAppearHereAfter':
         'Matching tokens appear here after you change or clear the filter.',
     'home.tabs.tokensAppearHereAfterYou':

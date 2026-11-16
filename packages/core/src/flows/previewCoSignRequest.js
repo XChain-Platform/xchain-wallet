@@ -38,6 +38,7 @@ import { CoSignerAccountNotFoundError } from './passiveCoSignForAccount.js';
  * @property {boolean} policyOk                 whether the stored policy would allow it
  * @property {string|null} policyReason         violation code when policyOk is false
  * @property {boolean} needsConfirmation        policy flagged it above the confirm threshold
+ * @property {string[]} clockWarnings           spending-window clock anomalies noticed at load; empty when none
  */
 
 /**
@@ -98,16 +99,19 @@ export async function previewCoSignRequest({ vault, sdkRegistry, accountId, requ
             policyOk: false,
             policyReason: 'UNDECODABLE',
             needsConfirmation: false,
+            clockWarnings: [],
         };
     }
 
     // 2. Dry-run the policy against the current spending-window snapshot
     //    (read-only: load the window but never record).
     let windowUsage;
+    let clockWarnings = [];
     const windowStore = buildAccountWindowStore({ vault, account, now });
     if (windowStore) {
         await windowStore.load();
         windowUsage = windowStore.snapshot();
+        if (typeof windowStore.clockWarnings === 'function') clockWarnings = windowStore.clockWarnings();
     }
     // The decoded VERSION rides along: without it the evaluator cannot tell
     // whether an amount cap can bind this exact format (G2), and the preview
@@ -131,5 +135,6 @@ export async function previewCoSignRequest({ vault, sdkRegistry, accountId, requ
         policyOk: verdict.ok === true,
         policyReason: verdict.ok ? null : (verdict.violation && verdict.violation.code) || 'POLICY_DENIED',
         needsConfirmation: Boolean(evalu.needsConfirmation),
+        clockWarnings,
     };
 }

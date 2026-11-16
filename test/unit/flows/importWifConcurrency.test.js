@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import { encryptWalletSeed } from '../../../packages/core/src/crypto/walletBlob.js';
 import {
+    DuplicateImportError,
     ImportConflictError,
     importWif,
 } from '../../../packages/core/src/flows/importWif.js';
@@ -139,5 +140,29 @@ describe('importWif password-change concurrency', () => {
 
         await expect(runImport(vault)).rejects.toBeInstanceOf(ImportConflictError);
         await expectOnlyPasswordChange({ backend, vault, replacement });
+    });
+});
+
+describe('importWif duplicate concurrency', () => {
+    it('allows only one of two overlapping imports of the same key', async () => {
+        const { vault } = await setupVault();
+        const guardedWrite = vault.putManyGuarded.bind(vault);
+        let arrivals = 0;
+        let release;
+        const bothReady = new Promise((resolve) => { release = resolve; });
+        vault.putManyGuarded = async (builder) => {
+            arrivals += 1;
+            if (arrivals === 2) release();
+            await bothReady;
+            return guardedWrite(builder);
+        };
+
+        const results = await Promise.allSettled([runImport(vault), runImport(vault)]);
+        expect(results.filter(({ status }) => status === 'fulfilled')).toHaveLength(1);
+        const failures = results.filter(({ status }) => status === 'rejected');
+        expect(failures).toHaveLength(1);
+        expect(failures[0].reason).toBeInstanceOf(DuplicateImportError);
+        expect(await vault.addresses.count()).toBe(1);
+        expect((await vault.wallets.get('wallet-1')).importedKeys).toHaveLength(1);
     });
 });

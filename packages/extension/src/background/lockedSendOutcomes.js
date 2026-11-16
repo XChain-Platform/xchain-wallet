@@ -59,6 +59,8 @@ const chains = new WeakMap();
  * @property {LockedSendOutcomeKind} kind
  * @property {number} at              epoch ms the send settled
  * @property {boolean} finished       the pending record has been finished from it
+ * @property {boolean} [commitLanded]  a two-phase commit reached the network
+ * @property {string|null} [commitTxid]
  * @property {string|null} [summary]  the record's plain-English summary, read once the vault is open
  */
 
@@ -112,7 +114,7 @@ const PRE_BROADCAST = new Set(['composing', 'awaiting-signature', 'signed']);
 /**
  * The fields that finish a pending record from an outcome, or null when the
  * record already reads as far as the outcome goes (a watcher saw it confirm, or
- * a later write landed).
+ * a later write landed). A commit-landed action never retires as failed.
  *
  * @param {LockedSendOutcome} entry
  * @param {{ status?: string, txid?: string|null }} record
@@ -130,10 +132,23 @@ export function finishPatchFor(entry, record) {
     }
     if (entry.kind === 'queued') {
         if (!PRE_BROADCAST.has(status) && status !== 'broadcasting') return null;
-        return { status: 'queued', txid: entry.txid ?? record.txid ?? null };
+        return {
+            status: 'queued',
+            txid: entry.txid ?? record.txid ?? null,
+            ...(entry.commitLanded === true
+                ? { commitLanded: true, commitTxid: entry.commitTxid ?? null }
+                : {}),
+        };
     }
     if (entry.kind === 'failed') {
         if (!PRE_BROADCAST.has(status) && status !== 'broadcasting') return null;
+        if (entry.commitLanded === true) {
+            return {
+                status: 'broadcast',
+                txid: entry.commitTxid ?? record.txid ?? null,
+                broadcastAt: record.broadcastAt ?? new Date(entry.at).toISOString(),
+            };
+        }
         return { status: 'failed' };
     }
     // An unsent send stopped before its checkpoint; a record that reached

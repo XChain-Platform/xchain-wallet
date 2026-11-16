@@ -37,6 +37,7 @@
 
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { VaultConflictError, vaultBlobsEqual } from '@xchain-wallet/core/storage/backend.js';
 
 /**
  * Subset of Electron's `safeStorage` API that we actually use. Typed as
@@ -142,10 +143,24 @@ export class KeychainSessionBackend {
      * later launch in the same OS-user session can auto-unlock.
      *
      * @param {Uint8Array} blob
+     * @param {{ expected?: Uint8Array | null }} [options]   when present, the
+     *   save lands only while the slot holds exactly these bytes (null = empty)
+     * @throws {VaultConflictError} the slot no longer holds `expected`, or a
+     *   clear() landed while it was being read
      */
-    async save(blob) {
+    async save(blob, options = {}) {
         if (!(blob instanceof Uint8Array)) {
             throw new Error('KeychainSessionBackend.save: blob must be a Uint8Array');
+        }
+        if (options != null && Object.hasOwn(options, 'expected')) {
+            const revokedBefore = this._revoked;
+            const current = await this.load();
+            // Nothing awaits between this check and the in-memory write below,
+            // so a clear() either lands before it (revoked, refused here) or
+            // after the write (and removes what was written).
+            if (!vaultBlobsEqual(current, options.expected ?? null) || (this._revoked && !revokedBefore)) {
+                throw new VaultConflictError();
+            }
         }
         // In-memory copy always. This is what load() checks first so
         // the current process stays unlocked even on platforms without

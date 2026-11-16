@@ -102,7 +102,12 @@ describe('integration/flows/backup-add-mode', () => {
             accounts: [sampleAccount('acc-src', 'src')],
             addresses: [
                 sampleAddress('addr-derived-1', 'acc-src'),
-                { ...sampleAddress('addr-imp-src', null), accountId: null },
+                {
+                    ...sampleAddress('addr-imp-src', null),
+                    accountId: null,
+                    source: 'imported-wif',
+                    derivationPath: null,
+                },
             ],
         });
         const r = await exportBackupFile({
@@ -182,7 +187,12 @@ describe('integration/flows/backup-add-mode', () => {
             // as it does in a real export.
             addresses: [
                 sampleAddress('addr-derived-1', 'acc-src'),
-                { ...sampleAddress('addr-imp-src', null), accountId: null },
+                {
+                    ...sampleAddress('addr-imp-src', null),
+                    accountId: null,
+                    source: 'imported-wif',
+                    derivationPath: null,
+                },
             ],
             settings: { ...createDefaultSettings(), activeNetwork: 'mainnet' },
         });

@@ -1820,6 +1820,7 @@ export async function importBackupLocal(req) {
             walletPassword,
             devicePassword: password,
             mode: 'fresh',
+            chainRegistry,
             // Core zeroes the lent buffer when this returns, so keep a copy;
             // the finally below zeroes it whether or not the restore succeeds.
             onDeviceKey: (key, params) => {

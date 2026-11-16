@@ -55,6 +55,7 @@ vi.mock('@xchain-wallet/core', async (importOriginal) => {
 
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
 import { OWN_SPEND_HOLD_MS, createOwnSpendLedger } from '../../../packages/extension/src/background/ownSpends.js';
+import { isAlreadyOnNetworkRejection } from '../../../packages/core/src/flows/broadcastPermanence.js';
 import { submitFailureMessage } from '../../../packages/core/src/shared/utils/submitFailureMessage.js';
 import { QUIT_DEFERRING_MESSAGE_TYPES } from '../../../packages/desktop/main/quitGuard.js';
 
@@ -464,6 +465,40 @@ describe('a PSBT the route builds itself', () => {
         const legTwoCoins = { type: 'action.send', request: { ...sendRequest('psbt-c', 'recipient-two', '0.0001').request } };
         await expect(host.handle(legTwoCoins)).resolves.toEqual(SPENT);
 
+        failLegTwo(new Error('leg two could not be signed'));
+        await expect(deploy).resolves.toMatchObject({ ok: false });
+        await expect(host.handle(sendRequest('psbt-b', 'recipient-two', '0.0004'))).resolves.toEqual(SPENT);
+        await expect(host.handle(legTwoCoins)).resolves.toEqual({ ok: true, result: { txid: 'tx-b' } });
+    });
+
+    it('keeps a leg the node reports as already known when a later leg fails', async () => {
+        let legTwoBuilt;
+        let failLegTwo;
+        const alreadyKnown = new Error('txn-already-known');
+        expect(isAlreadyOnNetworkRejection(alreadyKnown)).toBe(true);
+        createTxMock.mockResolvedValueOnce({ psbt: 'psbt-a' }).mockResolvedValueOnce({ psbt: 'psbt-c' });
+        broadcastTxMock.mockRejectedValueOnce(alreadyKnown);
+        deployChunkedRunMock.mockImplementationOnce(async (opts) => {
+            const encoder = opts.sdkRegistry.get(opts.chainId).encoder;
+            await encoder.createTx({});
+            try {
+                await encoder.broadcastTx(RAW_A);
+            } catch (err) {
+                if (!isAlreadyOnNetworkRejection(err)) throw err;
+            }
+            await encoder.createTx({});
+            legTwoBuilt();
+            await new Promise((resolve, reject) => { failLegTwo = reject; });
+        });
+        sendTokenMock.mockResolvedValue({ txid: 'tx-b' });
+        const host = makeHost();
+
+        const built = new Promise((resolve) => { legTwoBuilt = resolve; });
+        const deploy = host.handle(actionRequest('action.deployChunked', undefined));
+        await built;
+        const legTwoCoins = {
+            type: 'action.send', request: { ...sendRequest('psbt-c', 'recipient-two', '0.0001').request },
+        };
         failLegTwo(new Error('leg two could not be signed'));
         await expect(deploy).resolves.toMatchObject({ ok: false });
         await expect(host.handle(sendRequest('psbt-b', 'recipient-two', '0.0004'))).resolves.toEqual(SPENT);

@@ -144,7 +144,7 @@ export class VaultWindowStore {
         this._revision = 0;
         this._loadPromise = null;
         this._flushPromise = null;
-        /** @type {WindowEntry[]} entries snapshot() could not accumulate */
+        /** @type {WindowEntry[]} always empty: kept so quarantined() matches the SDK store API */
         this._quarantined = [];
     }
 
@@ -269,10 +269,6 @@ export class VaultWindowStore {
         }
     }
 
-    /**
-     * Current window usage in the shape the SDK policy evaluator expects.
-     * @returns {{ count: number, perTick: Record<string, string> }}
-     */
     /**
      * Current window usage in the shape the SDK policy evaluator expects.
      *

@@ -24,7 +24,7 @@
 // The kdfParams are read, never written: a change keeps the vault's cost and
 // salt, so the meta slot already describes the new seal.
 
-import { saveSigningSecret } from './signingSecretSession.js';
+import { clearSigningSecret, saveSigningSecret } from './signingSecretSession.js';
 
 /**
  * @typedef {Object} VaultKeyring
@@ -47,8 +47,8 @@ function sameKeyBytes(a, b) {
 /**
  * @param {Object} backends
  * @param {{ load: () => Promise<any> }} backends.metaBackend
- * @param {{ save: (key: Uint8Array) => Promise<void> } | null} [backends.sessionBackend]
- * @param {{ save: (blob: Uint8Array) => Promise<void> } | null} [backends.signingSecretBackend]
+ * @param {{ load: () => Promise<Uint8Array | null>, save: (key: Uint8Array, options?: { expected?: Uint8Array | null }) => Promise<void>, clear: () => Promise<void> } | null} [backends.sessionBackend]
+ * @param {{ save: (blob: Uint8Array) => Promise<void>, clear: () => Promise<void> } | null} [backends.signingSecretBackend]
  * @returns {VaultKeyring}
  */
 export function createVaultKeyring({ metaBackend, sessionBackend = null, signingSecretBackend = null }) {
@@ -66,9 +66,26 @@ export function createVaultKeyring({ metaBackend, sessionBackend = null, signing
             // an unlocked-looking session behind the lock.
             if (sessionBackend) {
                 if (!sameKeyBytes(await sessionBackend.load(), previousKey)) return false;
-                await sessionBackend.save(masterKey);
+                // The swap is conditional on the slot still holding the old key,
+                // so a lock that clears it between the read above and this write
+                // fails the swap instead of being overwritten.
+                try {
+                    await sessionBackend.save(masterKey, { expected: previousKey });
+                } catch (err) {
+                    if (/** @type {any} */ (err)?.name === 'VaultConflictError') return false;
+                    throw err;
+                }
             }
             await saveSigningSecret(signingSecretBackend, password);
+            // A lock clears the session slot first and the signing slot second.
+            // One that cleared both before the write above leaves the password
+            // behind, so an emptied session slot after the write means it landed
+            // inside this commit: take back what the commit put in storage.
+            if (sessionBackend && !(await sessionBackend.load())) {
+                await sessionBackend.clear();
+                await clearSigningSecret(signingSecretBackend);
+                return false;
+            }
             return true;
         },
     };

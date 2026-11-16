@@ -153,3 +153,37 @@ describe('SignApproval co-sign alerts', () => {
         expect(screen.queryByTestId('cosign-error-details')).toBeNull();
     });
 });
+
+describe('SignApproval co-sign clock warning', () => {
+    const base = {
+        account: ACCOUNT,
+        decodeOk: true,
+        decodeReason: null,
+        action: 'SEND',
+        params: {},
+        amount: '5',
+        tick: 'JDOG',
+        destinations: [],
+        policyOk: true,
+        policyReason: null,
+        needsConfirmation: false,
+    };
+
+    it('shows a plain warning with the log text in details when the window clock faulted', async () => {
+        messaging.parseCoSign.mockResolvedValue({ ...base, clockWarnings: ['1 entry timestamp(s) were in the future and were clamped'] });
+        renderCoSign();
+
+        const details = await screen.findByTestId('cosign-clock-details');
+        expect(alertText()).toContain('The clock on this device moved in an unexpected way');
+        expect(details.textContent).toContain('were clamped');
+    });
+
+    it('shows nothing extra when there are no clock warnings', async () => {
+        messaging.parseCoSign.mockResolvedValue({ ...base, clockWarnings: [] });
+        renderCoSign();
+
+        await screen.findByText(/Agent one/);
+        expect(screen.queryByTestId('cosign-clock-details')).toBeNull();
+        expect(alertText()).not.toContain('clock on this device');
+    });
+});

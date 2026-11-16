@@ -158,7 +158,7 @@ describe('exportBackupFile', () => {
             network: 'mainnet',
             source: 'hd',
             addressType: 'p2wpkh',
-            derivationPath: null,
+            derivationPath: "m/84'/0'/0'/0/0",
             publicKey: 'ab'.repeat(33),
             pinned: false,
             hidden: false,

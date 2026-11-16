@@ -35,6 +35,7 @@ import {
     panicCoverError,
     PanicModeActiveError,
 } from './panicMode.js';
+import { logConsole } from '../shared/utils/logConsole.js';
 
 // ── Exclusive bracket (G4) ──────────────────────────────────────────────
 //
@@ -226,6 +227,15 @@ export async function passiveCoSign(opts = {}) {
                 await windowStore.load();
             } catch (e) {
                 return { approved: false, reason: 'WINDOW_STATE_CORRUPT', detail: { message: e?.message ?? String(e) } };
+            }
+        }
+
+        // A host clock that stepped backward is a local fault the owner should be
+        // able to see. It goes to the local log only: the verdict is relayed to
+        // the requester, who has no business learning the device clock state.
+        if (windowStore && typeof windowStore.clockWarnings === 'function') {
+            for (const message of windowStore.clockWarnings()) {
+                logConsole.record({ source: 'cosigner', level: 'warn', message });
             }
         }
 

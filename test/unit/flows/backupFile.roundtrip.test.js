@@ -96,7 +96,9 @@ function address({ id, accountId, source, address, label, publicKey }) {
         network: 'mainnet',
         source,
         addressType: 'p2wpkh',
-        derivationPath: source === 'hd' ? "m/84'/0'/0'/0/0" : null,
+        derivationPath: source === 'hd' || source === 'watch-only'
+            ? "m/84'/0'/0'/0/0"
+            : null,
         address,
         publicKey,
         label,

@@ -42,10 +42,16 @@ import { createBackgroundHost } from '@xchain-wallet/extension/src/background/cr
 
 /**
  * Build the main-process MessageHost. Returns the host plus a
- * `handle(message)` wrapper that IPC registration calls directly:
+ * `handle(message)` wrapper that IPC registration calls after it has
+ * vetted the sender and the envelope. `handle` checks neither, so the
+ * registration owns both checks and runs them before dispatching:
  *
  *     const { host, handle } = createDesktopMessageHost({ vault, … });
- *     ipcMain.handle('xchain-wallet:message', (_event, message) => handle(message));
+ *     ipcMain.handle(IPC_CHANNEL, async (event, message, ...extra) => {
+ *         if (!isTrustedSender(event)) return FORBIDDEN_SENDER_RESPONSE;
+ *         if (extra.length > 0 || !isValidDesktopIpcMessage(message)) return INVALID_RESPONSE;
+ *         return handle(message);
+ *     });
  *
  * @param {DesktopHostDeps} deps
  * @returns {{ host: import('@xchain-wallet/extension/src/background/MessageHost.js').MessageHost, handle: (message: IpcMessage) => Promise<IpcResponse> }}

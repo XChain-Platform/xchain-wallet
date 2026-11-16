@@ -272,9 +272,10 @@ export function createRouteClaims(ledger, queuedOutpoints) {
 
 /**
  * A view of an SDK registry whose encoders report each transaction they build
- * and each one they broadcast, so a route can claim the coins of a PSBT built
- * at submit time before anything signs it. Everything else reads through to
- * the real registry and SDKs.
+ * and each one they broadcast, including bytes the node reports as already
+ * known, so a route can claim the coins of a PSBT built at submit time before
+ * anything signs it. Everything else reads through to the real registry and
+ * SDKs.
  *
  * @param {any} registry
  * @param {{
@@ -301,7 +302,15 @@ export function claimingSdkRegistry(registry, { onBuilt, onSent }) {
         };
         if (typeof encoder.broadcastTx === 'function') {
             watched.broadcastTx = async (txHex) => {
-                const sent = await encoder.broadcastTx(txHex);
+                let sent;
+                try {
+                    sent = await encoder.broadcastTx(txHex);
+                } catch (err) {
+                    if (flows.isAlreadyOnNetworkRejection(err)) {
+                        try { await onSent(chainId, txHex); } catch { /* Preserve the node response. */ }
+                    }
+                    throw err;
+                }
                 await onSent(chainId, txHex);
                 return sent;
             };

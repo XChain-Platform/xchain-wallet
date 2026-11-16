@@ -78,6 +78,8 @@ const messages = {
     'extension.sign.policyRefusal': 'The co-signer will refuse it even if you approve.',
     'extension.sign.confirmThreshold':
         'Above the policy confirm-threshold: review carefully before approving.',
+    'extension.sign.clockWarning':
+        'The clock on this device moved in an unexpected way, which can skew the spending window. Check the date and time before approving.',
 
     // Copy moved out of JSX literals by the i18n sweep.
     'extension.connection.unableToReconnect': 'Unable to reconnect',

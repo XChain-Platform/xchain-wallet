@@ -375,6 +375,32 @@ describe('broadcast.queue.broadcast books the ADS verdict the entry carries', ()
             broadcastTx: vi.fn(async () => { throw new Error('txn-already-known'); }),
         });
         expect((await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' })).ok).toBe(true);
+        // The interrupted attempt died inside the network call, before any booking,
+        // so the already-known answer is the only exit that can book this verdict.
+        expect(h.vault.settings.put).toHaveBeenCalledTimes(1);
+        expect(h.ads()).toMatchObject({ lifetimeDonatedSats: 5000, lifetimeTxCount: 1 });
+    });
+
+    it('a resumed claim the node already knows is booked once and a second press finds no entry', async () => {
+        const h = makeHost({
+            entries: [entry('A', {
+                resumedClaim: true,
+                adsCommit: { chainId: CHAIN, donationIncluded: true, donationAmount: 2500 },
+            })],
+            broadcastTx: vi.fn(async () => { throw new Error('txn-already-known'); }),
+        });
+        expect((await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' })).ok).toBe(true);
+        expect((await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' })).ok).toBe(false);
+        expect(h.vault.settings.put).toHaveBeenCalledTimes(1);
+        expect(h.ads()).toMatchObject({ lifetimeDonatedSats: 2500, accumulatedSats: 2600, lifetimeTxCount: 1 });
+    });
+
+    it('a resumed claim without a verdict books nothing when the node already knows it', async () => {
+        const h = makeHost({
+            entries: [entry('A', { resumedClaim: true })],
+            broadcastTx: vi.fn(async () => { throw new Error('txn-already-known'); }),
+        });
+        expect((await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' })).ok).toBe(true);
         expect(h.vault.settings.put).not.toHaveBeenCalled();
     });
 

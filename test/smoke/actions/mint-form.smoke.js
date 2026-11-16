@@ -132,6 +132,10 @@ assert.ok(
     'sdk.preflight runs host-side via messaging.preflight',
 );
 assert.ok(
+    !/xchainFee\s*:/.test(src),
+    'the form hands the host report to the confirm page untouched, never writing a fee into it',
+);
+assert.ok(
     /prebuiltPsbt: prebuiltPsbtFromComposed\(composed\)/.test(src),
     'Approve signs the byte-identical composed PSBT (prebuiltPsbt)',
 );
