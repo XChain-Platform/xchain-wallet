@@ -255,6 +255,33 @@ export function uploadMethodSizes({ compiledBytes, descriptor }) {
 }
 
 /**
+ * The pair-size estimators a multi-part quote prices each piece with, for one
+ * chain. The host binds these itself (handleFileMultipart drops any sizes a
+ * renderer sends), so without them every multi-part start fails its quote.
+ *
+ * Every piece is forced onto the commit and reveal pair of its lane (TAPROOT or
+ * P2SH), so a small piece is priced as that pair, never as the one OP_RETURN
+ * transaction uploadMethodSizes picks for a small single upload. The quote
+ * passes 0 bytes for the manifest slot, whose action string it does not hold,
+ * so that slot is priced at MULTIPART_MANIFEST_ALLOWANCE_BYTES: a manifest
+ * funded as an empty payload could not pay its own reveal.
+ *
+ * @param {object | null | undefined} descriptor
+ * @returns {{ envelopePairVbytes: (bytes: number) => number | null,
+ *             standardPairBytes: (bytes: number) => number | null }}
+ */
+export const MULTIPART_MANIFEST_ALLOWANCE_BYTES = 1024;
+
+export function multipartPairSizes(descriptor) {
+    const shape = walletShape(descriptor);
+    const pieceBytes = (bytes) => (bytes > 0 ? bytes : MULTIPART_MANIFEST_ALLOWANCE_BYTES);
+    return {
+        envelopePairVbytes: (bytes) => envelopePairVbytes(pieceBytes(bytes), shape),
+        standardPairBytes: (bytes) => standardPairBytes(pieceBytes(bytes), shape),
+    };
+}
+
+/**
  * The estimated total network fee of each method, at the rate of the fee the
  * form already shows (its Low / Normal / Fast / Custom estimate from
  * flows/feeEstimate.js). One call prices every option.

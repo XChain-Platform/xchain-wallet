@@ -71,6 +71,11 @@ describe('the multi-part file action host route', () => {
         });
         expect(deps.sdkRegistry.get(request.chainId)).toBe(sdk);
         expect(typeof deps.onBroadcastFailure).toBe('function');
+        // The route drops renderer sizes, so the host must bind the estimators
+        // or every multi-part quote fails before the encoder is called.
+        const sizes = deps.multipartSizesFor({ id: 'bitcoin-regtest', coin: 'bitcoin' });
+        expect(typeof sizes.envelopePairVbytes).toBe('function');
+        expect(typeof sizes.standardPairBytes).toBe('function');
     });
 });
 
