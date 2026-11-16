@@ -4,6 +4,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { resolveGatedPackKey } from './gatedPackKey.js';
+import { gateMinAmountValidationError } from './gatedPublishAction.js';
+import { resolveGateMinAmountActive } from './protocolActivations.js';
+import { indexerWatermark } from './balances.js';
 
 function refuse(code, message) {
     const error = new Error(message);
@@ -29,10 +32,34 @@ async function resumeGate(req, vault) {
     return record.gate;
 }
 
-export async function gatedMultipartRequest(req, { sdk, vault }) {
+async function freshGate(gate, { chainId, sdkRegistry, gateMinAmountHeights }) {
+    const ticker = typeof gate.ticker === 'string' ? gate.ticker.trim().toUpperCase() : '';
+    if (!ticker) refuse('GATED_TICKER_INVALID', 'Gate ticker is required.');
+    const minAmount = String(gate.minAmount ?? '').trim();
+    if (!minAmount) return { ticker, minAmount };
+    const thresholdError = gateMinAmountValidationError(minAmount);
+    if (thresholdError) refuse('GATE_MIN_AMOUNT_INVALID', thresholdError);
+    const active = await resolveGateMinAmountActive({
+        chainId,
+        heights: gateMinAmountHeights,
+        getBlockHeight: async () => {
+            const { watermark } = await indexerWatermark({ sdkRegistry, chainId });
+            return watermark;
+        },
+    });
+    if (!active) {
+        refuse('GATE_MIN_AMOUNT_NOT_ACTIVE', 'Unlock thresholds are not active on this chain yet.');
+    }
+    return { ticker, minAmount };
+}
+
+export async function gatedMultipartRequest(req, deps) {
     if (req?.gate == null) return { ...req };
     assertNoRequestKey(req.gate);
-    const gate = req.resumeId ? await resumeGate(req, vault) : req.gate;
+    const { sdk, vault } = deps;
+    const gate = req.resumeId
+        ? await resumeGate(req, vault)
+        : await freshGate(req.gate, { ...deps, chainId: req.chainId });
     const existingKeyHash = req.resumeId ? gate.keyHash : req.existingKeyHash;
     const resolved = await resolveGatedPackKey({
         sdk,

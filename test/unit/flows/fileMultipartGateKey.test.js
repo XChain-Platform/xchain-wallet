@@ -72,19 +72,19 @@ function uploadRecord(gate) {
 describe('fresh gated multipart key generation', () => {
     it('stores the generated key before publishing without mutating input', async () => {
         const h = harness();
-        const gate = Object.freeze({ ticker: 'GATE', minAmount: '5' });
+        const gate = Object.freeze({ ticker: 'GATE', minAmount: '' });
         const request = Object.freeze({ ...BASE, gate });
         await handleFileMultipart(request, h.deps);
         const published = forwarded(h);
         const keyHash = createHash('sha256').update(published.gate.key).digest('hex');
 
-        expect(published.gate).toMatchObject({ ticker: 'GATE', minAmount: '5' });
+        expect(published.gate).toMatchObject({ ticker: 'GATE', minAmount: '' });
         expect(published.gate.key).toBeInstanceOf(Uint8Array);
         expect(published.gate.key).toHaveLength(32);
         expect(h.gatedKeys.put).toHaveBeenCalledOnce();
         expect(h.gatedKeys.put.mock.calls[0][0]).toMatchObject({ keyHash });
         expect(h.events).toEqual(['put', 'publish']);
-        expect(request).toEqual({ ...BASE, gate: { ticker: 'GATE', minAmount: '5' } });
+        expect(request).toEqual({ ...BASE, gate: { ticker: 'GATE', minAmount: '' } });
         expect(published).not.toHaveProperty('existingKeyHash');
     });
 });
@@ -95,7 +95,7 @@ describe('stored multipart key reuse', () => {
         const stored = storedKey(h.sdk);
         h.gatedKeys.get.mockResolvedValue(stored.record);
         const request = {
-            ...BASE, gate: { ticker: 'GATE', minAmount: '7' },
+            ...BASE, gate: { ticker: 'GATE', minAmount: '' },
             existingKeyHash: stored.record.keyHash,
         };
 
@@ -200,7 +200,7 @@ describe('gated multipart reply secrecy', () => {
         });
 
         const reply = await handleFileMultipart(
-            { ...BASE, gate: { ticker: 'GATE', minAmount: '1' } },
+            { ...BASE, gate: { ticker: 'GATE', minAmount: '' } },
             h.deps,
         );
 
