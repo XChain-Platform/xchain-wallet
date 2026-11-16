@@ -455,6 +455,7 @@ const messages = {
     'components.multipartUploadPanel.partsAndTransactions': '{parts} parts, {transactions} transactions',
     'components.multipartUploadPanel.partsUploaded': '{done} of {total} parts uploaded',
     'components.multipartUploadPanel.chooseSameFile': 'Choose the same file to continue this upload.',
+    'components.multipartUploadPanel.resumeFileLabel': 'Choose the file to resume',
     'components.multipartUploadPanel.discard': 'Discard ({paid})',
     'components.multipartUploadPanel.unfinishedUploads': 'Unfinished uploads',
 };

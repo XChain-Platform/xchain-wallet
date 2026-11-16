@@ -11,6 +11,8 @@
 import React from 'react';
 import { MultipartUploadPanel } from './MultipartUploadPanel.jsx';
 import { StatusMessage } from '../../ui/index.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 import { multipartFailureMessage } from '../utils/multipartFailureMessage.js';
 import { resumePickMessage } from '../utils/resumePickMessage.js';
 
@@ -35,7 +37,7 @@ export function MultipartUploadSection({
     return (
         <>
             {fileInput ? (
-                <input type="file" hidden aria-label="Choose the file to resume" ref={fileInput.ref} onChange={fileInput.onChange} />
+                <input type="file" hidden aria-label={t('components.multipartUploadPanel.resumeFileLabel')} ref={fileInput.ref} onChange={fileInput.onChange} />
             ) : null}
             {message ? <StatusMessage variant="error">{message}</StatusMessage> : null}
             {panelProps && typeof panelProps === 'object' ? (
