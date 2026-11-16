@@ -68,34 +68,14 @@ function useSettled(value, delay) {
  * @param {(file: { name: string, type: string, bytes: Uint8Array }, metadata: Record<string, any>) => number} args.compiledBytesFor
  *   this form's compiled action-plus-file push size for a file and its metadata and context
  * @param {number | null} args.standardCap              the legacy ceiling for this file and metadata
+ * @param {ReturnType<import('../hooks/useMultipartUploadMethod.js').useMultipartUploadMethod> | null} [args.multipart]
+ *   the multipart quote and availability state for this file
  * @param {string | null} [args.picked]                 controlled explicit pick (Publish file shares it across modes)
  * @param {(method: string | null) => void} [args.onPick]
  */
-export function useUploadMethod({
-    descriptor,
-    fromAddress,
-    isWatcherMode = false,
-    feeEstimate,
-    coinTicker = '',
-    file,
-    metadata,
-    context = null,
-    compiledBytesFor,
-    standardCap,
-    picked: pickedProp,
-    onPick,
+function useUploadFeeEstimates({
+    descriptor, fromAddress, feeEstimate, file, metadata, context, compiledBytesFor,
 }) {
-    const [ownPicked, setOwnPicked] = useState(/** @type {string | null} */ (null));
-    const controlled = typeof onPick === 'function';
-    const picked = controlled ? (pickedProp ?? null) : ownPicked;
-    const setPicked = controlled ? onPick : setOwnPicked;
-
-    const reasons = {
-        taproot: taprootUnavailableReason({ descriptor, fromAddress, isWatcherMode }),
-        standard: standardUnavailableReason({ fileBytes: file?.bytes?.length ?? null, standardCap }),
-    };
-    const method = resolveUploadMethod({ picked, reasons });
-
     // The estimate's inputs, each reduced to a stable key so a re-render with
     // the same values never re-estimates.
     const metadataKey = useSettled(JSON.stringify(metadata || {}), UPLOAD_METADATA_SETTLE_MS);
@@ -112,7 +92,7 @@ export function useUploadMethod({
     const latest = useRef({ compiledBytesFor, descriptor, feeEstimate });
     latest.current = { compiledBytesFor, descriptor, feeEstimate };
 
-    const fees = useMemo(() => {
+    return useMemo(() => {
         const { compiledBytesFor: sizeOf, descriptor: desc, feeEstimate: rate } = latest.current;
         if (!file || typeof sizeOf !== 'function') return { taproot: null, standard: null };
         const compiledBytes = sizeOf(file, { ...JSON.parse(metadataKey), ...JSON.parse(contextKey) });
@@ -121,6 +101,35 @@ export function useUploadMethod({
         // form refreshes its fees on the same four triggers.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [file, metadataKey, contextKey, fromKey, networkKey, rateKey]);
+}
+
+function multipartReasons(multipart, fallback) {
+    if (multipart?.reasons) return multipart.reasons;
+    if (!multipart?.options) return fallback;
+    return Object.fromEntries(UPLOAD_METHODS.map((method) => {
+        const reason = multipart.options[method]?.reason;
+        return [method, reason === undefined ? fallback[method] : reason];
+    }));
+}
+
+export function useUploadMethod({
+    descriptor, fromAddress, isWatcherMode = false, feeEstimate, coinTicker = '',
+    file, metadata, context = null, compiledBytesFor, standardCap, multipart = null,
+    picked: pickedProp, onPick,
+}) {
+    const [ownPicked, setOwnPicked] = useState(/** @type {string | null} */ (null));
+    const controlled = typeof onPick === 'function';
+    const picked = controlled ? (pickedProp ?? null) : ownPicked;
+    const setPicked = controlled ? onPick : setOwnPicked;
+    const singleReasons = {
+        taproot: taprootUnavailableReason({ descriptor, fromAddress, isWatcherMode }),
+        standard: standardUnavailableReason({ fileBytes: file?.bytes?.length ?? null, standardCap }),
+    };
+    const reasons = multipartReasons(multipart, singleReasons);
+    const method = resolveUploadMethod({ picked, reasons });
+    const fees = useUploadFeeEstimates({
+        descriptor, fromAddress, feeEstimate, file, metadata, context, compiledBytesFor,
+    });
 
     const label = methodName(method);
     const fee = fees[method] || null;
@@ -134,6 +143,7 @@ export function useUploadMethod({
         label,
         coinTicker,
         standardCap,
+        multipart,
         ceilingOpts: uploadMethodCeilingOpts(method),
         encoderOpts: uploadMethodEncoderOpts(method, fromAddress),
         // An amount and its ticker, the figure the review's fee row shows.
