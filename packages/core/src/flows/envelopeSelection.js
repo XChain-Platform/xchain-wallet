@@ -74,6 +74,16 @@ export function compiledPayloadByteLen(actionString, rawData, compression = null
 }
 
 /**
+ * Whether this chain declares support for carrying a Taproot envelope.
+ *
+ * @param {{ taprootEnvelope?: boolean }|null|undefined} descriptor chain descriptor
+ * @returns {boolean}
+ */
+export function chainCarriesEnvelope(descriptor) {
+    return descriptor?.taprootEnvelope === true;
+}
+
+/**
  * Whether this chain and signer can carry a Taproot envelope at all.
  *
  * @param {{ addressTypes?: string[] }|null|undefined} descriptor  chain descriptor
