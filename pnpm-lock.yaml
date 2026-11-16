@@ -6,6 +6,7 @@ settings:
 
 overrides:
   tar: ^7.5.7
+  bitcoinjs-lib@5: ^5.2.1
   ws: ^8.20.1
   brace-expansion@1: ^1.1.21
   brace-expansion@2: ^2.1.4
@@ -169,8 +170,8 @@ importers:
         specifier: workspace:*
         version: link:../signers-trezor
       bitcoinjs-lib:
-        specifier: 6.1.7
-        version: 6.1.7
+        specifier: 6.1.8
+        version: 6.1.8
       electron-updater:
         specifier: ^6.8.9
         version: 6.8.9
@@ -224,8 +225,8 @@ importers:
         specifier: workspace:*
         version: link:../core
       bitcoinjs-lib:
-        specifier: 6.1.7
-        version: 6.1.7
+        specifier: 6.1.8
+        version: 6.1.8
       lightweight-charts:
         specifier: ^4.2.0
         version: 4.2.3
@@ -307,8 +308,8 @@ importers:
         specifier: workspace:*
         version: link:../extension
       bitcoinjs-lib:
-        specifier: 6.1.7
-        version: 6.1.7
+        specifier: 6.1.8
+        version: 6.1.8
       lightweight-charts:
         specifier: ^4.2.0
         version: 4.2.3
@@ -1201,6 +1202,7 @@ packages:
 
   '@ledgerhq/errors@6.34.0':
     resolution: {integrity: sha512-l16K56FzPoXBMT5J4EpnIBmRLTYkpSyYj3z4er+rmbwq0t9dDG/UaRvFeBpwB2gqGcYWcue14qF9Wkuos/43eA==}
+    deprecated: This package is no longer maintained and will not receive updates. Published versions remain available.
 
   '@ledgerhq/hw-app-btc@10.21.1':
     resolution: {integrity: sha512-zLn5WYtli0B/QwBRoPCrd1ZhQ6rcv0w7Ggv0eyqe6gM0fnfyymheSVybdDloKkBxYoM1W1ziUCXMJ70oohtGCQ==}
@@ -1819,12 +1821,12 @@ packages:
   bitcoin-ops@1.4.1:
     resolution: {integrity: sha512-pef6gxZFztEhaE9RY9HmWVmiIHqCb2OyS4HPKkpc6CIiiOa3Qmuoylxc5P2EkU3w+5eTSifI9SEZC88idAIGow==}
 
-  bitcoinjs-lib@5.2.0:
-    resolution: {integrity: sha512-5DcLxGUDejgNBYcieMIUfjORtUeNWl828VWLHJGVKZCb4zIS1oOySTUr0LGmcqJBQgTBz3bGbRQla4FgrdQEIQ==}
+  bitcoinjs-lib@5.2.3:
+    resolution: {integrity: sha512-Sgh9N1TpWYt0Jh4s5FRWeBHWCYvqHijyKS5HTrGpeTloA9NCET/4iJ09V8jeu4sIEckSv+6wjHGFNv91iPItvQ==}
     engines: {node: '>=8.0.0'}
 
-  bitcoinjs-lib@6.1.7:
-    resolution: {integrity: sha512-tlf/r2DGMbF7ky1MgUqXHzypYHakkEnm0SZP23CJKIqNY/5uNAnMbFhMJdhjrL/7anfb/U8+AlpdjPWjPnAalg==}
+  bitcoinjs-lib@6.1.8:
+    resolution: {integrity: sha512-A6o+yq7BvwlmLj4F0NC5f3XX109rRe5evxi368S9zil5voOtUfiqfiMCzZYKHk4k7iIJ3+NmcQW05Ar4CBlKyg==}
     engines: {node: '>=8.0.0'}
 
   bitcoinjs-lib@7.0.4:
@@ -5212,7 +5214,7 @@ snapshots:
       '@noble/curves': 1.9.7
       '@noble/hashes': 1.8.0
       bip32-path: 0.4.2
-      bitcoinjs-lib: 5.2.0
+      bitcoinjs-lib: 5.2.3
       bs58: 4.0.1
       bs58check: 2.1.2
       invariant: 2.2.4
@@ -5236,7 +5238,7 @@ snapshots:
 
   '@ledgerhq/psbtv2@0.4.0':
     dependencies:
-      bitcoinjs-lib: 5.2.0
+      bitcoinjs-lib: 5.2.3
       varuint-bitcoin: 1.1.2
 
   '@malept/cross-spawn-promise@2.0.0':
@@ -5895,7 +5897,7 @@ snapshots:
 
   bitcoin-ops@1.4.1: {}
 
-  bitcoinjs-lib@5.2.0:
+  bitcoinjs-lib@5.2.3:
     dependencies:
       bech32: 1.1.4
       bip174: 2.1.1
@@ -5913,7 +5915,7 @@ snapshots:
       varuint-bitcoin: 1.1.2
       wif: 2.0.6
 
-  bitcoinjs-lib@6.1.7:
+  bitcoinjs-lib@6.1.8:
     dependencies:
       '@noble/hashes': 1.8.0
       bech32: 2.0.0

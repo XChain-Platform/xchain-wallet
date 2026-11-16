@@ -51,6 +51,9 @@ supportedArchitectures:
 # silently, which is the opposite of what a pin is for.
 overrides:
   tar: ^7.5.7
+  # GHSA-8vv3-6qpc-gpw6 (merkle node duplication validates a forged transaction list):
+  # the Ledger libraries resolve the 5.x line, patched in 5.2.1; the shells pin 6.1.8.
+  bitcoinjs-lib@5: ^5.2.1
   ws: ^8.20.1
   # Three major lines are resident, so brace-expansion is pinned per major.
   # Two advisories stack here, and the SECOND one supersedes the first on

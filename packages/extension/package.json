@@ -16,7 +16,7 @@
         "@ledgerhq/hw-app-btc": "^10.21.0",
         "@ledgerhq/hw-transport-webhid": "^6.35.0",
         "@xchain-wallet/core": "workspace:*",
-        "bitcoinjs-lib": "6.1.7",
+        "bitcoinjs-lib": "6.1.8",
         "lightweight-charts": "^4.2.0",
         "qrcode": "^1.5.4",
         "react": "^18.3.0",
