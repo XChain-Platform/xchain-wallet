@@ -10,18 +10,33 @@
 
 import { t } from '../../i18n/index.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormNotice, FormPage, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+// Network, From and the fee selector come from the Wallet Form Standard's
+// FromSection and FeeSection.
+import { Button, ChainBadge, FormNotice, FormPage, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+// Destroy is laid out on the Wallet Form Standard: From, Tokens to Destroy
+// (Token, Amount), Network fee, status slot, Destroy.
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    useFormSections,
+} from '../components/formStandard/index.js';
+import { withAdvancedOptions } from '../components/formStandard/advancedOptions.js';
 import {
     registry as registryLib,
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import '../../i18n/locales/en/send.js';
+import '../../i18n/locales/en/routes.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { ConfirmActionModal } from '../components/ConfirmActionModal.jsx';
 import {
     resolvePreflightPrivacy,
 } from '../../schemas/settings.js';
@@ -30,13 +45,11 @@ import { AmountField } from '../components/AmountField.jsx';
 import { useSourceTickBalance } from '../hooks/useSourceTickBalance.js';
 import { recheckSourceTickBalance } from '../../flows/sourceTickBalance.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
-import { amountEntryProblem, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { amountEntryProblem, formatWithThousands, groupDecodedAmounts, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { compareDecimal, exceedsBalance } from '../utils/dividendPerUnit.js';
-import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { TokenField } from '../components/TokenField.jsx';
 import { nativeFeeForFeelessAction } from '../../flows/feeBearingActions.js';
 import { TokenPicker } from './TokenPicker.jsx';
-import { SignCredentials } from '../components/SignCredentials.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
@@ -54,6 +67,7 @@ import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+const NO_ACKNOWLEDGMENTS = new Set();
 
 /** The refusal raised at Approve when the source balance falls short of the amount or cannot be read. */
 const DESTROY_BALANCE_REFUSED = 'DESTROY_BALANCE_REFUSED';
@@ -147,6 +161,15 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
     const [amount, setAmount] = useState('');
     const [password, setPassword] = useState('');
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
+    // The standard sections' open state, held above every early
+    // return (pickers, review). Only the main section opens.
+    const formSections = useFormSections({ from: false, destroy: true, fee: false });
+    // Counts Destroy presses, so the section holding the error
+    // reopens on every attempt even after the user closed it.
+    const [reviewAttempt, setReviewAttempt] = useState(0);
+    // Set by a Destroy press (G22): the button is always enabled, and each
+    // required field still empty then shows red with its own message.
+    const [attempted, setAttempted] = useState(false);
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
@@ -184,10 +207,12 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
     // An amount refusal shows under the Amount field, which takes focus, so a
     // phone shows it beside the value to fix instead of above the fold.
     const [amountError, setAmountError] = useState(/** @type {string | null} */ (null));
-    // The Amount field shows the chosen token's own decimal places (U61): it
+    // The Amount field shows the chosen token's own decimal places: it
     // pads "1" to "1.00000000" for an 8-place token and refuses extra digits
     // with its own field error, which also holds the Destroy button.
     const amountDivisibility = amountPlacesFor(tokenInfo);
+    // The field shows its own precision error and holds the last valid
+    // amount, so a press while it shows refuses here (G22: never disabled).
     const [amountPrecisionError, setAmountPrecisionError] = useState(/** @type {string | null} */ (null));
     const amountInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const refuseAmount = (message) => {
@@ -234,13 +259,19 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         // nothing read and, worse, read like the confirm surface still
         // depended on form state.
         if (stage !== 'review' && stage !== 'submitting') return null;
-        return decoderLib.decodeAction({
+        return groupDecodedAmounts(decoderLib.decodeAction({
             action: 'DESTROY',
             params: actionParams,
             chainId: chainId || undefined,
             chainRegistry,
-        });
+        }));
     }, [stage, confirmModalOpen, actionParams, chainId]);
+    const legacyComposed = useMemo(() => (decoded ? {
+        action: 'DESTROY',
+        chainId,
+        decoded,
+        protocolFeeKnownFree: true,
+    } : null), [chainId, decoded]);
 
     // A refusal before signing hands the composed inputs back to the encoder,
     // so the next compose is not refused over coins this one still holds.
@@ -269,7 +300,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 preflightOpts: {
                     mode: resolvePreflightPrivacy(settings) === 'local' ? 'local' : 'report',
                 },
-                compose: () => messaging.composeForConfirm({
+                compose: () => messaging.composeForConfirm(withAdvancedOptions({
                     walletId,
                     chainId,
                     from,
@@ -280,7 +311,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                         payFeeInNativeCoin: nativeFee.flag,
                         ...(feePerKb != null ? { feePerKb } : {}),
                     },
-                }),
+                })),
                 preflight: (o) => messaging.preflight({ chainId, ...o }),
                 // §4.6: the input-liveness half of the Approve-time re-check,
                 // the same one useActionConfirmFlow.run gives every migrated form.
@@ -358,6 +389,17 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
     async function handleReview(event) {
         event.preventDefault();
         if (checkingBalanceRef.current) return;
+        setReviewAttempt((n) => n + 1);
+        setAttempted(true);
+        // G22: an empty required field is marked on the field itself and
+        // takes the cursor; nothing else is checked until it is filled.
+        const firstMissing = !ticker.trim() ? 'destroy-token'
+            : (!String(amount).trim() || amountPrecisionError) ? 'destroy-amount' : null;
+        if (firstMissing) {
+            setFormError(null);
+            setTimeout(() => document.getElementById(firstMissing)?.focus(), 0);
+            return;
+        }
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
         if (feeStop) { setFormError(feeStop.formError); return; }
         if (!chainId || !fromAddress) {
@@ -487,17 +529,19 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
 
     function handleBuildAnother() {
         setResult(null);
+        setAttempted(false); // a fresh form opens with no G22 marks
         setSubmitError(null);
         setStage('form');
     }
     const header = (
         <PageHeader
+            nested={stage === 'review' || stage === 'submitting'}
             onBack={stage === 'review'
                 ? () => { setSubmitError(null); setStage('form'); }
                 : onBack}
             backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
-                    ? 'Review destroy'
+                    ? 'Review Destroy'
                     : `Destroy`}
         />
     );
@@ -546,7 +590,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
             <FormPage
                 demoGuard={demoGuard}
                 label="Destroy result"
-                actions={<Button variant="primary" onClick={onBack}>Done</Button>}
+                actions={<Button variant="success" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button>}
             >
                 <h2 className={styles.successTitle}>Destroyed</h2>
                 {txid ? (
@@ -562,108 +606,75 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
     }
 
     if (stage === 'review' || stage === 'submitting') {
-        return wrap(
-            <FormPage
-                demoGuard={demoGuard}
-                label="Review destroy"
-                onSubmit={handleSubmit}
-                status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error">{submitError}</StatusMessage>
-                ) : null}
-                actions={(
-                    <Button
-                        type="submit"
-                        variant={isWatcherMode ? 'primary' : 'danger'}
-                        loading={stage === 'submitting'}
-                        disabled={
-                            !typedConfirmOk || (
-                                isWatcherMode
-                                    ? false
-                                    : isHwSource
-                                        ? hwStatus !== 'available'
-                                        : (!signerReady && password.length === 0)
-                            )
-                        }
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction: destroy'
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: destroy`
-                                : 'Destroy'}
-                    </Button>
+        return (
+            <ConfirmActionModal
+                phase={stage === 'submitting' ? 'signing' : 'ready'}
+                composed={legacyComposed}
+                report={null}
+                reportLoading={false}
+                acknowledged={NO_ACKNOWLEDGMENTS}
+                onAcknowledge={() => {}}
+                canApprove={stage === 'review'}
+                onApprove={() => handleSubmit({ preventDefault() {} })}
+                onReject={() => { setSubmitError(null); setTypedConfirm(''); setStage('form'); }}
+                decoded={decoded}
+                chainLabel={descriptor?.displayName || chainId}
+                screenVariant={variant}
+                error={submitError}
+                sourceAddress={fromAddress?.address}
+                nativeTicker={coinTicker}
+                credentialsReady={typedConfirmOk}
+                credentials={(
+                    <>
+                        <p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>
+                        <Input
+                            label='Type "DESTROY" to confirm'
+                            help={t('common.typedConfirmationHint', { word: 'DESTROY' })}
+                            value={typedConfirm}
+                            onChange={(event) => setTypedConfirm(event.target.value)}
+                            autoComplete="off"
+                            autoCorrect="off"
+                            spellCheck={false}
+                        />
+                    </>
                 )}
-            >
-                <p className={styles.summary}>{decoded?.summary}</p>
-                <dl className={styles.detailsList}>
-                    {descriptor ? (
-                        <>
-                            <dt className={styles.detailsLabel}>Network</dt>
-                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
-                        </>
-                    ) : null}
-                    <dt className={styles.detailsLabel}>From</dt>
-                    <dd className={styles.detailsValue}>
-                        <AddressText address={fromAddress.address} />
-                    </dd>
-                    {(decoded?.details || []).map((d) => (
-                        <DetailRow key={d.label} label={d.label} value={d.value} />
-                    ))}
-                    <DetailRow
-                        label="Network fee"
-                        value={feeEstimate
-                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
-                            : 'Estimate unavailable'}
-                    />
-                </dl>
-                {decoded && decoded.warnings.length > 0 ? (
-                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
-                ) : null}
-                {isWatcherMode ? (
-                    <p className={styles.hint}>
-                        {t('common.watcherBuildsUnsigned')}
-                    </p>
-                ) : (
-                    <SignCredentials
-                        unlocked={signerReady}
-                        fromAddress={fromAddress}
-                        chainId={chainId}
-                        password={password}
-                        onPasswordChange={(v) => {
-                            setPassword(v);
-                            if (submitError) setSubmitError(null);
-                        }}
-                        onStatusChange={onHwStatusChange}
-                        passwordRef={passwordRef}
-                        submitError={submitError}
-                        disabled={stage === 'submitting'}
-                        getSignerStatus={messaging.getSignerStatus}
-                        signerInfo={hwSignerInfo}
-                    />
-                )}
-                <Input
-                    label="Type DESTROY to confirm"
-                    help={t('common.typedConfirmationDestroyHint')}
-                    value={typedConfirm}
-                    onChange={(e) => setTypedConfirm(e.target.value)}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                />
-            </FormPage>,
+                summary={{
+                    verb: t('routes.manageToken.destroy'),
+                    amount: actionParams.AMOUNT,
+                    ticker: actionParams.TICK.toUpperCase(),
+                    chainId,
+                    direction: 'out',
+                    address: fromAddress?.address,
+                }}
+                networkFee={feeEstimate?.coinAmount ? {
+                    amount: String(feeEstimate.coinAmount), ticker: coinTicker, estimate: true,
+                } : null}
+            />
         );
     }
 
-    // confirm page, rendered in place of the form (operator
-    // direction 2026-07-22: the overlay modal didn't fit small/mobile
-    // viewports). All other form state stays intact behind it; the
+    // The confirm page renders in place of the form (an overlay modal did not
+    // fit small viewports); other form state stays intact behind it. The
     // typed-DESTROY gate rides in the credentials block.
     if (confirmModalOpen) {
+        // The hero states the composed action: the amount leaving supply,
+        // from the address that signs it.
+        const destroySummary = {
+            verb: t('routes.manageToken.destroy'),
+            amount: actionParams.AMOUNT,
+            ticker: actionParams.TICK.toUpperCase(),
+            chainId,
+            direction: 'out',
+            address: fromAddress?.address,
+        };
         return (
             <ActionConfirmScreen
                 confirmAction={confirmAction}
+                summary={destroySummary}
                 screenVariant={variant}
                 chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 // Fallback only: the composed PSBT's exact fee wins (§5.2.5).
+                feeEstimate={feeEstimate}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -679,7 +690,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 extraCredentials={(
                     <Input
                         label='Type "DESTROY" to confirm'
-                        help={t('common.typedConfirmationDestroyReviewHint')}
+                        help={t('common.typedConfirmationHint', { word: 'DESTROY' })}
                         value={typedConfirm}
                         onChange={(e) => setTypedConfirm(e.target.value)}
                         autoComplete="off"
@@ -699,7 +710,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={chainId}
                 onChainChange={setChainId}
@@ -717,10 +728,15 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
             <TokenPicker
                 purpose="send"
                 walletId={walletId}
-                title="Select token"
+                // DESTROY burns token supply; the network coin is not a token.
+                kindFilter="tokens"
+                kindLocked
+                title="Select Token"
                 onSelect={(sel) => {
                     setTicker(String(sel.tick || ''));
-                    if (!lockedToken && sel.chainId) setChainId(sel.chainId);
+                    // The Token field is live with a preset token
+                    // too, so a pick on another chain re-targets the form.
+                    if (sel.chainId) setChainId(sel.chainId);
                     setTokenPickerOpen(false);
                 }}
                 onBack={() => setTokenPickerOpen(false)}
@@ -728,50 +744,96 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         );
     }
 
+    // Which standard section the current error belongs to, and the
+    // closed sections' one-line summaries.
+    const errorSection = (() => {
+        if (!formError) return null;
+        if (/source address/i.test(formError)) return 'from';
+        // A custom fee refusal (the review's fee stop) belongs to Network fee.
+        const feeStopNow = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStopNow && feeStopNow.formError === formError) return 'fee';
+        return 'destroy';
+    })();
+    // G22 marks: shown once Destroy was pressed, cleared as soon as filled.
+    const tokenMark = attempted && !ticker.trim() ? 'Pick the token to destroy.' : undefined;
+    const amountMark = attempted && !String(amount).trim() ? 'Enter how much to destroy.' : undefined;
+    const sectionErrorKey = (id) => (
+        errorSection === id || (id === 'destroy' && (tokenMark || amountMark)) ? reviewAttempt + 1 : 0
+    );
+    const tickUpper = String(ticker || '').trim().toUpperCase();
+    const destroySummary = [amount ? formatWithThousands(amount) : null, tickUpper].filter(Boolean).join(' ') || null;
+    const sourceMissing = Boolean(addressesByChain) && !fromAddress
+        && (addressesByChain[chainId] || []).length === 0;
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label="Destroy token"
             onSubmit={handleReview}
             status={formError ? (
                 <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="primary"
+            action={(
+                <FormAction
+                    icon={<Icon.TrashIcon />}
                     loading={confirmAction.composing || checkingBalance}
-                    disabled={!fromAddress || !ticker || !amount || !!amountPrecisionError || confirmAction.composing || checkingBalance}
+                    disabled={confirmAction.composing || checkingBalance}
                 >
                     Destroy
-                </Button>
+                </FormAction>
+            )}
+            from={(
+                // Network and From live in the closed From section.
+                // The picked token decides the network (its picker lists every
+                // chain and moves the form), so Network locks once a token is set.
+                <FromSection
+                    {...formSections.bind('from')}
+                    revealKey={sectionErrorKey('from')}
+                    chainId={chainId}
+                    chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])}
+                    chainRegistry={chainRegistry}
+                    onNetworkChange={setChainId}
+                    lockNetwork={Boolean(ticker)}
+                    networkHelp="The chain the destroy is recorded on. Your From address, token balance, and network fee are on this network."
+                    address={fromAddress?.address || null}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    addressHelp="The address whose balance is burned. It signs this destroy and pays the network fee."
+                    missing={sourceMissing ? (
+                        <FormNotice variant="error">
+                            {t('send.source.noAddress')}
+                        </FormNotice>
+                    ) : null}
+                />
+            )}
+            fee={(
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    revealKey={sectionErrorKey('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeCustomEstimate}
+                />
             )}
         >
-            {lockedToken && chainId ? (
-                <LockedTokenContext chainId={chainId} tick={ticker} />
-            ) : (
-                <NetworkField label="Network" help="The chain the destroy is recorded on. Your From address, token balance, and network fee are on this network." value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-            )}
-
-            {fromAddress ? (
-                <AddressField
-                    label="From"
-                    help="The address whose balance is burned. It signs this destroy and pays the network fee."
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
-                />
-            ) : (
-                <FormNotice variant="error">
-                    {t('send.source.noAddress')}
-                </FormNotice>
-            )}
-
-            {lockedToken ? null : (
+            <FormSection
+                id="destroy"
+                // The main section names the action without repeating
+                // the Destroy button's own name.
+                title="Tokens to Destroy"
+                icon={Icon.TrashIcon}
+                {...formSections.bind('destroy')}
+                revealKey={sectionErrorKey('destroy')}
+                summary={destroySummary}
+            >
+            {/* Always the standard Token field, even when the token
+                arrives already chosen; the preset token simply fills it. */}
+            {(
                 <TokenField
+                    id="destroy-token"
+                    error={tokenMark}
                     label="Token"
                     help="The token balance you are permanently destroying. Only tokens available to send from this wallet are listed."
                     value={ticker && chainId ? { chainId, tick: ticker } : null}
@@ -781,11 +843,12 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
             <AmountField
                 label="Amount"
                 help="How much to destroy."
+                id="destroy-amount"
                 amount={amount}
                 tick={ticker}
                 divisibility={amountDivisibility}
                 inputRef={amountInputRef}
-                error={amountError || undefined}
+                error={amountError || amountMark}
                 onValidationError={setAmountPrecisionError}
                 onAmountFieldChange={(rawValue) => {
                     const stripped = String(rawValue).replace(/,/g, '');
@@ -801,28 +864,9 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                     ? `${formatWithThousands(tickAmtBalance)} ${String(ticker)} available`
                     : (sourceBalance.unreadable && ticker ? t('send.balance.unknown') : null)}
             />
-
-            {feeTiers ? (
-                <FeeSelector
-                    chainId={chainId}
-                    label="Network fee"
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
-            ) : null}
-        </FormPage>,
-    );
-}
-
-function DetailRow({ label, value }) {
-    return (
-        <>
-            <dt className={styles.detailsLabel}>{label}</dt>
-            <dd className={styles.detailsValue}>{value}</dd>
-        </>
+            </FormSection>
+            {/* The fee selector lives in the Network fee section. */}
+        </FormFrame>,
     );
 }
 

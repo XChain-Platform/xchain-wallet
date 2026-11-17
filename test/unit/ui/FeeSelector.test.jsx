@@ -85,9 +85,11 @@ describe('<FeeSelector>', () => {
                 onChange={onChange}
             />,
         );
-        fireEvent.change(screen.getByRole('textbox', { name: 'Custom fee rate (sat/vB)' }), {
-            target: { value: '5.5' },
-        });
+        // Custom opened the one editor, the fee amount (G113); no rate box.
+        expect(screen.queryByRole('textbox', { name: /Custom fee rate/ })).toBeNull();
+        const editor = screen.getByRole('textbox', { name: 'Network fee amount' });
+        expect(editor).toHaveValue('0.00000400');
+        fireEvent.change(editor, { target: { value: '0.0000055' } });
         expect(onChange).toHaveBeenLastCalledWith({ mode: 'custom', customRate: 5.5 });
     });
 
@@ -114,11 +116,12 @@ describe('<FeeSelector>', () => {
     });
 
     it.each([
-        ['de-DE', '2,75'],
-        ['fr-FR', '2,75'],
-    ])('parses a localized custom rate in %s without changing its numeric value', async (
+        // 0.00000275 BTC over the fixtures' 100 vB is 2.75 sat/vB.
+        ['de-DE', '0,00000275'],
+        ['fr-FR', '0,00000275'],
+    ])('parses a localized custom fee in %s without changing its numeric value', async (
         locale,
-        localizedRate,
+        localizedFee,
     ) => {
         await setLocale(locale);
         const onChange = vi.fn();
@@ -130,43 +133,38 @@ describe('<FeeSelector>', () => {
                 onChange={onChange}
             />,
         );
-        const input = screen.getByRole('textbox', { name: 'Custom fee rate (sat/vB)' });
-        expect(input).toHaveValue('2,5');
-
-        fireEvent.change(input, { target: { value: localizedRate } });
-
-        expect(onChange).toHaveBeenLastCalledWith({ mode: 'custom', customRate: 2.75 });
-        expect(screen.queryByRole('alert')).toBeNull();
-
+        // The one custom fee editor is the fee amount (G113).
+        expect(screen.queryByRole('textbox', { name: /Custom fee rate/ })).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Edit exact fee amount' }));
         const exactFee = screen.getByRole('textbox', { name: 'Network fee amount' });
         expect(exactFee).toHaveValue('0,00000250');
+        fireEvent.change(exactFee, { target: { value: localizedFee } });
+        expect(onChange).toHaveBeenLastCalledWith({ mode: 'custom', customRate: 2.75 });
+        expect(screen.queryByRole('alert')).toBeNull();
         fireEvent.change(exactFee, { target: { value: '0,000005' } });
         expect(onChange).toHaveBeenLastCalledWith({ mode: 'custom', customRate: 5 });
     });
 
-    it.each([
-        ['5.123456789'],
-        ['0.000000015'],
-    ])('names a custom rate %j with more than 8 decimal places under the field', (typed) => {
+    it('names a custom rate with more than 8 decimal places under the field', () => {
         const tiers = { ...TIERS, minimumRate: 0, maximumRate: 1000 };
         render(
-            <FeeSelector tiers={tiers} value={{ mode: 'custom', customRate: 2 }} onChange={() => {}} />,
+            <FeeSelector tiers={tiers} value={{ mode: 'custom', customRate: 5.123456789 }} onChange={() => {}} />,
         );
-        const input = screen.getByRole('textbox', { name: 'Custom fee rate (sat/vB)' });
-        fireEvent.change(input, { target: { value: typed } });
-
         expect(screen.getByRole('alert')).toHaveTextContent('Custom fee rate can have at most 8 decimal places.');
-        expect(input).toHaveAttribute('aria-invalid', 'true');
+        fireEvent.click(screen.getByRole('button', { name: 'Edit exact fee amount' }));
+        expect(screen.getByRole('textbox', { name: 'Network fee amount' })).toHaveAttribute('aria-invalid', 'true');
     });
 
-    it('accepts a custom rate with exactly 8 decimal places', () => {
+    it('turns a typed fee into a rate of at most 8 decimal places', () => {
+        const onChange = vi.fn();
         render(
-            <FeeSelector tiers={TIERS} value={{ mode: 'custom', customRate: 2 }} onChange={() => {}} />,
+            <FeeSelector tiers={TIERS} value={{ mode: 'custom', customRate: 2 }} onChange={onChange} />,
         );
-        fireEvent.change(screen.getByRole('textbox', { name: 'Custom fee rate (sat/vB)' }), {
-            target: { value: '2.12345678' },
+        fireEvent.click(screen.getByRole('button', { name: 'Edit exact fee amount' }));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Network fee amount' }), {
+            target: { value: '0.00000212345678' },
         });
+        expect(onChange).toHaveBeenLastCalledWith({ mode: 'custom', customRate: 2.12345678 });
         expect(screen.queryByRole('alert')).toBeNull();
     });
 

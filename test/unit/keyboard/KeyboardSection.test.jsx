@@ -57,8 +57,9 @@ describe('KeyboardSection', () => {
             expect(screen.queryByText(/Click Rebind/)).toBeNull();
             expect(screen.getByText('Export history')).toBeTruthy();
             expect(screen.getByText('? / Ctrl+/')).toBeTruthy();
-            expect(screen.getByText('Requires “Show pin button on rows” in Display.')).toBeTruthy();
-            expect(screen.getByText('Requires “Show hide button on rows” in Display.')).toBeTruthy();
+            // Display's options live on the Appearance page now.
+            expect(screen.getByText('Requires “Show pin button on rows” in Appearance.')).toBeTruthy();
+            expect(screen.getByText('Requires “Show hide button on rows” in Appearance.')).toBeTruthy();
             const rebinds = screen.getAllByRole('button', { name: 'Rebind' });
             // General (5, incl. palette) + Go to (6) are rebindable; the six
             // context shortcuts are not.
@@ -145,7 +146,7 @@ describe('KeyboardSection', () => {
 
     it('resets every override in one persisted update', async () => {
         const messaging = await setup({ lock: 'mod+j', settings: 'mod+.' });
-        fireEvent.click(screen.getByRole('button', { name: 'Reset all shortcuts' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reset All Shortcuts' }));
         await waitFor(() => expect(messaging.updateSettings).toHaveBeenCalledWith({
             keyboard: { bindings: {} },
         }));

@@ -14,6 +14,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withEnglishCopy } from '../_localized-source.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -42,7 +43,8 @@ assert.ok(/Number\.isInteger\(\s*r\.privacy\.clipboardAutoClearSeconds\s*\)/.tes
 
 // --- 2. PrivacySection persists the clipboard control -----------
 
-const ps = readFileSync(join(components, 'settings', 'PrivacySection.jsx'), 'utf8');
+// The row copy lives in the English locale, read back in place of each t() call.
+const ps = withEnglishCopy(readFileSync(join(components, 'settings', 'PrivacySection.jsx'), 'utf8'));
 const psBody = ps.split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
 assert.ok(/Clipboard auto-clear/.test(psBody),
     'PrivacySection renders the clipboard auto-clear row');

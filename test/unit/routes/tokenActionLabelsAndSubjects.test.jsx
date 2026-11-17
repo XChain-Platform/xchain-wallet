@@ -60,10 +60,10 @@ afterEach(() => {
 
 describe('token action labels', () => {
     it.each([
-        ['callback-settings', 'Update callback settings'],
-        ['bridge-settings', 'Update bridge settings'],
-        ['description', 'Update description'],
-        ['transfer', 'Transfer ownership'],
+        ['callback-settings', 'Update Callback Settings'],
+        ['bridge-settings', 'Update Bridge Settings'],
+        ['description', 'Update Description'],
+        ['transfer', 'Transfer Ownership'],
     ])('uses the %s action as the primary submit label', async (mode, label) => {
         mount(
             <TokenAdminForm
@@ -94,7 +94,7 @@ describe('token action labels', () => {
         );
 
         expect(await screen.findByLabelText('Description')).toBeInstanceOf(HTMLTextAreaElement);
-        expect(screen.getByRole('button', { name: 'Update description' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Update Description' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
     });
 });
@@ -126,6 +126,7 @@ describe('token action sentence subjects', () => {
             />,
         );
 
-        expect(await screen.findByText('This token is currently active (not paused).')).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: /^Pause token$/i })).toBeInTheDocument();
+        expect(screen.queryByText('Active, not paused')).toBeNull();
     });
 });

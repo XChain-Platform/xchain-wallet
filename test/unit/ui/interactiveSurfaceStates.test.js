@@ -27,11 +27,12 @@ const surfaces = [
         selectedSelector: '.pressed',
     },
     {
-        // Tabs mark hover, press and selection with text colour and the
-        // bottom underline only, so their hover and pressed rules paint no fill.
-        file: 'packages/core/src/ui/Tabs.module.css',
-        base: '.tab',
-        hoverSelectors: ['.tab:hover'],
+        // Every view toggle (Tabs and SegmentedControl) shares one sheet: a
+        // hovered or pressed item only darkens its label and paints no fill,
+        // and the active item takes the shared selected fill.
+        file: 'packages/core/src/ui/SegmentedControl.module.css',
+        base: '.segment',
+        hoverSelectors: ['.segment:hover'],
         underlineOnly: true,
         selectedSelector: "[aria-selected='true']",
     },

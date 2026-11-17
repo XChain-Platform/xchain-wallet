@@ -15,9 +15,6 @@ describe('flat composite surfaces', () => {
         'MyTokens.module.css',
         'MarketActivity.module.css',
         'PairSignerForm.module.css',
-        'StakeNew.module.css',
-        'TokenWizard.module.css',
-        'CrossChainTemplates.module.css',
     ])('%s groups repeated rows in one flush card', (name) => {
         expect(route(name)).toMatch(/composes:\s*flush from ['"]\.\.\/\.\.\/ui\/Card\.module\.css['"]/);
     });
@@ -26,26 +23,35 @@ describe('flat composite surfaces', () => {
         expect(route('LinkForm.jsx')).not.toMatch(/cardStyles\.card/);
         expect(route('MultisigCreate.jsx')).not.toMatch(/cardStyles\.card/);
         expect(route('CoSignerPolicyEditor.jsx')).not.toMatch(/cardStyles\.card/);
-        expect(route('CoSignerPolicyEditor.module.css')).toMatch(/\.fieldset\s*\{[^}]*border:\s*0/s);
         expect(route('IssueTokenForm.module.css')).toMatch(/\.flatFieldset\s*\{[^}]*border:\s*0/s);
     });
 
     it('uses one outer surface for composite detail screens', () => {
-        expect(route('ManageToken.jsx')).toMatch(/className=\{styles\.approvedDetailsCard\}/);
+        // The asset page (coins and tokens, My Tokens included) draws its
+        // Details in one card; ManageToken.module.css keeps the card the
+        // co-signer and address pages reuse.
+        expect(route('TokenDetail.jsx')).toMatch(/className=\{styles\.detailsCard\}/);
+        expect(route('TokenDetail.module.css')).toMatch(/\.detailsCard\s*\{[^}]*composes:\s*card/s);
         expect(route('ManageToken.module.css')).toMatch(/\.approvedDetailsCard\s*\{[^}]*composes:\s*card/s);
         expect(route('Settings.jsx')).toMatch(/className=\{settingsStyles\.settingsList\}/);
         expect(route('Settings.module.css')).toMatch(/\.settingsList\s*\{[^}]*composes:\s*flush/s);
-        expect(route('AddressList.module.css')).toMatch(/\.tabPanel\s*\{[^}]*composes:\s*card/s);
+        // View Address (AddressDetail, split out of AddressList) reuses the
+        // token page's detail cards; its panel is the shared Actions | Details
+        // toggle's plain column (G102), so no card sits inside another card (U16).
+        expect(route('AddressDetail.jsx')).toMatch(/className=\{tokenPageStyles\.approvedDetailsCard\}/);
+        expect(route('AddressDetail.jsx')).toMatch(/<ActionsDetailsToggle\b/);
+        expect(route('AddressDetail.module.css')).not.toMatch(/\.panel\s*\{/);
+        expect(route('AddressList.module.css')).not.toMatch(/\.tabPanel\s*\{/);
     });
 
     it('does not draw a capability card inside the stake form', () => {
-        expect(route('StakeForm.jsx')).not.toMatch(/border:\s*['"]var\(--xc-card-border\)['"]/);
-        expect(route('StakeForm.jsx')).not.toMatch(/background:\s*['"]var\(--xc-card-bg\)['"]/);
+        expect(route('StakingForm.jsx')).not.toMatch(/border:\s*['"]var\(--xc-card-border\)['"]/);
+        expect(route('StakingForm.jsx')).not.toMatch(/background:\s*['"]var\(--xc-card-bg\)['"]/);
     });
 
     it('preserves already-flat form sections and empty states', () => {
-        expect(route('SweepForm.jsx')).toMatch(/<FormPage[\s\S]*sectioned[\s\S]*<FormSection title="What to sweep">/);
+        expect(route('SweepForm.jsx')).toMatch(/<FormFrame[\s\S]*<FormSection\s+id="sweep"\s+title="Sweep Details"/);
         expect(route('ParallelComposer.jsx')).toMatch(/function RowEditor[\s\S]*<FormSection[\s\S]*title=\{`Row \$\{index \+ 1\}`\}/);
-        expect(route('UnionListForm.jsx')).toMatch(/className=\{styles\.flatFieldset\}[\s\S]*<EmptyState/);
+        expect(route('ListCreateForm.jsx')).toMatch(/className=\{styles\.flatFieldset\}[\s\S]*<EmptyState/);
     });
 });

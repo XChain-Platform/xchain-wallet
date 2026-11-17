@@ -86,7 +86,7 @@ function listPageOf(node) {
 async function publish() {
     await screen.findByLabelText('From');
     fireEvent.change(screen.getByLabelText('Addresses'), { target: { value: MEMBER } });
-    fireEvent.click(screen.getByRole('button', { name: 'Publish list' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Publish List' }));
     await waitFor(() => expect(runConfirm).toHaveBeenCalled());
 }
 
@@ -147,7 +147,8 @@ describe('ListCreateForm lays out every page state through a template', () => {
         const body = source.slice(start, end);
         const calls = [...body.matchAll(/\bwrap\(\s*<\s*([A-Za-z]*)/g)].map((match) => match[1]);
         expect(calls.length).toBeGreaterThan(0);
-        const bare = calls.filter((tag) => tag !== 'ListPage' && tag !== 'FormPage');
+        // FormFrame is the Form Standard's template (it wraps FormPage).
+        const bare = calls.filter((tag) => tag !== 'ListPage' && tag !== 'FormPage' && tag !== 'FormFrame');
         expect(bare).toEqual([]);
     });
 });

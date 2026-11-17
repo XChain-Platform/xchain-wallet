@@ -97,30 +97,30 @@ describe('action form validation feedback', () => {
     it('AdvancedActionsForm explains that an action is required', async () => {
         mount(AdvancedActionsForm);
 
-        await pressUntil('Sign action', 'Pick an action.');
+        await pressUntil('Sign Action','Pick an action.');
     });
 
     it('AttachContentForm explains that a file is required', async () => {
         mount(AttachContentForm, { chainId: BTC, tick: 'ART', issuerAddress: ADDRESS.address });
 
-        await pressUntil('Attach artwork', 'Pick a file first.');
+        await pressUntil('Attach Artwork','Pick a file first.');
     });
 
     it('PublishFileForm explains that a file is required', async () => {
         mount(PublishFileForm);
 
-        await pressUntil('Publish file', 'Pick a file first.');
+        await pressUntil('Publish File', 'Pick a file first.');
     });
 
     it('LinkForm explains that both action indices are required', async () => {
         mount(LinkForm);
 
-        await pressUntil('Link actions', 'Provide both action indices before reviewing.');
+        await pressUntil('Link Actions','Provide both action indices before reviewing.');
     });
 
     it('SignMessageForm explains that a message is required', async () => {
         mount(SignMessageForm);
 
-        await pressUntil('Sign message', 'Type a message to sign.');
+        await pressUntil('Sign Message','Type a message to sign.');
     });
 });

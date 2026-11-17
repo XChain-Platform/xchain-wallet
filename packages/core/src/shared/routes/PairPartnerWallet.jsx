@@ -12,11 +12,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     FieldIconButton, FieldNote,
     Screen, PageHeader, Button, FormPage, FormSection, Input, Textarea, Icon,
-    ListPage, StatusMessage, QrScanner, AnimatedQrFrames, CopyButton, InfoTip,
+    ListPage, Notice, StatusMessage, QrScanner, AnimatedQrFrames, CopyButton, useFormErrors,
 } from '@xchain-wallet/core/ui';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import { useProtectedScreen } from '../utils/screenGuard.js';
-import { DURESS_PASSWORD_COLLISION_MESSAGE, walletPasswordCollidesWithDuress } from '../../flows/duressPassphrase.js';
 import { normalizeRecoveryPhrase } from '../../crypto/recoveryPhrase.js';
 import {
     encodeXcwChunks,
@@ -27,25 +26,21 @@ import {
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { formatOrList } from '../../i18n/index.js';
 import '../../i18n/locales/en/flows.js';
-import '../../i18n/locales/en/settings.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useDocumentTitleSection } from '../hooks/useDocumentTitle.js';
 import { NAME_MAX_LENGTH, hasVisibleText, nameLength } from '../../util/display_name.js';
 import { useOwnWalletWriteHold } from '../hooks/useOwnWalletWriteHold.js';
+import { notifyWalletModesChanged } from '../hooks/useWalletMode.js';
 import styles from './PairPartnerWallet.module.css';
+import { ActionList, ActionListItem } from '../components/ActionList.jsx';
+import { formatWithThousands } from '../utils/amountFormat.js';
 import {
     importPhraseFormat,
     importPhraseFormatArg,
     importPhraseRefusal,
 } from '../utils/importPhraseCheck.js';
 
-const MIN_PASSWORD_LENGTH = 8;
-
-// The vault refuses a first wallet over an existing one with a named error; a
-// shell that passes errors across a message boundary keeps only the message.
-function isWalletExistsError(err) {
-    return err?.name === 'WalletExistsError' || /^A wallet already exists\b/.test(String(err?.message || ''));
-}
+const PAGE_TITLE = 'Phone Signer';
 const ACCEPTED_WORD_COUNTS = [12, 15, 18, 21, 24];
 const INVALID_PARTNER_CODE = 'That pairing code is invalid or incomplete. '
     + 'Paste or scan the complete code from the other wallet.';
@@ -62,19 +57,23 @@ const INVALID_PARTNER_CODE = 'That pairing code is invalid or incomplete. '
 const MAX_QR_CHARS = 1200;
 
 /**
- * §20.5: the watcher + signer auto-pairing lane.
+ * §20.5: the two-phone pairing lane, "Use another phone as a signer".
  *
- * Both halves of an air-gapped pair are the SAME recovery phrase restored
- * twice: one wallet online in `watcher` mode, one offline in `signer`
- * mode. Before this lane there was no guidance for that and no check that
- * the two halves matched, so a mistyped word surfaced as an unsignable
- * PSBT after the air-gap round-trip, with no explanation attached.
+ * Both halves of the pair are the SAME recovery phrase restored twice: one
+ * wallet online in `watcher` mode, one offline in `signer` mode. Before this
+ * lane there was no guidance for that and no check that the two halves
+ * matched, so a mistyped word surfaced as an unsignable PSBT after the
+ * round-trip between the phones, with no explanation attached.
+ *
+ * It lives in Settings, Advanced (operator ruling 2026-11-15), so the vault is
+ * already open: the shared phrase is ADDED to it as a new wallet through
+ * `addImportedWallet`, under the vault's own password.
  *
  * The lane runs four stages:
  *
- *   role      pick which half THIS device is. Sets `settings.walletMode`.
- *   seed      import the shared recovery phrase (skipped when the caller
- *             passes an existing `walletId`, e.g. re-pairing from Settings).
+ *   role      pick which half THIS phone is: the wallet's own mode (§20).
+ *   seed      add the shared recovery phrase as a new wallet (skipped when
+ *             the caller passes an existing `walletId` to re-pair).
  *   exchange  show this wallet's pairing code (account-level PUBLIC keys
  *             only) for the partner to scan, and take the partner's code
  *             back. `flows.pairPartner` proves both halves derive from one
@@ -88,7 +87,7 @@ const MAX_QR_CHARS = 1200;
  * @param {object} props
  * @param {() => void} [props.onBack]
  * @param {() => void} [props.onPaired]        fires once the pairing persists; caller refreshes App state
- * @param {string} [props.walletId]            existing wallet to pair (Settings entry point). Absent = onboarding, which imports the shared phrase first.
+ * @param {string} [props.walletId]            existing wallet to re-pair. Absent = the Settings, Advanced entry, which adds the shared phrase first.
  * @param {'watcher' | 'signer'} [props.initialMode]   preselects the role stage
  * @param {{ report: (holding: boolean) => void }} [props.ownWriteGuard]   told while this lane imports the shared phrase and until it hands back
  */
@@ -113,8 +112,8 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
     // A cleared or blank name field names the wallet by its default; the vault refuses an empty name.
     const walletName = name.trim() || 'Paired Wallet';
     const [mnemonic, setMnemonic] = useState('');
+    // The open vault's own password: an added wallet is sealed under it.
     const [password, setPassword] = useState('');
-    const [confirm, setConfirm] = useState('');
 
     const [localCode, setLocalCode] = useState(/** @type {string | null} */ (null));
     const [localKeySetId, setLocalKeySetId] = useState(/** @type {string | null} */ (null));
@@ -124,10 +123,8 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
     const [verification, setVerification] = useState(/** @type {any} */ (null));
 
     const [error, setError] = useState(/** @type {string | null} */ (null));
-    // Another window or tab made this device's wallet first: the shared phrase
-    // was not imported here, and the way on is that wallet's lock screen.
-    const [walletElsewhere, setWalletElsewhere] = useState(false);
-    const [partnerCodeError, setPartnerCodeError] = useState(/** @type {string | null} */ (null));
+    const formErrors = useFormErrors();
+    const { clear: clearFormError, fail: failFormError, reset: resetFormErrors } = formErrors;
     const [busy, setBusy] = useState(false);
 
     const lane = flowsLib.describePairingLane(walletMode);
@@ -156,6 +153,8 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                     label: walletName,
                 });
                 if (cancelled) return;
+                // The host wrote the role onto this wallet; readers re-read it.
+                notifyWalletModesChanged();
                 setLocalCode(res?.encoded || null);
                 setLocalKeySetId(
                     res?.payload?.keys ? flowsLib.keySetIdOf(res.payload.keys) : null,
@@ -203,7 +202,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
             setPartnerCollector((prev) => {
                 const next = addChunkToCollector({ ...prev }, text);
                 if (next.error) {
-                    setPartnerCodeError(INVALID_PARTNER_CODE);
+                    failFormError(INVALID_PARTNER_CODE, 'partner-code');
                     return createXcwCollector();
                 }
                 if (next.complete && next.psbt) {
@@ -211,15 +210,15 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                     try {
                         flowsLib.parsePairingPayload(code);
                     } catch {
-                        setPartnerCodeError(INVALID_PARTNER_CODE);
+                        failFormError(INVALID_PARTNER_CODE, 'partner-code');
                         return createXcwCollector();
                     }
                     setPartnerCode(code);
                     setScanning(false);
-                    setPartnerCodeError(null);
+                    clearFormError('partner-code');
                     return createXcwCollector();
                 }
-                setPartnerCodeError(null);
+                clearFormError('partner-code');
                 return next;
             });
             return;
@@ -228,96 +227,71 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
         try {
             flowsLib.parsePairingPayload(code);
         } catch {
-            setPartnerCodeError(INVALID_PARTNER_CODE);
+            failFormError(INVALID_PARTNER_CODE, 'partner-code');
             return;
         }
         setPartnerCode(code);
         setScanning(false);
-        setPartnerCodeError(null);
-    }, []);
+        clearFormError('partner-code');
+    }, [clearFormError, failFormError]);
 
     function pickRole(mode) {
         setWalletMode(mode);
         setError(null);
+        resetFormErrors();
         setStage(existingWalletId ? 'exchange' : 'seed');
     }
 
     async function handleSeedSubmit(event) {
         event.preventDefault();
         if (busy) return;
-        const normalized = normalizeRecoveryPhrase(mnemonic);
-        if (normalized.length === 0) {
-            setError('Recovery phrase is required.');
-            return;
-        }
-        // A blank name takes the default; a name that draws no mark or runs past
-        // the cap would read as nothing in every list, as on Create and Import.
+        const trimmed = normalizeRecoveryPhrase(mnemonic);
         const typedName = name.trim();
-        if (typedName.length > 0 && !hasVisibleText(typedName)) {
-            setError('Wallet name must include a visible character.');
-            return;
-        }
-        if (nameLength(typedName) > NAME_MAX_LENGTH) {
-            setError(`Wallet name must be ${NAME_MAX_LENGTH} characters or fewer.`);
-            return;
-        }
-        const wordCount = normalized.split(' ').length;
-        if (!ACCEPTED_WORD_COUNTS.includes(wordCount)) {
-            // Copy stays inline until this screen moves to the dictionary; the
-            // list still reads "12, 15, 18, 21, or 24" like the import screen.
-            setError(`Expected ${formatOrList(ACCEPTED_WORD_COUNTS)} words, got ${wordCount}.`);
-            return;
-        }
-        const acceptedFormat = importPhraseFormat(normalized, false);
-        if (!acceptedFormat) {
-            setError(importPhraseRefusal(normalized, false));
-            return;
-        }
-        if (password.length < MIN_PASSWORD_LENGTH) {
-            setError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
-            return;
-        }
-        if (password !== confirm) {
-            setError('Passwords do not match.');
-            return;
-        }
-        if (walletPasswordCollidesWithDuress(password)) {
-            setError(DURESS_PASSWORD_COLLISION_MESSAGE);
-            return;
-        }
-        if (typeof messaging.importMnemonic !== 'function') {
-            setError('Wallet import is not available in this shell.');
+        const wordCount = trimmed ? trimmed.split(' ').length : 0;
+        const acceptedFormat = trimmed && ACCEPTED_WORD_COUNTS.includes(wordCount)
+            ? importPhraseFormat(trimmed, false)
+            : null;
+        const nameError = typedName.length > 0 && !hasVisibleText(typedName)
+            ? 'Wallet name must include a visible character.'
+            : nameLength(typedName) > NAME_MAX_LENGTH
+                ? `Wallet name must be ${NAME_MAX_LENGTH} characters or fewer.`
+                : null;
+        const phraseError = !trimmed
+            ? 'Recovery phrase is required.'
+            : !ACCEPTED_WORD_COUNTS.includes(wordCount)
+                ? `Expected ${formatOrList(ACCEPTED_WORD_COUNTS)} words, got ${wordCount}.`
+                : !acceptedFormat ? importPhraseRefusal(trimmed, false) : null;
+        if (!formErrors.validate({
+            'wallet-name': nameError,
+            'shared-recovery-phrase': phraseError,
+            'wallet-password': password.length === 0 ? 'Enter your wallet password.' : null,
+        })) return;
+        if (typeof messaging.addImportedWallet !== 'function') {
+            failFormError('Adding a wallet is not available in this shell.');
             return;
         }
         setError(null);
         setBusy(true);
         try {
             const formatArg = importPhraseFormatArg(acceptedFormat, false);
-            const r = await messaging.importMnemonic({
-                password, mnemonic: normalized, name: walletName, ...formatArg,
+            // The role picked above is this wallet's mode (§20), so the
+            // wallet is added in it.
+            const r = await messaging.addImportedWallet({
+                password, mnemonic: trimmed, name: walletName, walletMode, ...formatArg,
             });
             const id = r?.wallet?.id || r?.walletId || r?.id || null;
             if (!id) {
-                throw new Error('The wallet imported but the shell returned no wallet id, so pairing cannot continue.');
+                throw new Error('The wallet was added but the shell returned no wallet id, so pairing cannot continue.');
             }
-            // `walletMode` rides along on the pairing requests rather than
-            // being flipped here: the host persists it as part of the same
-            // call that reads the keys, so a payload can never advertise a
-            // mode the wallet is not actually in.
+            // `walletMode` also rides along on the pairing requests: the host
+            // writes it onto this wallet's record in the same call that reads
+            // the keys, so a payload can never advertise a mode the wallet is
+            // not actually in.
             setWalletId(id);
+            resetFormErrors();
             setStage('exchange');
         } catch (err) {
-            if (isWalletExistsError(err)) {
-                // The phrase and password typed here cannot be used on this
-                // device any more, so they leave the screen.
-                setMnemonic('');
-                setPassword('');
-                setConfirm('');
-                setWalletElsewhere(true);
-                setError('This device already has a wallet, so the shared phrase was not imported here. Unlock that wallet to continue.');
-            } else {
-                setError(userFacingMessage(err, 'Could not import the recovery phrase.'));
-            }
+            failFormError(userFacingMessage(err, 'Could not add the recovery phrase as a wallet.'));
         } finally {
             setBusy(false);
         }
@@ -327,22 +301,22 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
         event.preventDefault();
         if (busy) return;
         if (partnerCode.trim().length === 0) {
-            setPartnerCodeError('Paste or scan the pairing code from the other wallet.');
+            formErrors.validate({ 'partner-code': 'Paste or scan the pairing code from the other wallet.' });
             return;
         }
         let normalizedPartnerCode;
         try {
             normalizedPartnerCode = normalizePartnerCodeInput(partnerCode);
         } catch (err) {
-            setPartnerCodeError(userFacingMessage(err, INVALID_PARTNER_CODE));
+            formErrors.validate({ 'partner-code': userFacingMessage(err, INVALID_PARTNER_CODE) });
             return;
         }
         if (typeof messaging.pairPartnerRequest !== 'function') {
-            setError('Wallet pairing is not available in this shell.');
+            failFormError('Wallet pairing is not available in this shell.');
             return;
         }
         setError(null);
-        setPartnerCodeError(null);
+        resetFormErrors();
         setBusy(true);
         try {
             const res = await messaging.pairPartnerRequest({
@@ -356,7 +330,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
             setStage('done');
         } catch (err) {
             // The flow prefixes its refusals with its own name; the reason after it is the copy.
-            setError(userFacingMessage(
+            failFormError(userFacingMessage(
                 String(err?.message || '').replace(/^pairPartner:\s*/, ''),
                 'The two wallets could not be paired.',
             ));
@@ -365,11 +339,11 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
         }
     }
 
-    // Once the shared phrase is imported here the vault exists, so leaving by the
-    // welcome screen would offer create and import against it and fail at the last
-    // step. The completion callback re-reads shell state and lands on unlock.
+    // Once the shared phrase is added here the new wallet exists, so leaving
+    // hands back through the completion callback, which re-reads the shell's
+    // wallets before it shows anything.
     function handleBack() {
-        if (!existingWalletId && (walletId || walletElsewhere) && typeof onPaired === 'function') {
+        if (!existingWalletId && walletId && typeof onPaired === 'function') {
             onPaired();
             return;
         }
@@ -378,59 +352,52 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
         if (stage === 'seed' && !initialMode) {
             setMnemonic('');
             setPassword('');
-            setConfirm('');
             setError(null);
+            resetFormErrors();
             setStage('role');
             return;
         }
         onBack?.();
     }
 
-    // The window title names the pairing lane the heading shows.
-    useDocumentTitleSection(lane.title || 'Pair an offline signer');
+    // The window title names the page the heading shows.
+    useDocumentTitleSection(PAGE_TITLE);
+    const step = pairingStep(stage, Boolean(existingWalletId), Boolean(initialMode));
+    // G01: the step count is the header subtitle under the title, never a
+    // line above the page content. The page opens inside the unlocked shell,
+    // so it has no logo header of its own.
     const header = (
         <PageHeader
             onBack={handleBack}
             backDisabled={busy}
-            title={lane.title || 'Pair an offline signer'}
+            title={PAGE_TITLE}
+            subtitle={<StepIndicator {...step} />}
         />
     );
-    const step = pairingStep(stage, Boolean(existingWalletId), Boolean(initialMode));
 
     if (stage === 'role') {
         return (
             <Screen variant={variant} header={header}>
                 <ListPage>
-                    <StepIndicator {...step} />
-                    <div className={styles.overview}>
-                        <p className={styles.fullWidthText}>You are pairing an online wallet with an offline one.</p>
-                        <p className={styles.fullWidthText}>Choose what this device does, then set up the other device as its partner.</p>
-                        <p className={styles.fullWidthText}>Write the recovery phrase down once, then type it into each device separately. It never travels between them.</p>
-                    </div>
-                    <div className={styles.roleChoices}>
-                        <div className={styles.roleChoice}>
-                            <Button
-                                variant="primary"
-                                block
-                                onClick={() => pickRole('watcher')}
-                                icon={<Icon.EyeIcon />}
-                            >
-                                This device watches. Pair a signer
-                            </Button>
-                            <p className={styles.fullWidthText}>This device stays online. It holds no keys that can sign, builds transactions, and shows balances.</p>
-                        </div>
-                        <div className={styles.roleChoice}>
-                            <Button
-                                variant="secondary"
-                                block
-                                onClick={() => pickRole('signer')}
-                                icon={<Icon.KeyIcon />}
-                            >
-                                This device signs. Pair a watcher
-                            </Button>
-                            <p className={styles.fullWidthText}>This device stays offline. It holds the recovery phrase and signs transactions the watcher builds.</p>
-                        </div>
-                    </div>
+                    <Notice tone="info" title="How Pairing Works" role="note">
+                        <p>You are pairing this phone with a second phone that keeps the keys offline.</p>
+                        <p>Choose what this phone does, then set up the other phone as its partner.</p>
+                        <p>Write the recovery phrase down once, then type it into each phone separately. It never travels between them.</p>
+                    </Notice>
+                    <ActionList label="Phone signer roles">
+                        <ActionListItem
+                            icon={<Icon.EyeIcon />}
+                            title="Sign on another phone"
+                            description="This phone stays online. It holds no keys that can sign, builds transactions, and shows balances."
+                            onClick={() => pickRole('watcher')}
+                        />
+                        <ActionListItem
+                            icon={<Icon.KeyIcon />}
+                            title="Make this phone the signer"
+                            description="This phone stays offline. It holds the recovery phrase and signs transactions the other phone builds."
+                            onClick={() => pickRole('signer')}
+                        />
+                    </ActionList>
                 </ListPage>
             </Screen>
         );
@@ -442,17 +409,12 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                 <FormPage
                     label="Pairing setup"
                     onSubmit={handleSeedSubmit}
-                    status={error ? (
-                        <StatusMessage
-                            variant="error"
-                            recovery={walletElsewhere && typeof onPaired === 'function' ? {
-                                label: 'Unlock',
-                                onAction: onPaired,
-                            } : undefined}
-                        >
-                            {error}
-                        </StatusMessage>
-                    ) : null}
+                    errors={formErrors}
+                    status={(
+                        <Notice tone="info" title="Shared Phrase" role="note">
+                            Enter the same recovery phrase on both phones. The phrase never travels between them.
+                        </Notice>
+                    )}
                     actions={(
                         <Button
                             type="submit"
@@ -465,14 +427,16 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                         </Button>
                     )}
                 >
-                    <StepIndicator {...step} />
                     <Input
+                        id="wallet-name"
                         label="Wallet name"
+                        help="The name this wallet shows on this phone. Only you see it."
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         disabled={busy}
                     />
                     <Textarea
+                        id="shared-recovery-phrase"
                         label="Shared recovery phrase"
                         help={lane.help}
                         rows={3}
@@ -485,19 +449,13 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                         disabled={busy}
                     />
                     <Input
-                        label="Password for this device"
+                        id="wallet-password"
+                        label="Wallet password"
+                        help="The password you unlock this app with. The added wallet is saved under it too."
                         type="password"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        autoComplete="new-password"
-                        disabled={busy}
-                    />
-                    <Input
-                        label="Confirm password"
-                        type="password"
-                        value={confirm}
-                        onChange={(e) => setConfirm(e.target.value)}
-                        autoComplete="new-password"
+                        autoComplete="current-password"
                         disabled={busy}
                     />
                 </FormPage>
@@ -513,7 +471,13 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                     label="Partner code exchange"
                     onSubmit={handlePairSubmit}
                     sectioned
-                    status={error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
+                    errors={formErrors}
+                    status={[
+                        <Notice key="public-code" tone="info" title="Public Codes" role="note">
+                            Pairing codes contain public keys only. They contain no recovery phrase, private key, or spending access.
+                        </Notice>,
+                        error ? <StatusMessage key="load-error" variant="error">{error}</StatusMessage> : null,
+                    ]}
                     actions={(
                         <Button
                             type="submit"
@@ -526,11 +490,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                         </Button>
                     )}
                 >
-                    <StepIndicator {...step} />
-                    <FormSection
-                        title="This wallet’s code"
-                        trailing={<InfoTip label="Pairing codes contain public keys only: no recovery phrase, no private key, and nothing that can spend." />}
-                    >
+                    <FormSection title="This wallet’s code">
                     {localCode ? (
                         <>
                             {localFrames ? (
@@ -545,7 +505,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                                         // children renders as several text nodes, and both this
                                         // spec's unit matcher and a screen reader see it in pieces.
                                         <FieldNote variant="info" role="status">
-                                            {`This code is too long for one QR, so it cycles through ${frameCount} frames. `
+                                            {`This code is too long for one QR, so it cycles through ${formatWithThousands(String(frameCount))} frames. `
                                                 + 'Point the other wallet’s camera at it and hold still until it has them all.'}
                                         </FieldNote>
                                     ) : null}
@@ -558,7 +518,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                             )}
                             <div className={styles.pairingCode} dir="ltr">
                                 <span className={styles.pairingCodeCopy}>
-                                    <CopyButton value={localCode} label="Copy pairing code" iconOnly />
+                                    <CopyButton value={localCode} label="Copy Pairing Code" iconOnly />
                                 </span>
                                 {localCode}
                             </div>
@@ -573,33 +533,33 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                     )}
                     </FormSection>
 
-                    <FormSection title={lane.partnerMode === 'signer' ? 'Signer wallet\'s code' : 'Watcher wallet\'s code'}>
+                    <FormSection title={lane.partnerMode === 'signer' ? 'Signer phone\'s code' : 'Other phone\'s code'}>
                     {scanning ? (
                         <>
                             <QrScanner onFrame={handleScanFrame} />
                             {partnerCollector.total ? (
                                 <FieldNote variant="info" role="status">
-                                    Pairing frames received: {partnerCollector.receivedCount} of
-                                    {' '}{partnerCollector.total}
+                                    Pairing frames received: {formatWithThousands(String(partnerCollector.receivedCount))} of
+                                    {' '}{formatWithThousands(String(partnerCollector.total))}
                                 </FieldNote>
                             ) : null}
                         </>
                     ) : null}
                     <Textarea
+                        id="partner-code"
                         label="Paste the other wallet's code"
+                        help="The pairing code the other wallet shows. Paste it here or scan its QR, and the two wallets are linked."
                         rows={3}
                         value={partnerCode}
                         onChange={(e) => {
                             setPartnerCode(e.target.value);
-                            setPartnerCodeError(null);
                         }}
-                        error={partnerCodeError || undefined}
                         autoComplete="off"
                         spellCheck={false}
                         disabled={busy}
                         fieldAction={(
                             <FieldIconButton
-                                icon={<Icon.ScanIcon />}
+                                icon={<Icon.QrCodeIcon />}
                                 label={scanning ? 'Stop scanning' : 'Scan the other wallet\'s QR'}
                                 aria-pressed={scanning}
                                 onClick={() => {
@@ -607,7 +567,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                                     // set left over from a previous attempt would
                                     // otherwise mix with frames from a different code.
                                     setPartnerCollector(createXcwCollector());
-                                    setPartnerCodeError(null);
+                                    clearFormError('partner-code');
                                     setScanning((s) => !s);
                                 }}
                                 disabled={busy}
@@ -623,15 +583,12 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
     return (
         <Screen variant={variant} header={header}>
             <ListPage>
-                <StepIndicator {...step} />
-                <StatusMessage variant="success">
-                    {verification?.message || 'Paired.'}
-                </StatusMessage>
-                {verification?.sharedChainIds?.length ? (
-                    <p className={styles.fullWidthText} style={COPY}>
-                        Matching networks: {verification.sharedChainIds.join(', ')}.
-                    </p>
-                ) : null}
+                <Notice tone="success" title="Phones Paired">
+                    <p>{verification?.message || 'Paired.'}</p>
+                    {verification?.sharedChainIds?.length ? (
+                        <p style={COPY}>Matching networks: {verification.sharedChainIds.join(', ')}.</p>
+                    ) : null}
+                </Notice>
                 <div style={STACK}>
                     <Button
                         variant="success"
@@ -686,11 +643,12 @@ function pairingStep(stage, hasExistingWallet, hasInitialMode) {
     return { current: Math.max(1, stages.indexOf(stage) + 1), total: stages.length };
 }
 
+/** The header subtitle's step count; PageHeader styles the subtitle line. */
 function StepIndicator({ current, total }) {
     return (
-        <p className={styles.fullWidthText} aria-current="step" style={STEP_INDICATOR}>
-            Step {current} of {total}
-        </p>
+        <span aria-current="step">
+            {`Step ${current} of ${total}`}
+        </span>
     );
 }
 
@@ -710,11 +668,4 @@ const FINGERPRINT = {
     fontFamily: 'var(--xc-font-mono, monospace)',
     fontSize: 'var(--xc-text-xs)',
     color: 'var(--xc-text-muted)',
-};
-
-const STEP_INDICATOR = {
-    color: 'var(--xc-text-muted)',
-    fontSize: 'var(--xc-text-xs)',
-    fontWeight: 600,
-    margin: 0,
 };

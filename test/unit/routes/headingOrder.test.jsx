@@ -10,8 +10,9 @@ import { ActionDetail } from '../../../packages/core/src/shared/routes/ActionDet
 import { ActionsMenu } from '../../../packages/core/src/shared/routes/ActionsMenu.jsx';
 import { AlertsRoute } from '../../../packages/core/src/shared/routes/AlertsRoute.jsx';
 import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
+import { resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { Locked } from '../../../packages/core/src/shared/routes/Locked.jsx';
-import { MyBets } from '../../../packages/core/src/shared/routes/MyBets.jsx';
+import { BetFeedsList } from '../../../packages/core/src/shared/routes/BetFeedsList.jsx';
 import { OnboardingCarousel } from '../../../packages/core/src/shared/routes/OnboardingCarousel.jsx';
 import {
     clearActiveWallet,
@@ -65,6 +66,7 @@ function actionEntry(overrides = {}) {
 }
 
 afterEach(() => {
+    resetWalletModes();
     cleanup();
     clearActiveWallet();
 });
@@ -89,8 +91,9 @@ describe('main route heading order', () => {
 
     it('keeps the Home h1 when signer mode replaces the standard body', async () => {
         const messaging = {
-            getSettings: vi.fn().mockResolvedValue({ walletMode: 'signer' }),
-            listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'Wallet' }]),
+            // Wallet mode is a property of the wallet record.
+            getSettings: vi.fn().mockResolvedValue({}),
+            listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'Wallet', walletMode: 'signer' }]),
             listAccounts: vi.fn().mockResolvedValue([]),
             getWalletBalances: vi.fn().mockResolvedValue({}),
             getAddressesByChain: vi.fn().mockResolvedValue({}),
@@ -98,12 +101,12 @@ describe('main route heading order', () => {
         };
         const view = renderRoute(<Home activeWalletId="wallet-1" />, messaging);
 
-        await screen.findByText('Signer mode');
+        await screen.findByText('Signer for another phone');
         expect(screen.getByRole('heading', { level: 1, name: 'Home' })).toBeInTheDocument();
         expectOrderedHeadings(view.container);
     });
 
-    it('restores the active wallet name from safe metadata on a cold launch', async () => {
+    it('keeps the product name as the lock h1 and never shows the wallet name on a cold launch', async () => {
         writeActiveWallet('wallet-2');
         const locked = renderRoute(<Locked onUnlocked={vi.fn()} />, {
             unlockWallet: vi.fn(),
@@ -112,16 +115,27 @@ describe('main route heading order', () => {
                 { id: 'wallet-2', name: 'Treasury' },
             ]),
         });
-        expect(await screen.findByRole('heading', { level: 1, name: 'Treasury' })).toBeVisible();
+        const heading = await screen.findByRole('heading', {
+            level: 1,
+            name: 'XChain Wallet',
+            hidden: true,
+        });
+        expect(heading).toHaveClass('sr-only');
+        expect(screen.queryByText('Treasury')).toBeNull();
         expectOrderedHeadings(locked.container);
     });
 
-    it('falls back to the unlock heading when there is no active wallet', () => {
+    it('shows the product name heading when there is no active wallet', () => {
         const locked = renderRoute(<Locked onUnlocked={vi.fn()} />, {
             unlockWallet: vi.fn(),
             listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'Personal' }]),
         });
-        expect(screen.getByRole('heading', { level: 1, name: 'Unlock wallet' })).toBeVisible();
+        const heading = screen.getByRole('heading', {
+            level: 1,
+            name: 'XChain Wallet',
+            hidden: true,
+        });
+        expect(heading).toHaveClass('sr-only');
         expectOrderedHeadings(locked.container);
         locked.unmount();
 
@@ -138,7 +152,7 @@ describe('main route heading order', () => {
         expectOrderedHeadings(onboarding.container);
     });
 
-    it('uses h2 section headings for populated bet lists', async () => {
+    it('keeps the page heading order on a populated My bets list', async () => {
         const messaging = {
             getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [{ address: ADDRESS }] }),
             bets: vi.fn().mockResolvedValue({
@@ -147,15 +161,22 @@ describe('main route heading order', () => {
                     { action_index: '1', feed_action_index: '7', bet_status: 'won', outcome: 1, amount: '5', tick: 'XCHAIN' },
                 ],
             }),
-            betFeed: vi.fn().mockResolvedValue({ outcomes: 'Yes,No' }),
+            betFeeds: vi.fn().mockResolvedValue({
+                data: [
+                    { action_index: '8', label: 'Market eight', outcomes: 'Yes,No', tick: 'XCHAIN', source: 'bc1qoracle' },
+                    { action_index: '7', label: 'Market seven', outcomes: 'Yes,No', tick: 'XCHAIN', source: 'bc1qoracle' },
+                ],
+            }),
         };
+        // My bets is the All list narrowed (ruling 2026-11-13): its cards
+        // sit under the page title with no section headings of their own.
         const view = renderRoute(
-            <MyBets walletId="wallet-1" onBack={vi.fn()} />,
+            <BetFeedsList walletId="wallet-1" view="bets" onViewChange={vi.fn()} onOpenMarket={vi.fn()} onBack={vi.fn()} />,
             messaging,
         );
 
-        await screen.findByRole('heading', { level: 2, name: 'Pending resolution' });
-        expect(screen.getByRole('heading', { level: 2, name: 'Past bets' })).toBeInTheDocument();
+        await screen.findByRole('button', { name: 'Market eight' });
+        expect(screen.getByRole('button', { name: 'Market seven' })).toBeInTheDocument();
         expectOrderedHeadings(view.container);
     });
 
@@ -198,8 +219,11 @@ describe('main route heading order', () => {
             />,
             messaging,
         );
-        fireEvent.click(screen.getByRole('tab', { name: 'Raw data' }));
-        await screen.findByRole('heading', { level: 2, name: 'Linked transaction · LTC #9' });
+        // Both views of the Actions | Details toggle keep the outline whole.
+        await screen.findByRole('heading', { level: 2, name: 'Actions' });
+        expectOrderedHeadings(linked.container);
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        await screen.findByRole('heading', { level: 2, name: 'Details' });
         expectOrderedHeadings(linked.container);
     });
 });

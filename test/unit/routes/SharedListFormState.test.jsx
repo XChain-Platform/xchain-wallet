@@ -19,9 +19,10 @@ vi.mock('../../../packages/core/src/flows/listFormatSupport.js', () => ({
 }));
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { SharedListDirectory } from '../../../packages/core/src/shared/routes/SharedListDirectory.jsx';
 import { SignerSelectForm } from '../../../packages/core/src/shared/routes/SignerSelectForm.jsx';
-import { UnionListForm } from '../../../packages/core/src/shared/routes/UnionListForm.jsx';
+import { ListCreateForm } from '../../../packages/core/src/shared/routes/ListCreateForm.jsx';
 
 const CHAIN = 'bitcoin-mainnet';
 const SOURCE = Object.freeze({
@@ -49,6 +50,7 @@ const NEW_SIGNER = Object.freeze({
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     vi.clearAllMocks();
 });
 
@@ -79,10 +81,12 @@ describe('shared list route state boundaries', () => {
         );
 
         expect(await screen.findAllByRole('listitem')).toHaveLength(20);
-        fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Load More' }));
         expect(screen.getAllByRole('listitem')).toHaveLength(40);
 
-        const loadMore = screen.getByRole('button', { name: 'Load more' });
+        const loadMore = screen.getByRole('button', { name: 'Load More' });
+        // The search sits in the title bar filter panel.
+        fireEvent.click(screen.getByRole('button', { name: 'Filter shared lists' }));
         await act(async () => {
             fireEvent.change(screen.getByLabelText('Search shared lists'), { target: { value: 'BTC' } });
             fireEvent.click(loadMore);
@@ -126,7 +130,7 @@ describe('shared list route state boundaries', () => {
                     observer.disconnect();
                     try {
                         expect(screen.getAllByRole('listitem')).toHaveLength(20);
-                        fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
+                        fireEvent.click(screen.getByRole('button', { name: 'Load More' }));
                         resolve();
                     } catch (error) {
                         reject(error);
@@ -163,10 +167,13 @@ describe('shared list route state boundaries', () => {
 
     it('clears union inputs before building another watcher transaction', async () => {
         listFormatSupport.mockResolvedValue({ share: true, transfer: true, union: true });
+        // The wallet's mode is read from the wallet list, not from settings.
+        publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode: 'watcher' }], activeWalletId: 'wallet-1' });
         const messaging = new Proxy({
             getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [SOURCE] }),
             getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: SOURCE.id } }),
-            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            getSettings: vi.fn().mockResolvedValue({}),
+            listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'W', walletMode: 'watcher' }]),
             signerReady: vi.fn().mockResolvedValue({ ready: true }),
             getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
             getListsForSource: vi.fn().mockResolvedValue({
@@ -183,17 +190,19 @@ describe('shared list route state boundaries', () => {
         });
         render(
             <MessagingProvider shell="web" messaging={messaging}>
-                <UnionListForm walletId="wallet-1" chainId={CHAIN} onBack={() => {}} />
+                <ListCreateForm initialType="3" walletId="wallet-1" chainId={CHAIN} onBack={() => {}} />
             </MessagingProvider>,
         );
 
         fireEvent.click(await screen.findByRole('checkbox', { name: 'Token list #101' }));
         fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'first list' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Build another' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Unsigned Transaction' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Build Another' }));
 
-        expect(screen.getByRole('checkbox', { name: 'Token list #101' })).not.toBeChecked();
-        expect(screen.getByLabelText('Memo')).toHaveValue('');
+        // The fresh form remounts the shared Advanced section, whose change
+        // address reads settings asynchronously; wait for it to settle.
+        expect(await screen.findByRole('checkbox', { name: 'Token list #101' })).not.toBeChecked();
+        await waitFor(() => expect(screen.getByLabelText('Memo')).toHaveValue(''));
     });
 
     it('surfaces a synchronous union address failure through the load error', async () => {
@@ -209,7 +218,7 @@ describe('shared list route state boundaries', () => {
         });
         render(
             <MessagingProvider shell="web" messaging={messaging}>
-                <UnionListForm walletId="wallet-1" chainId={CHAIN} onBack={() => {}} />
+                <ListCreateForm initialType="3" walletId="wallet-1" chainId={CHAIN} onBack={() => {}} />
             </MessagingProvider>,
         );
 
@@ -232,7 +241,8 @@ describe('shared list route state boundaries', () => {
                 <SignerSelectForm walletId="wallet-1" value="signer-old" onChange={onChange} />
             </MessagingProvider>,
         );
-        expect(await screen.findByRole('radio', { name: /Old signer/ })).toBeChecked();
+        // The signer dropdown's trigger names the chosen signer.
+        expect(await screen.findByRole('button', { name: /^Sign with: Old signer/ })).toBeTruthy();
         onChange.mockClear();
 
         view.rerender(
@@ -244,7 +254,7 @@ describe('shared list route state boundaries', () => {
         expect(onChange).not.toHaveBeenCalled();
 
         await act(async () => { resolveNewSigners([NEW_SIGNER]); });
-        expect(await screen.findByRole('radio', { name: /New signer/ })).toBeChecked();
+        expect(await screen.findByRole('button', { name: /^Sign with: New signer/ })).toBeTruthy();
         expect(onChange).not.toHaveBeenCalled();
     });
 

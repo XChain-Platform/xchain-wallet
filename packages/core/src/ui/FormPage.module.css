@@ -3,13 +3,11 @@
    exactly one place. Viewport media query, not a container query: the
    Android WebView 102 the app ships to has no container queries. */
 
-/* A plain form: its notices lead the page content at the full content width
-   and the form (a card when wide) follows them on the same gap the bare form
-   uses between its own rows, so a narrow screen looks as if they were inside. */
+/* A plain form's page column: it holds the form alone (its notices are the
+   form's first item), so hosts that place the page as one child keep it. */
 .page {
     display: flex;
     flex-direction: column;
-    gap: var(--xc-form-gap);
     width: 100%;
     min-width: 0;
 }
@@ -110,19 +108,34 @@
 }
 
 /* Several notices (the form's own plus ones raised from inside the body) stack
-   with the form's gap between them instead of touching. */
+   8px apart, the notice-to-next-element gap. */
 .status {
     display: flex;
     flex-direction: column;
-    gap: var(--xc-form-gap);
+    gap: var(--xc-space-2);
     outline: none;
 }
 
+/* The status slot is the form's first item: the next element (the fields, a
+   section, the action row) sits 8px under it, not the form's larger row gap,
+   and a form that owns its title puts the slot 8px under that title.
+   :not(:empty) because an empty slot is display: none and takes no gap. */
+.status:not(:empty) + *,
+.pageHeader + .status:not(:empty) {
+    margin-block-start: calc(var(--xc-space-2) - var(--xc-form-gap, var(--xc-space-4)));
+}
+
+/* A notice a page places in the form body itself (a warning over the phrase
+   it is about) also keeps 8px to the element under it, not the field gap. */
+.body > [data-variant] + *,
+.sectionBody > [data-variant] + * {
+    margin-block-start: calc(var(--xc-space-2) - var(--xc-form-gap, var(--xc-space-4)));
+}
+
 /* A status message (StatusMessage or the error summary built on its row) sits
-   in a form stack on the stack's gap alone. Its row carries an 8px block
-   margin for use outside forms, and route modules pass their own margined
-   class; two-part selectors outrank both whatever order the bundle loads
-   them in. */
+   in a form stack on the stack's gap alone. Route modules pass their own
+   margined class; two-part selectors outrank it whatever order the bundle
+   loads them in. */
 .body > [data-variant],
 .sectionBody > [data-variant],
 .status > [data-variant] {
@@ -258,4 +271,16 @@
         border-radius: 0;
         box-shadow: none;
     }
+}
+
+/* An empty notice slot takes no room, so the page's gap does not
+   push the first field down: the form starts 8px under the page header. */
+.status:empty {
+    display: none;
+}
+
+/* On every form the submit button sits 8px under the last field
+   (the fee picker or fees card on most), not the form's full gap. */
+.body + .actions {
+    margin-block-start: calc(var(--xc-space-2) - var(--xc-form-gap, var(--xc-space-4)));
 }

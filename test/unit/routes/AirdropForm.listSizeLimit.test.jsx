@@ -85,7 +85,7 @@ async function flushTimers() {
 }
 
 const recipientsBox = () => screen.getByRole('textbox', { name: 'Recipients' });
-const submitButton = () => screen.getByRole('button', { name: /^Review recipients$/ });
+const submitButton = () => screen.getByRole('button', { name: /^Review recipients$/i });
 
 async function fillForm(list) {
     await flushTimers();
@@ -111,11 +111,11 @@ describe('AirdropForm refuses a recipient list too large to verify, before compo
             'This airdrop lists 200 addresses, more than this wallet can verify in one airdrop: '
             + 'up to 190 of these fit. Split it into 2 airdrops of up to 190 addresses each.',
         );
-        expect(submitButton()).toBeDisabled();
+        expect(submitButton()).toBeEnabled();
         fireEvent.submit(submitButton().closest('form'));
         await flushTimers();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
-        expect(document.body.textContent).not.toMatch(/Review address list/);
+        expect(document.body.textContent).not.toMatch(/Review Address List/);
     });
 
     it('says nothing for a list that fits', async () => {
@@ -142,6 +142,7 @@ describe('AirdropForm refuses a recipient list too large to verify, before compo
 
         fireEvent.click(submitButton());
         await flushTimers();
-        expect(document.body.textContent).toMatch(/Review address list/);
+        expect(screen.getByTestId('confirm-modal')).toBeInTheDocument();
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent('Create address list of 190 items');
     });
 });

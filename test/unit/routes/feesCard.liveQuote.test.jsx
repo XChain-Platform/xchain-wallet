@@ -71,7 +71,10 @@ describe('Fees card live quote', () => {
         });
 
         await waitFor(() => expect(messaging.requoteNativeFee).toHaveBeenCalled(), { timeout: 2000 });
-        expect(await screen.findByText('0.064 XCHAIN')).toBeInTheDocument();
-        expect(screen.getByText(/\+ 0\.064 XCHAIN/)).toBeInTheDocument();
+        // The Speed and Fees section's Protocol fee line shows the live quote;
+        // the Total lives on the confirm screen, never in the form.
+        await waitFor(() => expect(document.querySelector('[data-fees-row="protocol"]'))
+            .toHaveTextContent('0.064 XCHAIN'), { timeout: 3000 });
+        expect(document.querySelector('[data-fees-row="total"]')).toBeNull();
     });
 });

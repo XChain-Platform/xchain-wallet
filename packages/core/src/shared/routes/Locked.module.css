@@ -33,24 +33,8 @@
 }
 
 .logo {
-    /* The brand mark has no matching size token at its default presentation width. */
-    width: 96px;
-    height: auto;
-    /* The mark is 750x464. The ratio reserves its height before the file
-       decodes, so the centred form does not move when the logo arrives. */
-    aspect-ratio: 750 / 464;
-    margin-bottom: var(--xc-space-3);
-}
-
-@media (min-width: 600px) {
-    .hero {
-        margin-bottom: var(--xc-space-5);
-    }
-
-    .logo {
-        /* The brand mark has no matching size token at its wide presentation width. */
-        width: 120px;
-    }
+    composes: standardSize from './BootLogo.module.css';
+    margin-bottom: 0;
 }
 
 /* §15.6 step 2. The sentence carries the whole explanation of why a
@@ -86,23 +70,12 @@
     width: 100%;
 }
 
+/* Exit Demo and Wipe sits right under Unlock Wallet, with its note below it
+   and no divider (operator ruling 2026-11-13). */
 .demoExitBlock {
-    margin-top: var(--xc-space-4);
-    padding-top: var(--xc-space-3);
-    border-top: 1px solid var(--xc-border);
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
-}
-
-/* The demo-exit and wipe panels share their note and error rules: this
-   sheet loads at startup, inside the initial CSS budget. */
-.demoExitNote,
-.wipeNote {
-    margin: 0;
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    line-height: 1.4;
 }
 
 .demoExitError,
@@ -124,8 +97,41 @@
     gap: var(--xc-space-2);
 }
 
+/* The two restore choices are chevron rows in one card, as on the Settings
+   pages. */
+.restoreCard {
+    composes: flush from '../../ui/Card.module.css';
+    list-style: none;
+    margin: 0;
+    overflow: hidden;
+}
+
+/* A divider line sits between the two choice rows. */
+.restoreCard > li + li {
+    border-top: 1px solid var(--xc-border);
+}
+
+/* The notice above the choices is the shared StatusMessage bubble; the
+   negative bottom margin takes the form gap down to 8px (operator ruling). */
+.restoreNotice {
+    margin: 0 0 calc(var(--xc-space-2) - var(--xc-form-gap));
+}
+
 /* The wipe warning is the shared StatusMessage; the panel gap spaces it. */
-.wipeWarning {
+.wipeWarning,
+.demoNotice {
+    margin: 0;
+}
+
+/* The shared StatusMessage row carries an 8px block margin of its own, which
+   on top of a column's 8px gap made 16px between the unlock buttons and any
+   notice in the stack. A same-specificity class lost to it by bundle order,
+   so these two-part selectors win whatever the order: the column gap alone
+   spaces every row in the unlock stack. */
+.unlockActions [data-variant],
+.demoExitBlock > [data-variant],
+.wipeConfirm > [data-variant],
+.passwordField > [data-variant] {
     margin: 0;
 }
 
@@ -149,8 +155,8 @@
     }
 
     .logo {
-        /* The compact brand mark has no matching size token. */
         width: 40px;
+        height: auto;
         margin-bottom: 0;
     }
 
@@ -191,8 +197,8 @@
 }
 
 :global(html[data-xc-keyboard='open']) .logo {
-    /* The compact brand mark has no matching size token. */
     width: 40px;
+    height: auto;
     margin-bottom: 0;
 }
 
@@ -204,9 +210,16 @@
     border-top: 0;
 }
 
+:global(html[data-xc-keyboard='open']) .demoExitBlock {
+    margin-top: 0;
+}
+
 /* The password field adds no space of its own, so the unlock actions sit the
    form gap under it, as on every other form; the field error grows the field
    only while it shows. */
 .passwordField {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
     width: 100%;
 }

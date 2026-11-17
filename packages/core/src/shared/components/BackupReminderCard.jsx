@@ -10,7 +10,7 @@
 
 import { useEffect, useState } from 'react';
 import { flows as flowsLib } from '@xchain-wallet/core';
-import { Button, Icon } from '@xchain-wallet/core/ui';
+import { Icon, Notice } from '@xchain-wallet/core/ui';
 import styles from './BackupReminderCard.module.css';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/backupReminder.js';
@@ -20,8 +20,7 @@ import '../../i18n/locales/en/backupReminder.js';
  *
  * Evaluates `flowsLib.computeBackupReminderState({ walletId, hasFunds })`.
  * Renders nothing for the 'hidden' state. 'gentle' renders a
- * quiet card with a snooze button; 'firm' renders a more prominent card
- * without a dismiss.
+ * info Notice whose X snoozes it; 'firm' renders a danger Notice without an X.
  *
  * The card itself does not navigate. Callers wire `onAction` to take the
  * user to the Settings > Backup flow.
@@ -32,6 +31,7 @@ import '../../i18n/locales/en/backupReminder.js';
  * @param {boolean} [props.isDemo]
  * @param {string | null} [props.walletMode]
  * @param {() => void} [props.onAction]      "Back up now" CTA
+ * @param {string} [props.walletFormat]      a hardware wallet keeps its keys on the device, so it gets no reminder
  */
 export function BackupReminderCard({
     walletId,
@@ -39,11 +39,13 @@ export function BackupReminderCard({
     isDemo = false,
     walletMode = 'full',
     onAction,
+    walletFormat,
 }) {
     const [state, setState] = useState({ kind: 'hidden' });
+    const seedless = walletFormat === 'hardware';
 
     useEffect(() => {
-        if (!walletId) {
+        if (!walletId || seedless) {
             setState({ kind: 'hidden' });
             return undefined;
         }
@@ -56,10 +58,10 @@ export function BackupReminderCard({
         refresh();
         globalThis.addEventListener?.('storage', refresh);
         return () => globalThis.removeEventListener?.('storage', refresh);
-    }, [walletId, hasFunds, isDemo, walletMode]);
+    }, [walletId, hasFunds, isDemo, walletMode, seedless]);
 
     useEffect(() => {
-        if (typeof state.recheckAt !== 'number') return undefined;
+        if (seedless || typeof state.recheckAt !== 'number') return undefined;
         const delay = Math.max(0, state.recheckAt - Date.now());
         const timer = setTimeout(() => {
             setState(flowsLib.computeBackupReminderState({
@@ -67,44 +69,39 @@ export function BackupReminderCard({
             }));
         }, delay);
         return () => clearTimeout(timer);
-    }, [state.recheckAt, walletId, hasFunds, isDemo, walletMode]);
+    }, [state.recheckAt, walletId, hasFunds, isDemo, walletMode, seedless]);
 
-    if (state.kind === 'hidden') return null;
+    if (seedless || state.kind === 'hidden') return null;
 
-    const variantClass = state.kind === 'firm' ? styles.firm : styles.gentle;
+    // The Notice Standard: a reminder is an info note, and the firm state
+    // (a wallet holding funds with no verified backup) a red warning. Both are
+    // part of the page, so neither is a live region. The one action is Back up
+    // now; the gentle state's snooze is the notice's X.
+    const snooze = () => {
+        flowsLib.dismissBackupReminder(walletId);
+        setState(flowsLib.computeBackupReminderState({
+            walletId, hasFunds, isDemo, walletMode,
+        }));
+    };
 
     return (
-        <div className={`${styles.card} ${variantClass}`} role="region" aria-label={state.headline}>
-            <div className={styles.body}>
-                <h3 className={styles.headline}>{state.headline}</h3>
-                <p className={styles.copy}>{state.body}</p>
-            </div>
-            <div className={styles.actions}>
-                <Button
-                    size="sm"
-                    variant="primary"
-                    onClick={onAction}
-                    disabled={!onAction}
-                    icon={<Icon.CheckIcon />}
-                >
-                    {t('backupReminder.backupNow')}
-                </Button>
-                {state.dismissable ? (
-                    <Button
-                        size="sm"
-                        variant="secondary"
-                        icon={null}
-                        onClick={() => {
-                            flowsLib.dismissBackupReminder(walletId);
-                            setState(flowsLib.computeBackupReminderState({
-                                walletId, hasFunds, isDemo, walletMode,
-                            }));
-                        }}
-                    >
-                        {t('backupReminder.remindTomorrow')}
-                    </Button>
-                ) : null}
-            </div>
-        </div>
+        <section className={styles.region} aria-label={state.headline}>
+            <Notice
+                tone={state.kind === 'firm' ? 'danger' : 'info'}
+                role={null}
+                flush
+                title={state.headline}
+                action={{
+                    label: t('backupReminder.backupNow'),
+                    onAction: onAction || (() => {}),
+                    disabled: !onAction,
+                    icon: <Icon.CheckIcon />,
+                }}
+                onDismiss={state.dismissable ? snooze : undefined}
+                dismissLabel={t('backupReminder.remindTomorrow')}
+            >
+                {state.body}
+            </Notice>
+        </section>
     );
 }

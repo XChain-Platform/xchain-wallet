@@ -105,9 +105,10 @@ describe('main screen rendering', () => {
         );
 
         await screen.findByText('No activity yet');
-        expect(screen.getByText('Activity appears here after you send or receive on a selected network.')).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Start receiving' }));
-        expect(onReceive).toHaveBeenCalledOnce();
+        expect(screen.getByText('Activity appears here after you send or receive.')).toBeTruthy();
+        // The plain empty state is the title and one short line, with no Start receiving button.
+        expect(screen.queryByRole('button', { name: 'Start receiving' })).toBeNull();
+        expect(onReceive).not.toHaveBeenCalled();
         expectEveryButtonNamed(view.container);
         expectVisibleCopyResolved(view.container);
     });
@@ -130,13 +131,13 @@ describe('main screen rendering', () => {
         );
 
         expect(screen.getByText('Choose a coin or token to view its markets.')).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Choose an asset' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Choose an Asset' }));
         expect(onChangeAsset).toHaveBeenCalledOnce();
         expectEveryButtonNamed(view.container);
         expectVisibleCopyResolved(view.container);
     });
 
-    it('offers the first action from an empty Contacts screen', async () => {
+    it('offers Add contact from the title bar of an empty Contacts screen', async () => {
         const messaging = {
             listContacts: vi.fn().mockResolvedValue([]),
         };
@@ -149,8 +150,8 @@ describe('main screen rendering', () => {
         );
 
         expect(await screen.findByText('Saved contacts label addresses across the inbox and history.')).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Create first contact' }));
-        expect(screen.getByRole('heading', { name: 'New contact' })).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Add contact' }));
+        expect(screen.getByRole('heading', { name: 'New Contact' })).toBeTruthy();
         expectEveryButtonNamed(view.container);
         expectVisibleCopyResolved(view.container);
     });

@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ImportWallet } from '../../../packages/core/src/shared/routes/ImportWallet.jsx';
+import { chooseBackupFile } from '../../helpers/backupFileChoice.js';
 
 const PHRASE = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 const WIF = 'L1aW4aubDFB7yfras2S1mN3bqg9nwySY8nkoLmJebSLD5BWv3ENZ';
@@ -18,12 +19,7 @@ const PASSWORD = 'correct-horse-battery';
 const EXISTS = 'A wallet already exists. Unlock or reset first.';
 const NOTICE = /This device already has a wallet, so nothing was imported here\. Unlock that wallet to continue\./;
 
-const BACKUP_FIELD_IDS = [
-    'xc-backup-content',
-    'import-backup-file-password',
-    'import-backup-wallet-password',
-    'import-backup-device-password',
-];
+const BACKUP_PASSWORD_ID = 'import-backup-file-password';
 
 afterEach(cleanup);
 
@@ -97,13 +93,14 @@ describe('ImportWallet in a window another window out-created', () => {
         const importBackupFresh = vi.fn(async () => { throw refusals[1][1](); });
         const handlers = mount({ importBackupFresh });
         fireEvent.click(screen.getByRole('tab', { name: /backup/i }));
-        const backupFields = () => BACKUP_FIELD_IDS.map((id) => document.getElementById(id));
-        for (const field of backupFields()) fireEvent.change(field, { target: { value: PASSWORD } });
+        await chooseBackupFile();
+        fireEvent.change(document.getElementById(BACKUP_PASSWORD_ID), { target: { value: PASSWORD } });
         await submit('Restore');
 
         expect(importBackupFresh).toHaveBeenCalledTimes(1);
         expect(screen.getByRole('alert')).toHaveTextContent(NOTICE);
-        for (const field of backupFields()) expect(field).toHaveValue('');
+        expect(document.getElementById(BACKUP_PASSWORD_ID)).toHaveValue('');
+        expect(screen.queryByRole('region', { name: 'Chosen backup file' })).toBeNull();
         expectUnlockAndBack(handlers);
     });
 

@@ -111,18 +111,18 @@ describe('TokenDetail keyboard navigation', () => {
             { getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [{ address: creator }] }) },
         );
 
-        await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).not.toBeDisabled());
-        await screen.findByRole('button', { name: 'More info' });
-        const actions = within(screen.getByRole('group', { name: 'Quick actions' }))
+        // The Actions tab opens first and holds the action list: Send, Receive, Exchange,
+        // then the issuer's own list with Manage token. History is its own tab now.
+        await vi.waitFor(() => expect(screen.getByRole('button', { name: /^Send\b/ })).not.toHaveAttribute('aria-disabled'));
+        await screen.findByRole('button', { name: /^Manage token\b/ });
+        const actions = within(screen.getByRole('list', { name: `Actions for ${TICK}` }))
             .getAllByRole('button');
-        expect(actions.map((button) => button.getAttribute('aria-label') || button.textContent)).toEqual([
-            'Send',
-            'Receive',
-            'Exchange',
-            'More info',
+        expect(actions.slice(0, 3).map((button) => button.getAttribute('data-action-id'))).toEqual([
+            'send',
+            'receive',
+            'exchange',
         ]);
-        expect(actions.map((button) => button.tabIndex)).toEqual([0, 0, 0, 0]);
-        expect(actions.every((button) => button.getAttribute('aria-busy') === 'false')).toBe(true);
+        expect(actions.map((button) => button.tabIndex).every((index) => index === 0)).toBe(true);
 
         const handlers = [onSend, onReceive, onBuy];
         actions.slice(0, 3).forEach((button, index) => {
@@ -131,24 +131,14 @@ describe('TokenDetail keyboard navigation', () => {
             expect(handlers[index]).toHaveBeenCalledTimes(1);
         });
 
-        const more = actions[3];
-        keyboardActivate(more);
-        const menu = screen.getByRole('menu', { name: 'More info' });
-        const manage = await within(menu).findByRole('menuitem', { name: 'Manage' });
-        const history = within(menu).getByRole('menuitem', { name: 'History' });
-        expect(document.activeElement).toBe(history);
-        fireEvent.keyDown(history, { key: 'ArrowDown' });
-        expect(document.activeElement).toBe(within(menu).getByRole('menuitem', { name: 'Gated content' }));
-        fireEvent.keyDown(document.activeElement, { key: 'End' });
-        expect(document.activeElement).toBe(manage);
+        const manage = within(screen.getByRole('list', { name: 'You issued this token' }))
+            .getByRole('button', { name: /^Manage token\b/ });
         keyboardActivate(manage);
         expect(onManageToken).toHaveBeenCalledTimes(1);
-        expect(screen.queryByRole('menu')).toBeNull();
-        expect(document.activeElement).toBe(more);
+        expect(document.activeElement).toBe(manage);
 
-        keyboardActivate(more);
-        keyboardActivate(screen.getByRole('menuitem', { name: 'History' }));
-        expect(onViewActivity).toHaveBeenCalledTimes(1);
+        fireEvent.click(screen.getByRole('tab', { name: /History/ }));
+        expect(await screen.findByRole('tabpanel', { name: /History/ })).toBeTruthy();
     });
 
     it('moves through chart ranges with arrows and keeps one range in the Tab order', async () => {
@@ -164,7 +154,8 @@ describe('TokenDetail keyboard navigation', () => {
         const next = within(ranges).getByRole('tab', { name: '1M' });
         expect(document.activeElement).toBe(next);
         expect(next).toHaveAttribute('aria-selected', 'true');
-        expect(screen.getByLabelText('1M price chart')).toBeTruthy();
+        // The chart panel is labelled by the chosen range's tab.
+        expect(screen.getByRole('tabpanel', { name: '1M' })).toBeTruthy();
 
         fireEvent.keyDown(next, { key: 'Home' });
         const first = within(ranges).getByRole('tab', { name: '24h' });
@@ -176,12 +167,11 @@ describe('TokenDetail keyboard navigation', () => {
         // A demo wallet reads no holders (it stays offline), so this uses a real one.
         mount({ walletId: 'wallet' });
 
-        const more = await screen.findByRole('button', { name: 'More info' });
-        keyboardActivate(more);
-        const holdersEntry = screen.getByRole('menuitem', { name: 'Holders' });
+        // Holders is a row at the foot of the Details tab.
+        fireEvent.click(await screen.findByRole('tab', { name: /Details/ }));
+        const holdersEntry = await screen.findByRole('button', { name: 'Holders' });
         holdersEntry.focus();
         keyboardActivate(holdersEntry);
-        expect(document.activeElement).toBe(more);
 
         const holders = await screen.findByRole('region', { name: 'Holders' });
         const copyButtons = within(holders).getAllByRole('button', { name: /Copy holder address/ });

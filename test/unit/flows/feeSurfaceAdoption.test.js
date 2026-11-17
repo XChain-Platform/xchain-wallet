@@ -45,14 +45,14 @@ const FEE_BEARING_SURFACES = new Set([
     'routes/DividendForm.jsx',
     'routes/ExecuteContractForm.jsx',
     'routes/IssueTokenForm.jsx',
+    // The one List form (Create, Edit, Share, Transfer and Fork).
     'routes/ListCreateForm.jsx',
-    'routes/ListForkForm.jsx',
-    'routes/ListRenameForm.jsx',
-    'routes/ListShareForm.jsx',
     'routes/SellOwnershipForm.jsx',
     'routes/SwapForm.jsx',
+    // Edit and Cancel for orders and swaps (ORDER and SWAP are fee-bearing;
+    // an edit re-charges the expiration fee).
+    'routes/TradeOwnerActionForm.jsx',
     'routes/SweepForm.jsx',
-    'routes/TokenWizard.jsx',
 ]);
 
 function feeControlSurfaces() {
@@ -61,7 +61,9 @@ function feeControlSurfaces() {
         for (const file of readdirSync(dir)) {
             if (!file.endsWith('.jsx') || file === 'NativeFeeToggle.jsx' || file === 'FeesCard.jsx') continue;
             const source = readFileSync(join(dir, file), 'utf8');
-            if (source.includes('<NativeFeeToggle') || source.includes('<FeesCard')) {
+            // A form with a protocol fee hands its toggle props to the Network fee section.
+            if (source.includes('<NativeFeeToggle') || source.includes('<FeesCard')
+                || source.includes('nativeFeeProps')) {
                 surfaces.push(`${kind}/${file}`);
             }
         }

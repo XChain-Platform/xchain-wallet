@@ -88,15 +88,15 @@ const issueSrc = withEnglishCopy(read('packages/core/src/shared/routes/IssueToke
 const dispSrc = read('packages/core/src/shared/routes/DispenserForm.jsx');
 const acctSrc = read('packages/core/src/shared/routes/AddAccountForm.jsx');
 
-// 1. IssueTokenForm: post-submit error wraps in StatusMessage with an
-//    "Edit" recovery action that returns to the form stage.
-assert.ok(/Cluster P FOLLOWUP 4/.test(issueSrc),
-    'IssueTokenForm tags FOLLOWUP 4');
-assert.ok(/\(isWatcherMode \|\| isHwSource\) && submitError \?[\s\S]{0,500}<StatusMessage[\s\S]{0,800}\{ label: 'Edit', onAction: \(\) => \{ setSubmitError\(null\); setStage\('form'\); \} \}/.test(issueSrc),
-    'IssueTokenForm wraps post-submit error in StatusMessage with an Edit recovery');
+// 1. IssueTokenForm: post-submit errors enter Confirm Standard's warning slot,
+//    and Reject clears the error and returns to the populated form.
+assert.ok(/<ConfirmActionModal[\s\S]{0,900}error=\{submitError\}/.test(issueSrc),
+    'IssueTokenForm hands post-submit errors to Confirm Standard');
+assert.ok(/onReject=\{\(\) => \{ setSubmitError\(null\); setStage\('form'\); \}\}/.test(issueSrc),
+    'IssueTokenForm Reject clears the error and returns to the form');
 // Field validation uses the focusable summary and its direct field links.
-assert.ok(/status=\{\[<FormErrorSummary key="errors" errors=\{issueErrors\} focusKey=\{validationAttempt\} \/>/.test(issueSrc),
-    'IssueTokenForm renders formError through FormErrorSummary');
+assert.ok(/errors=\{formErrors\}\s+status=\{\[offlineNotice, draftBanner\]\}/.test(issueSrc),
+    'IssueTokenForm hands its error map to the form, which renders the notice at the top');
 // Inline div role="alert" for those two error sites is gone (modulo
 // the warnings + chain-empty fallback row, which are not recovery
 // candidates).
@@ -105,13 +105,12 @@ assert.equal(
     0,
     'IssueTokenForm replaces the inline submit/form error divs with StatusMessage');
 
-// 2. DispenserForm mirrors the same pattern.
-assert.ok(/Cluster P FOLLOWUP 4/.test(dispSrc),
-    'DispenserForm tags FOLLOWUP 4');
+// 2. DispenserForm keeps an explicit Edit recovery on its watcher and hardware
+//    error path until that remaining review adapter moves to Confirm Standard.
 assert.ok(/\(isWatcherMode \|\| hw\) && submitError \?[\s\S]{0,500}<StatusMessage[\s\S]{0,800}\{ label: 'Edit', onAction: \(\) => \{ setSubmitError\(null\); setStage\('form'\); \} \}/.test(dispSrc),
     'DispenserForm wraps post-submit error in StatusMessage with an Edit recovery');
-assert.ok(/status=\{\[<FormErrorSummary key="errors" errors=\{dispenserErrors\} focusKey=\{validationAttempt\} \/>/.test(dispSrc),
-    'DispenserForm renders formError through FormErrorSummary');
+assert.ok(/errors=\{formErrors\}\s+status=\{\[draftBanner, closedTermsNotes\]\}/.test(dispSrc),
+    'DispenserForm hands its error map to the form, which renders the notice at the top');
 assert.equal(
     (dispSrc.match(/<div role="alert" className=\{styles\.error\}>\{(submitError|formError)\}<\/div>/g) || []).length,
     0,

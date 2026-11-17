@@ -95,36 +95,50 @@ afterEach(() => {
 });
 
 describe('reset app flow', () => {
-    it('requires WIPE, names the erased data, and returns an empty shell to onboarding', async () => {
-        render(<ResettableShell />);
+    // Operator ruling 2026-11-16: Forgot Password no longer erases on the spot.
+    // Erase Everything schedules the erase; once 48 hours pass with no unlock,
+    // the next app start runs the real wipe and the shell returns to onboarding.
+    it('requires WIPE, holds the erase 48 hours, then wipes every wallet record and returns to onboarding', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-11-16T12:00:00Z'));
+        try {
+            render(<ResettableShell />);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Forgot password?' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Use recovery phrase' }));
-        const dialog = screen.getByRole('alertdialog', { name: 'Restore wallet access' });
-        expect(dialog).toHaveTextContent(/every wallet saved in this app on this device/i);
-        expect(dialog).toHaveTextContent(/recovery information, accounts, addresses, and queued transactions/i);
+            fireEvent.click(screen.getByRole('button', { name: 'Forgot Password?' }));
+            fireEvent.click(await screen.findByRole('button', { name: /^Erase Everything/ }));
+            expect(document.body).toHaveTextContent(/every wallet, imported private key, contact and queued transaction on this device/i);
 
-        const wipeButton = screen.getByRole('button', { name: 'Erase vault and restore' });
-        expect(wipeButton).toBeDisabled();
-        fireEvent.change(screen.getByLabelText('Type WIPE to confirm'), {
-            target: { value: 'not wipe' },
-        });
-        expect(wipeButton).toBeDisabled();
-        fireEvent.change(screen.getByLabelText('Type WIPE to confirm'), {
-            target: { value: 'WIPE' },
-        });
-        expect(wipeButton).toBeEnabled();
-        for (const key of DEMO_KEYS) localStorage.setItem(key, `stale data for ${key}`);
-        fireEvent.click(wipeButton);
+            const schedule = screen.getByRole('button', { name: 'Schedule Erase' });
+            fireEvent.change(screen.getByLabelText('Type WIPE to confirm'), { target: { value: 'not wipe' } });
+            fireEvent.click(schedule);
+            expect(screen.getAllByText('Type WIPE exactly to continue.').length).toBeGreaterThan(0);
+            fireEvent.change(screen.getByLabelText('Type WIPE to confirm'), { target: { value: 'WIPE' } });
+            fireEvent.click(schedule);
+            expect(await screen.findByText('Erase Scheduled')).toBeInTheDocument();
+            // Nothing is erased while the hold runs.
+            expect(databases.has('xchain-wallet')).toBe(true);
+            expect(localStorage.getItem(META_KEY)).not.toBeNull();
+            expect(reload).not.toHaveBeenCalled();
 
-        expect(await screen.findByRole('button', { name: 'Create new wallet' })).toBeEnabled();
-        expect(reload).toHaveBeenCalledTimes(1);
-        expect(databases.has('xchain-wallet')).toBe(false);
-        await waitFor(() => {
-            expect([...WALLET_KEYS, ...DEMO_KEYS]
-                .filter((key) => localStorage.getItem(key) !== null)).toEqual([]);
-        });
-        expect(localStorage.getItem('unrelated.preference')).toBe('keep');
-        expect(localStorage.getItem('xc:licenseAcceptedVersion')).toBe(LICENSE_VERSION);
+            // 48 hours later the app starts again with no unlock.
+            cleanup();
+            vi.setSystemTime(new Date('2026-11-18T12:00:01Z'));
+            for (const key of DEMO_KEYS) localStorage.setItem(key, `stale data for ${key}`);
+            localStorage.removeItem('xc:demoWalletId');
+            render(<ResettableShell />);
+
+            expect(await screen.findByRole('button', { name: 'Create New Wallet' })).toBeEnabled();
+            expect(reload).toHaveBeenCalledTimes(1);
+            expect(databases.has('xchain-wallet')).toBe(false);
+            await waitFor(() => {
+                expect([...WALLET_KEYS, ...DEMO_KEYS.filter((k) => k !== 'xc:demoWalletId')]
+                    .filter((key) => localStorage.getItem(key) !== null)).toEqual([]);
+            });
+            expect(localStorage.getItem('xchain-wallet:erase-schedule')).toBeNull();
+            expect(localStorage.getItem('unrelated.preference')).toBe('keep');
+            expect(localStorage.getItem('xc:licenseAcceptedVersion')).toBe(LICENSE_VERSION);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });

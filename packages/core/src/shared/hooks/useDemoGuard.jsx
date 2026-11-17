@@ -9,14 +9,17 @@
 // contact legal@dankest.llc.
 
 // A demo wallet holds fixture balances and cannot move funds. Every route
-// that would compose or broadcast a transaction shows the same inline note
-// (with the "Create a real wallet" exit), keeps its form browsable, and
-// disables its submit, so no encoder is ever contacted from a demo wallet.
+// that would compose or broadcast a transaction keeps its form usable and its
+// submit enabled, then refuses the submit, so no encoder is ever contacted
+// from a demo wallet. The user knows the wallet is a demo, so no page warns
+// in advance: the refusal (with the "Create a real wallet" exit) shows only
+// as the result of pressing the action.
 //
 // `useDemoGuard(walletId)` is the one primitive. A FormPage route passes the
-// result as `<FormPage demoGuard={guard}>`; a route that lays itself out
-// renders `guard.note` and `guard.dialog` and reads `guard.blocked` to
-// disable its own action buttons.
+// result as `<FormPage demoGuard={guard}>`, and FormPage swallows the submit
+// and calls `guard.refuse()`. A route that lays itself out renders
+// `guard.note` (null until refused) and `guard.dialog`, and its action
+// handler calls `guard.refuse()` and returns when `guard.blocked` is true.
 
 import { useCallback, useMemo, useState } from 'react';
 import { StatusMessage } from '../../ui/StatusMessage.jsx';
@@ -65,11 +68,16 @@ export function useWalletSource(walletId) {
  *   blocked: boolean,
  *   note: import('react').ReactNode,
  *   dialog: import('react').ReactNode,
+ *   refuse: () => void,
+ *   walletId: string | null,
  * }}
  */
 export function useDemoGuard(walletId, { onBack } = {}) {
     const { messaging } = useMessaging();
     const blocked = !!walletId && isDemoWallet(walletId);
+    // Set only by a refused action, so the note is a result, never a warning.
+    const [refused, setRefused] = useState(false);
+    const refuse = useCallback(() => { setRefused(true); }, []);
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
@@ -90,13 +98,18 @@ export function useDemoGuard(walletId, { onBack } = {}) {
         }
     }, [busy, messaging, walletId, onBack]);
 
+    // `walletId` rides along so the Form Standard frame, which receives this
+    // guard, knows the wallet without each form passing it again.
     return useMemo(() => {
-        if (!blocked) return { blocked: false, note: null, dialog: null };
+        if (!blocked) return { blocked: false, note: null, dialog: null, refuse, walletId: walletId || null };
         return {
             blocked: true,
-            note: (
+            walletId,
+            refuse,
+            note: refused ? (
                 <StatusMessage
-                    variant="info"
+                    variant="error"
+                    testId="demo-guard-refusal"
                     recovery={{
                         label: t('send.demo.createRealWallet'),
                         onAction: () => { setError(null); setConfirmOpen(true); },
@@ -104,7 +117,7 @@ export function useDemoGuard(walletId, { onBack } = {}) {
                 >
                     {t('demo.guard.blocked')}
                 </StatusMessage>
-            ),
+            ) : null,
             dialog: confirmOpen ? (
                 <DemoExitConfirm
                     busy={busy}
@@ -114,5 +127,5 @@ export function useDemoGuard(walletId, { onBack } = {}) {
                 />
             ) : null,
         };
-    }, [blocked, confirmOpen, busy, error, handleExit]);
+    }, [blocked, refused, refuse, confirmOpen, busy, error, handleExit, walletId]);
 }

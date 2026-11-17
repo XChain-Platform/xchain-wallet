@@ -27,7 +27,7 @@ afterEach(() => {
 });
 
 describe('AppHeader', () => {
-    it('renders the logo, plain wallet name, and controlled wallet menu trigger', () => {
+    it('renders the logo and controlled wallet menu trigger, with no wallet name in the header', () => {
         const onMenuToggle = vi.fn();
         const { container } = render(
             <AppHeader
@@ -39,7 +39,7 @@ describe('AppHeader', () => {
 
         const header = screen.getByRole('region', { name: 'App header' });
         expect(within(header).getByAltText('XChain Wallet')).toBeTruthy();
-        expect(within(header).getByText('Everyday wallet')).toHaveAttribute('title', 'Everyday wallet');
+        expect(within(header).queryByText('Everyday wallet')).toBeNull();
         expect(container.querySelector('[data-testid="wallet-identity"]')).toBeNull();
 
         const menu = within(header).getByRole('button', { name: 'Open menu' });
@@ -54,38 +54,32 @@ describe('AppHeader', () => {
         expect(screen.getByRole('button', { name: 'Open menu' })).toHaveAttribute('aria-expanded', 'false');
     });
 
-    it('renders a disabled Lock control while locking', () => {
+    it('keeps Lock in the menu when a lock callback is supplied', () => {
         const onLock = vi.fn();
         render(<AppHeader onLock={onLock} locking />);
 
-        const lock = screen.getByRole('button', { name: 'Lock wallet' });
-        expect(lock).toBeDisabled();
-        fireEvent.click(lock);
+        expect(screen.queryByRole('button', { name: 'Lock wallet' })).toBeNull();
         expect(onLock).not.toHaveBeenCalled();
     });
 
-    it('shows the watch-only status independently of the wallet label', () => {
+    it('keeps watch-only status and the wallet label out of the app bar', () => {
         render(<AppHeader isWatcherMode activeWallet={{ id: 'watch-1', name: 'Cold watch' }} />);
-        expect(screen.getByRole('status', { name: 'Watch-only wallet' })).toBeTruthy();
-        expect(screen.getByText('Cold watch')).toBeTruthy();
+        expect(screen.queryByRole('status')).toBeNull();
+        expect(screen.queryByText('Cold watch')).toBeNull();
     });
 
-    it('renders Open in new window as a header button on browser surfaces', () => {
+    it('keeps Open in new window out of the header, which holds only the bell and menu controls', () => {
         const onPopOut = vi.fn();
         render(<AppHeader onPopOut={onPopOut} />);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Open in new window' }));
-        expect(onPopOut).toHaveBeenCalledOnce();
+        expect(screen.queryByRole('button', { name: 'Open in new window' })).toBeNull();
+        expect(onPopOut).not.toHaveBeenCalled();
         expect(screen.queryByRole('menu')).toBeNull();
     });
 
-    it('reveals Open in new window only when the app bar reaches 640px', () => {
-        render(<AppHeader onPopOut={() => {}} />);
-
-        expect(screen.getByRole('button', { name: 'Open in new window' })).toHaveClass(styles.popOut);
+    it('drops the legacy header pop-out rules', () => {
         expect(appHeaderCss).toMatch(/\.bar\s*\{[^}]*container:\s*app-header\s*\/\s*inline-size;/s);
-        expect(appHeaderCss).toMatch(/\.popOut\s*\{[^}]*display:\s*none;/s);
-        expect(appHeaderCss).toMatch(/@container app-header \(min-width: 640px\)\s*\{\s*\.popOut\s*\{[^}]*display:\s*inline-flex;/s);
+        expect(appHeaderCss).not.toMatch(/\.popOut\b/);
     });
 
     it('suppresses Open in new window in native and desktop shells', () => {

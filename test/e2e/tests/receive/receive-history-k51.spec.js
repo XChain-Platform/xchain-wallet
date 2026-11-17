@@ -59,10 +59,11 @@ async function expectReachableWithoutSidewaysScroll(locator, label) {
     expect(bounds.bodyScrollLeft, `${label} requires body-level sideways scrolling`).toBe(0);
 }
 
+// The value beside one Details label: the facts card is a dl, a dt label
+// and its dd value per fact (shared FactRows look, 2026-11-13).
 function detailRow(page, label) {
-    return page.getByRole('row').filter({
-        has: page.getByRole('rowheader', { name: label, exact: true }),
-    });
+    return page.locator('dt').filter({ hasText: new RegExp(`^${label}$`) })
+        .locator('xpath=following-sibling::dd[1]');
 }
 
 test.use(LG_K51);
@@ -127,10 +128,11 @@ test.describe('Receive to History on LG K51', { tag: '@lg-k51' }, () => {
             await page.getByRole('textbox', { name: /^Amount \(BTC\)/ }).fill(REQUEST_AMOUNT);
             await expect.poll(() => qr.getAttribute('src')).not.toBe(qrBefore);
 
-            const copyAction = page.getByRole('button', { name: /^Copy (QR code|payment link)$/ });
+            // ActionList rows (G101): the name is the title plus its description.
+            const copyAction = page.getByRole('button', { name: /^Copy (QR code|payment link)/ });
             await expect(copyAction).toBeVisible();
             await expectReachableWithoutSidewaysScroll(copyAction, 'QR copy action');
-            const shareAction = page.getByRole('button', { name: 'Share QR payment link' });
+            const shareAction = page.getByRole('button', { name: /^Share QR payment link/ });
             await expectReachableWithoutSidewaysScroll(shareAction, 'QR share action');
             await shareAction.click();
             await expect(page.getByText('Sharing is unavailable, so the payment link was copied to the clipboard.'))
@@ -162,14 +164,14 @@ test.describe('Receive to History on LG K51', { tag: '@lg-k51' }, () => {
             await rows.getByRole('button').click();
 
             // An incoming transfer is titled from this wallet's side.
-            await expect(page.getByRole('heading', { name: 'Receive #100,012' })).toBeVisible();
+            await expect(page.getByRole('heading', { name: 'Receive #100012' })).toBeVisible();
             await page.getByRole('tab', { name: 'Details' }).click();
-            await expect(detailRow(page, 'Action number')).toContainText('100,012');
-            // Long values render shortened at this width; the row's
-            // accessible name still carries the full value.
-            await expect(detailRow(page, 'Transaction ID')).toHaveAccessibleName(new RegExp(HISTORY_TX_ID));
-            await expect(detailRow(page, 'From')).toHaveAccessibleName(new RegExp(HISTORY_SOURCE));
-            await expect(detailRow(page, 'To')).toHaveAccessibleName(new RegExp(receiveAddress));
+            await expect(detailRow(page, 'Action number')).toContainText('100012');
+            // Long values may render cut in the middle at this width; the
+            // address text still carries the full value in its title.
+            await expect(detailRow(page, 'Transaction ID').locator('[title]').first()).toHaveAttribute('title', HISTORY_TX_ID);
+            await expect(detailRow(page, 'From').locator('[title]').first()).toHaveAttribute('title', HISTORY_SOURCE);
+            await expect(detailRow(page, 'To').locator('[title]').first()).toHaveAttribute('title', receiveAddress);
             await expect(detailRow(page, 'Amount')).toContainText('+1');
             await expect(detailRow(page, 'Tick')).toContainText('RAREPEPE');
             await expectNoHorizontalOverflow(page, 'transaction detail');

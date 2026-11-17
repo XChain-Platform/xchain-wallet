@@ -143,6 +143,9 @@ function mount(dispenser, extraMessaging = {}) {
             }),
         ),
     );
+    // Every viewer opens on Actions, so the buyer's view is the Buy page its
+    // first action row opens: open it as soon as the row has rendered.
+    screen.findByTestId('dispenser-buy-row').then((row) => fireEvent.click(row), () => {});
     return messaging;
 }
 
@@ -165,11 +168,11 @@ describe('fiat-priced dispenser, buyer view (D-144)', () => {
         });
         try {
             mount({ ...COIN_DISPENSER, get_amount: '1234567.8900' });
-            fireEvent.click(await screen.findByRole('button', { name: 'Copy amount' }));
+            fireEvent.click(await screen.findByRole('button', { name: 'Copy Amount' }));
 
             await waitFor(() => expect(writeText).toHaveBeenCalledWith('1234567.8900'));
-            expect(screen.getByRole('button', { name: 'Copied: amount' }))
-                .toHaveTextContent('Copied: amount');
+            expect(screen.getByRole('button', { name: 'Copied: Amount' }))
+                .toHaveTextContent('Copied: Amount');
         } finally {
             if (prior) Object.defineProperty(navigator, 'clipboard', prior);
             else delete navigator.clipboard;
@@ -178,7 +181,13 @@ describe('fiat-priced dispenser, buyer view (D-144)', () => {
 
     it('shows the network fee in the selected currency', async () => {
         mount({ ...COIN_DISPENSER, source: BUYER, address: BUYER });
-        fireEvent.click(await screen.findByTitle('Change expiration or allow/block lists'));
+        // The owner's setting rows are rows of the Actions tab's action list
+        // (G101, G104), the tab the page opens on. The row stays dimmed until
+        // the live state reads open.
+        const editRow = () => screen.getByRole('button', { name: /^Change expiration/ });
+        await screen.findByRole('button', { name: /^Change expiration/ });
+        await waitFor(() => expect(editRow().getAttribute('aria-disabled')).toBeNull());
+        fireEvent.click(editRow());
         expect((await screen.findAllByText(/€[0-9,.]+/)).length).toBeGreaterThan(0);
         expect(document.body.textContent).not.toContain('$');
     });
@@ -302,14 +311,14 @@ describe('fiat-priced dispenser, buyer view (D-144)', () => {
 
     it('blocks an in-wallet Buy only for an explicitly stale price', async () => {
         mount({ ...COIN_DISPENSER, price_stale: true });
-        expect(await screen.findByRole('button', { name: 'Buy 1 fill' })).toBeDisabled();
+        expect(await screen.findByRole('button', { name: 'Buy 1 Dispense' })).toBeEnabled();
         cleanup();
 
         mount({ ...COIN_DISPENSER, price_stale: false });
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Buy 1 fill' })).toBeEnabled());
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Buy 1 Dispense' })).toBeEnabled());
         cleanup();
 
         mount(COIN_DISPENSER);
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Buy 1 fill' })).toBeEnabled());
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Buy 1 Dispense' })).toBeEnabled());
     });
 });

@@ -7,11 +7,19 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
     classifyInstallFailure,
+    desktopInstallChannel,
     readPackageType,
     selectUpdater,
 } from '../../../packages/desktop/main/updater.js';
 
 describe('updater selection branches', () => {
+    it('classifies the running desktop install from Electron store flags', () => {
+        expect(desktopInstallChannel({ mas: true, windowsStore: false, env: {} })).toBe('macos-appstore');
+        expect(desktopInstallChannel({ mas: false, windowsStore: true, env: {} })).toBe('windows-store');
+        expect(desktopInstallChannel({ mas: false, windowsStore: false, env: { SNAP: '/snap/xchain', SNAP_NAME: 'xchain' } })).toBe('snap');
+        expect(desktopInstallChannel({ mas: false, windowsStore: false, env: {} })).toBe('desktop-direct');
+    });
+
     it('reads a trimmed package type and returns null for absent metadata', () => {
         const readFile = vi.fn(() => '  deb\n');
         expect(readPackageType({ resourcesPath: '/resources', readFile })).toBe('deb');

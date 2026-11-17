@@ -78,6 +78,10 @@ beforeAll(() => {
 });
 afterAll(() => { globalThis.ResizeObserver = savedResizeObserver; });
 
+// The price line behind the balance card is a labelled image whose
+// description names the selected range.
+const chartFor = (range) => screen.findByRole('img', { name: new RegExp(`Range ${range}\\.`) });
+
 const CHAIN = 'bitcoin-regtest';
 const MAINNET_CHAIN = 'bitcoin-mainnet';
 const HISTORY_DAILY = Array.from({ length: 366 }, (_, index) => [
@@ -165,12 +169,11 @@ describe('TokenDetail price history', () => {
         await screen.findByRole('status', { name: 'Loading token artwork' });
         expect(document.querySelectorAll('[aria-label="Loading token artwork"]')).toHaveLength(1);
         expect(screen.queryByRole('status', { name: 'Loading supply history' })).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'More info' }));
-        fireEvent.click(screen.getByRole('menuitem', { name: 'Supply over time' }));
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Supply over time' }));
         expect(screen.getByRole('status', { name: 'Loading supply history' }).style.height).toBe('94px');
-        expect(screen.getByRole('status', { name: 'Loading price history' }).style.height).toBe('64px');
-        const actions = screen.getByRole('group', { name: 'Quick actions' });
-        const supplySlot = actions.nextElementSibling;
+        const detailsCard = screen.getByRole('region', { name: 'Token details' }).parentElement;
+        const supplySlot = detailsCard.nextElementSibling;
 
         await act(async () => {
             const info = {
@@ -185,7 +188,7 @@ describe('TokenDetail price history', () => {
 
         expect(await screen.findByRole('img', { name: /Supply of SUPPLYPROBE over time/ })).toBeTruthy();
         expect(screen.getByText('Projects').closest('li')).toHaveTextContent('Example');
-        expect(actions.nextElementSibling).toBe(supplySlot);
+        expect(detailsCard.nextElementSibling).toBe(supplySlot);
         expect(screen.queryByRole('status', { name: 'Loading supply history' })).toBeNull();
     });
 
@@ -210,9 +213,11 @@ describe('TokenDetail price history', () => {
             </MessagingProvider>,
         );
 
-        const hero = await screen.findByRole('region', { name: 'NOROSTER balance' });
+        const hero = await screen.findByRole('region', { name: 'NOROSTER' });
         // The element after the balance hero holds content, not an empty slot.
         expect(hero.nextElementSibling.textContent.trim()).not.toBe('');
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        expect(await screen.findByText('Creator')).toBeTruthy();
         expect(screen.queryByText('Projects')).toBeNull();
     });
 
@@ -240,17 +245,16 @@ describe('TokenDetail price history', () => {
 
         await vi.waitFor(() => expect(messaging.getSupplyHistory).toHaveBeenCalled());
         expect(screen.queryByText('No supply history yet')).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'More info' }));
-        fireEvent.click(screen.getByRole('menuitem', { name: 'Supply over time' }));
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Supply over time' }));
         const title = await screen.findByText('No supply history yet');
-        const hero = screen.getByRole('region', { name: 'NOSUPPLY balance' });
-        const actions = screen.getByRole('group', { name: 'Quick actions' });
-        // The empty state is a sibling of the hero and the actions: one
-        // message in the page stack, with no card drawn around it.
-        expect(actions.nextElementSibling.contains(title)).toBe(true);
-        expect(actions.nextElementSibling.parentElement).toBe(hero.parentElement);
-        expect(actions.nextElementSibling.querySelector('section, [class*="infoCard"]')).toBeNull();
-        expect(actions.nextElementSibling.className).not.toMatch(/infoCard/);
+        const detailsCard = screen.getByRole('region', { name: 'Token details' }).parentElement;
+        // The empty state is a sibling of the details card: one message in
+        // the tab panel, with no card drawn around it.
+        expect(detailsCard.nextElementSibling.contains(title)).toBe(true);
+        expect(detailsCard.nextElementSibling.parentElement).toBe(detailsCard.parentElement);
+        expect(detailsCard.nextElementSibling.querySelector('section, [class*="infoCard"]')).toBeNull();
+        expect(detailsCard.nextElementSibling.className).not.toMatch(/infoCard/);
     });
 
     it('keeps the price alert behind More info while native prices settle', async () => {
@@ -278,11 +282,13 @@ describe('TokenDetail price history', () => {
             </MessagingProvider>,
         );
 
-        const historySkeleton = await screen.findByRole('status', { name: 'Loading price history' });
-        expect(historySkeleton.style.height).toBe('64px');
+        const actions = await screen.findByRole('list', { name: 'Actions for BTC' });
         expect(screen.queryByRole('status', { name: 'Loading price alert action' })).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Set price alert' })).toBeNull();
-        const actions = screen.getByRole('group', { name: 'Quick actions' });
+        expect(screen.queryByRole('button', { name: 'Add Alert' })).toBeNull();
+        // While native prices settle, the Price alert row is held back by its reason.
+        const alertRow = within(actions).getByRole('button', { name: /^Price alert\b/ });
+        expect(alertRow).toHaveAttribute('aria-disabled', 'true');
+        expect(within(alertRow).getByText('Needs a current price.')).toBeTruthy();
 
         await act(async () => {
             finishPrices({
@@ -298,24 +304,30 @@ describe('TokenDetail price history', () => {
             });
         });
 
-        fireEvent.click(within(actions).getByRole('button', { name: 'More info' }));
-        fireEvent.click(await screen.findByRole('menuitem', { name: 'Set price alert' }));
-        expect(await screen.findByRole('button', { name: 'Add alert' })).toBeTruthy();
-        expect(screen.getByLabelText('1W price chart')).toBeTruthy();
-        expect(screen.queryByText('No price history yet')).toBeNull();
+        await vi.waitFor(() => expect(within(actions).getByRole('button', { name: /Price alert/ })).not.toHaveAttribute('aria-disabled'));
+        fireEvent.click(within(actions).getByRole('button', { name: /Price alert/ }));
+        // The action opens Add Price Alert as its own page with BTC chosen; Back returns here.
+        expect(await screen.findByRole('heading', { level: 1, name: 'Add Price Alert' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Add Alert' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: /^Asset: BTC/ })).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+        expect(await screen.findByRole('list', { name: 'Actions for BTC' })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'Add Alert' })).toBeNull();
+        expect(screen.getByRole('img', { name: /Range 1W\./ })).toBeTruthy();
         const chartRanges = screen.getByRole('tablist', { name: 'Chart range' });
         expect([...chartRanges.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent))
             .toEqual(['24h', '1W', '1M', '3M', '6M', '1Y', 'YTD', 'All']);
-        expect(screen.queryByRole('status', { name: 'Loading price history' })).toBeNull();
     });
 
     it('uses the selected currency for balances, market values, and price requests', async () => {
         const messaging = renderNativeDetail();
 
+        fireEvent.click(await screen.findByRole('tab', { name: 'Details' }));
         // 2 BTC at the live €40,000 price; the carried rate of 50 only stands in.
         expect(await screen.findAllByText(/€80,000\.00/)).not.toHaveLength(0);
-        expect(await screen.findByText('€40,000.00')).toBeTruthy();
-        expect(await screen.findByText('€1.20B')).toBeTruthy();
+        await screen.findByText('€1.20B');
+        expect(screen.getByText('Price').closest('li')).toHaveTextContent('€40,000.00');
+        expect(screen.getByText('€1.20B')).toBeTruthy();
         expect(screen.queryByText('$40,000.00')).toBeNull();
         expect(messaging.getNativePricesRequest).toHaveBeenLastCalledWith({
             chainIds: [MAINNET_CHAIN],
@@ -327,27 +339,47 @@ describe('TokenDetail price history', () => {
     it('values a native holding at the live price rather than a carried or restored rate', async () => {
         // A reload restores the route with the rate the balance row had then.
         renderNativeDetail();
-        const hero = await screen.findByRole('region', { name: 'BTC balance' });
+        const hero = await screen.findByRole('region', { name: 'BTC' });
 
-        await screen.findByText('€40,000.00');
-        expect(within(hero).getByText(/€80,000\.00/)).toBeTruthy();
-        expect(within(hero).queryByText(/€100\.00/)).toBeNull();
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        await screen.findByText('€1.20B');
+        const estimate = screen.getByText('Estimated value').closest('li');
+        expect(estimate).toHaveTextContent(/€80,000\.00/);
+        expect(estimate).not.toHaveTextContent(/€100\.00/);
+        // The hero's swap button shows the same live value in fiat.
+        fireEvent.click(within(hero).getByRole('button', { name: 'Show in EUR' }));
+        expect(hero).toHaveTextContent(/80,000\.00/);
+        expect(within(hero).queryByText(/100\.00/)).toBeNull();
+    });
+
+    it('updates the chart scale with the balance hero unit', async () => {
+        renderNativeDetail();
+        const hero = await screen.findByRole('region', { name: 'BTC' });
+        const chart = await chartFor('1W');
+        const scaleLabels = () => [...chart.parentElement.querySelectorAll('[data-chart-scale]')]
+            .map((label) => label.textContent);
+
+        expect(scaleLabels()).toEqual(['2 BTC', '1.98 BTC', '1.95 BTC']);
+        expect(chart).toHaveAccessibleName(/Range high 2 BTC, low 1\.95 BTC/);
+
+        fireEvent.click(within(hero).getByRole('button', { name: 'Show in EUR' }));
+        await vi.waitFor(() => expect(scaleLabels()).toEqual(['€80K', '€79K', '€78K']));
+        expect(chart).toHaveAccessibleName(/Range high €80K, low €78K/);
     });
 
     it('loads a real native daily range lazily and draws its recorded history', async () => {
         const messaging = renderNativeDetail();
-        await screen.findByLabelText('1W price chart');
+        await chartFor('1W');
 
         fireEvent.click(screen.getByRole('tab', { name: '1Y' }));
 
-        expect(await screen.findByLabelText('1Y price chart')).toBeTruthy();
+        expect(await chartFor('1Y')).toBeTruthy();
         expect(messaging.getNativePricesRequest).toHaveBeenCalledWith({
             chainIds: [MAINNET_CHAIN],
             includeSparkline: false,
             includeHistory: true,
             fiatCurrency: 'EUR',
         });
-        expect(screen.queryByText('No price history yet')).toBeNull();
     });
 
     it('opens a demo native coin detail with the 1W range selected', async () => {
@@ -356,7 +388,7 @@ describe('TokenDetail price history', () => {
         const tablist = await screen.findByRole('tablist', { name: 'Chart range' });
         expect(within(tablist).getByRole('tab', { name: '1W' }))
             .toHaveAttribute('aria-selected', 'true');
-        expect(await screen.findByLabelText('1W price chart')).toBeTruthy();
+        expect(await chartFor('1W')).toBeTruthy();
     });
 
     it('keeps the range tabs while daily history loads and reuses it after a trip back to 1W', async () => {
@@ -366,34 +398,39 @@ describe('TokenDetail price history', () => {
         messaging.getNativePricesRequest.mockImplementation((request) => (request.includeHistory
             ? new Promise((resolve) => { release = () => resolve(base(request)); })
             : base(request)));
-        await screen.findByLabelText('1W price chart');
+        await chartFor('1W');
 
         fireEvent.click(screen.getByRole('tab', { name: '1M' }));
         const tablist = await screen.findByRole('tablist', { name: 'Chart range' });
         expect(within(tablist).getByRole('tab', { name: '1M' }).getAttribute('aria-selected')).toBe('true');
-        const loading = await screen.findByRole('status', { name: 'Loading price history' });
-        expect(loading.style.height).toBe('40px');
+        // The chart slot holds the card's height while the daily history loads.
+        const panel = screen.getByRole('region', { name: 'Price chart' });
+        await vi.waitFor(() => expect(panel).toHaveAttribute('aria-busy', 'true'));
+        expect(within(panel).queryByRole('img')).toBeNull();
 
         await act(async () => { release(); });
-        expect(await screen.findByLabelText('1M price chart')).toBeTruthy();
+        expect(await chartFor('1M')).toBeTruthy();
         fireEvent.click(screen.getByRole('tab', { name: '1W' }));
-        await screen.findByLabelText('1W price chart');
+        await chartFor('1W');
         fireEvent.click(screen.getByRole('tab', { name: '3M' }));
-        expect(await screen.findByLabelText('3M price chart')).toBeTruthy();
+        expect(await chartFor('3M')).toBeTruthy();
         const historyCalls = messaging.getNativePricesRequest.mock.calls.filter(([request]) => request.includeHistory);
         expect(historyCalls).toHaveLength(1);
     });
 
-    it('shows a message and no synthesized line for a real wallet', async () => {
+    it('draws no synthesized price line for a real wallet, only its real balance', async () => {
         renderDetail('real-wallet');
-        expect(await screen.findByText('No price history yet')).toBeTruthy();
-        expect(screen.getByText('Price (DEX)')).toBeTruthy();
+        const balance = await screen.findByRole('region', { name: 'PRICEPROBE' });
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        expect(await screen.findByText('Price (DEX)')).toBeTruthy();
         expect(screen.getByText('0.5 BTC')).toBeTruthy();
-        const balance = screen.getByRole('region', { name: 'PRICEPROBE balance' });
         expect(balance.textContent).not.toContain('$');
         expect(balance.textContent).not.toContain('USD');
         expect(screen.queryByRole('img', { name: /^Price trend/ })).toBeNull();
-        expect(screen.queryByRole('tablist', { name: 'Chart range' })).toBeNull();
+        // With no price history the hero draws the balance from the wallet's
+        // own rows (operator ruling 2026-11-15), so its range buttons show.
+        expect(await screen.findByRole('img', { name: /^Balance trend/ })).toBeTruthy();
+        expect(screen.getByRole('tablist', { name: 'Chart range' }).className).not.toMatch(/rangesIdle/);
     });
 
     it('prints a small DEX price as a decimal and still derives the market cap', async () => {
@@ -403,6 +440,7 @@ describe('TokenDetail price history', () => {
             assetInfo: { creator: 'bcrt1qx', marketPrice: 1.5384615384615385e-9, totalSupply: '1000000' },
         });
 
+        fireEvent.click(await screen.findByRole('tab', { name: 'Details' }));
         expect(await screen.findByText('0.0000000015384615 BTC')).toBeTruthy();
         expect(screen.getByText('Market cap').nextElementSibling).toHaveTextContent('0.0015 BTC');
         expect(screen.queryByText(/e-9/)).toBeNull();
@@ -415,19 +453,21 @@ describe('TokenDetail price history', () => {
         const ranges = screen.getByRole('tablist', { name: 'Chart range' });
         expect(ranges).toBeTruthy();
         fireEvent.click(screen.getByRole('tab', { name: '24h' }));
-        expect(screen.getByLabelText('24h price chart')).toBeTruthy();
-        expect(screen.queryByText('No price history yet')).toBeNull();
+        expect(await chartFor('24h')).toBeTruthy();
     });
 
-    it('keeps a demo DEX-derived fiat rate labelled when token metadata has no market price', async () => {
+    it('values a demo holding at its DEX-derived fiat rate when token metadata has no market price', async () => {
         renderDetail('demo-wallet', {
             assetInfo: { creator: 'bcrt1qx' },
             tokenProps: { fiatRate: 2, fiatRateSource: 'market', divisibility: 0 },
         });
 
-        expect(await screen.findByText('Price (DEX)')).toBeTruthy();
-        expect(screen.getByText('$2.00')).toBeTruthy();
-        expect(screen.getByText(/DEX price/)).toBeTruthy();
+        fireEvent.click(await screen.findByRole('tab', { name: 'Details' }));
+        // 10 units at the carried DEX rate of $2.00. The page no longer prints
+        // a price-source label for a rate the oracle did not supply.
+        const estimate = (await screen.findByText('Estimated value')).closest('li');
+        expect(estimate).toHaveTextContent('20.00');
+        expect(screen.queryByText(/DEX price/)).toBeNull();
     });
 
     it('does not show fiat from a balance snapshot on a real test-network wallet', async () => {
@@ -436,7 +476,7 @@ describe('TokenDetail price history', () => {
             tokenProps: { fiatRate: 2, fiatRateSource: 'market', divisibility: 0 },
         });
 
-        expect(await screen.findByText('No price history yet')).toBeTruthy();
+        await screen.findByRole('region', { name: 'PRICEPROBE' });
         expect(screen.queryByText('$2.00')).toBeNull();
         expect(screen.queryByText(/DEX price/)).toBeNull();
         fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
@@ -475,10 +515,12 @@ describe('TokenDetail price history', () => {
             </MessagingProvider>,
         );
 
-        expect(await screen.findByText('No market data available for this network.')).toBeTruthy();
+        fireEvent.click(await screen.findByRole('tab', { name: 'Details' }));
+        expect(await screen.findByText('Price source')).toBeTruthy();
         expect(view.container.textContent).not.toMatch(/NaN|Infinity/);
-        expect(screen.getByText('Price').nextElementSibling).toHaveTextContent('-');
-        expect(screen.getByText('Market cap').nextElementSibling).toHaveTextContent('-');
+        // A non-finite price or market cap gets no row rather than a number.
+        expect(screen.queryByText('Price')).toBeNull();
+        expect(screen.queryByText('Market cap')).toBeNull();
     });
 
     it('keeps token details usable when the market panel throws and retries it inline', async () => {
@@ -486,7 +528,7 @@ describe('TokenDetail price history', () => {
         renderDetail('demo-wallet');
 
         expect(await screen.findByRole('alert')).toHaveTextContent('Couldn\'t load this section.');
-        expect(screen.getByRole('group', { name: 'Quick actions' })).toBeInTheDocument();
+        expect(screen.getByRole('list', { name: 'Actions for PRICEPROBE' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull();
 
         widgetFailure.current = null;
@@ -511,13 +553,15 @@ describe('TokenDetail price history', () => {
             </MessagingProvider>,
         );
 
-        fireEvent.click(await screen.findByRole('button', { name: 'More info' }));
-        fireEvent.click(await screen.findByRole('menuitem', { name: 'Set price alert' }));
-        expect(await screen.findByText('Current: $1.20')).toBeTruthy();
+        fireEvent.click(await screen.findByRole('button', { name: /Price alert/ }));
+        expect(await screen.findByRole('heading', { level: 1, name: 'Add Price Alert' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: /^Asset: XCHAIN/ })).toBeTruthy();
+        expect(await screen.findByText('Now $1.2')).toBeTruthy();
         fireEvent.change(screen.getByRole('textbox', { name: 'Target price' }), { target: { value: '2' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Add alert' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add Alert' }));
 
-        expect(await screen.findByRole('button', { name: /Price alert set/ })).toBeTruthy();
+        // A saved alert returns to the token page.
+        expect(await screen.findByRole('list', { name: 'Actions for XCHAIN' })).toBeTruthy();
         expect(messaging.savePriceAlert).toHaveBeenCalledWith({
             walletId: 'real-wallet',
             chainId: MAINNET_CHAIN,
@@ -544,8 +588,8 @@ describe('TokenDetail price history', () => {
             </MessagingProvider>,
         );
 
-        fireEvent.click(await screen.findByRole('button', { name: 'More info' }));
-        expect(screen.queryByRole('menuitem', { name: 'Set price alert' })).toBeNull();
+        await screen.findByRole('list', { name: 'Actions for NOPRICE' });
+        expect(screen.queryByRole('button', { name: /Price alert/ })).toBeNull();
     });
 });
 

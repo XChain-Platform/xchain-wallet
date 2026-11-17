@@ -111,7 +111,7 @@ export function sameSats(a, b) {
  * @param {Object} args
  * @param {Array<{ address: string, value: number|string }>} [args.customOutputs]
  * @param {string} args.encoding   'OP_RETURN' | 'P2SH' | 'P2WSH' | 'MULTISIGN'
- * @param {{ address: string|null, value: number|string }|null} [args.adsOutput]   the resolved ADS donation, when present (hidden from display)
+ * @param {{ address: string|null, value: number|string }|null} [args.adsOutput]   the automatic donation the build kept, when present (named on its own confirm line)
  * @param {number} [args.payloadByteLen]   byte length of the compiled action+rawData push, which decides the carrier allowance
  * @returns {{ addressed: Array<{ address: string, value: number|string, isAds: boolean }>, encoding: string, carrierAllowance: number, carrierExactCount: number|null }}
  */
@@ -121,7 +121,7 @@ export function buildExpectedOutputs({ customOutputs = [], encoding, adsOutput =
     const addressed = (Array.isArray(customOutputs) ? customOutputs : []).map((o) => ({
         address: String(o.address),
         value: o.value,
-        // Flag the ADS output so the modal can whitelist-but-not-display it.
+        // Flag the donation output; the confirm screen names it on its own line.
         isAds: !!(adsOutput && String(o.address) === String(adsOutput.address) &&
             sameSats(o.value, adsOutput.value)),
     }));

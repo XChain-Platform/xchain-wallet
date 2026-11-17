@@ -149,8 +149,10 @@ describe('CreateOrderForm: the load error, loading line and broadcast panel rend
     it('passes FormPage or ResultScreen to every wrap() call, the broadcast panel included', () => {
         const calls = wrapCallArgs();
         expect(calls.length).toBeGreaterThanOrEqual(5);
+        // The form stage lays out through the Form Standard's
+        // FormFrame, which renders FormPage itself.
         const faults = calls
-            .filter((arg) => !['FormPage', 'ResultScreen'].includes(rootName(arg)))
+            .filter((arg) => !['FormPage', 'FormFrame', 'ResultScreen'].includes(rootName(arg)))
             .map((arg) => `CreateOrderForm.jsx:${arg?.loc?.start.line} wrap(${rootName(arg)})`);
         expect(faults).toEqual([]);
         const broadcast = calls.filter((arg) => hasDescendant(arg, (node) => node.type === 'JSXText'

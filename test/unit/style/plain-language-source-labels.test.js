@@ -64,7 +64,7 @@ describe('plain-language transaction labels in signing and broadcast screens', (
     });
 
     it('names the transaction data as code', () => {
-        expectSource(read(FILES.rawPsbtViewer), "copyLabel('psbt', 'unsigned transaction code')");
+        expectSource(read(FILES.rawPsbtViewer), "copyLabel('psbt', 'Unsigned Transaction Code')");
         expect(read(FILES.broadcastForm)).not.toContain('Signed transaction code');
         const sign = read(FILES.psbtSignForm);
         expectSource(sign, 'label="Unsigned transaction code"');

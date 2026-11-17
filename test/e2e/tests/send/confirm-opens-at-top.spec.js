@@ -44,7 +44,7 @@ async function expectConfirmAtTop(page) {
         'the confirm scroll container must start at the top')
         .toBe(0);
 
-    const summary = confirm.getByTestId('action-intent')
+    const summary = confirm.getByTestId('confirm-sentence')
         .or(confirm.getByText(VALID_BTC, { exact: false }))
         .or(confirm.getByText('Review action', { exact: true }))
         .first();
@@ -78,7 +78,7 @@ async function openIssueConfirm(page) {
     // The availability lookup starts after a 350 ms debounce.
     await page.waitForTimeout(500);
     await scrollFormToBottom(page);
-    await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
 }
 
 async function openDispenserConfirm(page) {
@@ -95,7 +95,7 @@ async function openDispenserConfirm(page) {
     await main.getByRole('textbox', { name: /^Trigger price/ }).fill('0.004');
     await scrollFormToBottom(page);
     // The main action names what it does (U63).
-    await main.getByRole('button', { name: 'Create dispenser', exact: true }).click();
+    await main.getByRole('button', { name: 'Create Dispenser', exact: true }).click();
 }
 
 const FLOWS = [

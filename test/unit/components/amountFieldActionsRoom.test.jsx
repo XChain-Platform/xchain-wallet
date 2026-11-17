@@ -3,74 +3,101 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The amount input keeps its digits clear of Max at every text size: the room
-// it reserves follows where the action really is, not the
-// default-text lanes alone.
+// Operator ruling: a control inside a field is just an icon. Max on every
+// amount field is the shared in-field icon action (FieldIconButton through the
+// Input's fieldAction slot): no button box, no visible text, an accessible
+// name and a tooltip, and the Input reserves its room so typed digits stop
+// before it. The Give/Get Quick card's Max is the same icon.
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import {
-    AmountField,
-    syncAmountActionsRoom,
-} from '../../../packages/core/src/shared/components/AmountField.jsx';
+import { afterEach, describe, expect, it } from 'vitest';
+import { useState } from 'react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { AmountField } from '../../../packages/core/src/shared/components/AmountField.jsx';
+import { GiveGetQuick } from '../../../packages/core/src/shared/components/giveGet/GiveGetQuick.jsx';
+import fieldIconStyles from '../../../packages/core/src/ui/FieldIconButton.module.css';
+import inputStyles from '../../../packages/core/src/ui/Input.module.css';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 
-function box(left, width) {
-    return { getBoundingClientRect: () => ({ left, right: left + width, width, top: 0, bottom: 36, height: 36 }) };
+const MAX_NAME = 'Use max available amount';
+
+function expectIconOnly(button, name) {
+    expect(button).toHaveAttribute('aria-label', name);
+    expect(button).toHaveAttribute('title', name);
+    expect(button).toHaveClass(fieldIconStyles.button);
+    expect(button).not.toHaveClass(buttonStyles.btn);
+    expect(button.textContent.trim()).toBe('');
+    expect(button.querySelectorAll('svg[data-xc-icon]')).toHaveLength(1);
 }
 
-describe('amount field action room', () => {
-    afterEach(() => {
-        vi.restoreAllMocks();
-        document.body.replaceChildren();
+function MaxHost({ max = '1.5' }) {
+    const [amount, setAmount] = useState('');
+    return (
+        <AmountField
+            amount={amount}
+            tick="XCP"
+            onAmountFieldChange={setAmount}
+            onMax={() => setAmount(max)}
+        />
+    );
+}
+
+afterEach(cleanup);
+
+describe('amount field Max is an in-field icon', () => {
+    it.each(['sm', 'md', 'lg'])('renders an icon-only button with its name and no text at size %s', (size) => {
+        render(<AmountField amount="" tick="BTC" size={size} onAmountFieldChange={() => {}} onMax={() => {}} />);
+        expectIconOnly(screen.getByRole('button', { name: MAX_NAME }), MAX_NAME);
     });
 
-    it('reserves from the input end edge to the first action, plus the 4px gap', () => {
-        const wrap = document.createElement('div');
-        document.body.appendChild(wrap);
-        // 150% text on a 411px phone: input 12..399, Max at 329.
-        const room = syncAmountActionsRoom(wrap, box(12, 387), [box(329, 66)]);
-        expect(room).toBe(74);
-        expect(wrap.style.getPropertyValue('--amount-actions-room')).toBe('74px');
-    });
-
-    it('measures from the start edge when the field runs right to left', () => {
-        const wrap = document.createElement('div');
-        wrap.style.direction = 'rtl';
-        document.body.appendChild(wrap);
-        expect(syncAmountActionsRoom(wrap, box(12, 387), [box(16, 66)])).toBe(74);
-    });
-
-    it('writes nothing when there is no action or no laid-out input', () => {
-        const wrap = document.createElement('div');
-        expect(syncAmountActionsRoom(wrap, box(0, 0), [box(10, 20)])).toBeNull();
-        expect(syncAmountActionsRoom(wrap, box(12, 387), [null, box(0, 0)])).toBeNull();
-        expect(syncAmountActionsRoom(wrap, null, [box(10, 20)])).toBeNull();
-        expect(wrap.style.getPropertyValue('--amount-actions-room')).toBe('');
-    });
-
-    it('pads the input to whichever is larger, the default lanes or the measured room', () => {
+    it('sits in the field\'s own trailing slot, which reserves the input end room', () => {
         render(<AmountField amount="" tick="BTC" onAmountFieldChange={() => {}} onMax={() => {}} />);
-        expect(screen.getByRole('textbox', { name: /^Amount/ }).style.paddingInlineEnd)
-            .toBe('max(var(--amount-action-width), var(--amount-actions-room, 0px))');
+        const input = screen.getByRole('textbox', { name: 'Amount (BTC)' });
+        const max = screen.getByRole('button', { name: MAX_NAME });
+        expect(max.parentElement).toHaveClass(inputStyles.controlActions);
+        expect(input).toHaveClass(inputStyles.inputWithFieldAction);
+        expect(screen.queryByText('Max')).toBeNull();
+    });
+
+    it('fills the maximum when tapped', () => {
+        render(<MaxHost max="1.5" />);
+        fireEvent.click(screen.getByRole('button', { name: MAX_NAME }));
+        expect(screen.getByRole('textbox', { name: 'Amount (XCP)' })).toHaveValue('1.5');
+    });
+
+    it('keeps the disabled icon shown before a token is chosen', () => {
+        render(<AmountField amount="" onAmountFieldChange={() => {}} />);
+        const max = screen.getByRole('button', { name: MAX_NAME });
+        expect(max).toBeDisabled();
+        expectIconOnly(max, MAX_NAME);
+    });
+
+    it('marks the icon busy while a Max quote is in flight', () => {
+        render(<AmountField amount="" tick="BTC" onAmountFieldChange={() => {}} onMax={() => {}} maxBusy />);
+        const max = screen.getByRole('button', { name: MAX_NAME });
+        expect(max).toBeDisabled();
+        expect(max).toHaveAttribute('aria-busy', 'true');
     });
 });
 
-describe('amount field Max button icon', () => {
-    afterEach(() => {
-        document.body.replaceChildren();
-    });
-
-    it.each(['sm', 'md', 'lg'])('shows an icon beside the Max text at size %s and keeps its name', (size) => {
-        render(<AmountField amount="" tick="BTC" size={size} onAmountFieldChange={() => {}} onMax={() => {}} />);
-        const max = screen.getByRole('button', { name: 'Use max available amount' });
-        expect(max.querySelector('svg[data-xc-icon]')).not.toBeNull();
-        expect(max.textContent).toBe('Max');
-    });
-
-    it('keeps the icon on the disabled Max shown before a token is chosen', () => {
-        render(<AmountField amount="" onAmountFieldChange={() => {}} />);
-        const max = screen.getByRole('button', { name: 'Use max available amount' });
-        expect(max).toBeDisabled();
-        expect(max.querySelector('svg[data-xc-icon]')).not.toBeNull();
+describe('Give/Get Quick Max is the same icon', () => {
+    it('renders the give side Max as an icon-only button that fills the maximum', () => {
+        let filled = 0;
+        const give = {
+            label: 'You give',
+            asset: { chainId: 'bitcoin-mainnet', tick: 'XCP' },
+            assetLabel: 'Give asset',
+            onOpenAsset: () => {},
+            amount: '',
+            onAmountChange: () => {},
+            amountLabel: 'Give amount',
+            balanceText: '10 XCP available',
+            onMax: () => { filled += 1; },
+        };
+        const get = { ...give, label: 'You get', assetLabel: 'Get asset', amountLabel: 'Get amount', onMax: undefined, balanceText: undefined };
+        render(<GiveGetQuick give={give} get={get} />);
+        const max = screen.getByRole('button', { name: 'Max you give amount' });
+        expectIconOnly(max, 'Max you give amount');
+        fireEvent.click(max);
+        expect(filled).toBe(1);
     });
 });

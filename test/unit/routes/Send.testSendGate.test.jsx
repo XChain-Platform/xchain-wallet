@@ -20,12 +20,31 @@
 // These drive the real form: type a large native send to a never-seen address
 // with a threshold configured, and assert the user is actually stopped, i.e.
 // nothing crosses the messaging boundary until the warning is acknowledged.
+//
+// The threshold is an amount in the display currency (operator ruling
+// 2026-11-14), converted to sats with the coin's price at check time; these
+// fix the BTC price at $50,000, so $1 is 2,000 sats and $1,000 is 0.02 BTC.
+// With no price the suggestion is skipped and nothing is said.
 
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 
 const renderMetrics = vi.hoisted(() => ({ noveltyChecks: vi.fn() }));
+const price = vi.hoisted(() => ({ rate: null }));
+const BTC_USD = Object.freeze({
+    rate: 50000,
+    chainCoin: 'bitcoin',
+    fiatCurrency: 'USD',
+    source: 'oracle',
+    fetchedAt: '2026-11-14T00:00:00.000Z',
+    stale: false,
+});
+
+vi.mock('../../../packages/core/src/shared/hooks/useFiatRate.js', async (importOriginal) => ({
+    ...(await importOriginal()),
+    useTickFiatRate: () => price.rate,
+}));
 
 vi.mock('../../../packages/core/src/flows/recipientNovelty.js', async (importOriginal) => {
     const actual = await importOriginal();
@@ -57,7 +76,7 @@ const ADDRESSES = {
     }],
 };
 
-function mount({ thresholdSats = 100000, contacts = [], history = [] } = {}) {
+function mount({ thresholdFiat = '50', contacts = [], history = [] } = {}) {
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getAddressBalances: vi.fn().mockResolvedValue({
@@ -65,7 +84,8 @@ function mount({ thresholdSats = 100000, contacts = [], history = [] } = {}) {
             tokens: [],
         }),
         getSettings: vi.fn().mockResolvedValue({
-            grace: { testSendThresholdSats: thresholdSats },
+            fiatCurrency: 'USD',
+            grace: { testSendThresholdFiat: thresholdFiat },
         }),
         getSignerStatus: vi.fn().mockResolvedValue({ unlocked: false }),
         listContacts: vi.fn().mockResolvedValue(contacts),
@@ -106,18 +126,40 @@ async function fillNativeSend({ to = NOVEL, amount = '0.02' } = {}) {
 
 const sendButton = () => screen.getByRole('button', { name: /^Send$/ });
 
-beforeEach(() => renderMetrics.noveltyChecks.mockClear());
+beforeEach(() => {
+    renderMetrics.noveltyChecks.mockClear();
+    price.rate = BTC_USD;
+});
 afterEach(() => cleanup());
 
 describe('Send: test-send gate reaches the screen', () => {
     it('warns before a large first send to a never-seen address', async () => {
-        mount({ thresholdSats: 1 });
+        mount({ thresholdFiat: '1' });
         await fillNativeSend();
         expect(await screen.findByText(/First payment to this address/i)).toBeInTheDocument();
     });
 
+    it('skips the suggestion and says nothing when there is no price', async () => {
+        price.rate = null;
+        const messaging = mount({ thresholdFiat: '1' });
+        await fillNativeSend();
+        fireEvent.click(sendButton());
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled());
+        expect(screen.queryByText(/First payment to this address/i)).toBeNull();
+    });
+
+    it('stays quiet with the threshold Off', async () => {
+        const messaging = mount({ thresholdFiat: '0' });
+        await fillNativeSend();
+        fireEvent.click(sendButton());
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled());
+        expect(screen.queryByText(/First payment to this address/i)).toBeNull();
+        // Off skips the novelty scan altogether.
+        expect(renderMetrics.noveltyChecks).not.toHaveBeenCalled();
+    });
+
     it('[REGRESSION] refuses to compose while the warning stands', async () => {
-        const messaging = mount({ thresholdSats: 1 });
+        const messaging = mount({ thresholdFiat: '1' });
         await fillNativeSend();
         await screen.findByText(/First payment to this address/i);
 
@@ -129,7 +171,7 @@ describe('Send: test-send gate reaches the screen', () => {
     });
 
     it('composes once the user acknowledges the address', async () => {
-        const messaging = mount({ thresholdSats: 1 });
+        const messaging = mount({ thresholdFiat: '1' });
         await fillNativeSend();
         fireEvent.click(await screen.findByRole('button', { name: /full amount/i }));
 
@@ -141,34 +183,42 @@ describe('Send: test-send gate reaches the screen', () => {
     });
 
     it('"Send a small test first" drops the amount to 1% and clears the gate', async () => {
-        mount({ thresholdSats: 100000 });
+        mount({ thresholdFiat: '50' });
         await fillNativeSend({ amount: '0.02' });
         fireEvent.click(await screen.findByRole('button', { name: /small test/i }));
 
         const amountField = await screen.findByLabelText(/^Amount \(/);
         await waitFor(() => expect(amountField.value).toBe('0.0002'));
-        // 20,000 sats now sits under the 100,000-sat threshold, so the
+        // $10 now sits under the $50 threshold (100,000 sats), so the
         // warning must retire on its own.
         expect(screen.queryByText(/First payment to this address/i)).toBeNull();
     });
 
     it('stays quiet for an amount under the threshold', async () => {
-        const messaging = mount({ thresholdSats: 100000000 });
+        const messaging = mount({ thresholdFiat: '100000' });
         await fillNativeSend({ amount: '0.02' });
         fireEvent.click(sendButton());
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled());
         expect(screen.queryByText(/First payment to this address/i)).toBeNull();
     });
 
-    it('warns when amount and threshold differ above 2^53 sats', async () => {
-        mount({ thresholdSats: '9007199254740992' });
-        await fillNativeSend({ amount: '90071992.54740993' });
+    it('converts the fiat threshold exactly: quiet at it, warns one sat above', async () => {
+        // $1,000 at $50,000 is exactly 0.02 BTC.
+        const messaging = mount({ thresholdFiat: '1000' });
+        await fillNativeSend({ amount: '0.02' });
+        fireEvent.click(sendButton());
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled());
+        expect(screen.queryByText(/First payment to this address/i)).toBeNull();
+        cleanup();
+
+        mount({ thresholdFiat: '1000' });
+        await fillNativeSend({ amount: '0.02000001' });
         expect(await screen.findByText(/First payment to this address/i)).toBeInTheDocument();
     });
 
     it('stays quiet for an address the user has already sent to', async () => {
         const messaging = mount({
-            thresholdSats: 1,
+            thresholdFiat: '1',
             history: [{ action: 'SEND', destination: NOVEL }],
         });
         await fillNativeSend();
@@ -182,7 +232,7 @@ describe('Send: test-send gate reaches the screen', () => {
             action: 'SEND',
             destination: `past-recipient-${index}`,
         }));
-        mount({ thresholdSats: 1, history });
+        mount({ thresholdFiat: '1', history });
         await fillNativeSend({ amount: '0.02' });
         await screen.findByText(/First payment to this address/i);
         const checksAfterRecipient = renderMetrics.noveltyChecks.mock.calls.length;

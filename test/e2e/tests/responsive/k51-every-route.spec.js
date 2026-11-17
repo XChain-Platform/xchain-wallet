@@ -73,17 +73,14 @@ const TOP_LEVEL_ROUTES = [
 // Phone layouts leave Keyboard out of Settings (shortcut bindings need a
 // hardware keyboard), and Network & endpoints shows only in Developer Mode.
 const SETTINGS_SUBPAGES = [
-    'This wallet',
-    'Display',
-    'Privacy',
-    'Safety',
-    'Wallet mode',
-    'Backup',
-    'Fees',
-    'Connected sites',
-    'Automatic donation system',
-    'Developer mode',
-    'About',
+    'Wallets',
+    'Security',
+    'Backup and Recovery',
+    'Privacy and Sites',
+    'Appearance',
+    'Notifications',
+    'Network and Fees',
+    'Advanced',
 ];
 
 test.use(K51);
@@ -386,7 +383,7 @@ test.describe('LG K51 responsive route sweep', () => {
                 await expectK51Layout(page, `Settings / ${subpage}`);
 
                 await page.getByRole('button', { name: 'Back to settings' }).click();
-                await expect(page.getByRole('searchbox', { name: 'Search settings' })).toBeVisible();
+                await expect(page.getByRole('button', { name: 'Filter settings' })).toBeVisible();
             });
         }
     });

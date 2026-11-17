@@ -79,36 +79,36 @@ describe('Onboarding add-wallet lane inside the demo', () => {
         globalThis.localStorage.setItem(DEMO_ID_KEY, 'demo-1');
         mount({ mode: 'add' });
 
-        expect(screen.getByText('Leave the demo first')).toBeInTheDocument();
+        expect(screen.getByText('Leave the Demo First')).toBeInTheDocument();
         // The plain create/import buttons are gone; every lane now says it
         // clears the demo, so nothing offers to add into the demo vault.
-        expect(screen.queryByRole('button', { name: /^Create new wallet$/ })).not.toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /Clear demo & create new wallet/ })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /Clear demo & import wallet/ })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /Keep exploring the demo/ })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^Create New Wallet$/ })).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Clear Demo & Create New Wallet/ })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Clear Demo & Import Wallet/ })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Keep Exploring the Demo/ })).toBeInTheDocument();
     });
 
     it('names the screen Add wallet so the header does not repeat the gate heading', () => {
         globalThis.localStorage.setItem(DEMO_ID_KEY, 'demo-1');
         mount({ mode: 'add' });
 
-        expect(screen.getByRole('heading', { name: 'Add wallet' })).toBeInTheDocument();
-        expect(screen.getByRole('heading', { name: 'Leave the demo first' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Add Wallet' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Leave the Demo First' })).toBeInTheDocument();
         expect(screen.queryByText('Leave the demo')).not.toBeInTheDocument();
     });
 
     it('leaves the normal add-wallet lane alone when no demo is running', () => {
         mount({ mode: 'add' });
-        expect(screen.queryByText('Leave the demo first')).not.toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /Create new wallet/ })).toBeInTheDocument();
+        expect(screen.queryByText('Leave the Demo First')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Create New Wallet/ })).toBeInTheDocument();
     });
 
     it('leaves the fresh-install lane alone even with a stale demo flag', () => {
         globalThis.localStorage.setItem(DEMO_ID_KEY, 'demo-1');
         globalThis.localStorage.setItem('xc:onboardingExplainerSeenAt', new Date().toISOString());
         mount({ mode: 'fresh', onBack: undefined });
-        expect(screen.queryByText('Leave the demo first')).not.toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /Create new wallet/ })).toBeInTheDocument();
+        expect(screen.queryByText('Leave the Demo First')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Create New Wallet/ })).toBeInTheDocument();
     });
 
     it('clears the demo, wipes the vault meta, and hands the picked lane across the reload', async () => {
@@ -117,7 +117,7 @@ describe('Onboarding add-wallet lane inside the demo', () => {
         const removeWallet = vi.fn(async () => {});
         mount({ mode: 'add', messaging: { removeWallet, listWallets: async () => [] } });
 
-        fireEvent.click(screen.getByRole('button', { name: /Clear demo & import wallet/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Clear Demo & Import Wallet/ }));
 
         await waitFor(() => expect(reloadCount).toBe(1));
         expect(removeWallet).toHaveBeenCalledWith({ walletId: 'demo-1' });
@@ -141,7 +141,7 @@ describe('Onboarding add-wallet lane inside the demo', () => {
             },
         });
 
-        fireEvent.click(screen.getByRole('button', { name: /Clear demo & create new wallet/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Clear Demo & Create New Wallet/ }));
 
         await waitFor(() => expect(onCreate).toHaveBeenCalled());
         expect(reloadCount).toBe(0);
@@ -162,7 +162,7 @@ describe('Onboarding add-wallet lane inside the demo', () => {
             },
         });
 
-        fireEvent.click(screen.getByRole('button', { name: /Clear demo & create new wallet/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Clear Demo & Create New Wallet/ }));
 
         await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
         expect(screen.getByRole('alert').textContent).toMatch(/Could not verify/);
@@ -183,7 +183,7 @@ describe('Onboarding add-wallet lane inside the demo', () => {
             },
         });
 
-        fireEvent.click(screen.getByRole('button', { name: /Clear demo & create new wallet/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Clear Demo & Create New Wallet/ }));
 
         await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
         expect(screen.getByRole('alert').textContent).toMatch(/vault is locked/);

@@ -46,7 +46,12 @@ assert.match(form, /pairConsumers/, 'consumers listed before signing');
 assert.match(form, /oracleConsumers/, 'consumer lookup wired');
 assert.match(form, /oracleFeeds/, 'published-pairs list wired');
 assert.match(form, /activationCountdownText/, 'effective-at countdown shown');
-assert.match(form, /0\.01 means 1%/, 'fee field explains the fractional unit');
+// The fee is typed as a percent and converted to the protocol fraction on
+// submit, so the field no longer has to teach the fractional unit.
+assert.match(form, /infoLabel="Percent charged when/, 'fee field is entered as a percent');
+assert.match(form, /usage fee should be very small/, 'fee help says the usage fee should be very small');
+assert.match(form, /<StopSlider/, 'the usage fee is a stop slider');
+assert.match(form, /p\.FEE = usageFeePercentToFraction\(/, 'the percent becomes the protocol fraction on submit');
 assert.match(form, /fee scales with escrow/, 'fee field explains how the charge is sized');
 
 // The publish rule that used to be documented backwards: the FIRST price is
@@ -56,7 +61,14 @@ assert.match(form, /fee scales with escrow/, 'fee field explains how the charge 
 assert.ok(!/takes effect immediately/i.test(form), 'form never claims an immediate first publish');
 
 // "Could not check" must stay distinguishable from "nobody uses this oracle".
-assert.match(form, /Could not check which dispensers use this oracle/, 'unsupported consumer lane is stated, not silently empty');
+assert.match(form, /The wallet could not check which dispensers use this oracle/,
+    'unsupported consumer lane is stated, not silently empty');
+assert.match(form, /label: 'Affected dispensers',[\s\S]{0,180}\? 'Could not check'/,
+    'consumer uncertainty is also present in the Confirm Standard facts card');
+assert.match(form, /warnings: \[\.\.\.\(decoded\.warnings \|\| \[\]\), \.\.\.publishWarnings\]/,
+    'oracle safety rails are carried into the shared warning slot');
+assert.match(form, /<ActionConfirmScreen\b/, 'signed publish uses the shared Confirm Standard screen');
+assert.match(form, /<ConfirmActionModal\b/, 'watcher publish uses the shared Confirm Standard adapter');
 
 // ---- Flows ----
 const action = read('packages', 'core', 'src', 'flows', 'oraclePriceAction.js');

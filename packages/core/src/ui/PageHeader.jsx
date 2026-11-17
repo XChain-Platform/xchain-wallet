@@ -8,22 +8,23 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useRef } from 'react';
-import { useRouteIsNavDestination } from '../shared/components/navSurface.js';
+import { useContext, useEffect, useRef } from 'react';
 import { useBackHandler } from './backStack.js';
 import { Button } from './Button.jsx';
 import { BackIcon } from './icons/index.jsx';
+import { NavHistoryContext } from './navHistory.js';
 import styles from './PageHeader.module.css';
 import { t } from '../i18n/index.js';
 
 /**
  * Shared secondary-toolbar header used by every routed screen.
  *
- * The Back chevron is left out on a screen the visible navigation already
- * links to (a sidebar destination while the sidebar shows, a bottom-bar tab
- * while the tab bar shows); see NAV_SURFACE_DESTINATIONS in
- * routeRegistry.js. The system Back gesture still runs `onBack` there, and
- * the leading lane keeps its width so the title stays centred.
+ * The Back chevron follows the shell's one navigation history (G06): it
+ * shows whenever the page on screen was opened from another page, and is
+ * left out on a root page, one opened from the sidebar, the bottom bar, the
+ * menu or the command palette, since there is nothing to go back to. The
+ * system Back gesture still runs `onBack` on a root page, and the leading
+ * lane keeps its width so the title stays centred.
  *
  * Encapsulates the 3-column grid layout, chevron alignment (lines up
  * under the AppHeader logo via a negative margin-inline-start), title
@@ -42,11 +43,13 @@ import { t } from '../i18n/index.js';
  *   (e.g. while a submit is in flight). The chevron stays visible but inert.
  * @param {boolean} [props.nested]                    marks a sub-screen that
  *   shares its parent's route id (a Settings section, a Contacts detail, a
- *   review step). Such a screen always shows Back, even when the visible
- *   navigation links to the route itself.
+ *   review step), whose Back steps inside the page. Such a screen always
+ *   shows Back, even on a root page.
  * @param {import('react').ReactNode} props.title     centered title text.
  * @param {string} [props.titleId]                    id for naming the screen body.
  * @param {import('react').Ref<HTMLHeadingElement>} [props.titleRef] ref for moving focus to the screen heading.
+ * @param {import('react').ReactNode} [props.subtitle]  One small muted line
+ *                                                    under the title (a wizard's step).
  * @param {import('react').ReactNode} [props.trailing]    right-side slot for
  *   page-scoped actions (filter buttons, scan, etc.). Omit to render an
  *   empty spacer for symmetry.
@@ -59,11 +62,13 @@ export function PageHeader({
     title,
     titleId,
     titleRef,
+    subtitle = null,
     trailing = null,
 }) {
     useBackHandler(onBack, backDisabled, 'route');
-    const reachableFromNav = useRouteIsNavDestination();
-    const showBack = Boolean(onBack) && !(reachableFromNav && !nested);
+    // Null outside a shell (onboarding, a bare render): Back shows there.
+    const history = useContext(NavHistoryContext);
+    const showBack = Boolean(onBack) && (nested || history === null || history.canGoBack);
     const headerRef = useRef(null);
     // A screen opened from a control on another screen (a detail, a picker)
     // unmounts that control, and focus would fall to <body> and restart Tab at
@@ -100,7 +105,7 @@ export function PageHeader({
             ) : (
                 <span className={styles.spacer} />
             )}
-            <span className={styles.titleGroup}>
+            <span className={subtitle ? `${styles.titleGroup} ${styles.titleGroupStacked}` : styles.titleGroup}>
                 {/* The screen's title is its one top-level heading, so a
                     screen reader can jump to it and announce where the user is. */}
                 <h1
@@ -112,6 +117,7 @@ export function PageHeader({
                 >
                     {title}
                 </h1>
+                {subtitle ? <span className={styles.subtitle}>{subtitle}</span> : null}
             </span>
             {trailing ? (
                 <span className={styles.trailing}>{trailing}</span>

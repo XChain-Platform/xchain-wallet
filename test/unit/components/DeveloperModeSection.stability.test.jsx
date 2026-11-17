@@ -21,8 +21,11 @@ vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
 vi.mock('../../../packages/core/src/shared/components/LogConsole.jsx', () => ({ LogConsole: () => null }));
 vi.mock('../../../packages/core/src/flows/regtestFaucet.js', () => ({ fundActiveWalletFromMiner }));
 
-const { DeveloperModeSection, RegtestRow } = await import(
+const { DeveloperModeSection } = await import(
     '../../../packages/core/src/shared/components/settings/DeveloperModeSection.jsx'
+);
+const { AddNetworkPage, CustomNetworkFormPage, FaucetPage, TestNetworksPage } = await import(
+    '../../../packages/core/src/shared/components/settings/TestNetworksPages.jsx'
 );
 const { Settings } = await import('../../../packages/core/src/shared/routes/Settings.jsx');
 
@@ -78,30 +81,32 @@ describe('DeveloperModeSection unavailable actions', () => {
         expect(screen.queryByText(/Coming soon/)).toBeNull();
     });
 
+    // The faucet, activation and custom networks moved to the Test Networks
+    // pages (operator picks 2026-11-14); these cases followed them.
     it('hides the mint handoff when the route callback is unavailable', () => {
-        render(<DeveloperModeSection />);
-        expect(screen.queryByRole('button', { name: 'Mint test XCHAIN' })).toBeNull();
+        render(<FaucetPage activeWallet={{ id: 'wallet-2' }} activeAccount={{ id: 'account-7' }} />);
+        expect(screen.queryByRole('button', { name: /Mint test XCHAIN/ })).toBeNull();
     });
 
-    it('rejects an empty faucet amount before requesting an address', () => {
-        render(<DeveloperModeSection />);
+    it('rejects an empty faucet amount before asking the miner', () => {
+        render(<FaucetPage activeWallet={{ id: 'wallet-2' }} activeAccount={{ id: 'account-7' }} />);
         const input = screen.getByRole('textbox', { name: 'Amount (BTC)' });
         fireEvent.change(input, { target: { value: '' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Get test BTC' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Get Test Coins' }));
 
         expect(screen.getByText('Enter an amount of BTC greater than 0.')).toBeTruthy();
-        expect(messaging.getNewestAddress).not.toHaveBeenCalled();
+        expect(fundActiveWalletFromMiner).not.toHaveBeenCalled();
     });
 
     it('funds the active wallet and account', async () => {
         render(
-            <DeveloperModeSection
+            <FaucetPage
                 activeWallet={{ id: 'wallet-2', name: 'Second wallet' }}
                 activeAccount={{ id: 'account-7', name: 'Trading' }}
             />,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: 'Get test BTC' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Get Test Coins' }));
 
         await waitFor(() => expect(fundActiveWalletFromMiner).toHaveBeenCalledWith(expect.objectContaining({
             messaging,
@@ -114,15 +119,15 @@ describe('DeveloperModeSection unavailable actions', () => {
         expect(await screen.findByText(/Sent 10 BTC to bcrt1qactive/)).toBeTruthy();
     });
 
-    it('keeps hook ordering stable when the faucet appears and disappears', () => {
+    it('keeps hook ordering stable when the active regtest networks come and go', () => {
         const props = {
             activeWallet: { id: 'wallet-2' },
             activeAccount: { id: 'account-7' },
         };
-        const view = render(<DeveloperModeSection {...props} />);
+        const view = render(<FaucetPage {...props} />);
 
         settings = { ...settings, fees: {} };
-        expect(() => view.rerender(<DeveloperModeSection {...props} />)).not.toThrow();
+        expect(() => view.rerender(<FaucetPage {...props} />)).not.toThrow();
 
         settings = {
             ...settings,
@@ -130,80 +135,76 @@ describe('DeveloperModeSection unavailable actions', () => {
                 'bitcoin-regtest': { strategy: 'normal', customSatsPerKb: null, rbfByDefault: true },
             },
         };
-        expect(() => view.rerender(<DeveloperModeSection {...props} />)).not.toThrow();
+        expect(() => view.rerender(<FaucetPage {...props} />)).not.toThrow();
     });
 
     it('exposes the adopted style guide fields and actions by role', async () => {
         render(<DeveloperModeSection />);
-
         expect(screen.getByRole('combobox', {
-            name: 'Cache password for localhost auto-sign',
+            name: 'Localhost auto-sign',
         })).toBeTruthy();
-        expect(screen.getByRole('textbox', { name: 'Miner URL' })).toBeTruthy();
+        cleanup();
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Add custom network…' }));
-
-        expect(screen.getByRole('textbox', {
-            name: 'Custom network descriptor JSON',
-        })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Add network' })).toBeDisabled();
+        render(<CustomNetworkFormPage />);
+        expect(screen.getByRole('textbox', { name: 'Network name' })).toBeTruthy();
+        expect(screen.getByRole('textbox', { name: 'Network ID' })).toBeTruthy();
+        expect(screen.getByRole('combobox', { name: 'Start from' })).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: /^Descriptor JSON/ }));
+        expect(screen.getByRole('textbox', { name: 'Descriptor JSON' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Add Network' })).toBeTruthy();
     });
 
     it('refuses an oversized custom network paste without calling the host', async () => {
         messaging.addCustomChain = vi.fn(async () => ({}));
-        render(<DeveloperModeSection />);
+        render(<CustomNetworkFormPage />);
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Add custom network…' }));
-        fireEvent.change(screen.getByRole('textbox', { name: 'Custom network descriptor JSON' }), {
-            target: { value: `{"note":"${'x'.repeat(1024 * 1024)}"}` },
+        fireEvent.click(screen.getByRole('button', { name: /^Descriptor JSON/ }));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Descriptor JSON' }), {
+            target: { value: `{"note":"${'x'.repeat(40 * 1024)}"}` },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Add network' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add Network' }));
 
-        expect(await screen.findByText('That text is too large to be a chain descriptor.')).toBeTruthy();
+        expect(await screen.findByText('That text is too large to be a network descriptor.')).toBeTruthy();
         expect(messaging.addCustomChain).not.toHaveBeenCalled();
     });
 
     it('explains when no active wallet is available for activation', async () => {
-        render(
-            <RegtestRow
-                descriptor={{ id: 'bitcoin-regtest', displayName: 'Bitcoin Regtest' }}
-                isActive={false}
-                disabled={false}
-            />,
-        );
+        settings = { ...settings, fees: {} };
+        render(<AddNetworkPage />);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Activate…' }));
-        fireEvent.change(screen.getByLabelText('Bitcoin Regtest activation password'), {
-            target: { value: 'password' },
-        });
-        fireEvent.click(screen.getByRole('button', { name: 'Activate Bitcoin Regtest' }));
-
-        expect(await screen.findByText('No active wallet is available for network activation.')).toBeTruthy();
+        expect(screen.getAllByText('Open a wallet first').length).toBeGreaterThan(0);
+        fireEvent.click(screen.getByRole('button', { name: /^Bitcoin Regtest/ }));
+        expect(screen.queryByLabelText('Wallet password')).toBeNull();
     });
 
-    it('shows an activated regtest as active immediately after activation', async () => {
-        messaging.activateChainRequest = vi.fn(async () => ({ addresses: [{ address: 'bcrt1qnew' }] }));
-        render(
-            <RegtestRow
-                descriptor={{ id: 'bitcoin-regtest', displayName: 'Bitcoin Regtest' }}
-                isActive={false}
-                disabled={false}
-                activeWallet={{ id: 'wallet-2' }}
-            />,
-        );
+    it('activates in place and returns to Test Networks, which shows it active', async () => {
+        settings = { ...settings, fees: {} };
+        messaging.activateChainRequest = vi.fn(async () => {
+            settings = {
+                ...settings,
+                fees: { 'bitcoin-regtest': { strategy: 'normal', customSatsPerKb: null, rbfByDefault: true } },
+            };
+            return { addresses: [{ address: 'bcrt1qnew' }] };
+        });
+        const onReturnTo = vi.fn();
+        render(<AddNetworkPage activeWallet={{ id: 'wallet-2' }} onReturnTo={onReturnTo} />);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Activate…' }));
-        fireEvent.change(screen.getByLabelText('Bitcoin Regtest activation password'), {
+        fireEvent.click(screen.getByRole('button', { name: /^Bitcoin Regtest/ }));
+        fireEvent.change(screen.getByLabelText('Wallet password'), {
             target: { value: 'password' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Activate Bitcoin Regtest' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Activate Network' }));
 
-        expect(await screen.findByText('Active')).toBeTruthy();
-        expect(screen.queryByRole('button', { name: 'Activate…' })).toBeNull();
+        await waitFor(() => expect(onReturnTo).toHaveBeenCalledWith('developer-test-networks'));
         expect(messaging.activateChainRequest).toHaveBeenCalledWith(expect.objectContaining({
             walletId: 'wallet-2',
             chainId: 'bitcoin-regtest',
+            password: 'password',
         }));
+        cleanup();
+        render(<TestNetworksPage />);
+        const row = await screen.findByRole('button', { name: /^Bitcoin Regtest/ });
+        expect(row).toHaveTextContent('Active');
     });
 
     it('labels its master switch as an action instead of repeating the page title', () => {
@@ -237,7 +238,8 @@ describe('DeveloperModeSection unavailable actions', () => {
         settings = { ...settings, activeNetwork: 'regtest' };
         render(<DeveloperModeSection reload={reload} />);
 
-        expect(screen.getByText(/Turning it off while on Regtest returns the wallet to Mainnet\./)).toBeVisible();
+        // The explanation is the switch's '?' help tip (ruling 2026-11-13).
+        expect(screen.getByText(/Turning it off while on Regtest returns the wallet to Mainnet\./)).toBeInTheDocument();
         fireEvent.click(screen.getByRole('switch', { name: 'Turn on developer mode' }));
 
         await waitFor(() => expect(update).toHaveBeenCalledWith({

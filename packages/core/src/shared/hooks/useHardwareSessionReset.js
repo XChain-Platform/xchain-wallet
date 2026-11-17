@@ -19,8 +19,16 @@
 // change away from a non-null id is the one signal for both, and on it every
 // factory module already loaded runs its reset. A module never loaded is not
 // imported just to reset it.
+//
+// A reset closes the transports, so it also tells the reconnect layer to
+// forget every opened device; and `useHardwareReconnect` registers each
+// paired device of the active wallet again once the wallet is unlocked, so a
+// lock, a switch or a reload never leaves a hardware wallet unable to sign.
 
 import { useEffect, useRef } from 'react';
+import {
+    invalidateLiveSigners, isHardwareVendorRecord, setHardwareFactories, setHardwareRecordSource,
+} from '../../signers/hardwareReconnect.js';
 
 const RESET_EXPORTS = ['resetTrezorConnect', 'resetLedgerTransport'];
 
@@ -47,6 +55,8 @@ export function trackHardwareFactories(loaders) {
             return /** @type {Promise<any>} */ (loaded.get(key));
         },
         async reset() {
+            // The transports close below, so every device opened on them is stale.
+            invalidateLiveSigners();
             const modules = await Promise.allSettled(Array.from(loaded.values()));
             for (const settled of modules) {
                 if (settled.status !== 'fulfilled') continue;
@@ -80,4 +90,67 @@ export function useHardwareSessionReset(activeWalletId, reset) {
             Promise.resolve().then(reset).catch(() => {});
         }
     }, [activeWalletId, reset]);
+}
+
+/**
+ * Register every paired Trezor or Ledger of the active wallet with the
+ * shell's signer bridge once the wallet is unlocked. No device opens here:
+ * each registration opens its device on the first sign. One signer list read
+ * per unlocked wallet (re-run when `refreshKey` changes, for a wallet the
+ * user just connected). It also hands the reconnect layer the shell's pair
+ * factories (keep the object stable), which reopen each device on its first
+ * sign.
+ *
+ * @param {{
+ *   unlocked: boolean,
+ *   walletId: string | null | undefined,
+ *   listSigners?: (walletId: string) => Promise<any>,
+ *   registerRecord: (record: object) => void,
+ *   factories?: Record<string, Function | null | undefined>,
+ *   refreshKey?: unknown,
+ * }} opts
+ */
+export function useHardwareReconnect({ unlocked, walletId, listSigners, registerRecord, factories, refreshKey }) {
+    useEffect(() => {
+        if (factories) setHardwareFactories(factories);
+    }, [factories]);
+    // A sign on a network the bridge's copy of a record has no Ledger
+    // identity for re-reads that record through the same signer list.
+    useEffect(() => {
+        if (!unlocked || !walletId || typeof listSigners !== 'function') return undefined;
+        setHardwareRecordSource(async (signerId) => (
+            signerRecords(await listSigners(walletId)).find((record) => record?.id === signerId) || null
+        ));
+        return () => {
+            setHardwareRecordSource(null);
+        };
+    }, [unlocked, walletId, listSigners]);
+    useEffect(() => {
+        if (!unlocked || !walletId || typeof listSigners !== 'function') return undefined;
+        let cancelled = false;
+        Promise.resolve()
+            .then(() => listSigners(walletId))
+            .then((result) => {
+                if (cancelled) return;
+                const records = signerRecords(result);
+                for (const record of records) {
+                    if (!record?.id || !isHardwareVendorRecord(record)) continue;
+                    try {
+                        registerRecord(record);
+                    } catch {
+                        // A bridge that cannot open (no preload, no runtime) leaves this device to the sign page.
+                    }
+                }
+            })
+            .catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, [unlocked, walletId, listSigners, registerRecord, refreshKey]);
+}
+
+/** The records a signer list answered, bare or wrapped in `{ signers }`. */
+function signerRecords(result) {
+    if (Array.isArray(result)) return result;
+    return Array.isArray(result?.signers) ? result.signers : [];
 }

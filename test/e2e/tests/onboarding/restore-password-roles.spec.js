@@ -6,64 +6,53 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// A restore that refuses a password says WHICH password it wanted.
+// A restore asks for one password and says which role refused it.
 //
-// THE DEFECT, as reported. The restore screen asks for three passwords at once
-// (§19.4): the one that opens the backup FILE, the one the backed-up
-// WALLET used on the device it came from, and the one THIS DEVICE unlocks
-// with. a later change shipped the mechanism that needs all three and left the copy
-// alone, so every refusal came back as "wrong password or tampered file". Two
-// of those three are passwords the user still uses, so the likeliest mistake
-// on this screen is not a typo at all: it is a correct password in the wrong
-// box, and the app could not tell them apart.
+// A backup can hold two different secrets: the one that opens the backup FILE
+// and the one the backed-up WALLET used on the device it came from. The old
+// screen asked for both, plus a new password for this device, all at once
+// (§19.4), and the likeliest mistake there was a correct password in the wrong
+// box. The rebuilt tab (restore-v2, 2026-11-14) asks once, tries that password
+// to open the file and then the wallet, and only when the wallet needs another
+// one shows a "Wallet password" field in place. The restored wallet keeps its
+// own password on this device.
 //
 // WHAT THIS DRIVES. A vault-less browser, the real restore screen, a real
-// §19.4 envelope, and the two mix-ups a user actually makes:
+// §19.4 envelope whose file and wallet passwords differ:
 //
-//   1. This device's password typed into the backup-FILE box.
-//   2. The backup file's password typed into the backed-up-WALLET box.
+//   1. A password that opens neither: one red sentence under the field.
+//   2. The file's password: the file opens, the wallet does not, so the
+//      screen asks for the wallet's own password in a second field.
 //
-// Both are refused (they should be), and the point of the spec is that the two
-// refusals are DIFFERENT and each names the box it is talking about. A test
-// that only asserted "it failed" passes against the defect.
+// The second lane is also the fixture check: the wallet field can only appear
+// because the envelope really did decrypt under the file password.
 //
-// WHY THE SECOND LANE IS ALSO THE FIXTURE CHECK. Its message begins "The
-// backup file opened", which it can only say because the envelope really did
-// decrypt under the file password. So a genuinely encrypted fixture, a real
-// decrypt, and a real re-key attempt are all pinned without needing a chain.
-//
-// NO CHAIN, NO FUNDS, NO SIGNING: this is a copy question on a pre-vault
-// screen, so it runs on the dev-server venue.
+// NO CHAIN, NO FUNDS, NO SIGNING: a pre-vault screen, so it runs on the
+// dev-server venue.
 //
 // RUN IT:
-//   cd test/e2e && npx playwright test tests/onboarding/restore-password-roles.spec.js
+//   npx playwright test --config test/e2e/playwright.config.js tests/onboarding/restore-password-roles.spec.js
 
 import { dismissIntroCarousel, expect, test } from '../../fixtures/wallet.js';
 import { kdfStepTimeout } from '../../timeout-budget.js';
+import { chooseBackupFile } from '../../fixtures/backupRestore.js';
 import { exportBackupFile } from '../../../../packages/core/src/flows/backupFile.js';
 import { encryptWalletSeed } from '../../../../packages/core/src/crypto/walletBlob.js';
-import {
-    RESTORE_PASSWORD_INTRO,
-    RESTORE_PASSWORD_LABELS,
-} from '../../../../packages/core/src/flows/restorePasswordCopy.js';
 
-// The restore still pays one Argon2id derivation at the production floor (the
-// device key the vault would have been created under), so the waits take the
-// shared budget rather than a hand-picked number.
+// The restore still pays Argon2id derivations, so the waits take the shared
+// budget rather than a hand-picked number.
 const KDF_STEP_MS = kdfStepTimeout();
 
-// THREE DELIBERATELY DIFFERENT STRINGS. Reusing one for two roles would let a
-// build that confuses two of them pass.
+// DELIBERATELY DIFFERENT STRINGS. Reusing one for two roles would let a build
+// that confuses them pass.
 const BACKUP_PASSWORD = 'opens-the-backup-file';
 const WALLET_PASSWORD = 'the-old-devices-password';
-const DEVICE_PASSWORD = 'this-devices-password';
+const UNRELATED_PASSWORD = 'this-devices-password';
 
 const MNEMONIC = 'legal winner thank year wave sausage worth useful legal winner thank yellow';
 
 // Below the production floor on purpose: what is under test is which key opens
-// the envelope, not how expensive the KDF is, and the fixture's cost is what
-// the browser has to pay to find out the password is wrong. The derive path
-// enforces maxima only.
+// the envelope, not how expensive the KDF is. The derive path enforces maxima only.
 const KDF_PARAMS = {
     algorithm: 'argon2id',
     salt: 'AAAAAAAAAAAAAAAAAAAAAA==',
@@ -85,8 +74,7 @@ function memCollection(initial = []) {
 /**
  * A real §19.4 envelope holding a wallet whose seed is really sealed under
  * WALLET_PASSWORD. Built here rather than exported through the UI because this
- * spec is about the RESTORE screen, and an export walk would only add another
- * way for it to go red for an unrelated reason.
+ * spec is about the RESTORE screen.
  */
 async function buildEnvelope() {
     const sealed = await encryptWalletSeed({
@@ -130,100 +118,61 @@ async function buildEnvelope() {
     return fileContent;
 }
 
-/** Walks a vault-less browser to the restore screen and pastes the envelope. */
+/** Walks a vault-less browser to the restore screen and chooses the envelope. */
 async function openRestoreScreen(page, envelope) {
     await page.goto('/');
     await dismissIntroCarousel(page);
     await page.getByRole('button', { name: 'Import wallet' }).click();
     await page.getByRole('tab', { name: 'Encrypted backup' }).click();
-    await page.getByPlaceholder(/argon2id/).fill(envelope);
+    await chooseBackupFile(page, envelope, 'backed-up-wallet.xchain-wallet');
 }
 
-async function fillPasswords(page, { file, wallet, device }) {
-    await page.getByLabel(RESTORE_PASSWORD_LABELS.file, { exact: true }).fill(file);
-    await page.getByLabel(RESTORE_PASSWORD_LABELS.wallet, { exact: true }).fill(wallet);
-    await page.getByLabel(RESTORE_PASSWORD_LABELS.device.fresh, { exact: true }).fill(device);
+async function restoreWith(page, password) {
+    await page.getByLabel('Backup password', { exact: true }).fill(password);
+    await page.getByRole('button', { name: 'Restore' }).click();
 }
 
-/** The screen's error region. Scoped, so a label on the form cannot answer for it. */
-function restoreError(page) {
-    return page.getByRole('alert').first();
-}
-
-test.describe('restore: which of the three passwords is it asking for', () => {
-    test('the screen names all three before anything is typed', async ({ page }) => {
+test.describe('restore: one password, and the role that refused it', () => {
+    test('the screen asks for one password and shows the chosen file\'s summary', async ({ page }) => {
         await openRestoreScreen(page, await buildEnvelope());
+        const card = page.getByRole('region', { name: 'Chosen backup file' });
+        await expect(card).toContainText('Backed-up Wallet');
+        await expect(card.getByRole('button', { name: 'Change File' })).toBeVisible();
+        await expect(page.locator('input[type="password"]'),
+            'the restore screen asks for more than one password before any is refused')
+            .toHaveCount(1);
+        await expect(page.getByLabel('Backup password', { exact: true })).toBeVisible();
+    });
 
-        // Said once, up front: without it the second and third boxes read as
-        // the app asking for the same thing twice.
-        await expect(page.getByText(RESTORE_PASSWORD_INTRO),
-            'the restore screen never says that three DIFFERENT passwords are in play')
+    test('a password that opens nothing is one red sentence under the field', async ({ page }) => {
+        await openRestoreScreen(page, await buildEnvelope());
+        await restoreWith(page, UNRELATED_PASSWORD);
+
+        const error = page.getByRole('alert').first();
+        await expect(error).toHaveText("That password doesn't open this backup.", { timeout: KDF_STEP_MS });
+        await expect(page.getByLabel('Backup password', { exact: true })).toHaveAttribute('aria-invalid', 'true');
+        // Nothing was created, and no second field was offered for a file
+        // that never opened.
+        await expect(page.getByLabel('Wallet password', { exact: true })).toHaveCount(0);
+    });
+
+    test('the file\'s password opens the file and the screen asks for the wallet\'s own', async ({ page }) => {
+        await openRestoreScreen(page, await buildEnvelope());
+        await restoreWith(page, BACKUP_PASSWORD);
+
+        const walletField = page.getByLabel('Wallet password', { exact: true });
+        await expect(walletField,
+            'the file opened under its own password but the screen never asked for the wallet\'s')
+            .toBeVisible({ timeout: KDF_STEP_MS });
+        await expect(page.getByText('The file opened, but the wallet inside uses a different password.'))
             .toBeVisible();
+        await expect(page.getByLabel('Backup password', { exact: true }))
+            .not.toHaveAttribute('aria-invalid', 'true');
 
-        // And each box carries its own name. `getByLabel(exact)` is the
-        // assertion: a renamed or duplicated label finds nothing.
-        for (const label of [
-            RESTORE_PASSWORD_LABELS.file,
-            RESTORE_PASSWORD_LABELS.wallet,
-            RESTORE_PASSWORD_LABELS.device.fresh,
-        ]) {
-            await expect(page.getByLabel(label, { exact: true }),
-                `the restore screen has no field labelled "${label}"`).toBeVisible();
-        }
-    });
-
-    test('this device\'s password in the backup-file box is told which box wants it', async ({ page }) => {
-        // THE REPORTED CASE, exactly: a password that is correct for something
-        // else, in the wrong field.
-        await openRestoreScreen(page, await buildEnvelope());
-        await fillPasswords(page, {
-            file: DEVICE_PASSWORD,
-            wallet: WALLET_PASSWORD,
-            device: DEVICE_PASSWORD,
-        });
+        // The wrong wallet password is named on the wallet field, not the file's.
+        await walletField.fill(UNRELATED_PASSWORD);
         await page.getByRole('button', { name: 'Restore' }).click();
-
-        const error = restoreError(page);
-        await expect(error).toBeVisible({ timeout: KDF_STEP_MS });
-        await expect(error,
-            'the restore refused a correct-but-misfiled password without naming which of the '
-            + 'three passwords it wanted, so the user cannot tell a mix-up from a typo')
-            .toContainText(RESTORE_PASSWORD_LABELS.file, { timeout: KDF_STEP_MS });
-        await expect(error).toContainText(/did not open the backup file/i);
-        // And it does not blame either of the two boxes that were right.
-        await expect(error,
-            'the refusal points at the wrong field, which sends the user to change a password '
-            + 'that was correct')
-            .not.toContainText(`The "${RESTORE_PASSWORD_LABELS.wallet}" field wants`);
-
-        // Nothing was created: the user is still on the restore screen and can
-        // fix the one box the message named.
-        await expect(page.getByLabel(RESTORE_PASSWORD_LABELS.file, { exact: true })).toBeVisible();
-    });
-
-    test('the file password in the wallet box gets a DIFFERENT answer, naming that box', async ({ page }) => {
-        // The half that makes the case above meaningful. If both mix-ups
-        // produced the same sentence, naming a field would be decoration.
-        //
-        // This is also the fixture check: the message can only open with "the
-        // backup file opened" because the envelope really did decrypt under
-        // BACKUP_PASSWORD, and the wallet's seal really was then tried.
-        await openRestoreScreen(page, await buildEnvelope());
-        await fillPasswords(page, {
-            file: BACKUP_PASSWORD,
-            wallet: BACKUP_PASSWORD,        // the wrong ROLE for this string
-            device: DEVICE_PASSWORD,
-        });
-        await page.getByRole('button', { name: 'Restore' }).click();
-
-        const error = restoreError(page);
-        await expect(error).toBeVisible({ timeout: KDF_STEP_MS });
-        await expect(error,
-            'a wrong WALLET password is reported without naming the wallet field')
-            .toContainText(RESTORE_PASSWORD_LABELS.wallet, { timeout: KDF_STEP_MS });
-        await expect(error).toContainText(/backup file opened/i);
-        await expect(error,
-            'the wallet-password refusal blames the backup-file field, whose password was correct')
-            .not.toContainText(`The "${RESTORE_PASSWORD_LABELS.file}" field wants`);
+        await expect(page.getByRole('alert').first())
+            .toHaveText("That password doesn't open the wallet in this backup.", { timeout: KDF_STEP_MS });
     });
 });

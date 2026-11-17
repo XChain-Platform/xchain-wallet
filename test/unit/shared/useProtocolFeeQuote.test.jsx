@@ -49,7 +49,7 @@ describe('useProtocolFeeQuote', () => {
         messaging.requoteNativeFee.mockResolvedValue({ xchainFee: '0.064', requiredFeeSats: 197 });
         const { result } = render();
 
-        expect(result.current).toEqual({ quote: null, pending: true });
+        expect(result.current).toEqual({ quote: null, pending: true, waiting: false });
         await advance(399);
         expect(messaging.requoteNativeFee).not.toHaveBeenCalled();
         await advance(1);
@@ -59,7 +59,7 @@ describe('useProtocolFeeQuote', () => {
             actionString: BASE.actionString,
         });
         await waitFor(() => expect(result.current).toEqual({
-            quote: { xchainFee: '0.064', requiredFeeSats: 197 }, pending: false,
+            quote: { xchainFee: '0.064', requiredFeeSats: 197 }, pending: false, waiting: false,
         }));
     });
 
@@ -75,7 +75,7 @@ describe('useProtocolFeeQuote', () => {
             resolveFirst({ xchainFee: '0.1', requiredFeeSats: 200 });
             await Promise.resolve();
         });
-        expect(result.current).toEqual({ quote: null, pending: true });
+        expect(result.current).toEqual({ quote: null, pending: true, waiting: false });
         await advance(400);
         await waitFor(() => expect(result.current.quote).toEqual({
             xchainFee: '0.2', requiredFeeSats: 400,
@@ -86,19 +86,19 @@ describe('useProtocolFeeQuote', () => {
         messaging.requoteNativeFee.mockRejectedValue(new Error('offline'));
         const { result } = render();
         await advance(400);
-        await waitFor(() => expect(result.current).toEqual({ quote: null, pending: false }));
+        await waitFor(() => expect(result.current).toEqual({ quote: null, pending: false, waiting: false }));
     });
 
     it('does not quote while disabled or incomplete', async () => {
         const { result } = render({ enabled: false });
-        expect(result.current).toEqual({ quote: null, pending: false });
+        expect(result.current).toEqual({ quote: null, pending: false, waiting: false });
         await advance(400);
         expect(messaging.requoteNativeFee).not.toHaveBeenCalled();
     });
 
     it('stays pending while an enabled quote is incomplete', async () => {
         const { result } = render({ actionString: null });
-        expect(result.current).toEqual({ quote: null, pending: true });
+        expect(result.current).toEqual({ quote: null, pending: true, waiting: true });
         await advance(400);
         expect(messaging.requoteNativeFee).not.toHaveBeenCalled();
     });
@@ -108,7 +108,7 @@ describe('useProtocolFeeQuote', () => {
         const actionData = { action: 'SWEEP', params: { VERSION: '0', DESTINATION: 'bc1qdest' } };
         const { result } = render({ actionString: undefined, actionData });
 
-        expect(result.current).toEqual({ quote: null, pending: true });
+        expect(result.current).toEqual({ quote: null, pending: true, waiting: false });
         await advance(400);
         expect(messaging.quoteProtocolFee).toHaveBeenCalledWith({
             chainId: BASE.chainId,
@@ -117,7 +117,7 @@ describe('useProtocolFeeQuote', () => {
         });
         expect(messaging.requoteNativeFee).not.toHaveBeenCalled();
         await waitFor(() => expect(result.current).toEqual({
-            quote: { xchainFee: '0.5', requiredFeeSats: 900 }, pending: false,
+            quote: { xchainFee: '0.5', requiredFeeSats: 900 }, pending: false, waiting: false,
         }));
     });
 
@@ -151,7 +151,7 @@ describe('useProtocolFeeQuote', () => {
             resolveFirst({ xchainFee: '0.3' });
             await Promise.resolve();
         });
-        expect(result.current).toEqual({ quote: null, pending: true });
+        expect(result.current).toEqual({ quote: null, pending: true, waiting: false });
         await advance(399);
         expect(messaging.quoteProtocolFee).toHaveBeenCalledTimes(1);
         await advance(1);
@@ -164,7 +164,7 @@ describe('useProtocolFeeQuote', () => {
     it('stays pending while the action params are still incomplete', async () => {
         messaging.quoteProtocolFee = vi.fn();
         const { result } = render({ actionString: undefined, actionData: null });
-        expect(result.current).toEqual({ quote: null, pending: true });
+        expect(result.current).toEqual({ quote: null, pending: true, waiting: true });
         await advance(400);
         expect(messaging.quoteProtocolFee).not.toHaveBeenCalled();
     });
@@ -174,17 +174,17 @@ describe('useProtocolFeeQuote', () => {
             actionString: undefined,
             actionData: { action: 'SWEEP', params: { VERSION: '0' } },
         });
-        expect(result.current).toEqual({ quote: null, pending: false });
+        expect(result.current).toEqual({ quote: null, pending: false, waiting: false });
         await advance(400);
         expect(messaging.requoteNativeFee).not.toHaveBeenCalled();
     });
 
     it('stays pending, without quoting, until the string and source are both known', async () => {
         const { result, rerender } = render({ actionString: null, actionData: undefined, source: '' });
-        expect(result.current).toEqual({ quote: null, pending: true });
+        expect(result.current).toEqual({ quote: null, pending: true, waiting: true });
         await advance(800);
         expect(messaging.requoteNativeFee).not.toHaveBeenCalled();
-        expect(result.current).toEqual({ quote: null, pending: true });
+        expect(result.current).toEqual({ quote: null, pending: true, waiting: true });
         messaging.requoteNativeFee.mockResolvedValue({ xchainFee: '1' });
         rerender({ actionString: 'DIVIDEND|0|A|B|1', source: BASE.source });
         await advance(400);

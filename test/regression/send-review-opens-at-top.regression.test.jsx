@@ -44,8 +44,9 @@ function sendMessaging() {
             native: { tick: 'BTC', quantity: '100000000', divisibility: 8 },
             tokens: [],
         }),
+        // §20: the watch-only mode is this wallet's own.
+        listWallets: vi.fn().mockResolvedValue([{ id: WALLET_ID, name: 'W', walletMode: 'watcher' }]),
         getSettings: vi.fn().mockResolvedValue({
-            walletMode: 'watcher',
             activeNetwork: 'mainnet',
             grace: { testSendThresholdSats: 0 },
             privacy: { formDraftTtlMs: 0 },
@@ -114,7 +115,7 @@ describe('regression/send-review-opens-at-top', () => {
 
         await screen.findByRole('form', { name: 'Review payment' });
         expect(scroller.scrollTop).toBe(0);
-        expect(screen.getByRole('heading', { name: 'Review and send' })).toHaveFocus();
+        expect(screen.getByRole('heading', { name: 'Review and Send' })).toHaveFocus();
     });
 
     it('[REGRESSION P1] opens shared confirmation at the top and submits one double-tapped approval', async () => {

@@ -24,8 +24,10 @@ const messages = {
     'settings.network.switching': 'Switching networks. This can take a moment.',
     'alerts.notificationsTitle': 'Notifications',
     'walletDetails.exitDemo': 'Exit demo & wipe',
-    'walletPicker.add': 'Add wallet',
-    'importWallet.title': 'Import wallet',
+    // The same action on a button, where labels are Title Case.
+    'walletDetails.exitDemoAction': 'Exit Demo & Wipe',
+    'walletPicker.add': 'Add Wallet',
+    'importWallet.title': 'Import Wallet',
 
     // --- send -----------------------------------------------------
     'send.title': 'Send',
@@ -35,14 +37,14 @@ const messages = {
     'extensionBanner.activeTitle': 'Using your extension wallet.',
     'extensionBanner.activeBody':
         'Signing and account access route through the XChain Wallet extension on this site.',
-    'extensionBanner.switchBack': 'Switch back',
+    'extensionBanner.switchBack': 'Switch Back',
     'extensionBanner.detectedTitle': 'XChain Wallet extension detected.',
     'extensionBanner.detectedBody':
         'Use your extension wallet on this site instead of the web app.',
     'extensionBanner.connecting': 'Connecting…',
-    'extensionBanner.useExtension': 'Use extension wallet',
+    'extensionBanner.useExtension': 'Use Extension Wallet',
     'extensionBanner.dismissLabel': 'Dismiss extension notice',
-    'extensionBanner.notNow': 'Not now',
+    'extensionBanner.notNow': 'Not Now',
 
     // --- xchain: URI intent labels (Cluster L FOLLOWUP 5) ---------
     'uri.intent.send': 'Send',
@@ -57,7 +59,7 @@ const messages = {
     'uri.intent.receiveAssetAt': 'Receive {tick} at {address}',
     'uri.intent.receiveAmount': 'Receive {amount} {tick}',
     'uri.intent.receiveAmountAt': 'Receive {amount} {tick} at {address}',
-    'uri.intent.execute': 'Call contract #{contract}',
+    'uri.intent.execute': 'Call Contract #{contract}', // Feeds the Execute page title.
     'uri.intent.executeMethod': 'Call {method} on contract #{contract}',
     'uri.intent.unknown': 'Unrecognized link',
 
@@ -66,8 +68,7 @@ const messages = {
 
     // --- history --------------------------------------------------
     'history.title': 'History',
-    'history.detail.more': 'More',
-    'history.detail.openNewWindow': 'Open in new window',
+    'history.detail.openNewWindow': 'Open in New Window',
     'pending.detail.technicalDetails': 'Technical details',
 
 
@@ -83,15 +84,27 @@ const messages = {
     'settings.developer.sending': 'Sending…',
     'settings.thisWallet.wallet': 'Wallet',
     'settings.thisWallet.removing': 'Removing…',
-    'receive.explorer': 'Explorer',
-    'routes.addressList.viewAddress': 'View address',
-    'routes.addressList.dispensers': 'Dispensers',
     'routes.addressList.search': 'Search',
     'components.leftNav.primaryNavigation': 'Primary navigation',
     'components.leftNav.xchainWallet': 'XChain Wallet',
+    'components.leftNav.groupWallet': 'Wallet',
+    'components.leftNav.groupTrade': 'Trade',
+    'components.leftNav.groupNetwork': 'Network',
+    'components.leftNav.groupBuild': 'Build',
+    'components.leftNav.groupSocial': 'Social',
+    'components.leftNav.exchangeDex': 'Exchange (DEX)',
+    'components.leftNav.myTokens': 'My Tokens',
+    'components.leftNav.governance': 'Governance',
+    'components.leftNav.bettingMarkets': 'Betting markets',
+    'components.leftNav.footerActions': 'Wallet controls',
     'components.leftNav.openCommandPalette': 'Open the wallet menu',
     'components.leftNav.searchCmdCtrlK': 'Search the wallet menu (Cmd/Ctrl+K)',
     'components.leftNav.skipToMainContent': 'Skip to main content',
+    // The side menu's three states (G100); button labels are Title Case.
+    'components.leftNav.hideSideMenu': 'Hide Side Menu',
+    'components.leftNav.showSideMenu': 'Show Side Menu',
+    'components.leftNav.resizeSideMenu': 'Resize side menu',
+    'components.leftNav.resizeSideMenuHint': 'Drag to resize, or press Home to reset.',
     'components.bottomTabBar.bottomNavigation': 'Bottom navigation',
     'components.bottomTabBar.switchWallet': 'Switch wallet',
     'components.contactsPickerScreen.contacts': 'Contacts',
@@ -101,8 +114,8 @@ const messages = {
         "Sending was interrupted, so this may already have been sent. Sending it again is safe and can't pay twice.",
     'components.queuedBroadcastBanner.sending': 'Sending: {summary}',
     'components.queuedBroadcastBanner.sendNow': 'Send now: {summary}',
-    'components.queuedBroadcastBanner.trySendingAgain': 'Try sending again',
-    'components.queuedBroadcastBanner.sendNow2': 'Send now',
+    'components.queuedBroadcastBanner.trySendingAgain': 'Try Sending Again',
+    'components.queuedBroadcastBanner.sendNow2': 'Send Now',
     'components.queuedBroadcastBanner.removingFromQueue': 'Removing from queue: {summary}',
     'components.queuedBroadcastBanner.removeFromQueue': 'Remove from queue: {summary}',
     'components.routeErrorBoundary.couldNotLoadThisSection': "Couldn't load this section.",
@@ -115,8 +128,8 @@ const messages = {
     'components.toastHost.more': '+{hiddenCount} more',
     'components.toastHost.dismissNotification': 'Dismiss notification',
     'components.demoExitConfirm.exitDemoAndDeleteIts': 'Exit demo and delete its data?',
-    'components.watchOnlyBadge.watchOnlyWallet': 'Watch-only wallet',
-    'components.watchOnlyBadge.watchOnly': 'Watch-only',
+    'components.watchOnlyBadge.watchOnlyWallet': 'Another phone signs for this wallet',
+    'components.watchOnlyBadge.watchOnly': 'Signs on another phone',
     'ui.input.capsLockIsOn': 'Caps Lock is on',
     'ui.pageHeader.backToPreviousScreen': 'Back to previous screen',
 };

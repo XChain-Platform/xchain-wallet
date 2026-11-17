@@ -84,6 +84,9 @@ function mount({ mode = 'browse', filterType, onSelect = vi.fn(), onOpenList, re
 
 afterEach(cleanup);
 
+// A directory entry, not a row of an entry's own action list.
+const ENTRY = { name: /^(Token|Address) list / };
+
 describe('SharedListDirectory', () => {
     it('shows the platform badge and keeps unbadged lists in the directory', async () => {
         mount();
@@ -91,7 +94,8 @@ describe('SharedListDirectory', () => {
         expect(await screen.findByText('Maintained by XChain Platform')).toBeTruthy();
         expect(screen.getByRole('listitem', { name: 'Token list 12' })).toBeTruthy();
         expect(screen.getByRole('listitem', { name: 'Address list 8' })).toBeTruthy();
-        expect(screen.getByText('bc1qor...7890')).toBeTruthy();
+        // G99: the owner is the fitting AddressText, named by the full address.
+        expect(screen.getByLabelText('bc1qordinaryowner1234567890')).toBeTruthy();
         expect(screen.getByText('not yet mirrored here')).toBeTruthy();
     });
 
@@ -112,7 +116,7 @@ describe('SharedListDirectory', () => {
 
         const row = await screen.findByRole('listitem', { name: 'Address list 8' });
         expect(screen.queryByRole('listitem', { name: 'Token list 12' })).toBeNull();
-        fireEvent.click(within(row).getByRole('button', { name: 'Choose list' }));
+        fireEvent.click(within(row).getByRole('button', { name: /^Choose list\b/ }));
 
         expect(state.messaging.getSharedLists).toHaveBeenCalledWith({ chainId: CHAIN });
         expect(onSelect).toHaveBeenCalledWith({
@@ -128,7 +132,7 @@ describe('SharedListDirectory', () => {
 
         expect(await screen.findByRole('listitem', { name: 'Token list 12' })).toBeTruthy();
         expect(screen.queryByRole('listitem', { name: 'Token list 4' })).toBeNull();
-        expect(screen.getAllByRole('button', { name: 'Choose list' })).toHaveLength(1);
+        expect(screen.getAllByRole('button', { name: /^Choose list\b/ })).toHaveLength(1);
     });
 
     it('renders one unavailable line for each failed chain', async () => {
@@ -185,6 +189,8 @@ describe('SharedListDirectory', () => {
         });
 
         await screen.findByRole('listitem', { name: 'Token list 99' });
+        // The search sits in the title bar filter panel.
+        fireEvent.click(screen.getByRole('button', { name: 'Filter shared lists' }));
         fireEvent.change(screen.getByRole('searchbox', { name: 'Search shared lists' }), {
             target: { value: 'treasury' },
         });
@@ -208,23 +214,55 @@ describe('SharedListDirectory', () => {
         }));
         mount({ response: { lists, unavailable: [] }, onOpenList });
 
-        expect(await screen.findAllByRole('listitem')).toHaveLength(20);
+        expect(await screen.findAllByRole('listitem', ENTRY)).toHaveLength(20);
+        fireEvent.click(screen.getByRole('button', { name: 'Filter shared lists' }));
         fireEvent.change(screen.getByRole('searchbox', { name: 'Search shared lists' }), {
             target: { value: '1022' },
         });
-        expect(screen.getAllByRole('listitem')).toHaveLength(1);
+        expect(screen.getAllByRole('listitem', ENTRY)).toHaveLength(1);
         expect(screen.getByRole('listitem', { name: 'Token list 23' })).toBeTruthy();
 
         fireEvent.change(screen.getByRole('searchbox', { name: 'Search shared lists' }), {
             target: { value: '' },
         });
-        expect(screen.getAllByRole('listitem')).toHaveLength(20);
-        fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
-        expect(screen.getAllByRole('listitem')).toHaveLength(23);
+        expect(screen.getAllByRole('listitem', ENTRY)).toHaveLength(20);
+        fireEvent.click(screen.getByRole('button', { name: 'Load More' }));
+        expect(screen.getAllByRole('listitem', ENTRY)).toHaveLength(23);
 
         const row = screen.getByRole('listitem', { name: 'Token list 23' });
-        fireEvent.click(within(row).getByRole('button', { name: 'Open list' }));
+        fireEvent.click(within(row).getByRole('button', { name: /^Open list\b/ }));
         expect(onOpenList).toHaveBeenCalledWith('bitcoin-mainnet', '23');
+    });
+
+    it('ends each entry with its action as a shared action list row (G101)', async () => {
+        const onOpenList = vi.fn();
+        mount({ onOpenList });
+
+        const entry = await screen.findByRole('listitem', { name: 'Token list 12' });
+        const actions = within(entry).getByRole('list', { name: 'Token list 12 actions' });
+        expect(actions.tagName).toBe('UL');
+        // The facts card comes first and the action list closes the pane.
+        expect(entry.lastElementChild).toBe(actions);
+        const open = within(actions).getByRole('button', { name: /^Open list\b/ });
+        expect(open).toHaveTextContent('See its members and details');
+        expect(open).toHaveAttribute('data-tone', 'default');
+        expect(open.querySelector('[aria-hidden="true"] svg')).toBeTruthy();
+        fireEvent.click(open);
+        expect(onOpenList).toHaveBeenCalledWith('bitcoin-mainnet', '12');
+    });
+
+    it('offers Choose list as the action row in pick mode', async () => {
+        const onSelect = vi.fn();
+        mount({ mode: 'pick', filterType: 'token', onSelect });
+
+        const entry = await screen.findByRole('listitem', { name: 'Token list 12' });
+        const actions = within(entry).getByRole('list', { name: 'Token list 12 actions' });
+        expect(within(actions).getAllByRole('listitem')).toHaveLength(1);
+        const choose = within(actions).getByRole('button', { name: /^Choose list\b/ });
+        expect(choose).toHaveTextContent('Use this list for the form you came from');
+        expect(within(actions).queryByRole('button', { name: /^Open list\b/ })).toBeNull();
+        fireEvent.click(choose);
+        expect(onSelect).toHaveBeenCalledTimes(1);
     });
 
     it('shows the request failure instead of an empty directory', async () => {
@@ -247,7 +285,7 @@ describe('SharedListDirectory', () => {
 
         expect(await screen.findByText('Directory unavailable')).toBeTruthy();
         expect(screen.queryByText('No shared lists are available.')).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
 
         expect(await screen.findByText('No shared lists yet')).toBeTruthy();
         expect(messaging.getSharedLists).toHaveBeenCalledTimes(2);

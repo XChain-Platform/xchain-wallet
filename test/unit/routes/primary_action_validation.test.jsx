@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BetFeedDetail } from '../../../packages/core/src/shared/routes/BetFeedDetail.jsx';
@@ -73,14 +73,20 @@ function mount(Component, props, messaging = messagingWith()) {
 }
 
 describe('primary actions explain missing form input', () => {
-    it('BetFeedDetail asks for an outcome when Place bet is pressed', async () => {
+    it('BetFeedDetail needs no outcome prompt: each outcome is its own enabled action', async () => {
         mount(BetFeedDetail, { walletId: 'wallet-1', chainId: BTC, feedIndex: '123', onBack() {} });
-        const action = await screen.findByRole('button', { name: 'Place bet' });
+        // The outcome rows are on the Bet tab.
+        fireEvent.click(await screen.findByRole('tab', { name: 'Bet' }));
+        const group = await screen.findByRole('list', { name: 'Outcome to back' });
+        const sides = within(group).getAllByRole('button');
 
-        expect(action).toBeEnabled();
-        fireEvent.click(action);
+        expect(sides.length).toBeGreaterThan(0);
+        sides.forEach((side) => expect(side).toBeEnabled());
+        expect(screen.queryByRole('button', { name: 'Bet' })).toBeNull();
+        fireEvent.click(sides[0]);
 
-        expect(await screen.findByText('Choose an outcome.')).toBeTruthy();
+        expect(await screen.findByRole('form', { name: 'Place Bet' })).toBeTruthy();
+        expect(screen.queryByText('Choose an outcome.')).toBeNull();
     });
 
     it('CreateBetFeedForm explains that the selected network has no source address', async () => {
@@ -89,9 +95,11 @@ describe('primary actions explain missing form input', () => {
         });
         await screen.findByDisplayValue(ADDRESS.address);
 
+        // The oracle address picker sits in the closed From section; open it first.
+        fireEvent.click(screen.getByRole('button', { name: /^From\b/, expanded: false }));
         fireEvent.click(screen.getByRole('button', { name: 'Choose oracle address' }));
         fireEvent.click(screen.getByRole('button', { name: 'Pick unavailable address' }));
-        const action = screen.getByRole('button', { name: 'Open market' });
+        const action = screen.getByRole('button', { name: 'Open Market' });
         expect(action).toBeEnabled();
         fireEvent.click(action);
 
@@ -101,7 +109,7 @@ describe('primary actions explain missing form input', () => {
     it('CreatePollForm asks for its governance token', async () => {
         mount(CreatePollForm, { walletId: 'wallet-1', chainId: BTC, onBack() {} });
         await screen.findByDisplayValue(ADDRESS.address);
-        const action = screen.getByRole('button', { name: 'Create poll' });
+        const action = screen.getByRole('button', { name: /^Create poll$/i });
 
         expect(action).toBeEnabled();
         fireEvent.click(action);
@@ -109,15 +117,16 @@ describe('primary actions explain missing form input', () => {
         expect(await screen.findByText('Governance token is required.')).toBeTruthy();
     });
 
-    it('OracleForm asks for the token ticker', async () => {
+    it('OracleForm asks for the token', async () => {
         mount(OracleForm, { walletId: 'wallet-1', initialChainId: BTC, onBack() {} });
         await screen.findByDisplayValue(ADDRESS.address);
-        const action = screen.getByRole('button', { name: 'Publish price' });
+        const action = screen.getByRole('button', { name: /^Publish price$/i });
 
         expect(action).toBeEnabled();
         fireEvent.click(action);
 
-        expect(await screen.findByText('Enter the token ticker this oracle prices.')).toBeTruthy();
+        // G122: the Token field is picked, so the copy says choose.
+        expect(await screen.findByText('Choose the token this oracle prices.')).toBeTruthy();
         await waitFor(() => expect(action).toBeEnabled());
     });
 });

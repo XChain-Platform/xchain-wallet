@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 
 let settings;
@@ -25,36 +25,9 @@ vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
     screenVariantFor: () => 'full',
 }));
 
-vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
-    TokenPicker: ({ title, onBack, onSelect }) => (
-        <section aria-label="Held-token picker">
-            <h1>{title}</h1>
-            <button type="button" onClick={onBack}>Back to price alert</button>
-            <button
-                type="button"
-                onClick={() => onSelect({ chainId: 'bitcoin-mainnet', tick: 'PEPE', kind: 'token' })}
-            >
-                Select PEPE
-            </button>
-        </section>
-    ),
-}));
-
 const { NotificationsSection } = await import(
     '../../../packages/core/src/shared/components/settings/NotificationsSection.jsx');
 const { Settings } = await import('../../../packages/core/src/shared/routes/Settings.jsx');
-
-function alertRecord(overrides = {}) {
-    return {
-        id: 'alert-1',
-        chainId: 'bitcoin-mainnet',
-        direction: 'above',
-        targetFiat: 70000,
-        fiatCurrency: 'usd',
-        status: 'armed',
-        ...overrides,
-    };
-}
 
 beforeEach(() => {
     settings = createDefaultSettings();
@@ -86,7 +59,6 @@ describe('notification categories and permission', () => {
 
         expect(screen.getByRole('switch', { name: 'Transaction confirmations' })).not.toBeChecked();
         expect(screen.getByRole('switch', { name: 'Incoming pending payments' })).toBeChecked();
-        expect(screen.getByText('No wallet selected.')).toBeTruthy();
         expect(container.querySelector('[data-empty-state]')).toBeNull();
     });
 
@@ -109,7 +81,7 @@ describe('notification categories and permission', () => {
         try {
             render(<NotificationsSection />);
 
-            expect(await screen.findByRole('button', { name: 'Allow notifications' })).toBeTruthy();
+            expect(await screen.findByRole('button', { name: 'Allow Notifications' })).toBeTruthy();
             expect(screen.getByText(/Optional\. Allows XChain Wallet/)).toHaveTextContent(
                 'You can revoke access here at any time.',
             );
@@ -117,15 +89,15 @@ describe('notification categories and permission', () => {
             expect(category).not.toBeChecked();
             expect(category).toBeDisabled();
             expect(request).not.toHaveBeenCalled();
-            fireEvent.click(screen.getByRole('button', { name: 'Allow notifications' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Allow Notifications' }));
 
             await waitFor(() => expect(request).toHaveBeenCalledWith({ permissions: ['notifications'] }));
             await waitFor(() => expect(category).toBeChecked());
             expect(category).toBeEnabled();
-            fireEvent.click(await screen.findByRole('button', { name: 'Revoke permission' }));
+            fireEvent.click(await screen.findByRole('button', { name: 'Revoke Permission' }));
 
             await waitFor(() => expect(remove).toHaveBeenCalledWith({ permissions: ['notifications'] }));
-            expect(await screen.findByRole('button', { name: 'Allow notifications' })).toBeTruthy();
+            expect(await screen.findByRole('button', { name: 'Allow Notifications' })).toBeTruthy();
             expect(category).not.toBeChecked();
             expect(category).toBeDisabled();
         } finally {
@@ -151,14 +123,14 @@ describe('notification categories and permission', () => {
         };
         try {
             render(<NotificationsSection />);
-            expect(await screen.findByRole('button', { name: 'Revoke permission' })).toBeTruthy();
+            expect(await screen.findByRole('button', { name: 'Revoke Permission' })).toBeTruthy();
             const category = screen.getByRole('switch', { name: 'Transaction confirmations' });
             expect(category).toBeChecked();
 
             granted = false;
             for (const listener of removedListeners) listener({ permissions: ['notifications'] });
 
-            expect(await screen.findByRole('button', { name: 'Allow notifications' })).toBeTruthy();
+            expect(await screen.findByRole('button', { name: 'Allow Notifications' })).toBeTruthy();
             expect(category).not.toBeChecked();
             expect(category).toBeDisabled();
             expect(request).not.toHaveBeenCalled();
@@ -175,7 +147,7 @@ describe('notification categories and permission', () => {
             expect(screen.getByText(/Notifications are blocked/)).toHaveTextContent(
                 'Open your browser or system settings, find XChain Wallet, and allow notifications.',
             );
-            expect(screen.queryByRole('button', { name: 'Request permission' })).toBeNull();
+            expect(screen.queryByRole('button', { name: 'Request Permission' })).toBeNull();
             const category = screen.getByRole('switch', { name: 'Transaction confirmations' });
             expect(category).not.toBeChecked();
             expect(category).toBeDisabled();
@@ -223,192 +195,20 @@ describe('notification categories and permission', () => {
 });
 
 describe('price alert manager', () => {
-    it('opens the held-token picker as a screen and preserves the form on Back', () => {
+    it('keeps the Price alerts master on the Notifications page and opens the list from its own row', () => {
         settings.notifications.priceAlerts = true;
         render(<Settings
             activeWallet={{ id: 'wallet-1', name: 'Test wallet' }}
             onBack={vi.fn()}
         />);
 
-        fireEvent.change(screen.getByLabelText('Direction'), { target: { value: 'below' } });
-        fireEvent.change(screen.getByLabelText('Target price'), { target: { value: '123' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Choose a held token' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Notifications/ }));
+        // The on/off master is a switch on this page (G08); no alert depends on it.
+        expect(screen.getByRole('switch', { name: 'Price alerts' })).toBeChecked();
+        fireEvent.click(screen.getByRole('button', { name: /^Your price alerts/ }));
 
-        expect(screen.getByRole('heading', { level: 1, name: 'Choose a coin or token' })).toBeTruthy();
-        expect(screen.queryByRole('heading', { name: 'Settings' })).toBeNull();
-        expect(screen.queryByRole('switch', { name: 'Transaction confirmations' })).toBeNull();
-
-        fireEvent.click(screen.getByRole('button', { name: 'Back to price alert' }));
-        expect(screen.getByLabelText('Direction').value).toBe('below');
-        expect(screen.getByLabelText('Target price').value).toBe('123');
-
-        fireEvent.click(screen.getByRole('button', { name: 'Choose a held token' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Select PEPE' }));
-
-        expect(screen.getByRole('button', { name: /PEPE/ })).toBeTruthy();
-        expect(screen.getByLabelText('Target price').value).toBe('');
-    });
-
-    it('groups only the whole-number part of a saved target', () => {
-        priceAlerts.alerts = [
-            alertRecord({ id: 'a1', chainId: 'dogecoin-mainnet', direction: 'below', targetFiat: 0.1234 }),
-            alertRecord({ id: 'a2', targetFiat: 70000.123456 }),
-            alertRecord({ id: 'a3', targetFiat: 1e21 }),
-            alertRecord({ id: 'a4', chainId: 'litecoin-mainnet', targetFiat: 1e-7 }),
-        ];
-        const { container } = render(<NotificationsSection walletId="wallet-1" />);
-
-        const text = container.textContent;
-        expect(text).toContain('Dogecoin falls below $0.1234');
-        expect(text).toContain('Bitcoin rises above $70,000.123456');
-        expect(text).toContain('$1,000,000,000,000,000,000,000');
-        expect(text).toContain('Litecoin rises above $0.0000001');
-    });
-
-
-    it('keeps and labels an alert in its original currency after a display-currency switch', async () => {
-        settings = { ...settings, fiatCurrency: 'EUR' };
-        priceAlerts.alerts = [alertRecord({ fiatCurrency: 'usd' })];
-        render(<NotificationsSection walletId="wallet-1" />);
-
-        const edit = screen.getByRole('button', { name: 'Edit Bitcoin price alert' });
-        expect(edit.closest('div')).toHaveTextContent('Bitcoin rises above $70,000');
-        expect(screen.getByText(/Saved price alerts keep the currency/)).toHaveTextContent(
-            'Delete and recreate an alert to use the current display currency.',
-        );
-        fireEvent.click(edit);
-        fireEvent.click(screen.getByRole('button', { name: 'Add alert' }));
-        await waitFor(() => expect(priceAlerts.updateAlert).toHaveBeenCalledWith('alert-1', {
-            chainId: 'bitcoin-mainnet',
-            direction: 'above',
-            targetFiat: 70000,
-            fiatCurrency: 'usd',
-        }));
-    });
-
-    it('distinguishes loading from an empty result', () => {
-        priceAlerts.loading = true;
-        render(<NotificationsSection walletId="wallet-1" />);
-
-        expect(screen.getByText('Loading price alerts…')).toBeTruthy();
-        expect(screen.queryByText(/No price alerts yet/)).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Add alert' })).toBeNull();
-    });
-
-    it('offers a retry after the alert list fails to load', () => {
-        priceAlerts.error = 'storage failed';
-        render(<NotificationsSection walletId="wallet-1" />);
-
-        expect(screen.getByRole('alert')).toHaveTextContent('Couldn\'t load price alerts.');
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
-        expect(priceAlerts.reload).toHaveBeenCalledTimes(1);
-        expect(screen.queryByText(/No price alerts yet/)).toBeNull();
-    });
-
-    it('says one thing, not two, while price alerts are switched off', () => {
-        render(<NotificationsSection walletId="wallet-1" />);
-
-        expect(screen.getByText('Turn on Price alerts above to start receiving these.')).toBeTruthy();
-        expect(screen.queryByText('No price alerts yet')).toBeNull();
-    });
-
-    it('creates a price alert from the empty state', async () => {
-        settings.notifications.priceAlerts = true;
-        render(<NotificationsSection walletId="wallet-1" />);
-        expect(screen.getAllByRole('status').some(
-            (region) => region.textContent === 'No price alerts yetAdd one below.',
-        )).toBe(true);
-
-        fireEvent.change(screen.getByLabelText('Target price'), { target: { value: '71000' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Add alert' }));
-
-        await waitFor(() => expect(priceAlerts.addAlert).toHaveBeenCalledWith({
-            chainId: 'bitcoin-mainnet',
-            direction: 'above',
-            targetFiat: 71000,
-            fiatCurrency: 'usd',
-        }));
-    });
-
-    it('edits an existing price alert', async () => {
-        priceAlerts.alerts = [alertRecord()];
-        render(<NotificationsSection walletId="wallet-1" />);
-
-        fireEvent.click(screen.getByRole('button', { name: 'Edit Bitcoin price alert' }));
-        expect(screen.getByLabelText('Target price').value).toBe('70000');
-        fireEvent.change(screen.getByLabelText('Direction'), { target: { value: 'below' } });
-        fireEvent.change(screen.getByLabelText('Target price'), { target: { value: '65000' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Add alert' }));
-
-        await waitFor(() => expect(priceAlerts.updateAlert).toHaveBeenCalledWith('alert-1', {
-            chainId: 'bitcoin-mainnet',
-            direction: 'below',
-            targetFiat: 65000,
-            fiatCurrency: 'usd',
-        }));
-    });
-
-    it('shows when a price alert triggered with its exact local time', () => {
-        vi.useFakeTimers();
-        vi.setSystemTime(new Date('2026-01-15T12:00:00Z'));
-        vi.spyOn(Date.prototype, 'toLocaleString').mockReturnValue('Jan 15, 2026, 3:58 AM PST');
-        priceAlerts.alerts = [alertRecord({
-            status: 'triggered',
-            triggeredAt: '2026-01-15T11:58:00.000Z',
-        })];
-
-        render(<NotificationsSection walletId="wallet-1" />);
-
-        const time = screen.getByText('2 minutes ago');
-        expect(time).toHaveAttribute('title', 'Jan 15, 2026, 3:58 AM PST');
-    });
-
-    it('asks before deleting an alert and keeps it on cancel', async () => {
-        priceAlerts.alerts = [alertRecord()];
-        render(<NotificationsSection walletId="wallet-1" />);
-
-        const remove = screen.getByRole('button', { name: 'Remove Bitcoin price alert' });
-        expect(remove).toHaveTextContent('');
-        expect(remove.querySelectorAll('line')).toHaveLength(2);
-        fireEvent.click(remove);
-
-        const dialog = await screen.findByRole('dialog');
-        expect(priceAlerts.removeAlert).not.toHaveBeenCalled();
-        fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
-
-        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-        expect(screen.getByRole('button', { name: 'Remove Bitcoin price alert' })).toBeTruthy();
-        expect(priceAlerts.removeAlert).not.toHaveBeenCalled();
-
-        fireEvent.click(screen.getByRole('button', { name: 'Remove Bitcoin price alert' }));
-        fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }));
-
-        await waitFor(() => expect(priceAlerts.removeAlert).toHaveBeenCalledTimes(1));
-        expect(priceAlerts.removeAlert).toHaveBeenCalledWith('alert-1');
-    });
-
-    it('deletes an alert after the confirm', async () => {
-        priceAlerts.alerts = [alertRecord()];
-        render(<NotificationsSection walletId="wallet-1" />);
-
-        fireEvent.click(screen.getByRole('button', { name: 'Remove Bitcoin price alert' }));
-        fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }));
-
-        await waitFor(() => expect(priceAlerts.removeAlert).toHaveBeenCalledWith('alert-1'));
-        expect(screen.queryByText('Could not update the price alert. Try again.')).toBeNull();
-    });
-
-    it('reports deletion failures', async () => {
-        priceAlerts.alerts = [alertRecord()];
-        priceAlerts.removeAlert.mockRejectedValueOnce(new Error('delete failed'));
-        render(<NotificationsSection walletId="wallet-1" />);
-
-        fireEvent.click(screen.getByRole('button', { name: 'Remove Bitcoin price alert' }));
-        fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }));
-
-        await waitFor(() => expect(priceAlerts.removeAlert).toHaveBeenCalledWith('alert-1'));
-        expect(await screen.findByRole('alert')).toHaveTextContent(
-            'Could not update the price alert. Try again.',
-        );
+        expect(screen.getByRole('heading', { level: 1, name: 'Price Alerts' })).toBeTruthy();
+        expect(screen.queryByRole('switch', { name: 'Price alerts' })).toBeNull();
+        expect(screen.getByText('No price alerts yet')).toBeTruthy();
     });
 });

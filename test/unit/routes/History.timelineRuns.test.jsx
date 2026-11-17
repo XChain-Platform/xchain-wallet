@@ -36,7 +36,8 @@ describe('History timeline runs', () => {
         const rowRule = /\n\.row \{([^}]*)\}/.exec(row)[1];
         expect(rowRule).not.toMatch(/composes:/);
         expect(rowRule).toMatch(/border:\s*0/);
-        expect(rowRule).toMatch(/padding:\s*var\(--xc-card-pad\)/);
+        // The same row inset as the Coins and Tokens lists.
+        expect(rowRule).toMatch(/padding:\s*var\(--xc-list-row-padding\)/);
         expect(history).toMatch(/\.rowList \{\s*composes: flush from '\.\.\/\.\.\/ui\/Card\.module\.css';/);
         expect(history).toMatch(/\.rowList > li \+ li \{\s*border-top: 1px solid var\(--xc-border\);/);
         expect(home).toMatch(/\.activityList > li \+ li \{\s*border-top: 1px solid var\(--xc-border\);/);

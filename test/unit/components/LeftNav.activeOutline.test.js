@@ -44,27 +44,59 @@ function ruleIn(body, selector) {
     return match ? match[2] : null;
 }
 
-// The active nav row carries the same 1px control edge as every other
-// selected control. Every row reserves that edge in transparent, so selecting
-// a row never moves the list.
-describe('left nav active row outline', () => {
-    it('draws a 1px control-border edge on the active row', () => {
+describe('left nav layout 5 highlight', () => {
+    it('draws the active row as an accent wash without a square edge', () => {
         const active = topLevelRule('.itemActive');
         expect(active).not.toBeNull();
-        expect(active).toMatch(/border:\s*1px solid var\(--xc-control-border\)\s*;/);
+        expect(active).toMatch(/background:\s*color-mix\(in srgb, var\(--xc-accent-primary\) 20%, transparent\)\s*;/);
+        expect(active).toMatch(/border:\s*1px solid transparent\s*;/);
+        expect(active).not.toMatch(/box-shadow/);
     });
 
-    it('reserves a transparent 1px edge on every row', () => {
+    it('insets every row and gives it rounded corners', () => {
         const item = topLevelRule('.item');
         expect(item).not.toBeNull();
-        expect(item).toMatch(/border:\s*1px solid transparent\s*;/);
-        expect(item).not.toMatch(/border:\s*0\s*;/);
+        expect(item).toMatch(/width:\s*calc\(100% - \(2 \* var\(--xc-side-menu-row-inset\)\)\)\s*;/);
+        expect(item).toMatch(/margin-inline:\s*var\(--xc-side-menu-row-inset\)\s*;/);
+        expect(item).toMatch(/border-radius:\s*10px\s*;/);
+        expect(item).toMatch(/padding:\s*var\(--xc-space-2\)\s+var\(--xc-space-3\)\s*;/);
     });
 
-    it('pads the row with the spacing tokens', () => {
-        const item = topLevelRule('.item');
-        expect(item).toMatch(/padding:\s*var\(--xc-space-2\)\s+var\(--xc-space-4\)\s*;/);
-        expect(item).not.toMatch(/padding:[^;]*calc\(/);
+    it('pins one 64px icon rail and one centred row geometry at every wide width', () => {
+        const layout = topLevelRule('.layout');
+        expect(layout).toMatch(/--xc-side-menu-icons-width:\s*64px\s*;/);
+        expect(layout).toMatch(/--xc-side-menu-row-inset:\s*var\(--xc-space-2\)\s*;/);
+
+        expect(css).toMatch(
+            /\.layout\[data-xc-side-menu='icons'\] \.sidebar,\s*\.layout\[data-xc-tier='rail'\] \.sidebar\s*\{[^}]*flex:\s*0 0 64px\s*;[^}]*inline-size:\s*var\(--xc-side-menu-icons-width\)\s*;[^}]*min-inline-size:\s*var\(--xc-side-menu-icons-width\)\s*;[^}]*max-inline-size:\s*var\(--xc-side-menu-icons-width\)\s*;/s,
+        );
+        expect(css).toMatch(
+            /\.layout\[data-xc-side-menu='icons'\] \.item,\s*\.layout\[data-xc-tier='rail'\] \.item\s*\{[^}]*box-sizing:\s*border-box\s*;[^}]*width:\s*calc\(100% - \(2 \* var\(--xc-side-menu-row-inset\)\)\)\s*;[^}]*margin-inline:\s*var\(--xc-side-menu-row-inset\)\s*;[^}]*justify-content:\s*center\s*;[^}]*padding-inline:\s*0\s*;/s,
+        );
+        expect(css).toMatch(
+            /\.layout\[data-xc-rail='shown'\]\[data-xc-side-menu='icons'\] > \.sidebar,\s*\.layout\[data-xc-rail='shown'\]\[data-xc-tier='rail'\] > \.sidebar\s*\{[^}]*width:\s*64px\s*;/s,
+        );
+        expect(css).toMatch(
+            /\.layout\[data-xc-rail='shown'\]\[data-xc-side-menu='collapsed'\] > \.sidebar\s*\{[^}]*width:\s*0\s*;[^}]*inline-size:\s*0\s*;[^}]*min-inline-size:\s*0\s*;[^}]*max-inline-size:\s*0\s*;[^}]*flex-basis:\s*0\s*;/s,
+        );
+    });
+
+    it('centres primary and footer icons alike and gives every divider the same inset', () => {
+        expect(css).toMatch(
+            /\.layout\[data-xc-side-menu='icons'\] \.item > \.icon,\s*\.layout\[data-xc-tier='rail'\] \.item > \.icon\s*\{[^}]*margin-inline:\s*0\s*;/s,
+        );
+        const divider = topLevelRule('.groupDivider');
+        expect(divider).toMatch(
+            /margin:\s*var\(--xc-space-2\)\s+calc\(var\(--xc-side-menu-row-inset\) \+ var\(--xc-space-2\) - var\(--xc-space-1\) \/ 2\)\s*;/,
+        );
+    });
+
+    it('uses the neutral hover wash and preserves the keyboard focus ring', () => {
+        const hover = topLevelRule('.nav .item:hover');
+        const focus = topLevelRule('.nav .item:focus-visible');
+        expect(hover).toMatch(/background:\s*color-mix\(in srgb, var\(--xc-text\) 10%, transparent\)\s*;/);
+        expect(focus).toMatch(/outline:\s*2px solid var\(--xc-accent-primary, var\(--xc-text\)\)\s*;/);
+        expect(focus).toMatch(/outline-offset:\s*-2px\s*;/);
     });
 
     it('keeps idle rows edgeless and marks the active row in forced colors', () => {

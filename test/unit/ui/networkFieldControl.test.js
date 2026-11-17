@@ -11,9 +11,9 @@ import { describe, expect, it } from 'vitest';
 
 const root = process.cwd();
 const sharedRoot = join(root, 'packages/core/src/shared');
-const exceptions = new Set([
-    'routes/History.jsx',
-]);
+// The History filter was the one exception; it now draws the shared network
+// filter inside the title-line filter menu, so no file may use ChainPicker.
+const exceptions = new Set([]);
 
 function sourceFiles(directory) {
     return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -44,7 +44,9 @@ describe('network field control', () => {
         }
         const link = readFileSync(join(sharedRoot, 'routes/LinkForm.jsx'), 'utf8');
         expect(link).not.toMatch(/<ChainPicker\b/);
-        // The form network (U93) and the one ActionCard field drawn for Action 1 and Action 2 (U59).
-        expect(link.match(/<NetworkField\b/g) || []).toHaveLength(2);
+        // The form network comes from the standard From section; the one ActionCard
+        // field drawn for Action 1 and Action 2 is the only NetworkField left here.
+        expect(link).toMatch(/<FromSection\b/);
+        expect(link.match(/<NetworkField\b/g) || []).toHaveLength(1);
     });
 });

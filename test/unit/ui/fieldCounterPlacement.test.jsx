@@ -89,6 +89,26 @@ describe('field counter placement', () => {
         },
     );
 
+    it.each(FIELD_CASES)(
+        'draws the %s custom counter last on the label row with the optional pill and help before it',
+        (_name, Field) => {
+            const { container } = render(
+                <Field label="Name" optional help="About" counter="0 / 64 bytes" />,
+            );
+            const counter = screen.getByText('0 / 64 bytes');
+            const row = counter.parentElement;
+
+            expect(row.className).toMatch(/labelRow/);
+            expect(row.lastElementChild).toBe(counter);
+            expect(row).toContainElement(container.querySelector('[data-optional-pill]'));
+            expect(row).toContainElement(screen.getByText('Name'));
+            expect(row).not.toContainElement(screen.getByLabelText('Name'));
+            expect(counter).toHaveAttribute('aria-live', 'polite');
+            expect(screen.getByLabelText('Name').getAttribute('aria-describedby')?.split(' '))
+                .toContain(counter.id);
+        },
+    );
+
     it('renders a custom Textarea counter on the label row instead of its character count', () => {
         const { rerender } = render(
             <Textarea label="Message" defaultValue="abc" maxLength={10} />,

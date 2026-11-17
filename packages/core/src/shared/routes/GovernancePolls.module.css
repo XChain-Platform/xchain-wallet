@@ -37,12 +37,12 @@
 
 .pollTitle {
     min-width: 0;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
 }
 
 .pollText {
     min-width: 0;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
     text-align: start;
 }
 

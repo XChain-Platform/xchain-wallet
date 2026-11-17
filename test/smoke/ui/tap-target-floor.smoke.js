@@ -65,7 +65,8 @@ const CONSUMERS = [
     ['shared/components/PortfolioChart.module.css', 'the chart range chips (were 20px tall)'],
     ['shared/routes/Send.module.css', 'the Advanced disclosure (was 21px tall)'],
     ['shared/commandPalette/CommandPalette.module.css', 'the palette search field (was 19px tall)'],
-    ['shared/routes/MarketsList.jsx', 'the watchlist star (was 18x18)'],
+    // The watchlist star (was 18x18) left the rows; the row's open button keeps the floor.
+    ['shared/routes/MarketsList.module.css', 'the market row open button'],
 ];
 
 for (const [rel, what] of CONSUMERS) {

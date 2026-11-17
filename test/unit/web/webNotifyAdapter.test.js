@@ -79,6 +79,39 @@ describe('webNotifyAdapter', () => {
         expect(ctor.mock.calls[0][1]).toEqual({ body: payload.body });
     });
 
+    it('raises the OS notification when the desktop setting is true', () => {
+        stubVisibility('hidden');
+        const ctor = stubNotification('granted');
+        createWebNotifyAdapter({ getDesktopSetting: () => true })(payload);
+        expect(ctor).toHaveBeenCalledTimes(1);
+    });
+
+    it('raises no OS notification when the desktop setting is false, and keeps the in-app event', () => {
+        stubVisibility('hidden');
+        const ctor = stubNotification('granted');
+        const seen = [];
+        const onEvent = (e) => seen.push(e.detail);
+        window.addEventListener(NOTIFICATION_EVENT, onEvent);
+        expect(createWebNotifyAdapter({ getDesktopSetting: () => false })(payload)).toBe(false);
+        window.removeEventListener(NOTIFICATION_EVENT, onEvent);
+        expect(ctor).not.toHaveBeenCalled();
+        expect(seen).toEqual([payload]);
+    });
+
+    it('raises the OS notification when the desktop setting is undefined and permission was granted', () => {
+        stubVisibility('hidden');
+        const ctor = stubNotification('granted');
+        createWebNotifyAdapter({ getDesktopSetting: () => undefined })(payload);
+        expect(ctor).toHaveBeenCalledTimes(1);
+    });
+
+    it('raises no OS notification when the setting is true but permission is not granted', () => {
+        stubVisibility('hidden');
+        const ctor = stubNotification('default');
+        createWebNotifyAdapter({ getDesktopSetting: () => true })(payload);
+        expect(ctor).not.toHaveBeenCalled();
+    });
+
     it('raises no OS notification while the tab is visible (the toast covers it)', () => {
         stubVisibility('visible');
         const ctor = stubNotification('granted');

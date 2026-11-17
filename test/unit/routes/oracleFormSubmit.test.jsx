@@ -19,10 +19,12 @@
 // perfectly.
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, act as domAct, fireEvent } from '@testing-library/react';
+import { render, act as domAct, fireEvent, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { OracleForm } from '../../../packages/core/src/shared/routes/OracleForm.jsx';
+import {
+    OracleForm, usageFeePercentToFraction, usageFeeFractionToPercent, usageFeePercentError,
+} from '../../../packages/core/src/shared/routes/OracleForm.jsx';
 import { ORACLE_ACTIVATION_DELAY_S } from '../../../packages/core/src/flows/oracleQueries.js';
 import { clearDemoWalletId, markDemoWallet } from '../../../packages/core/src/flows/demoMode.js';
 
@@ -110,7 +112,10 @@ function recordingMessaging({ feeds = [], feedsError = null, consumers = { suppo
     return { messaging, calls };
 }
 
-async function mountForm({ formProps = {}, ...opts } = {}) {
+// The Token field takes no typed text (G122): it opens the token picker,
+// which oracleFormPickers.test.jsx drives. Here the priced ticker arrives as
+// the form's initialTick, the same path a link or a token page uses.
+async function mountForm({ formProps = {}, tick = 'pepecash', ...opts } = {}) {
     const { messaging, calls } = recordingMessaging(opts);
     let utils;
     await domAct(async () => {
@@ -122,6 +127,7 @@ async function mountForm({ formProps = {}, ...opts } = {}) {
                     walletId: 'w',
                     onBack() {},
                     initialChainId: 'bitcoin-mainnet',
+                    initialTick: tick,
                     ...formProps,
                 }),
             ),
@@ -131,18 +137,29 @@ async function mountForm({ formProps = {}, ...opts } = {}) {
     return { utils, calls };
 }
 
-async function fill(utils, { tick = 'pepecash', value = '0.05', fee } = {}) {
-    await domAct(async () => {
-        fireEvent.change(utils.getByLabelText(/^Token ticker/), { target: { value: tick } });
-        await drainMicrotasks();
-    });
+// The usage fee stop slider sits in a section that is closed on load.
+const feeSlider = (utils) => utils.getByRole('slider', { name: 'Usage fee', hidden: true });
+
+const escapeRe = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// The ticker came in at mount, so a `tick` here only checks that the Token
+// field shows it, upper-cased as the form keeps it.
+async function fill(utils, { tick, value = '0.05', fee } = {}) {
+    if (tick) {
+        expect(utils.getByRole('button', { name: new RegExp(`^Token: ${escapeRe(tick.toUpperCase())} on `) })).toBeTruthy();
+    }
     await domAct(async () => {
         fireEvent.change(utils.getByLabelText(/^Price of one/), { target: { value } });
         await drainMicrotasks();
     });
     if (fee !== undefined) {
+        // The Custom stop is the last of six: Free, 0.5%, 1%, 2%, 5%, Custom.
         await domAct(async () => {
-            fireEvent.change(utils.getByLabelText(/^Usage fee/), { target: { value: fee } });
+            fireEvent.change(feeSlider(utils), { target: { value: '5' } });
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            fireEvent.change(utils.getByLabelText(/^Custom usage fee/), { target: { value: fee } });
             await drainMicrotasks();
         });
     }
@@ -150,7 +167,7 @@ async function fill(utils, { tick = 'pepecash', value = '0.05', fee } = {}) {
 
 async function preview(utils) {
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('button', { name: 'Publish price' }));
+        fireEvent.click(utils.getByRole('button', { name: /^Publish price$/i }));
         await drainMicrotasks();
     });
 }
@@ -164,6 +181,9 @@ async function clickSubmit(utils) {
     });
 }
 
+const confirmFactValue = (utils, label) => within(utils.getByTestId('confirm-facts'))
+    .getByText(label, { selector: 'dt' }).nextElementSibling;
+
 function expectStoppedBeforeCompose(utils, calls, message) {
     expect(utils.getByText(message)).toBeTruthy();
     expect(calls.some((call) => call.method === 'composeForConfirm')).toBe(false);
@@ -172,7 +192,7 @@ function expectStoppedBeforeCompose(utils, calls, message) {
 describe('OracleForm submit payload', () => {
     it('composes PRICE v1 with the chain coin and an upper-cased ticker', async () => {
         const { utils, calls } = await mountForm();
-        await fill(utils, { tick: 'pepecash', value: '0.05', fee: '0.01' });
+        await fill(utils, { tick: 'pepecash', value: '0.05', fee: '1' });
         await preview(utils);
         await clickSubmit(utils);
 
@@ -227,13 +247,18 @@ describe('OracleForm submit payload', () => {
     });
 
     it('offers a published price as an action and prefills its values', async () => {
-        const { utils } = await mountForm({ feeds: liveFeed('0.05') });
+        // No ticker at mount, so the Token field shows only what the feed fills in.
+        const { utils } = await mountForm({ feeds: liveFeed('0.05'), tick: '' });
+        expect(utils.getByRole('button', { name: /^Token: Select a token/ })).toBeTruthy();
 
+        // Published prices sit in their own closed section, and the
+        // usage fee in its optional section, closed on load.
+        fireEvent.click(utils.getByRole('button', { name: /^Published Prices/, expanded: false }));
         fireEvent.click(utils.getByRole('button', { name: 'PEPECASH in USD' }));
 
-        expect(utils.getByRole('textbox', { name: /^Token ticker/ }).value).toBe('PEPECASH');
+        expect(utils.getByRole('button', { name: 'Token: PEPECASH on Bitcoin' })).toBeTruthy();
         expect(utils.getByRole('textbox', { name: /^Price of one/ }).value).toBe('0.05');
-        expect(utils.getByRole('textbox', { name: /^Usage fee/ }).value).toBe('0.01');
+        expect(feeSlider(utils)).toHaveAttribute('aria-valuetext', '1 percent');
     });
 
     it('does not describe a failed feed read as an address with no published prices', async () => {
@@ -268,19 +293,21 @@ describe('OracleForm pre-review validation', () => {
     });
 
     it.each([
-        ['^abc', /Token ticker can be a name, or \^ followed by the token's number/i],
-        ['BAD/TICK', /Token ticker can only use letters, numbers, dots/i],
-    ])('stops the malformed ticker or id %j before compose', async (tick, message) => {
-        const { utils, calls } = await mountForm();
+        ['^abc', /Token can be a name, or \^ followed by the token's number/i],
+        ['BAD/TICK', /Token can only use letters, numbers, dots/i],
+    ])('stops a malformed ticker or id %j from a link before compose', async (tick, message) => {
+        // A picked token always passes; a ticker handed in by a link may not.
+        const { utils, calls } = await mountForm({ tick });
         await fill(utils, { tick });
         await preview(utils);
         expectStoppedBeforeCompose(utils, calls, message);
     });
 
     it.each([
-        ['-0.01'],
-        ['1.000000000000000001'],
-        ['0.0000000000000000001'],
+        ['-1'],
+        ['abc'],
+        ['100.01'],
+        ['0.00000000000000001'],
     ])('stops the invalid usage fee %j before compose', async (fee) => {
         const { utils, calls } = await mountForm();
         await fill(utils, { fee });
@@ -288,7 +315,7 @@ describe('OracleForm pre-review validation', () => {
         expectStoppedBeforeCompose(
             utils,
             calls,
-            /The usage fee is a fraction between 0 and 1/i,
+            /Usage fee (can be at most 100%|must be a percent from 0 to 100)/i,
         );
     });
 
@@ -313,6 +340,105 @@ describe('OracleForm pre-review validation', () => {
         await preview(utils);
         await clickSubmit(utils);
         expect(calls.find((call) => call.method === 'oraclePriceAction').args.params.FEE).toBe('0');
+    });
+
+    it.each([['1', '0.01'], ['0.25', '0.0025'], ['0.5', '0.005'], ['100', '1']])(
+        'composes a usage fee typed as %s percent as the exact fraction %s',
+        async (percent, fraction) => {
+            const { utils, calls } = await mountForm();
+            await fill(utils, { fee: percent });
+            await preview(utils);
+            await clickSubmit(utils);
+            expect(calls.find((call) => call.method === 'oraclePriceAction').args.params.FEE).toBe(fraction);
+        },
+    );
+
+    it.each([
+        ['1', '0.5', '0.005', '0.5 percent'],
+        ['2', '1', '0.01', '1 percent'],
+        ['3', '2', '0.02', '2 percent'],
+        ['4', '5', '0.05', '5 percent'],
+    ])('stop %s of the usage fee slider sets %s percent and composes %s', async (index, percent, fraction, valueText) => {
+        const { utils, calls } = await mountForm();
+        await fill(utils);
+        await domAct(async () => { fireEvent.change(feeSlider(utils), { target: { value: index } }); await drainMicrotasks(); });
+        expect(feeSlider(utils)).toHaveAttribute('aria-valuetext', valueText);
+        // The header pill and the closed section summary read the percent.
+        expect(utils.container.textContent).toContain(`${percent}%`);
+        // A preset stop opens no entry.
+        expect(utils.queryByLabelText(/^Custom usage fee/)).toBeNull();
+        await preview(utils);
+        await clickSubmit(utils);
+        expect(calls.find((call) => call.method === 'oraclePriceAction').args.params.FEE).toBe(fraction);
+    });
+
+    it('the Free stop clears the fee and composes no FEE', async () => {
+        const { utils, calls } = await mountForm();
+        await fill(utils);
+        await domAct(async () => { fireEvent.change(feeSlider(utils), { target: { value: '2' } }); await drainMicrotasks(); });
+        await domAct(async () => { fireEvent.change(feeSlider(utils), { target: { value: '0' } }); await drainMicrotasks(); });
+        expect(feeSlider(utils)).toHaveAttribute('aria-valuetext', 'Free, 0 percent');
+        await preview(utils);
+        await clickSubmit(utils);
+        expect(calls.find((call) => call.method === 'oraclePriceAction').args.params.FEE).toBeUndefined();
+    });
+
+    it('the Custom stop shows one percent entry, and the pill and value text follow it', async () => {
+        const { utils } = await mountForm();
+        expect(utils.queryByLabelText(/^Custom usage fee/, { selector: 'input' })).toBeNull();
+        await domAct(async () => { fireEvent.change(feeSlider(utils), { target: { value: '5' } }); await drainMicrotasks(); });
+        expect(utils.getAllByLabelText(/^Custom usage fee/, { selector: 'input' })).toHaveLength(1);
+        await domAct(async () => {
+            fireEvent.change(utils.getByLabelText(/^Custom usage fee/, { selector: 'input' }), { target: { value: '3.25' } });
+            await drainMicrotasks();
+        });
+        // Typing a preset value inside Custom keeps Custom selected.
+        await domAct(async () => {
+            fireEvent.change(utils.getByLabelText(/^Custom usage fee/, { selector: 'input' }), { target: { value: '1' } });
+            await drainMicrotasks();
+        });
+        expect(utils.getAllByLabelText(/^Custom usage fee/, { selector: 'input' })).toHaveLength(1);
+        expect(feeSlider(utils)).toHaveAttribute('aria-valuetext', '1 percent');
+    });
+
+    it.each([['0', '0'], ['100', '1'], ['3.25', '0.0325']])(
+        'the Custom stop accepts %s percent and composes %s',
+        async (percent, fraction) => {
+            const { utils, calls } = await mountForm();
+            await fill(utils, { fee: percent });
+            await preview(utils);
+            await clickSubmit(utils);
+            expect(calls.find((call) => call.method === 'oraclePriceAction').args.params.FEE).toBe(fraction);
+        },
+    );
+
+    it('says the usage fee should be very small and explains it in percent, never as a raw fraction', async () => {
+        const { utils } = await mountForm();
+        expect(utils.container.textContent).toMatch(/Percent charged when someone opens a dispenser/);
+        expect(utils.container.textContent).toMatch(/usage fee should be very small/i);
+        expect(utils.container.textContent).not.toMatch(/0\.01 means 1%/);
+    });
+});
+
+describe('usage fee percent conversion', () => {
+    it('moves the decimal point exactly, with no float math', () => {
+        expect(usageFeePercentToFraction('1')).toBe('0.01');
+        expect(usageFeePercentToFraction('0.25')).toBe('0.0025');
+        expect(usageFeePercentToFraction('12.5')).toBe('0.125');
+        expect(usageFeePercentToFraction('0.0000000000000001')).toBe('0.000000000000000001');
+        expect(usageFeePercentToFraction('abc')).toBe('');
+        expect(usageFeeFractionToPercent('0.01')).toBe('1');
+        expect(usageFeeFractionToPercent('0.0025')).toBe('0.25');
+        expect(usageFeeFractionToPercent('1')).toBe('100');
+        expect(usageFeeFractionToPercent('0.010000000000000000')).toBe('1');
+    });
+
+    it('words every error in percent and rejects a non-number', () => {
+        expect(usageFeePercentError('')).toBeNull();
+        expect(usageFeePercentError('100')).toBeNull();
+        expect(usageFeePercentError('100.5')).toBe('Usage fee can be at most 100%.');
+        expect(usageFeePercentError('abc')).toMatch(/percent from 0 to 100/);
+        expect(usageFeePercentError('0.123456789012345678')).toMatch(/at most 16 decimal places/);
     });
 });
 
@@ -351,7 +477,8 @@ describe('OracleForm deviation gate', () => {
         await fill(utils, { tick: 'PEPECASH', value: '999' });
         await preview(utils);
         expect(utils.queryByLabelText(/type publish to confirm/i)).toBeNull();
-        expect(utils.getByText(/will not price anything for 24 hours/i)).toBeTruthy();
+        expect(utils.getByTestId('confirm-status')).toHaveAttribute('data-state', 'unknownAction');
+        expect(utils.getByTestId('confirm-warning')).toHaveTextContent(/will not price anything for 24 hours/i);
         await clickSubmit(utils);
         expect(calls.some((c) => c.method === 'oraclePriceAction')).toBe(true);
     });
@@ -372,7 +499,8 @@ describe('OracleForm consumer disclosure', () => {
         await fill(utils, { tick: 'PEPECASH', value: '0.06' });
         await preview(utils);
         // Only the PEPECASH dispenser reprices; the other feed's is noise.
-        expect(utils.getByText(/1 open dispenser price/i)).toBeTruthy();
+        expect(confirmFactValue(utils, 'Affected dispensers')).toHaveTextContent('1 open');
+        expect(utils.getByTestId('confirm-warning')).toHaveTextContent(/1 open dispenser will use this price/i);
     });
 
     it('expands to show every dispenser included in the affected count', async () => {
@@ -389,11 +517,9 @@ describe('OracleForm consumer disclosure', () => {
         await fill(utils, { tick: 'PEPECASH', value: '0.06' });
         await preview(utils);
 
-        const summary = utils.getByText('Affected dispensers (6)');
-        expect(summary.closest('details').open).toBe(false);
-        fireEvent.click(summary);
-        expect(summary.closest('details').open).toBe(true);
-        expect(utils.getByText(/600 PEPECASH per dispense/)).toBeTruthy();
+        expect(confirmFactValue(utils, 'Affected dispensers')).toHaveTextContent('6 open');
+        expect(within(utils.getByTestId('confirm-facts')).getAllByText(/^Dispenser \d+$/, { selector: 'dt' })).toHaveLength(6);
+        expect(confirmFactValue(utils, 'Dispenser 6')).toHaveTextContent(/600 PEPECASH per dispense/);
     });
 
     // "Could not check" and "nobody is using it" must not render the same,
@@ -405,6 +531,7 @@ describe('OracleForm consumer disclosure', () => {
         });
         await fill(utils, { tick: 'PEPECASH', value: '0.06' });
         await preview(utils);
-        expect(utils.getByText(/Could not check which dispensers use this oracle/i)).toBeTruthy();
+        expect(confirmFactValue(utils, 'Affected dispensers')).toHaveTextContent('Could not check');
+        expect(utils.getByTestId('confirm-warning')).toHaveTextContent(/could not check which dispensers use this oracle/i);
     });
 });

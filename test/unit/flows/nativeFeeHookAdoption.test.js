@@ -38,10 +38,11 @@ function nativeFeeSurfaces() {
     const out = [];
     for (const dir of ['components', 'routes']) {
         for (const file of readdirSync(join(SHARED, dir))) {
-            if (!file.endsWith('.jsx') || file === 'NativeFeeToggle.jsx') continue;
+            if (!file.endsWith('.jsx') || file === 'NativeFeeToggle.jsx' || file === 'FeesCard.jsx') continue;
             const rel = `${dir}/${file}`;
             const src = readFileSync(join(SHARED, rel), 'utf8');
-            if (src.includes('NativeFeeToggle') || src.includes('nativeFeeForFeelessAction')) {
+            if (src.includes('NativeFeeToggle') || src.includes('nativeFeeProps')
+                || src.includes('nativeFeeForFeelessAction')) {
                 out.push({ rel, src });
             }
         }
@@ -63,7 +64,7 @@ describe('the native-fee flag comes from shared policy on every submitting surfa
 
     for (const { rel, src } of surfaces) {
         it(`${rel} takes the fee mode from shared policy`, () => {
-            if (src.includes('NativeFeeToggle')) {
+            if (src.includes('NativeFeeToggle') || src.includes('nativeFeeProps')) {
                 expect(src, `${rel} mounts NativeFeeToggle without calling useNativeFee. The flag has to `
                     + 'reach the legacy sign path, the confirm preview AND the watcher encode-only path, '
                     + 'and `mandatory` has to be derived per render so a chain switch re-derives.'

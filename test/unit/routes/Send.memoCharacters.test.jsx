@@ -3,8 +3,20 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+
+// The Asset field opens the token picker page; a stub with one button for the
+// token under test keeps these cases about the memo.
+vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
+    TokenPicker: ({ title, chainIdFilter, onSelect, onBack }) => (
+        <section aria-label={title}>
+            <h2>{title}</h2>
+            <button type="button" onClick={() => onSelect({ chainId: chainIdFilter, tick: 'PEPE' })}>Pick PEPE</button>
+            <button type="button" onClick={onBack}>Back</button>
+        </section>
+    ),
+}));
 
 import { memoCharacterError } from '../../../packages/core/src/shared/utils/memoLimit.js';
 import { fillNativeSend, mountSend, sendButton } from './sendInputHarness.jsx';
@@ -47,9 +59,10 @@ describe('Send memo characters', () => {
     it('refuses a token send whose memo carries a control character before compose', async () => {
         const messaging = mountSend();
         fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4' } });
-        fireEvent.change(screen.getByLabelText(/^Token$/), { target: { value: 'PEPE' } });
-        fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '1' } });
-        fireEvent.click(screen.getByText('Advanced'));
+        fireEvent.click(await screen.findByRole('button', { name: /^Asset/ }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Pick PEPE' }));
+        fireEvent.change(await screen.findByLabelText(/^Amount \(/), { target: { value: '1' } });
+        fireEvent.click(screen.getByText('Advanced', { selector: '[data-form-section-title]' }));
         fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'hi‮evil' } });
 
         expect(screen.getAllByText('Memo cannot contain text-direction control characters.').length).toBeGreaterThan(0);

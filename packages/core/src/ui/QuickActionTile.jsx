@@ -20,12 +20,14 @@ import styles from './QuickActionTile.module.css';
  * @param {object} props
  * @param {import('react').ReactNode} props.icon   the glyph, wrapped in the shared icon slot
  * @param {string} [props.className]                 extra classes from the screen's row
+ * @param {boolean} [props.square]                   the outlined square tile, for action grids
  * @param {import('react').ReactNode} props.children the label
  * @param {import('react').Ref<HTMLButtonElement>} [ref]
  */
 export const QuickActionTile = forwardRef(function QuickActionTile({
     icon,
     className,
+    square = false,
     children,
     ...rest
 }, ref) {
@@ -34,7 +36,7 @@ export const QuickActionTile = forwardRef(function QuickActionTile({
             {...rest}
             ref={ref}
             variant="secondary"
-            className={[styles.tile, className].filter(Boolean).join(' ')}
+            className={[styles.tile, square ? styles.square : null, className].filter(Boolean).join(' ')}
             icon={<span className={styles.icon}>{icon}</span>}
         >
             {children}

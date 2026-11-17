@@ -97,10 +97,4 @@ button.toggle:focus-visible {
     outline-offset: 2px;
 }
 
-.toggle:disabled {
-    cursor: not-allowed;
-    background: var(--xc-control-disabled-bg);
-    border-color: var(--xc-control-disabled-border);
-    color: var(--xc-control-disabled-text);
-    opacity: var(--xc-disabled-opacity);
-}
+/* A disabled chip keeps its colours: a button never looks disabled (G130). */

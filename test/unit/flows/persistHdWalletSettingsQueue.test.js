@@ -46,19 +46,19 @@ describe('rolling back a wallet setup seed', () => {
     it('keeps an ADS step that lands while the rollback is in flight', async () => {
         const registry = defaultRegistry();
         const before = seedSettingsForChains(createDefaultSettings(), registry, [BTC]);
-        before.ads.enabled = true;
-        before.ads.perChain[BTC].accumulatedSats = 25000;
+        before.ads.perTransaction = '1';
+        before.ads.queued = '25';
         const seeded = seedSettingsForChains(before, registry, [BTC, LTC]);
         const vault = slowVault(seeded);
 
         await Promise.all([
             rollbackSettingsSeed(vault, settingsSeedDelta(before, seeded, [BTC, LTC])),
-            commitAdsStep({ vault, chainId: BTC, donationIncluded: false, chainRegistry: registry }),
+            commitAdsStep({ vault, donationIncluded: false }),
         ]);
 
         const saved = vault.read();
-        expect(saved.ads.perChain[BTC]).toMatchObject({ accumulatedSats: 26000, lifetimeTxCount: 1 });
-        expect(saved.ads.perChain[LTC]).toBeUndefined();
+        expect(saved.ads).toMatchObject({ queued: '26', donationCount: 0 });
+        expect(saved.fees[BTC]).toBeDefined();
         expect(saved.fees[LTC]).toBeUndefined();
     });
 });
@@ -131,8 +131,6 @@ describe('a failed wallet setup on a vault that already has settings', () => {
 
         const settings = await vault.settings.get();
         expect(settings.fees['bitcoin-regtest']).toBeDefined();
-        expect(settings.ads.perChain['bitcoin-regtest']).toBeDefined();
         expect(settings.fees['litecoin-regtest']).toBeUndefined();
-        expect(settings.ads.perChain['litecoin-regtest']).toBeUndefined();
     });
 });

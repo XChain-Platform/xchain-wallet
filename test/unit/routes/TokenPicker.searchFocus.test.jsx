@@ -54,6 +54,8 @@ describe('Token picker search focus', () => {
         stubPointer(false);
         const navigate = vi.fn();
         renderPicker(navigate);
+        // Search now sits behind the title-line filter button, which puts the caret in the box when opened.
+        fireEvent.click(screen.getByRole('button', { name: 'Filter coins and tokens' }));
         const search = screen.getByLabelText('Search coins or tokens');
         expect(document.activeElement).toBe(search);
 
@@ -64,6 +66,8 @@ describe('Token picker search focus', () => {
     it('leaves focus alone on a touch screen, where it would raise the keyboard over the list', () => {
         stubPointer(true);
         renderPicker(vi.fn());
-        expect(document.activeElement).not.toBe(screen.getByLabelText('Search coins or tokens'));
+        // The search box is not even mounted until the filter opens, so nothing raises the keyboard.
+        expect(screen.queryByLabelText('Search coins or tokens')).toBeNull();
+        expect(document.activeElement?.tagName).not.toBe('INPUT');
     });
 });

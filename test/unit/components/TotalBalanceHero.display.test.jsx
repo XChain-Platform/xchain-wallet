@@ -68,11 +68,13 @@ describe('TotalBalanceHero privacy', () => {
         });
 
         expect(screen.getByText('•••••')).toBeInTheDocument();
-        expect(screen.getByLabelText('Balance hidden')).toBeInTheDocument();
+        // The amount and the summary row's change pill are both masked, and the
+        // summary row stays so hiding the balance never changes the card's height.
+        expect(screen.getAllByLabelText('Balance hidden')).toHaveLength(2);
         expect(screen.queryByText('$1,234.56')).toBeNull();
         expect(screen.queryByText(/not priced/)).toBeNull();
         expect(screen.queryByRole('status')).toBeNull();
-        expect(screen.queryByLabelText('Balance summary')).toBeNull();
+        expect(screen.getByLabelText('Balance summary').textContent).not.toMatch(/\d/);
     });
 });
 
@@ -183,16 +185,31 @@ describe('TotalBalanceHero refresh status', () => {
         expect(screen.queryByText(/^Updated/)).toBeNull();
     });
 
-    it('keeps refresh in the actions menu without an online freshness line', () => {
+    it('does not render an updated line while offline either; Settings, About shows it', () => {
+        // The last-updated time moved off the card to Settings, About, so
+        // saved balances shown offline carry no age line on the card.
+        const onLine = vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+        try {
+            mount({ lastSyncedAt: Date.now() - 2 * 24 * 60 * 60_000 });
+            expect(screen.queryByText(/Updated/)).toBeNull();
+            expect(screen.queryByText(/ago/)).toBeNull();
+        } finally {
+            onLine.mockRestore();
+        }
+    });
+
+    it('leaves refresh out of the balance card and prints no online freshness line', () => {
+        // The card has two buttons, Show in BTC and the eye; Refresh is not
+        // among them, and a menu appears only where it holds other rows.
         const onRefresh = vi.fn();
         const lastSyncedAt = Date.now() - 2 * 60_000;
         const pricesFetchedAt = Date.now() - 10 * 60_000;
         const { rerender } = mount({ lastSyncedAt, pricesFetchedAt, onRefresh });
 
         expect(screen.queryByText(/^Updated/)).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Balance actions' }));
-        fireEvent.click(screen.getByRole('menuitem', { name: 'Refresh portfolio' }));
-        expect(onRefresh).toHaveBeenCalledOnce();
+        expect(screen.queryByRole('button', { name: 'Balance actions' })).toBeNull();
+        expect(screen.queryByRole('button', { name: /Refresh portfolio/ })).toBeNull();
+        expect(onRefresh).not.toHaveBeenCalled();
 
         rerender(
             <MessagingProvider shell="web" messaging={{ getSettings: vi.fn(async () => ({})) }}>
@@ -206,8 +223,8 @@ describe('TotalBalanceHero refresh status', () => {
                 />
             </MessagingProvider>,
         );
-        fireEvent.click(screen.getByRole('button', { name: 'Balance actions' }));
-        expect(screen.getByRole('menuitem', { name: 'Refreshing portfolio' })).toBeDisabled();
+        expect(screen.queryByRole('button', { name: 'Balance actions' })).toBeNull();
+        expect(screen.queryByRole('menuitem', { name: /Refreshing portfolio/ })).toBeNull();
     });
 });
 
@@ -218,7 +235,7 @@ describe('TotalBalanceHero responsive layout', () => {
         const label = screen.getByText('Active address balance');
         const region = screen.getByRole('region', { name: 'Active address balance' });
         const total = screen.getByText('$1,234.56');
-        const action = screen.getByRole('button', { name: 'Balance actions' });
+        const action = screen.getByRole('button', { name: 'Hide balance' });
 
         expect(region).toHaveAttribute('aria-labelledby', label.id);
         expect(region).not.toHaveAttribute('aria-label');
@@ -235,27 +252,45 @@ describe('TotalBalanceHero responsive layout', () => {
         expect(cssRule('amountValue')).toMatch(/overflow-wrap:\s*anywhere/);
     });
 
-    it('holds every hero action in one overflow menu', () => {
+    it('puts the unit swap and the eye in the card and the shell rows in one overflow menu', () => {
         const onOpenSettings = vi.fn();
         const onCommandPalette = vi.fn();
         const onLockWallet = vi.fn();
         mount({ onOpenSettings, onCommandPalette, onLockWallet });
 
+        const swap = screen.getByRole('button', { name: 'Show in BTC' });
+        const eye = screen.getByRole('button', { name: 'Hide balance' });
         const trigger = screen.getByRole('button', { name: 'Balance actions' });
-        expect(screen.getAllByRole('button')).toEqual([trigger]);
+        expect(screen.getAllByRole('button')).toEqual([swap, eye, trigger]);
         expect(trigger).toHaveAttribute('aria-expanded', 'false');
 
         fireEvent.click(trigger);
         const menu = screen.getByRole('menu', { name: 'Balance actions' });
         expect(trigger).toHaveAttribute('aria-expanded', 'true');
-        expect([
-            ...within(menu).getAllByRole('menuitem'),
-            ...within(menu).getAllByRole('menuitemcheckbox'),
-        ]).toHaveLength(6);
-        expect(within(menu).getByRole('menuitem', { name: 'Show in BTC' })).toBeTruthy();
+        expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+            'Open settings',
+            'Open the wallet menu',
+            'Lock wallet',
+        ]);
+        expect(within(menu).queryAllByRole('menuitemcheckbox')).toHaveLength(0);
         fireEvent.click(within(menu).getByRole('menuitem', { name: 'Open settings' }));
         expect(onOpenSettings).toHaveBeenCalledOnce();
         expect(screen.queryByRole('menu', { name: 'Balance actions' })).toBeNull();
         expect(STYLES).toMatch(/@media not all and \(min-width: 480px\)[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\) var\(--xc-control-h-sm\)/);
+    });
+});
+
+describe('TotalBalanceHero card surface', () => {
+    it('paints the card flat app blue with no gradient, on the hero and on Home\'s card stack', () => {
+        const homeStyles = readFileSync(join(
+            process.cwd(),
+            'packages/core/src/shared/components/HomeTabs.module.css',
+        ), 'utf8');
+        const heroStack = homeStyles.match(/\.heroStack\s*\{([^}]*)\}/)?.[1] || '';
+
+        expect(cssRule('hero')).toMatch(/background:\s*var\(--xc-accent-primary\);/);
+        expect(heroStack).toMatch(/background:\s*var\(--xc-accent-primary\);/);
+        expect(STYLES).not.toMatch(/-gradient\(/);
+        expect(heroStack).not.toMatch(/-gradient\(/);
     });
 });

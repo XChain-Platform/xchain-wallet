@@ -143,13 +143,13 @@ describe('useActionConfirmFlow orchestration', () => {
             actionString: 'SEND|0',
             version: 0,
             deferredOutputs: [{ value: 1 }],
-            adsPlan: { canSubmit: true },
+            adsPlan: { canSubmit: true, donationFiat: '25', currency: 'USD' },
         };
         await expect(options.onApprove({}, composed)).resolves.toBe('submitted');
         expect(onApprove).toHaveBeenCalledWith(expect.objectContaining({
             psbtHex: 'previewed-psbt',
             deferredOutputs: [{ value: 1 }],
-            adsDonation: { included: true },
+            adsDonation: { included: true, fiat: '25', currency: 'USD' },
         }), composed);
     });
 

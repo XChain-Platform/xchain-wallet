@@ -80,7 +80,8 @@ const controls = [
     {
         name: 'Tabs',
         exportName: 'Tabs',
-        cssModule: 'Tabs.module.css',
+        // Tabs draw the shared view-toggle look from the SegmentedControl sheet.
+        cssModule: 'SegmentedControl.module.css',
         props: {
             'aria-label': 'Wallet section',
             items: [{ id: 'overview', label: 'Overview' }],

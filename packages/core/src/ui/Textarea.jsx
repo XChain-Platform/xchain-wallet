@@ -9,10 +9,13 @@
 // contact legal@dankest.llc.
 
 import { forwardRef, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { ClearFieldButton, clearControlValue } from './ClearFieldButton.jsx';
 import { InfoTip } from './InfoTip.jsx';
 import styles from './Input.module.css';
 import { fieldHelpName, resolveFieldRequirement } from './fieldRequirement.js';
 import { OptionalPill } from './OptionalPill.jsx';
+import { fitAutoGrow } from './textareaAutoGrow.js';
+import { useFormFieldError } from './formErrors.js';
 import { t } from '../i18n/index.js';
 import '../i18n/locales/en/ui.js';
 
@@ -39,14 +42,24 @@ import '../i18n/locales/en/ui.js';
  *   turned off.
  * @property {import('react').ReactNode} [fieldAction] one small control drawn
  *   inside the field at its trailing edge, aligned with the first text line.
+ * @property {boolean} [clearable] draws a small X inside the field at its
+ *   trailing edge, shown only while the field has text, named "Clear <label>".
+ * @property {() => void} [onClear] what the X does; by default it empties the
+ *   field through an ordinary change event.
+ * @property {boolean} [autoGrow]  one line (an Input's height) by default,
+ *   growing with the text up to `maxRows` lines, then scrolling inside.
+ * @property {number} [maxRows]    the auto-grow cap, default 3.
  */
 export const Textarea = /* @__PURE__ */ forwardRef(function Textarea(
     {
         label,
         help,
         hint,
-        error,
+        error: errorProp,
         counter: customCounter,
+        // A host that shows the count elsewhere (a section header)
+        // keeps maxLength's cap without the field's own count.
+        hideCounter = false,
         id,
         optional = false,
         size = 'md',
@@ -58,6 +71,11 @@ export const Textarea = /* @__PURE__ */ forwardRef(function Textarea(
         onChange,
         actions,
         fieldAction,
+        clearable = false,
+        onClear,
+        autoGrow = false,
+        maxRows = 3,
+        rows,
         required = false,
         'aria-invalid': externalInvalid,
         'aria-describedby': externalDescribedBy,
@@ -68,6 +86,10 @@ export const Textarea = /* @__PURE__ */ forwardRef(function Textarea(
 ) {
     const autoId = useId();
     const textareaId = id || autoId;
+    // The form error standard: this field's entry in the form's error map,
+    // dropped on change; an `error` the caller passes wins.
+    const formField = useFormFieldError(id);
+    const error = errorProp || formField.error;
     const requirement = resolveFieldRequirement({
         label,
         optional,
@@ -80,18 +102,23 @@ export const Textarea = /* @__PURE__ */ forwardRef(function Textarea(
     const errorId = visibleError ? `${textareaId}-error` : undefined;
     const optionalPillId = requirement.isOptional ? `${textareaId}-optional` : undefined;
     const hasCustomCounter = customCounter != null && customCounter !== false;
-    const counterId = hasCustomCounter || maxLength != null ? `${textareaId}-counter` : undefined;
+    // A hidden counter is never drawn, so the field must not point at it.
+    const counterId = !hideCounter && (hasCustomCounter || maxLength != null) ? `${textareaId}-counter` : undefined;
     const initialValue = value ?? defaultValue ?? '';
     const [uncontrolledLength, setUncontrolledLength] = useState(() => String(initialValue).length);
     const characterCount = value === undefined ? uncontrolledLength : String(value ?? '').length;
     const describedBy = [externalDescribedBy, optionalPillId, hintId, errorId, counterId]
         .filter(Boolean).join(' ') || undefined;
     const hasActions = actions != null && actions !== false;
-    const hasFieldAction = fieldAction != null && fieldAction !== false;
+    const showClear = clearable && characterCount > 0 && !rest.disabled && !rest.readOnly;
+    const hasFieldAction = showClear || (fieldAction != null && fieldAction !== false);
     const hasHelp = Boolean(label && help);
+    // Actions already grow the box without a cap; autoGrow is the capped one.
+    const growing = autoGrow && !hasActions;
     const textareaClass = [
         styles.input,
         hasActions ? styles.textareaWithActions : '',
+        growing ? styles.textareaAutoGrow : '',
         hasFieldAction ? styles.inputWithFieldAction : '',
         visibleError ? styles.invalid : '',
         className,
@@ -116,7 +143,22 @@ export const Textarea = /* @__PURE__ */ forwardRef(function Textarea(
     }, []);
     useLayoutEffect(() => {
         if (hasActions) fitToContent();
+        else if (growing) fitAutoGrow(innerRef.current, maxRows);
     });
+    // An auto-growing box refits when its width changes: a rotation, a
+    // resize, or a closed section opening (zero width until it shows).
+    useEffect(() => {
+        const node = innerRef.current;
+        if (!growing || !node || typeof ResizeObserver !== 'function') return undefined;
+        let width = node.clientWidth;
+        const observer = new ResizeObserver(() => {
+            if (node.clientWidth === width) return;
+            width = node.clientWidth;
+            fitAutoGrow(node, maxRows);
+        });
+        observer.observe(node);
+        return () => observer.disconnect();
+    }, [growing, maxRows]);
     // A width change (rotation, window resize) or a late web font rewraps
     // the text, so the fitted height is recomputed then too.
     useEffect(() => {
@@ -137,6 +179,7 @@ export const Textarea = /* @__PURE__ */ forwardRef(function Textarea(
     const handleChange = (event) => {
         setUncontrolledLength(event.currentTarget.value.length);
         if (error) setDismissedError(error);
+        formField.clear();
         onChange?.(event);
     };
 
@@ -149,7 +192,8 @@ export const Textarea = /* @__PURE__ */ forwardRef(function Textarea(
             aria-describedby={describedBy}
             aria-required={requirement.ariaRequired}
             required={required}
-            style={{ resize: hasActions ? 'none' : 'vertical', ...style }}
+            style={{ resize: hasActions || growing ? 'none' : 'vertical', ...style }}
+            rows={rows ?? (growing ? 1 : undefined)}
             value={value}
             defaultValue={defaultValue}
             maxLength={maxLength}
@@ -157,7 +201,7 @@ export const Textarea = /* @__PURE__ */ forwardRef(function Textarea(
             {...rest}
         />
     );
-    const counter = hasCustomCounter || maxLength != null ? (
+    const counter = !hideCounter && (hasCustomCounter || maxLength != null) ? (
         <div id={counterId} className={styles.counter} aria-live="polite">
             {hasCustomCounter ? customCounter : <>{characterCount} / {maxLength}</>}
         </div>
@@ -170,7 +214,6 @@ export const Textarea = /* @__PURE__ */ forwardRef(function Textarea(
                     <label htmlFor={textareaId} className={styles.label}>
                         {requirement.label}
                     </label>
-                    {requirement.isOptional ? <OptionalPill id={optionalPillId} /> : null}
                     {hasHelp ? (
                         <InfoTip
                             className={styles.labelHelp}
@@ -178,6 +221,8 @@ export const Textarea = /* @__PURE__ */ forwardRef(function Textarea(
                             aria={t('ui.field.about', { label: fieldHelpName(requirement.label, rest['aria-label']) })}
                         />
                     ) : null}
+                    {/* The ? help comes first, then the Optional tag. */}
+                    {requirement.isOptional ? <OptionalPill id={optionalPillId} /> : null}
                     {counter}
                 </div>
             ) : label ? (
@@ -185,12 +230,18 @@ export const Textarea = /* @__PURE__ */ forwardRef(function Textarea(
                     {requirement.label}
                 </label>
             ) : null}
-            {hasActions || hasFieldAction ? (
+            {hasActions || hasFieldAction || clearable ? (
                 <div className={styles.textareaControl}>
                     {control}
                     {hasFieldAction ? (
                         <div className={`${styles.controlActions} ${styles.textareaFieldAction}`}>
                             {fieldAction}
+                            {showClear ? (
+                                <ClearFieldButton
+                                    label={typeof rest['aria-label'] === 'string' ? rest['aria-label'] : label}
+                                    onClear={() => (onClear ? onClear() : clearControlValue(innerRef.current))}
+                                />
+                            ) : null}
                         </div>
                     ) : null}
                     {hasActions ? <div className={styles.textareaActions}>{actions}</div> : null}

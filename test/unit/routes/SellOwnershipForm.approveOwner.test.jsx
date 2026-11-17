@@ -70,7 +70,7 @@ function mount(messaging) {
 
 async function openConfirm() {
     fireEvent.change(await screen.findByLabelText(/^Price/), { target: { value: '5' } });
-    const list = screen.getByRole('button', { name: 'List name for sale' });
+    const list = screen.getByRole('button', { name: 'List Ownership for Sale' });
     await waitFor(() => expect(list).not.toBeDisabled());
     fireEvent.click(list);
     return waitFor(() => {
@@ -133,7 +133,7 @@ describe('SellOwnershipForm reads the owner again at Approve', () => {
         expect(messaging.orderAction.mock.calls[0][0].params).toMatchObject({ GIVE_TICK: 'ALPHA', GIVE_OWNERSHIP: '1' });
         // The Approve read goes past the read reuse and the HTTP cache.
         expect(messaging.getTokenInfo).toHaveBeenLastCalledWith(expect.objectContaining({ tick: 'ALPHA', fresh: true }));
-        expect(await screen.findByText('Name listed for sale')).toBeInTheDocument();
+        expect(await screen.findByText('Ownership listed for sale')).toBeInTheDocument();
         expect(messaging.orderAction).toHaveBeenCalledTimes(1);
     });
 });

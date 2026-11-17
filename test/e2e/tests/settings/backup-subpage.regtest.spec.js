@@ -80,13 +80,21 @@ const PASSWORD = 'regtestpassword123';
 /** Same length and shape as the real one, and emphatically not it. */
 const WRONG_PASSWORD = 'regtestpassword124';
 
-/** The four affordances the sub-page is supposed to offer, row -> action. */
+/**
+ * The four affordances the sub-page is supposed to offer. Each is a drill-in
+ * row that opens its own page straight on its form (no intro button).
+ */
 const OFFERED = [
-    ['Export encrypted backup', 'Export…'],
-    ['Back up recovery phrase', 'Show…'],
-    ['Test backup (dry-run restore)', 'Test…'],
-    ['Publish labels on-chain', 'Publish now…'],
+    'Encrypted backup file',
+    'Recovery phrase',
+    'Test backup',
+    'Publish labels on-chain',
 ];
+
+/** One of the sub-page's drill-in rows, by its title. */
+function backupRow(page, title) {
+    return page.getByRole('main').getByRole('button', { name: new RegExp(`^${title}\\b`) }).first();
+}
 
 /** Opens Settings and walks into the Backup sub-page. */
 async function openBackup(page) {
@@ -98,8 +106,16 @@ async function openBackup(page) {
     const row = page.getByRole('main').getByRole('button', { name: /^Backup/ }).first();
     await expect(row, 'Settings has no Backup row').toBeVisible({ timeout: 30_000 });
     await row.click();
-    await expect(page.getByRole('main').getByRole('button', { name: 'Show…', exact: true }),
+    await expect(backupRow(page, 'Recovery phrase'),
         'the Backup sub-page did not open').toBeVisible({ timeout: 30_000 });
+}
+
+/** Opens the Recovery phrase page, which rests on its password step. */
+async function openPhrasePage(page) {
+    await backupRow(page, 'Recovery phrase').click();
+    await expect(page.getByLabel('Wallet password'),
+        'asking to see the seed phrase raised no password prompt at all')
+        .toBeVisible({ timeout: 30_000 });
 }
 
 /**
@@ -143,13 +159,9 @@ test.describe('Settings: backup sub-page', () => {
 
             await test.step('the sub-page offers the four backup affordances', async () => {
                 await openBackup(page);
-                const main = page.getByRole('main');
-                for (const [label, action] of OFFERED) {
-                    await expect(main.getByText(label, { exact: true }),
+                for (const label of OFFERED) {
+                    await expect(backupRow(page, label),
                         `the Backup sub-page no longer offers the "${label}" row`)
-                        .toBeVisible({ timeout: 30_000 });
-                    await expect(main.getByRole('button', { name: action, exact: true }),
-                        `the "${label}" row has no "${action}" control, so the affordance is a label only`)
                         .toBeVisible({ timeout: 30_000 });
                 }
             });
@@ -160,10 +172,7 @@ test.describe('Settings: backup sub-page', () => {
                     + 'user has asked for it or proved who they are')
                     .toBe(false);
 
-                await page.getByRole('main').getByRole('button', { name: 'Show…', exact: true }).click();
-                await expect(page.getByLabel('Wallet password'),
-                    'asking to see the seed phrase raised no password prompt at all')
-                    .toBeVisible({ timeout: 30_000 });
+                await openPhrasePage(page);
 
                 // The gate is up. If the seed arrived with it, the gate is a
                 // curtain in front of a page that already holds the key.
@@ -175,7 +184,7 @@ test.describe('Settings: backup sub-page', () => {
 
             await test.step('CLAIM 2: a wrong password reveals nothing', async () => {
                 await page.getByLabel('Wallet password').fill(WRONG_PASSWORD);
-                await page.getByRole('main').getByRole('button', { name: 'Reveal phrase', exact: true }).click();
+                await page.getByRole('main').getByRole('button', { name: 'Reveal Phrase', exact: true }).click();
 
                 // Wait for the attempt to SETTLE rather than racing it. Both
                 // outcomes are waited for on purpose: the button's label is
@@ -188,7 +197,7 @@ test.describe('Settings: backup sub-page', () => {
                 // falsification run, where the correct password was fed in
                 // here on purpose.
                 await expect(
-                    page.getByRole('main').getByRole('button', { name: 'Reveal phrase', exact: true })
+                    page.getByRole('main').getByRole('button', { name: 'Reveal Phrase', exact: true })
                         .or(page.getByText('Your recovery phrase', { exact: true })).first(),
                     'the reveal attempt never came back from its busy state')
                     .toBeVisible({ timeout: 120_000 });
@@ -207,7 +216,7 @@ test.describe('Settings: backup sub-page', () => {
 
             await test.step('CLAIM 3: the right password reveals THIS wallet\'s phrase, blurred', async () => {
                 await page.getByLabel('Wallet password').fill(PASSWORD);
-                await page.getByRole('main').getByRole('button', { name: 'Reveal phrase', exact: true }).click();
+                await page.getByRole('main').getByRole('button', { name: 'Reveal Phrase', exact: true }).click();
 
                 await expect(page.getByText('Your recovery phrase', { exact: true }),
                     'the wallet\'s OWN password did not open the seed-phrase panel, so either the row '
@@ -267,8 +276,9 @@ test.describe('Settings: backup sub-page', () => {
             await test.step('CLAIM 4: Done takes it out of the DOM, and the gate re-arms', async () => {
                 await page.getByRole('main').getByRole('button', { name: 'Done', exact: true }).click();
 
-                await expect(page.getByRole('main').getByRole('button', { name: 'Show…', exact: true }),
-                    'the row did not collapse back to its idle state after Done')
+                // Done returns the direct page to its password step.
+                await expect(page.getByLabel('Wallet password'),
+                    'the page did not return to its password step after Done')
                     .toBeVisible({ timeout: 30_000 });
                 expect(await phraseInPage(page, phrase),
                     'Done hid the seed phrase without REMOVING it: it is still in the DOM of a screen '
@@ -287,7 +297,7 @@ test.describe('Settings: backup sub-page', () => {
                     'the seed phrase came back on its own after a reload')
                     .toBe(false);
 
-                await page.getByRole('main').getByRole('button', { name: 'Show…', exact: true }).click();
+                await backupRow(page, 'Recovery phrase').click();
                 await expect(page.getByLabel('Wallet password'),
                     'the seed-phrase row stopped asking for the password after it had been given once, '
                     + 'so the "requires the wallet password every time" promise on this row is false')

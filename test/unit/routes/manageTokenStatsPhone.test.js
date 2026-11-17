@@ -10,10 +10,15 @@ const css = readFileSync(
     'utf8',
 );
 
-describe('ManageToken phone action grid', () => {
-    it('keeps the action tiles three across at every width', () => {
-        expect(css).toMatch(/\.approvedActionGrid\s*\{[^}]*grid-template-columns:\s*repeat\(3,/s);
-        expect(css.match(/\.approvedActionGrid\s*\{/g)).toHaveLength(1);
+describe('issuer actions phone action list', () => {
+    it('draws its actions as the shared action list (G101), with no grid or tiles of its own', () => {
+        const source = readFileSync(
+            join(process.cwd(), 'packages/core/src/shared/components/TokenOwnerActions.jsx'),
+            'utf8',
+        );
+        expect(source).toMatch(/<ActionList label=\{group\.title\}>/);
+        expect(source).not.toMatch(/QuickActionTile|assetActionGrid/);
+        expect(css).not.toMatch(/\.approvedActionGrid\b|\.approvedActionTile\b/);
         expect(css).not.toContain('.statsStrip');
     });
 });

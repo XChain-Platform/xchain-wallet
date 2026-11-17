@@ -93,9 +93,11 @@ for (const label of Object.keys(shells)) {
         /useCommandPalette\(\{\s*enabled:\s*status\.state === 'unlocked'/.test(src),
         `${label} App installs the Cmd/Ctrl+K listener gated on the unlocked state`,
     );
+    // A palette pick opens its page as a root of the one history (G06).
     assert.ok(
-        /useCommandPalette\(\{[\s\S]{0,240}?navigate:\s*setUnlockedView/.test(src),
-        `${label} App backs palette navigation with setUnlockedView`,
+        /useCommandPalette\(\{[\s\S]{0,240}?navigate:\s*openRootView/.test(src)
+            && /const openRootView = nav\.navigateRoot;/.test(src),
+        `${label} App backs palette navigation with the history's root navigation`,
     );
     // Command list assembled from the shared catalogue.
     assert.ok(/buildCommands\(/.test(src), `${label} App builds its command list via buildCommands`);
@@ -186,8 +188,15 @@ assert.ok(/onCommandPalette=\{palette\.openPalette\}/.test(read(shells['extensio
     'extension popup App wires the visible Home palette trigger');
 
 // The popup trigger renders from TotalBalanceHero (threaded Home -> HomeTabs).
+// Its label is the shared i18n key, whose English text is "Open the wallet
+// menu". The smoke runner's English-source loader shows the text in place of
+// the t() call, and a plain node run shows the call, so either form counts.
 const hero = read('packages/core/src/shared/components/TotalBalanceHero.jsx');
-assert.ok(/onCommandPalette\b/.test(hero) && /Open the wallet menu/.test(hero),
+const firstPaintStrings = read('packages/core/src/i18n/locales/en/firstPaint.js');
+const OPEN_MENU_LABEL = /Open the wallet menu|t\('components\.leftNav\.openCommandPalette'\)/;
+assert.ok(/'components\.leftNav\.openCommandPalette': 'Open the wallet menu'/.test(firstPaintStrings),
+    'the palette trigger key reads "Open the wallet menu"');
+assert.ok(/onCommandPalette\b/.test(hero) && OPEN_MENU_LABEL.test(hero),
     'TotalBalanceHero renders the popup\'s "Open the wallet menu" search button');
 
 // --- §34.1 rebinding + §34.2 context shortcuts ----------------------------
@@ -226,7 +235,7 @@ assert.ok(/aria-haspopup="dialog"/.test(headerMenu) && /aria-expanded=\{menuOpen
     'the header menu button toggles the wallet menu and labels itself walletMenu.openMenu');
 
 const leftNav = read('packages/core/src/shared/components/LeftNav.jsx');
-assert.ok(/onCommandPalette\b/.test(leftNav) && /Open the wallet menu/.test(leftNav),
+assert.ok(/onCommandPalette\b/.test(leftNav) && OPEN_MENU_LABEL.test(leftNav),
     'LeftNav renders an "Open the wallet menu" search row (desktop trigger)');
 
 // Every shell passes the header menu toggle and open state; desktop also keeps the nav search row.

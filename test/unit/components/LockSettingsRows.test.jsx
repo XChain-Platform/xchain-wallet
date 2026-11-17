@@ -104,7 +104,8 @@ describe('BiometricRow', () => {
         render(<BiometricRow />);
 
         const enable = await screen.findByRole('button', { name: 'Enable' });
-        expect(enable.className).toMatch(/ghost/);
+        // Settings has no grey ghost buttons (operator 2026-11-13).
+        expect(enable.className).toMatch(/secondary/);
         expect(enable.style.border).toBe('');
         fireEvent.click(enable);
 
@@ -119,7 +120,7 @@ describe('BiometricRow', () => {
 
         fireEvent.click(await screen.findByRole('button', { name: 'Enable' }));
         fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'wrong' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Enable biometric unlock' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Enable Biometric Unlock' }));
 
         expect(await screen.findByText('Incorrect wallet password.')).toBeTruthy();
         expect(biometric.register).not.toHaveBeenCalled();
@@ -133,10 +134,10 @@ describe('BiometricRow', () => {
 
         fireEvent.click(await screen.findByRole('button', { name: 'Enable' }));
         fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'correct' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Enable biometric unlock' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Enable Biometric Unlock' }));
 
         expect(await screen.findByText('Sensor unavailable.')).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         expect(await screen.findByText(/Enabled\. Use device unlock/)).toBeTruthy();
         expect(messaging.unlockWallet).toHaveBeenCalledTimes(2);
     });
@@ -149,7 +150,7 @@ describe('BiometricRow', () => {
 
         fireEvent.click(await screen.findByRole('button', { name: 'Enable' }));
         fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'correct' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Enable biometric unlock' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Enable Biometric Unlock' }));
 
         expect(await screen.findByText('Biometric enrolment failed.')).toBeTruthy();
         expect(screen.queryByText(/PRF extension/)).toBeNull();
@@ -160,14 +161,23 @@ describe('BiometricRow', () => {
         biometric.clear.mockImplementation(() => {});
         render(<BiometricRow />);
 
-        expect(await screen.findByRole('button', { name: 'Re-enrol' })).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Re-enrol' }));
-        expect(screen.getAllByText('Re-enrol biometric unlock').length).toBeGreaterThan(0);
+        expect(await screen.findByRole('button', { name: 'Re-Enrol' })).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Re-Enrol' }));
+        expect(screen.getAllByText('Re-Enrol Biometric Unlock').length).toBeGreaterThan(0);
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
         fireEvent.click(screen.getByRole('button', { name: 'Disable' }));
         expect(await screen.findByText('Biometric unlock could not be disabled.')).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Try Again' })).toBeTruthy();
+    });
+
+    it('lands its own page straight on the enable form, with no Enable or Cancel step', async () => {
+        render(<BiometricRow direct />);
+
+        expect(await screen.findByLabelText('Wallet password')).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'Enable' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'Enable Biometric Unlock' })).toBeTruthy();
     });
 });
 
@@ -177,14 +187,14 @@ describe('DuressPassphraseRow', () => {
         fireEvent.change(screen.getByLabelText('Current wallet password'), { target: { value: current } });
         fireEvent.change(screen.getByLabelText('Duress passphrase'), { target: { value: pass } });
         fireEvent.change(screen.getByLabelText('Confirm duress passphrase'), { target: { value: confirm } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save passphrase' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save Passphrase' }));
     }
 
     it('uses style-guide controls without changing accessible names', () => {
         render(<DuressPassphraseRow />);
 
         const set = screen.getByRole('button', { name: 'Set' });
-        expect(set.className).toMatch(/ghost/);
+        expect(set.className).toMatch(/secondary/);
         expect(set.style.border).toBe('');
         fireEvent.click(set);
 
@@ -193,6 +203,15 @@ describe('DuressPassphraseRow', () => {
             expect(input.className).toMatch(/input/);
             expect(input).toHaveAttribute('type', 'password');
         }
+    });
+
+    it('lands its own page straight on the form, with no Set or Cancel step', () => {
+        render(<DuressPassphraseRow direct />);
+
+        expect(screen.queryByRole('button', { name: 'Set' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+        expect(screen.getByLabelText('Current wallet password')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Save Passphrase' })).toBeTruthy();
     });
 
     it('rejects a duress passphrase that equals the wallet password', async () => {
@@ -213,7 +232,7 @@ describe('DuressPassphraseRow', () => {
         expect(duress.set).not.toHaveBeenCalled();
 
         fireEvent.change(screen.getByLabelText('Current wallet password'), { target: { value: 'correct' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save passphrase' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save Passphrase' }));
         expect(await screen.findByText(/Configured\. Entering this passphrase/)).toBeTruthy();
         expect(duress.set).toHaveBeenCalledWith('emergency-only');
     });
@@ -238,7 +257,7 @@ describe('PanicModeRow', () => {
         expect(panic.activate).not.toHaveBeenCalled();
         expect(screen.getByText('Confirm panic mode')).toBeTruthy();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Confirm 24-hour freeze' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Confirm 24-Hour Freeze' }));
         expect(panic.activate).toHaveBeenCalledTimes(1);
         expect(screen.getByText('Panic mode is active')).toBeTruthy();
     });

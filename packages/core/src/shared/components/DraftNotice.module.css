@@ -1,0 +1,24 @@
+.notice {
+    position: relative;
+    width: 100%;
+}
+
+.notice p {
+    padding-inline-end: var(--xc-control-h-lg);
+}
+
+/* The discard X is pinned 8px from the notice's block-start and inline-end edges. */
+.notice [data-notice-dismiss] {
+    position: absolute;
+    top: 8px;
+    inset-inline-end: 8px;
+    width: var(--xc-control-h-lg);
+    height: var(--xc-control-h-lg);
+    margin: 0;
+}
+
+.actions {
+    width: calc(100% + var(--xc-icon-sm) + var(--xc-space-2));
+    margin-top: var(--xc-space-2);
+    margin-inline-start: calc(-1 * (var(--xc-icon-sm) + var(--xc-space-2)));
+}

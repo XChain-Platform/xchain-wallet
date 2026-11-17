@@ -1,7 +1,7 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { createWallet, expect, openPaletteCommand, submitTokenWizard, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openIssueSection, openPaletteCommand, pickIssuePreset, submitTokenWizard, test } from '../../fixtures/wallet.js';
 import {
     explorerJson,
     expectConfirmModal,
@@ -60,17 +60,14 @@ test.describe(`Meme token wizard template on ${REGTEST_CHAIN_LABEL}`, () => {
 
         await openPaletteCommand(page, 'Create a token');
         const main = page.getByRole('main');
-        await main.getByRole('button', { name: /^Meme token/ }).click();
+        await pickIssuePreset(main, /^Meme token/);
+        // The network sits in the From section, closed until opened.
+        await openIssueSection(main, 'From');
         await selectVenueChain(main);
-        await main.getByRole('button', { name: 'Next', exact: true }).click();
 
-        await expect(main).toContainText('Step 3 of 4: Details');
-        await main.getByLabel('Token name (ticker)').fill(TICK);
-        await main.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
-        await submitTokenWizard(page, {
-            // Only the review stage names the chosen template.
-            onReview: async (review) => expect(review).toContainText('Meme token'),
-        });
+        await main.getByLabel('Ticker', { exact: true }).fill(TICK);
+        await main.getByLabel('Max supply', { exact: true }).fill(String(SUPPLY));
+        await submitTokenWizard(page);
 
         const txid = await approveAndReadTxid(page);
         const genesis = await waitForValidAction(txid);

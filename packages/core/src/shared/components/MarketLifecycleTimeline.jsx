@@ -139,8 +139,8 @@ export function MarketLifecycleTimeline({ messaging, kind, chainId, address, act
                         {e.kind === 'matches' && e.row.give_amount != null
                             ? `${formatDecimalAmount(e.row.give_amount)} ${e.row.give_tick || e.row.give_coin || ''}`.trim()
                             : e.row.block_index != null
-                                ? t('components.marketLifecycleTimeline.block', { formatDecimalAmountValue: formatDecimalAmount(e.row.block_index) })
-                                : (e.row.action_index != null ? `#${formatDecimalAmount(e.row.action_index)}` : '')}
+                                ? t('components.marketLifecycleTimeline.block', { formatDecimalAmountValue: String(e.row.block_index) })
+                                : (e.row.action_index != null ? `#${String(e.row.action_index)}` : '')}
                     </span>
                 </li>
             ))}

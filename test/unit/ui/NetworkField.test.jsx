@@ -174,7 +174,7 @@ describe('<NetworkField>', () => {
         expect(screen.getByText('The chain this private key belongs to.')).toBeInTheDocument();
     });
 
-    it('keeps the plain label and no tip when help is not given', () => {
+    it('keeps the plain label and shows the standard network tip when help is not given', () => {
         render(
             <NetworkField
                 value="bitcoin-mainnet"
@@ -184,6 +184,7 @@ describe('<NetworkField>', () => {
             />,
         );
         expect(screen.getByText('Network')).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: /^About / })).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'About Network' }));
+        expect(screen.getByText('The blockchain this runs on. The address, the network fee and the coin it is paid in all belong to this network.')).toBeInTheDocument();
     });
 });

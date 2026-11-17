@@ -36,7 +36,7 @@
 // `warmPreflight` in fixtures/regtest.js.
 
 import { readShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openIssueSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal,
     fundAddress,
@@ -94,6 +94,8 @@ function feeToggle(scope) {
 }
 
 async function setFeeLane(scope, nativeFee) {
+    // The switch sits in the Fees section, closed until opened.
+    await openIssueSection(scope, 'Speed and Fees');
     const toggle = feeToggle(scope);
     await expect(toggle, 'Bitcoin does not offer the fee choice this walk needs')
         .toBeVisible({ timeout: 30_000 });
@@ -108,10 +110,10 @@ async function composeIssue(page, { nativeFee, reuseForm = false }) {
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     if (!reuseForm) {
         await main.getByLabel('Ticker').fill(ISSUE_TICK);
-        await main.getByLabel('Supply', { exact: true }).fill(ISSUE_SUPPLY);
+        await main.getByLabel('Max supply', { exact: true }).fill(ISSUE_SUPPLY);
     }
     await setFeeLane(main, nativeFee);
-    await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
     await expectConfirmModal(page, `the ISSUE of ${ISSUE_TICK}`, 30_000);
 }
 
@@ -138,20 +140,18 @@ test.describe('pre-flight gate on regtest', () => {
             .toBe(false);
         await composeIssue(page, { nativeFee: false });
 
-        // §5.2.4: the verdict chip, from a REAL dry-run. Tier 1 was
+        // §5.2.4: the warning state, from a REAL dry-run. Tier 1 was
         // unreachable on every venue until, so this had never once
         // been observed rendering a fail.
-        const chip = page.getByTestId('preflight-chip');
-        await expect(chip).toHaveText('Will likely fail');
-        await expect(page.getByTestId('preflight-panel')).toHaveAttribute('data-verdict', 'fail');
+        const warning = page.getByTestId('confirm-status');
+        await expect(warning).toHaveAttribute('data-state', 'fail');
 
         // §4.2: the finding carries the network's own reason rather than a
         // paraphrase of it. The panel frames the indexer's status as a pre-send
         // check ("This action would be refused because <reason>."), and the
         // reason after "because" is the indexer's text verbatim; a wallet that
         // reworded it would be hiding which party said what.
-        const panel = page.getByTestId('preflight-panel');
-        await expect(panel).toContainText(/would be refused because/i);
+        await expect(warning).toContainText(/would be refused because/i);
 
         // ISSUE spends no token amount, so Tier 2's balance check stays quiet
         // and the venue's fee refusal is the only error to acknowledge.
@@ -159,21 +159,25 @@ test.describe('pre-flight gate on regtest', () => {
         await expect(dryRunAck).toBeVisible();
         await expect(page.getByTestId('ack-BALANCE_INSUFFICIENT')).toHaveCount(0);
 
-        // Blocking BY DEFAULT.
+        // Blocking BY DEFAULT. Approve keeps its colour (G130); a tap says
+        // why at the top and sends nothing.
         const approve = page.getByTestId('confirm-approve');
-        await expect(approve).toBeDisabled();
+        await approve.click();
+        await expect(page.getByTestId('confirm-blocked')).toBeVisible();
 
         // With the error acknowledged, signing is permitted. This is the
         // anti-censorship half of §4.2: a gate the explorer could hold shut
         // would let a hostile or broken one stop the user signing at all.
         await dryRunAck.check();
+        await expect(page.getByTestId('confirm-blocked')).toHaveCount(0);
         await expect(approve).toBeEnabled();
 
         // The acknowledgment is a live gate, not a one-way latch: withdrawing
         // it must re-block. A latch would mean a mis-click cannot be undone on
         // the screen whose entire job is deliberate authorization.
         await dryRunAck.uncheck();
-        await expect(approve).toBeDisabled();
+        await approve.click();
+        await expect(page.getByTestId('confirm-blocked')).toBeVisible();
 
         // Nothing is signed here. This case proves the gate; the walk below
         // proves the fix. Reject is §5.1's always-available exit and must work
@@ -190,7 +194,7 @@ test.describe('pre-flight gate on regtest', () => {
         // not a stale one.
         await warmIssue(own, false);
         await composeIssue(page, { nativeFee: false });
-        await expect(page.getByTestId('preflight-chip')).toHaveText('Will likely fail');
+        await expect(page.getByTestId('confirm-status')).toHaveAttribute('data-state', 'fail');
         await page.getByTestId('confirm-reject').click();
         await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
 
@@ -200,12 +204,12 @@ test.describe('pre-flight gate on regtest', () => {
         await warmIssue(own, true, 'native');
         await composeIssue(page, { nativeFee: true, reuseForm: true });
 
-        await expect(page.getByTestId('preflight-chip')).toHaveText('Looks good');
+        await expect(page.getByTestId('confirm-status')).toHaveAttribute('data-state', 'pass');
 
         // §1.1 / §5.2.2: the intent describes the COMPOSED action string, not
         // the form fields that requested it.
-        await expect(page.getByTestId('action-intent').locator('p').first())
-            .toContainText(`Create token ${ISSUE_TICK} with max supply ${ISSUE_SUPPLY} on ${REGTEST_CHAIN_LABEL}`);
+        await expect(page.getByTestId('confirm-sentence'))
+            .toContainText(`Create token ${ISSUE_TICK} with max supply ${ISSUE_SUPPLY}`);
 
         // No override control at all, because there is nothing to override.
         // Its presence would mean the previous report leaked into this one.

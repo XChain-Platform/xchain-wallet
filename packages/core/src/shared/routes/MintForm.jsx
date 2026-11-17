@@ -10,12 +10,29 @@
 
 import { t } from '../../i18n/index.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormNotice, FormPage, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+// Network and the fee selector come from the Wallet Form Standard's
+// FromSection and FeeSection.
+import { AddressField, AddressText, Button, ChainBadge, FormNotice, FormPage, Icon, ListPage, PageHeader, Screen, StatusMessage, useFormErrors } from '@xchain-wallet/core/ui';
+// Mint is laid out on the Wallet Form Standard: From (closed), Mint (open:
+// Token, Amount, Destination), Network fee, the status slot and Mint.
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    joinSummaryParts,
+    SummaryAddress,
+    useFormSections,
+} from '../components/formStandard/index.js';
+import { withAdvancedOptions } from '../components/formStandard/advancedOptions.js';
 import {
     registry as registryLib,
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import '../../i18n/locales/en/send.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/routes.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useSettings } from '../hooks/useSettings.js';
@@ -32,12 +49,11 @@ import {
     compareDecimal, mintHeadroom, exceedsHeadroom, mintWindowState, mintWindowMessage,
     mintLockMessage, subtractDecimal,
 } from '../utils/mintHeadroom.js';
-import { amountEntryProblem, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { amountEntryProblem, formatDisplayAmount, formatWithThousands, groupDecodedAmounts, sumDecimalStrings, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import {
     TOKEN_RECORD_GATE_KEYS, tokenRecordChangedMessage, tokenRecordChangedSince, tokenRecordsDiffer,
 } from '../utils/tokenRecordDrift.js';
 import { invalidateTokenInfo } from '../utils/tokenInfoCache.js';
-import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
@@ -182,6 +198,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
     const addressRoom = addressMintStatus === 'loaded'
         ? subtractDecimal(addressCap, addressMintRead.amount)
         : null;
+    const maxWaitsOnAddress = addressMintStatus === 'loading';
     const headroom = useMemo(
         () => mintHeadroom({
             maxSupply: tokenInfo?.maxSupply ?? null,
@@ -235,10 +252,20 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
     const [amount, setAmount] = useState('');
     const [destination, setDestination] = useState('');
     const [password, setPassword] = useState('');
+    const reviewErrors = useFormErrors();
     const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [contactsPickerOpen, setContactsPickerOpen] = useState(false);
     const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
+    // The standard sections' open state, held above every early
+    // return (pickers, review) so it survives a picker page. Only Mint opens.
+    const formSections = useFormSections({ from: false, mint: true, fee: false });
+    // Counts Mint presses, so a section holding the error reopens
+    // on every attempt even after the user closed it.
+    const [reviewAttempt, setReviewAttempt] = useState(0);
+    // Set by a Mint press (G22): the button is always enabled, and each
+    // required field still empty then shows red with its own message.
+    const [attempted, setAttempted] = useState(false);
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
     const { formatNativeFee } = useFeeFiat({
@@ -292,6 +319,8 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
     // pads "1" to "1.00000000" for an 8-place token and refuses extra digits
     // with its own field error, which also holds the Mint button.
     const amountDivisibility = amountPlacesFor(tokenInfo);
+    // The field shows its own precision error and holds the last valid
+    // amount, so a press while it shows refuses here (G22: never disabled).
     const [amountPrecisionError, setAmountPrecisionError] = useState(/** @type {string | null} */ (null));
     const amountInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const refuseAmount = (message) => {
@@ -342,12 +371,12 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         // nothing read and, worse, read like the confirm surface still
         // depended on form state.
         if (stage !== 'review' && stage !== 'submitting') return null;
-        return decoderLib.decodeAction({
+        return groupDecodedAmounts(decoderLib.decodeAction({
             action: 'MINT',
             params: actionParams,
             chainId: chainId || undefined,
             chainRegistry,
-        });
+        }));
     }, [stage, confirmModalOpen, actionParams, chainId]);
 
     // Single-encode confirm (mirrors Send slice 1): compose + tamper-check +
@@ -368,7 +397,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                 preflightOpts: {
                     mode: resolvePreflightPrivacy(settings) === 'local' ? 'local' : 'report',
                 },
-                compose: () => messaging.composeForConfirm({
+                compose: () => messaging.composeForConfirm(withAdvancedOptions({
                     walletId,
                     chainId,
                     from,
@@ -376,7 +405,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                     encoderOpts: {
                         ...(feePerKb != null ? { feePerKb } : {}),
                     },
-                }),
+                })),
                 preflight: (o) => messaging.preflight({ chainId, ...o }),
                 // §4.6: the input-liveness half of the Approve-time re-check,
                 // the same one useActionConfirmFlow.run gives every migrated form.
@@ -437,15 +466,22 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
 
     async function handleReview(event) {
         event.preventDefault();
+        setReviewAttempt((n) => n + 1);
+        setAttempted(true);
+        // G22: an empty required field is marked on the field itself and
+        // takes the cursor; nothing else is checked until it is filled.
+        const firstMissing = !ticker.trim() ? 'mint-token'
+            : (!String(amount).trim() || amountPrecisionError) ? 'mint-amount' : null;
+        if (firstMissing) {
+            setFormError(null);
+            setTimeout(() => document.getElementById(firstMissing)?.focus(), 0);
+            return;
+        }
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
         if (feeStop) { setFormError(feeStop.formError); return; }
         if (reviewInFlightRef.current) return;
         if (!chainId || !fromAddress) {
             setFormError('Pick a source address first.');
-            return;
-        }
-        if (!ticker.trim()) {
-            setFormError('Ticker is required.');
             return;
         }
         const tickerError = tickerReferenceError(ticker);
@@ -533,8 +569,13 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
     async function handleSubmit(event) {
         event.preventDefault();
         if (stage === 'submitting') return;
-        if (!isWatcherMode && !isHwSource && (!signerReady && password.length === 0)) return;
+        if (!isWatcherMode && !isHwSource && !signerReady && password.length === 0) {
+            setSubmitError(null);
+            reviewErrors.validate({ 'mint-review-password': 'Enter your wallet password.' });
+            return;
+        }
         if (!isWatcherMode && isHwSource && hwStatus !== 'available') return;
+        reviewErrors.reset();
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -572,17 +613,19 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
 
     function handleBuildAnother() {
         setResult(null);
+        setAttempted(false); // a fresh form opens with no G22 marks
         setSubmitError(null);
         setStage('form');
     }
         const header = (
         <PageHeader
+            nested={stage === 'review' || stage === 'submitting'}
             onBack={stage === 'review'
                 ? () => { setSubmitError(null); setStage('form'); }
                 : onBack}
             backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
-                    ? 'Review mint'
+                    ? 'Review Mint'
                     : `Mint`}
         />
     );
@@ -643,7 +686,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                     <p className={styles.hint}>Broadcast complete.</p>
                 )}
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
+                    <Button variant="success" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button>
                 </div>
             </ListPage>,
         );
@@ -655,6 +698,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                 demoGuard={demoGuard}
                 label="Review mint"
                 onSubmit={handleSubmit}
+                errors={reviewErrors}
                 status={(isWatcherMode || isHwSource) && submitError ? (
                     <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
@@ -662,20 +706,13 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                     <Button
                         type="submit"
                         variant="primary"
+                        icon={<Icon.SignIcon />}
                         loading={stage === 'submitting'}
-                        disabled={
-                            isWatcherMode
-                                ? false
-                                : isHwSource
-                                    ? hwStatus !== 'available'
-                                    : (!signerReady && password.length === 0)
-                        }
+                        aria-disabled={!isWatcherMode && isHwSource && hwStatus !== 'available' ? 'true' : undefined}
                     >
                         {isWatcherMode
-                            ? 'Create unsigned transaction: mint'
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: mint`
-                                : 'Sign mint'}
+                            ? 'Create Unsigned Transaction: Mint'
+                            : 'Sign Mint'}
                     </Button>
                 )}
             >
@@ -719,6 +756,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                         }}
                         onStatusChange={onHwStatusChange}
                         passwordRef={passwordRef}
+                        passwordFieldId="mint-review-password"
                         submitError={submitError}
                         disabled={stage === 'submitting'}
                         getSignerStatus={messaging.getSignerStatus}
@@ -728,13 +766,36 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         );
     }
 
-    // confirm page, rendered in place of the form (operator
-    // direction 2026-07-22: the overlay modal didn't fit small/mobile
-    // viewports). All other form state stays intact behind it.
+    // The confirm page renders in place of the form (an overlay modal did not
+    // fit small/mobile viewports). All other form state stays intact behind it.
     if (confirmModalOpen) {
+        // K6 hero and before and after, from what this form already holds:
+        // the amount and token being minted, and the token's supply as read
+        // for the headroom check. Balances come from the host's projection.
+        const mintAmount = String(amount).trim();
+        const mintTick = ticker.trim().toUpperCase();
+        const supplyBefore = tokenInfo?.totalSupply != null && compareDecimal(tokenInfo.totalSupply, '0') !== null
+            ? String(tokenInfo.totalSupply)
+            : null;
+        const mintSummary = {
+            verb: t('routes.manageToken.mint'),
+            amount: mintAmount,
+            ticker: mintTick,
+            chainId,
+            direction: 'in',
+            address: fromAddress?.address,
+            recipient: destination.trim() || undefined,
+            changes: supplyBefore ? [{
+                label: t('components.confirmSummary.totalSupply'),
+                before: formatDisplayAmount(supplyBefore),
+                after: formatDisplayAmount(sumDecimalStrings([supplyBefore, mintAmount])),
+            }] : [],
+            networkFee: feeEstimate?.coinAmount ? { amount: String(feeEstimate.coinAmount), ticker: coinTicker } : undefined,
+        };
         return (
             <ActionConfirmScreen
                 confirmAction={confirmAction}
+                summary={mintSummary}
                 screenVariant={variant}
                 chainLabel={null}
                 // Fallback only: the composed PSBT's exact fee wins (§5.2.5).
@@ -771,10 +832,15 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                 // which is the same "meaningful at zero balance" case (D-41).
                 purpose="receive"
                 walletId={walletId}
-                title="Select token"
+                // MINT adds token supply; the network coin cannot be minted.
+                kindFilter="tokens"
+                kindLocked
+                title="Select Token"
                 onSelect={(sel) => {
                     setTicker(String(sel.tick || ''));
-                    if (!lockedToken && sel.chainId) setChainId(sel.chainId);
+                    // The Token field is live with a preset token too, so a
+                    // pick on another chain re-targets the form.
+                    if (sel.chainId) setChainId(sel.chainId);
                     setTokenPickerOpen(false);
                 }}
                 onBack={() => setTokenPickerOpen(false)}
@@ -786,7 +852,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={chainId}
                 onChainChange={setChainId}
@@ -813,59 +879,99 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         );
     }
 
+    // Which standard section the current error belongs to, and the
+    // one-line summaries of the closed sections.
+    const errorSection = (() => {
+        if (!formError) return null;
+        if (/source address/i.test(formError)) return 'from';
+        // A custom fee refusal (the review's fee stop) belongs to Network fee.
+        const feeStopNow = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStopNow && feeStopNow.formError === formError) return 'fee';
+        return 'mint';
+    })();
+    // G22 marks: shown once Mint was pressed, cleared as soon as filled.
+    const tokenMark = attempted && !ticker.trim() ? 'Pick the token to mint.' : undefined;
+    const amountMark = attempted && !String(amount).trim() ? 'Enter how much to mint.' : undefined;
+    const sectionErrorKey = (id) => (
+        errorSection === id || (id === 'mint' && (tokenMark || amountMark)) ? reviewAttempt + 1 : 0
+    );
+    const tickUpper = String(ticker || '').trim().toUpperCase();
+    const mintSummary = joinSummaryParts([
+        [amount ? formatWithThousands(amount) : null, tickUpper].filter(Boolean).join(' ') || null,
+        destination.trim() ? <>to <SummaryAddress address={destination} /></> : null,
+    ]) || null;
+    const sourceMissing = Boolean(addressesByChain) && !fromAddress
+        && (addressesByChain[chainId] || []).length === 0;
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label="Mint tokens"
             onSubmit={handleReview}
             status={formError ? (
                 <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="primary"
+            action={(
+                <FormAction
+                    icon={<Icon.MintIcon />}
                     loading={confirmAction.composing}
-                    disabled={!fromAddress || !ticker || !amount || !!amountPrecisionError || confirmAction.composing}
+                    disabled={confirmAction.composing}
                 >
                     Mint
-                </Button>
+                </FormAction>
+            )}
+            from={(
+                // Network and From live in the closed From section.
+                // The picked token decides the network (its picker lists every
+                // chain and moves the form), so Network locks once a token is set.
+                <FromSection
+                    {...formSections.bind('from')}
+                    revealKey={sectionErrorKey('from')}
+                    chainId={chainId}
+                    chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])}
+                    chainRegistry={chainRegistry}
+                    onNetworkChange={setChainId}
+                    lockNetwork={Boolean(ticker)}
+                    networkHelp="The chain the mint is recorded on. Your From address and the fee are on this network."
+                    address={fromAddress?.address || null}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    addressHelp="The address that signs and pays for this mint. What it mints counts toward the token's per-address cap."
+                    missing={sourceMissing ? (
+                        <FormNotice variant="error">
+                            {t('send.source.noAddress')}
+                        </FormNotice>
+                    ) : null}
+                />
+            )}
+            fee={(
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    revealKey={sectionErrorKey('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeCustomEstimate}
+                />
             )}
         >
-            {lockedToken && chainId ? (
-                <LockedTokenContext chainId={chainId} tick={ticker} />
-            ) : (
-                <>
-                    <NetworkField
-                        label="Network"
-                        help="The chain the mint is recorded on. Your From address and the fee are on this network."
-                        value={chainId}
-                        onChange={setChainId}
-                        chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])}
-                        chainRegistry={chainRegistry}
-                    />
-                </>
-            )}
-
-            {fromAddress ? (
-                <AddressField
-                    label="From"
-                    help="The address that signs and pays for this mint. What it mints counts toward the token's per-address cap."
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
-                />
-            ) : (
-                <FormNotice variant="error">
-                    {t('send.source.noAddress')}
-                </FormNotice>
-            )}
-
-            {lockedToken ? null : (
+            <FormSection
+                id="mint"
+                // The main section names the action without repeating
+                // the Mint button's own name.
+                title="Tokens to Mint"
+                icon={Icon.MintIcon}
+                {...formSections.bind('mint')}
+                revealKey={sectionErrorKey('mint')}
+                summary={mintSummary}
+            >
+            {/* Always the standard Token field, even when the token arrives
+                already chosen; the preset token simply fills it. */}
+            {(
                 <TokenField
+                    id="mint-token"
+                    error={tokenMark}
                     label="Token"
                     help="The token you are minting more of. Only tokens with public minting open are listed."
                     value={ticker && chainId ? { chainId, tick: ticker } : null}
@@ -878,8 +984,9 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                 amount={amount}
                 tick={ticker}
                 divisibility={amountDivisibility}
+                id="mint-amount"
                 inputRef={amountInputRef}
-                error={amountError || undefined}
+                error={amountError || amountMark}
                 onValidationError={setAmountPrecisionError}
                 onAmountFieldChange={(rawValue) => {
                     const stripped = String(rawValue).replace(/,/g, '');
@@ -887,10 +994,13 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                     setAmount(stripped);
                     setAmountError(null);
                 }}
-                onMax={!mintBlocked && headroom !== null && Number(headroom) > 0
+                // Max is min(MAX_MINT, supply room, this address's room). While
+                // the address's mint history is still loading the third cap is
+                // unknown, so Max waits rather than fill an amount it may refuse.
+                onMax={!mintBlocked && !maxWaitsOnAddress && headroom !== null && Number(headroom) > 0
                     ? () => { setAmount(headroom); setFormError(null); setAmountError(null); }
                     : undefined}
-                maxDisabled={mintBlocked || headroom === null || Number(headroom) <= 0}
+                maxDisabled={mintBlocked || maxWaitsOnAddress || headroom === null || Number(headroom) <= 0}
                 // D-164: the window outranks the quantity. "10 available to
                 // mint" over a closed window is a claim the network refuses on
                 // the same screen, so the window's own sentence replaces it
@@ -919,17 +1029,9 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                 onChange={(e) => setDestination(e.target.value)}
                 onIconClick={() => setContactsPickerOpen(true)}
             />
-
-            <FeeSelector
-                chainId={chainId}
-                label="Network fee"
-                coinTicker={coinTicker}
-                tiers={feeTiers}
-                value={feePick}
-                onChange={setFeePick}
-                customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-            />
-        </FormPage>,
+            </FormSection>
+            {/* The fee selector lives in the Network fee section. */}
+        </FormFrame>,
     );
 }
 

@@ -75,12 +75,12 @@ describe('backgrounding the native app during onboarding', () => {
         renderWith(<CreateWallet onBack={onBack} onCreated={vi.fn()} />);
         fillPasswords();
         fireEvent.submit(screen.getByLabelText('Confirm password').form);
-        await screen.findByRole('heading', { name: 'Write down your recovery phrase' });
+        await screen.findByRole('heading', { name: 'Write Down Your Recovery Phrase' });
         expect(generateBip39Mnemonic).toHaveBeenCalledOnce();
 
         backgroundTheApp();
 
-        expect(screen.getByRole('heading', { name: 'Write down your recovery phrase' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Write Down Your Recovery Phrase' })).toBeInTheDocument();
         expect(screen.queryByLabelText('Password')).toBeNull();
         expect(generateBip39Mnemonic).toHaveBeenCalledOnce();
         expect(onBack).not.toHaveBeenCalled();

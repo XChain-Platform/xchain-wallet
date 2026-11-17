@@ -31,6 +31,7 @@
 // refused ornament is not an error worth surfacing.
 
 import { soundById } from '@xchain-wallet/core/notifications/notificationSounds.js';
+import { isCustomSoundId, playCustomSound } from '@xchain-wallet/core/notifications/customSounds.js';
 
 /** Event name bridging the non-React adapter to the React toast layer. */
 export const NOTIFICATION_EVENT = 'xchain:notification';
@@ -144,9 +145,16 @@ function tabVisible() {
 
 /**
  * @param {{ now?: () => number, locks?: LockManager | null }} [deps]
- * @returns {((n: { kind: string, title: string, body: string, data?: object, sound?: { id: string, file: string } | null }) => (boolean | Promise<boolean>)) & { playSound: (soundId: string) => boolean }}
+ * @returns {((n: { kind: string, title: string, body: string, data?: object, sound?: ({ id: string, file: string } | { id: string, custom: true }) | null }) => (boolean | Promise<boolean>)) & { playSound: (soundId: string) => boolean }}
  */
-export function createWebNotifyAdapter({ now = Date.now, locks = globalThis.navigator?.locks } = {}) {
+export function createWebNotifyAdapter({
+    now = Date.now,
+    locks = globalThis.navigator?.locks,
+    // Last known `settings.notifications.desktop`. false mutes the OS channel;
+    // true or undefined leaves it to the browser permission (so existing users
+    // who granted permission before the setting existed are not muted).
+    getDesktopSetting = () => undefined,
+} = {}) {
     function deliver({ kind, title, body, sound, data }) {
         const visible = tabVisible();
         const claim = claimDelivery(kind, data, now);
@@ -165,12 +173,18 @@ export function createWebNotifyAdapter({ now = Date.now, locks = globalThis.navi
 
         // Sound: the in-app path only, so it accompanies the toast and never
         // an OS notification (which has the system's sound) or nothing at all.
-        if (sound && visible) playFile(sound);
+        if (sound && visible) {
+            if (sound.custom || isCustomSoundId(sound.id)) void playCustomSound(sound.id);
+            else playFile(sound);
+        }
 
         // OS channel: only when backgrounded and permission is granted.
         let osDelivered = false;
+        let osMuted = false;
+        try { osMuted = getDesktopSetting() === false; } catch { osMuted = false; }
         try {
-            if (typeof document !== 'undefined'
+            if (!osMuted
+                && typeof document !== 'undefined'
                 && document.visibilityState === 'hidden'
                 && typeof Notification !== 'undefined'
                 && Notification.permission === 'granted') {
@@ -205,6 +219,10 @@ export function createWebNotifyAdapter({ now = Date.now, locks = globalThis.navi
      * @returns {boolean} whether a play was started
      */
     notify.playSound = function playSound(soundId) {
+        if (isCustomSoundId(soundId)) {
+            void playCustomSound(soundId);
+            return true;
+        }
         return playFile(soundById(soundId));
     };
 

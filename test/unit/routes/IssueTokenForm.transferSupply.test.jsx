@@ -84,7 +84,7 @@ async function fill({ supply, initialMint, owner, holder }) {
 }
 
 async function submit() {
-    fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
 }
 
 async function composedParams() {
@@ -134,7 +134,8 @@ describe('IssueTokenForm ownership transfer versus supply transfer', () => {
         await fill({ supply: '5000', initialMint: '0', holder: HOLDER });
         await submit();
 
-        await screen.findByText('Sending the initial mint somewhere needs an initial mint above 0.');
+        expect(await screen.findByRole('alert', { name: 'Form errors' }))
+            .toHaveTextContent('Sending the initial mint somewhere needs an initial mint above 0.');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 

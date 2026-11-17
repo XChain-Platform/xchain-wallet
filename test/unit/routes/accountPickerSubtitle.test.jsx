@@ -36,6 +36,7 @@ async function mountWith(accounts, overrides = {}) {
                     onSwitch={overrides.onSwitch || (() => {})}
                     onAddAccount={overrides.onAddAccount || (() => {})}
                     onRenameAccount={overrides.onRenameAccount}
+                    onShowDetails={overrides.onShowDetails}
                     onBack={overrides.onBack || (() => {})}
                 />
             </MessagingProvider>,
@@ -63,8 +64,8 @@ describe('AccountPicker row subtitle', () => {
         await mountWith([{ id: 'a3', index: 2, name: 'Savings' }]);
         const row = rowFor('Savings');
         expect(row.textContent).toContain('Account 3');
-        expect(row.children).toHaveLength(1);
-        expect(row.firstElementChild.children).toHaveLength(2);
+        expect(row.textContent.match(/Account 3/g)).toHaveLength(1);
+        expect(screen.getByText('Savings')).toBeInTheDocument();
     });
 
     it('does not repeat a name that already equals the numbered one', async () => {
@@ -81,54 +82,55 @@ describe('AccountPicker row subtitle', () => {
         expect(container.textContent).not.toMatch(/BIP44/);
     });
 
-    it('passes the selected record to the rename route', async () => {
+    // A row opens the account's own page when the shell wires one; renaming
+    // lives there, so the row carries no Rename button.
+    it('passes the selected record to the account page and offers no row rename button', async () => {
         const account = { id: 'a3', index: 2, name: 'Savings' };
-        const onRenameAccount = vi.fn();
-        await mountWith([account], { onRenameAccount });
+        const onShowDetails = vi.fn();
+        const onSwitch = vi.fn();
+        await mountWith([account], { onShowDetails, onSwitch });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Rename Savings' }));
+        expect(screen.queryByRole('button', { name: 'Rename Savings' })).toBeNull();
+        fireEvent.click(rowFor('Savings'));
 
-        expect(onRenameAccount).toHaveBeenCalledWith(account);
+        expect(onShowDetails).toHaveBeenCalledWith(account);
+        expect(onSwitch).not.toHaveBeenCalled();
     });
 
-    it('marks the current account and keeps add and manage actions directly under the list, as Wallets does', async () => {
+    it('marks the current account and puts Add account on the title line', async () => {
         const account = { id: 'a3', index: 2, name: 'Savings' };
         const onAddAccount = vi.fn();
-        const onRenameAccount = vi.fn();
         await mountWith([account], {
             activeAccountId: account.id,
             onAddAccount,
-            onRenameAccount,
         });
 
         expect(rowFor(account.name)).toHaveAttribute('aria-current', 'true');
-        const add = screen.getByRole('button', { name: 'Add account' });
-        const manage = screen.getByRole('button', { name: 'Manage' });
-        expect(add.closest('footer')).toBeNull();
-        expect(manage.closest('footer')).toBeNull();
-        expect(add.closest('main')).not.toBeNull();
-        expect(rowFor(account.name).compareDocumentPosition(add) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        const add = screen.getByRole('button', { name: 'Add Account' });
+        // The plus sits in the page header; there is no Manage button under the list.
+        expect(add.closest('header')).not.toBeNull();
+        expect(screen.queryByRole('button', { name: 'Manage' })).toBeNull();
         expect(pickerCss).toMatch(/\.pickerActions button > span:last-child\s*{[^}]*white-space:\s*nowrap/);
 
         fireEvent.click(add);
-        fireEvent.click(manage);
         expect(onAddAccount).toHaveBeenCalledOnce();
-        expect(onRenameAccount).toHaveBeenCalledWith(account);
     });
 
-    it('renders the row edit affordance as an icon-only kit button', async () => {
+    it('renders the title-line add affordance as an icon-only kit button', async () => {
         await mountWith(
             [{ id: 'a1', index: 0, name: 'Savings' }],
-            { onRenameAccount: () => {} },
+            {},
         );
 
-        const rename = screen.getByRole('button', { name: 'Rename Savings' });
-        expect(rename).toHaveClass(buttonStyles.iconOnly);
-        expect(rename.querySelector('svg[data-xc-icon]')).toBeInTheDocument();
-        expect(rename.querySelectorAll(':scope > span')).toHaveLength(1);
+        const add = screen.getByRole('button', { name: 'Add Account' });
+        expect(add).toHaveClass(buttonStyles.iconOnly);
+        expect(add.querySelector('svg[data-xc-icon]')).toBeInTheDocument();
+        expect(add.querySelectorAll(':scope > span')).toHaveLength(1);
     });
 
-    it('switches an inactive account and returns through the supplied route', async () => {
+    // Without an account page wired, a row switches the account; the picker
+    // stays open (Back is the title bar's).
+    it('switches an inactive account from its row', async () => {
         const onSwitch = vi.fn();
         const onBack = vi.fn();
         await mountWith(
@@ -139,7 +141,6 @@ describe('AccountPicker row subtitle', () => {
         fireEvent.click(rowFor('Savings'));
 
         expect(onSwitch).toHaveBeenCalledWith('a2');
-        expect(onBack).toHaveBeenCalledOnce();
     });
 
     it('closes without switching when the current account or Back is selected', async () => {
@@ -156,7 +157,8 @@ describe('AccountPicker row subtitle', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
 
         expect(onSwitch).not.toHaveBeenCalled();
-        expect(onBack).toHaveBeenCalledTimes(2);
+        // Only Back leaves; the current account's row does nothing.
+        expect(onBack).toHaveBeenCalledTimes(1);
     });
 
     it('reports a list failure without rendering an empty account state', async () => {

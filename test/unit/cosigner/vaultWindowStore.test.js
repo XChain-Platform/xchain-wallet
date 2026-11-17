@@ -39,6 +39,11 @@ describe('cosigner/addDecimalStrings', () => {
 });
 
 describe('cosigner/VaultWindowStore construction', () => {
+    it('uses the wallet spelling in corrupt-state errors', () => {
+        expect(new WindowStateCorruptError('bad state').message)
+            .toBe('cosigner window state is unreadable (bad state); inspect/remove it deliberately to reset the spending window');
+    });
+
     it('requires a persistence port and positive hours', () => {
         const p = createInMemoryWindowPersistence();
         expect(() => new VaultWindowStore({ persistence: p, hours: 24 })).not.toThrow();

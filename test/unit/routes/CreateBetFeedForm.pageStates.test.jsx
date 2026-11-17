@@ -22,6 +22,7 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { CreateBetFeedForm } from '../../../packages/core/src/shared/routes/CreateBetFeedForm.jsx';
 import { ListPage } from '../../../packages/core/src/ui/ListPage.jsx';
 import { FormPage } from '../../../packages/core/src/ui/FormPage.jsx';
+import * as walletModes from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 
 const SOURCE_PATH = join(__dirname, '..', '..', '..', 'packages', 'core', 'src', 'shared', 'routes', 'CreateBetFeedForm.jsx');
 
@@ -42,6 +43,7 @@ beforeEach(() => {
 
 afterEach(() => {
     cleanup();
+    walletModes.resetWalletModes?.();
 });
 
 async function drain(rounds = 16) {
@@ -77,6 +79,8 @@ function messagingFor({ getAddressesByChain, built = { txid: 'market-txid' } } =
 }
 
 async function mount(opts) {
+    // A wallet's mode is published by the shell from the wallet list, not read from settings.
+    walletModes.publishWalletModes?.({ wallets: [{ id: 'w', walletMode: 'watcher' }], activeWalletId: 'w' });
     let utils;
     await domAct(async () => {
         utils = render(
@@ -93,14 +97,14 @@ async function mount(opts) {
 async function buildMarket(utils) {
     await domAct(async () => {
         const typeIn = (label, value) => fireEvent.change(utils.getByLabelText(label), { target: { value } });
-        typeIn('What is being bet on', 'Who wins the final?');
-        typeIn('Outcome 0', 'Home');
-        typeIn('Outcome 1', 'Away');
-        typeIn('Betting closes', DEADLINE_LOCAL);
+        typeIn('Question', 'Who wins the final?');
+        typeIn('Outcome 1', 'Home');
+        typeIn('Outcome 2', 'Away');
+        typeIn('Closes', DEADLINE_LOCAL);
         await drain();
     });
     const submit = Array.from(utils.container.querySelectorAll('button'))
-        .find((b) => /Create unsigned transaction/.test(b.textContent || ''));
+        .find((b) => /Create Unsigned Transaction/.test(b.textContent || ''));
     expect(submit).toBeTruthy();
     await domAct(async () => {
         fireEvent.click(submit);
@@ -146,11 +150,15 @@ describe('CreateBetFeedForm lays out every page state through a template', () =>
     it('puts the submitted-market summary, transaction id and Done inside one template', async () => {
         const utils = await mount();
         await buildMarket(utils);
-        const summary = byText(utils.container, 'p', 'Market submitted');
+        // The shared result screen: notice, a fact row, the note in a WarningCard.
+        const summary = utils.container.querySelector('[data-testid="result-screen-notice"]');
+        expect(summary?.textContent).toContain('Market submitted');
         expectInsideTemplate(summary);
         const page = summary.closest(templateSelector());
         expect(page.textContent).toContain('Transaction ID');
         expect(page.textContent).toContain('market-txid');
+        expect(page.querySelector('[data-bet-create-permanent]')?.textContent).toContain('permanent');
+        expect(page.querySelector('dt')).toBeNull();
         expectInsideTemplate(byText(page, 'button', 'Done'));
     });
 
@@ -184,7 +192,8 @@ describe('CreateBetFeedForm lays out every page state through a template', () =>
         };
         visit(tree.program);
         expect(roots.length).toBeGreaterThanOrEqual(6);
-        expect(roots.filter(({ name }) => name !== 'FormPage' && name !== 'ListPage')
+        // FormFrame is the Form Standard's frame and renders FormPage.
+        expect(roots.filter(({ name }) => name !== 'FormPage' && name !== 'FormFrame' && name !== 'ListPage')
             .map(({ line, name }) => `CreateBetFeedForm.jsx:${line} wrap(${name})`)).toEqual([]);
     });
 });

@@ -48,6 +48,7 @@ import { sessionRandomUUID } from './uuid.js';
  * @typedef {Object} BrokerWindowDeps
  * @property {(options: any) => Promise<{ id?: number } | undefined> | { id?: number } | undefined} create
  * @property {(windowId: number) => Promise<void> | void} [remove]
+ * @property {(windowId: number, update: { focused: boolean }) => Promise<unknown> | unknown} [update]
  * @property {{ addListener(fn: (windowId: number) => void): void, removeListener?: (fn: Function) => void }} [onRemoved]
  */
 
@@ -178,6 +179,38 @@ export class ApprovalBroker {
             } catch (_err) { /* window may already be gone */ }
         }
         return true;
+    }
+
+    /**
+     * The parked requests of one kind, oldest first, for a page that shows
+     * what is waiting (the agent account page lists its co-sign requests).
+     *
+     * @param {string} kind
+     * @returns {Array<{ id: string, kind: string, payload: unknown }>}
+     */
+    listPending(kind) {
+        return [...this._pending.values()]
+            .filter((entry) => entry.kind === kind)
+            .map((entry) => ({ id: entry.id, kind: entry.kind, payload: entry.payload }));
+    }
+
+    /**
+     * Bring a parked request's approval window to the front, so a decision
+     * started on another page is made in that window, behind its password and
+     * checks. False when the id is unknown or no window is open for it.
+     *
+     * @param {string} id
+     * @returns {Promise<boolean>}
+     */
+    async focus(id) {
+        const entry = this._pending.get(id);
+        if (!entry || entry.windowId == null || !this._windows?.update) return false;
+        try {
+            await this._windows.update(entry.windowId, { focused: true });
+            return true;
+        } catch (_err) {
+            return false;
+        }
     }
 
     /** Test helper: inspect the in-memory map. */

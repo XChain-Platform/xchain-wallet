@@ -1,5 +1,6 @@
 .button {
     --xc-icon-size: var(--xc-icon-md);
+    position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -15,7 +16,7 @@
     cursor: pointer;
 }
 
-.button:hover:not(:disabled) {
+.button:hover:not(:disabled):not([aria-disabled="true"]) {
     color: var(--xc-text);
 }
 
@@ -24,9 +25,20 @@
     outline-offset: 0;
 }
 
-.button:disabled {
-    color: var(--xc-control-disabled-text);
-    cursor: not-allowed;
+/* A locked action (aria-disabled) stays focusable so its reason can be read,
+   and keeps the icon's colour: a button never looks disabled (G130). */
+
+/* An in-field action is a bare icon, but a finger still gets a 44px target:
+   a transparent area centred on the icon, with no visible box. */
+@media (pointer: coarse), (hover: none) {
+    .button::before {
+        content: '';
+        position: absolute;
+        inset-block-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+        inset-inline-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+        inline-size: max(100%, var(--xc-control-hit-min, 24px));
+        block-size: max(100%, var(--xc-control-hit-min, 24px));
+    }
 }
 
 @media (forced-colors: active) {

@@ -53,7 +53,8 @@ function feeBearingForms() {
             if (!file.endsWith('.jsx')) continue;
             const rel = `${dir}/${file}`;
             const src = readFileSync(join(SHARED, rel), 'utf8');
-            if (src.includes('NativeFeeToggle')) out.push({ rel, src });
+            // A form mounts the toggle directly or through the Network fee section's nativeFeeProps.
+            if (src.includes('NativeFeeToggle') || src.includes('nativeFeeProps')) out.push({ rel, src });
         }
     }
     return out;

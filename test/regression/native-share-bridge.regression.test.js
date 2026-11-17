@@ -66,8 +66,8 @@ function renderReceive() {
 }
 
 async function sharePaymentLink() {
-    const button = await screen.findByRole('button', { name: 'Share QR payment link' });
-    await waitFor(() => expect(button).toBeEnabled());
+    const button = await screen.findByRole('button', { name: /^Share QR payment link/ });
+    await waitFor(() => expect(button).not.toHaveAttribute('aria-disabled'));
     fireEvent.click(button);
 }
 

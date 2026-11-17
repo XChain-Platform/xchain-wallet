@@ -75,7 +75,7 @@ describe('ActionConfirmScreen From row (#40)', () => {
         );
 
         await waitFor(() => {
-            expect(screen.getByTestId('confirm-source').textContent)
+            expect(screen.getByTestId('confirm-source').previousElementSibling.textContent)
                 .toContain('Trading account · Main wallet');
         });
     });
@@ -111,7 +111,7 @@ describe('ActionConfirmScreen From row (#40)', () => {
         );
 
         await waitFor(() => {
-            expect(screen.getByTestId('confirm-source').textContent)
+            expect(screen.getByTestId('confirm-source').previousElementSibling.textContent)
                 .toContain('Cold account · Cold wallet');
         });
     });
@@ -128,10 +128,11 @@ describe('ActionConfirmScreen From row (#40)', () => {
         );
 
         const row = screen.getByTestId('confirm-source');
-        expect(row.textContent).toMatch(/^From/);
-        // The final review keeps the complete address visible and also
-        // exposes it through the title attribute.
-        expect(row.textContent).toContain(SOFTWARE_ADDRESS);
+        expect(row.previousElementSibling.textContent).toMatch(/^From/);
+        expect(row.closest('[data-testid="confirm-facts"]')?.querySelector('dd')).toBe(row);
+        // The address shows whole where it fits and is cut in the middle
+        // where it does not (G127); its title always carries all of it.
+        // jsdom measures nothing, so only the title is checked here.
         expect(row.querySelector('[title]')?.getAttribute('title')).toBe(SOFTWARE_ADDRESS);
     });
 
@@ -157,7 +158,8 @@ describe('ActionConfirmScreen From row (#40)', () => {
         );
 
         const row = screen.getByTestId('confirm-source');
-        expect(row.textContent).toMatch(/^From/);
+        expect(row.previousElementSibling.textContent).toMatch(/^From/);
+        expect(row.closest('[data-testid="confirm-facts"]')?.querySelector('dd')).toBe(row);
         expect(row.querySelector('[title]')?.getAttribute('title')).toBe(HARDWARE_ADDRESS);
     });
 });

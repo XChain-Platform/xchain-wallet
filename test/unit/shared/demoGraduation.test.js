@@ -86,7 +86,7 @@ describe('entering demo mode', () => {
             ),
         );
 
-        fireEvent.click(screen.getByRole('button', { name: 'Try in demo mode' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Demo' }));
 
         await waitFor(() => expect(onDemoEntered).toHaveBeenCalledTimes(1));
         expect(importMnemonic).toHaveBeenCalledWith(expect.objectContaining({

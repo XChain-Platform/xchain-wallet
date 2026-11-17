@@ -81,7 +81,7 @@ async function enterMembers(messaging) {
     const box = await screen.findByLabelText('Addresses');
     fireEvent.change(box, { target: { value: `${BITCOIN_MEMBER}\n${LITECOIN_MEMBER}` } });
     await screen.findByLabelText('From');
-    fireEvent.click(screen.getByRole('button', { name: 'Publish list' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Publish List$/ }));
 }
 
 beforeEach(() => {

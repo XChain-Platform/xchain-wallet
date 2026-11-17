@@ -49,8 +49,9 @@ function renderHistory(history) {
             <TokenDetail walletId="w1" chainId={CHAIN} tick="HIST" kind="token" quantity="1" onBack={() => {}} />
         </MessagingProvider>,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'More info' }));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Supply over time' }));
+    // Supply over time is a row at the foot of the Details tab.
+    fireEvent.click(screen.getByRole('tab', { name: /Details/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Supply over time' }));
 }
 
 const pathOf = (chart) => chart.querySelector('path').getAttribute('d');

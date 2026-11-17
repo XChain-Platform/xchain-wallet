@@ -15,16 +15,21 @@
 import { addEnglish } from '../../store.js';
 
 const messages = {
-    'walletPicker.title': 'Wallets',
-    'walletPicker.manage': 'Manage wallet',
+    'walletPicker.title': 'My Wallets',
+    'walletPicker.manage': 'Manage Wallet',
     'walletPicker.emptyTitle': 'No wallets yet',
     'walletPicker.emptyBody': 'Wallets available to this app appear here.',
     'walletPicker.demoPrefix': 'Demo wallet · ',
-    'walletPicker.legacy': 'FreeWallet (legacy)',
+    'walletPicker.legacy': 'Legacy',
     'walletPicker.importedKey': 'Imported key',
-    'walletPicker.bip39': 'Standard',
+    'walletPicker.bip39': 'BIP39',
     'walletPicker.passphraseNeeded': ' · needs its passphrase at unlock',
-    'walletPicker.detailsFor': 'Wallet details for {wallet}',
+    'walletPicker.unnamed': 'Unnamed wallet',
+    'walletPicker.filter': 'Filter wallets',
+    'walletPicker.searchLabel': 'Search wallets',
+    'walletPicker.noMatchTitle': 'No matching wallets',
+    'walletPicker.noMatchBody': 'Matching wallets appear here after you change the search.',
+    'walletPicker.accountCount': '{count, plural, one {# account} other {# accounts}}',
 };
 
 addEnglish(messages);

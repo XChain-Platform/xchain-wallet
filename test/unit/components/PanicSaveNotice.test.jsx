@@ -56,7 +56,7 @@ describe('PanicSaveNotice', () => {
         render(<Page />);
 
         fireEvent.click(screen.getByRole('button', { name: 'Activate' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Confirm 24-hour freeze' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Confirm 24-Hour Freeze' }));
         await settle();
 
         const notice = screen.getByTestId('panic-save-notice');
@@ -73,7 +73,7 @@ describe('PanicSaveNotice', () => {
             await configurePanicModePersistence(store({ refuseSave: true }));
             render(<Page />);
             fireEvent.click(screen.getByRole('button', { name: 'Activate' }));
-            fireEvent.click(screen.getByRole('button', { name: 'Confirm 24-hour freeze' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Confirm 24-Hour Freeze' }));
             await settle();
             expect(scrolled).toHaveBeenCalledTimes(1);
             expect(scrolled.mock.contexts[0].contains(screen.getByTestId('panic-save-notice'))).toBe(true);
@@ -86,7 +86,7 @@ describe('PanicSaveNotice', () => {
         await configurePanicModePersistence(store());
         render(<Page />);
         fireEvent.click(screen.getByRole('button', { name: 'Activate' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Confirm 24-hour freeze' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Confirm 24-Hour Freeze' }));
         await settle();
         expect(screen.queryByTestId('panic-save-notice')).toBeNull();
     });

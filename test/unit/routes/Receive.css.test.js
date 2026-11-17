@@ -39,9 +39,9 @@ function rule(cssText, selector) {
 }
 
 describe('Receive form spacing', () => {
-    it('separates the label editor from the following field group', () => {
-        expect(rule(css, '.labelEditor'))
-            .toMatch(/margin-bottom:\s*var\(--xc-space-3\)/);
+    it('has no label editor to space: Receive no longer edits address labels', () => {
+        expect(rule(css, '.labelEditor')).toBe('');
+        expect(receive).not.toContain('styles.labelEditor');
     });
 
     it('uses one responsive frame rule across standalone static and animated QRs', () => {
@@ -76,15 +76,19 @@ describe('Receive form spacing', () => {
         expect(receive).toMatch(
             /styles\.qrSurface[\s\S]*?<AddressField[\s\S]*?\{qrActionsContent\}/,
         );
-        expect(receive).toMatch(/className=\{`\$\{qrStyles\.actions\} \$\{styles\.qrActions\}`\}/);
+        // The actions are one ActionList under the QR (G101), not QrDisplay's button row.
+        expect(receive).toMatch(/className=\{styles\.qrActions\}>\s*<ActionList\b/);
         expect(animatedQr).toMatch(
             /qrStyles\.frame[\s\S]*?qrStyles\.caption[\s\S]*?qrStyles\.actions/,
         );
         expect(cosignerShare).toMatch(
             /<KeyQR[\s\S]*?<CopyButton/,
         );
+        // The key's QR sits first inside the Receive-style display, with the
+        // address and key fields, each carrying its Copy, below it.
+        expect(privateKey).toMatch(/receiveStyles\.receiveQrDisplay/);
         expect(privateKey).toMatch(
-            /renderQR\(\{ value: currentWif \}\)[\s\S]*?styles\.copyRow/,
+            /<img src=\{keyQr\}[\s\S]*?label="Address"[\s\S]*?<CopyButton[\s\S]*?label="Private key"[\s\S]*?<CopyButton/,
         );
     });
 });

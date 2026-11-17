@@ -23,7 +23,7 @@ import '../../../packages/core/src/i18n/locales/en/signerSelect.js';
 
 afterEach(cleanup);
 
-const GENERIC = 'Failed to load signers.';
+const GENERIC = 'Failed to load hardware wallets.';
 
 const FAULTS = [
     ['a fetch failure', () => new TypeError('Failed to fetch')],
@@ -63,7 +63,7 @@ describe('AddAccountForm network faults', () => {
 
         await waitFor(() => expect(screen.getByLabelText('Account name')).toHaveValue('Account 2'));
         fireEvent.change(screen.getByLabelText('Account name'), { target: { value: 'Savings' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add Account' }));
 
         await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1));
         expect(onCreated).toHaveBeenCalledWith(created.account);

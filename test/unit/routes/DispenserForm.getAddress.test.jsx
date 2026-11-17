@@ -20,7 +20,8 @@
 // and the Approve dispatch, on a fresh form, on the first submit.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, act as domAct, fireEvent, cleanup } from '@testing-library/react';
+import { render, act as domAct, fireEvent, cleanup, within } from '@testing-library/react';
+import { selectOption } from '../../helpers/selectOption.js';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispenserForm } from '../../../packages/core/src/shared/routes/DispenserForm.jsx';
@@ -115,8 +116,18 @@ async function drainMicrotasks(rounds = 12) {
 }
 
 const setValue = (utils, label, value) => {
-    fireEvent.change(utils.getByLabelText(label), { target: { value } });
+    const control = utils.getByLabelText(label);
+    // Dropdowns are the themed Select: pick the option rather than typing a value.
+    if (control.hasAttribute('data-xc-select')) selectOption(control, value);
+    else fireEvent.change(control, { target: { value } });
 };
+
+// G122: the Fiat currency field opens its picker page and a row picks the
+// code; two steps, so the page renders between the tap and the pick.
+const openFiatPicker = (utils) => fireEvent.click(utils.getByRole('button', { name: /^Fiat currency:/ }));
+const pickFiat = (code) => (utils) => fireEvent.click(
+    within(utils.getByRole('list', { name: 'Fiat currencies' })).getByRole('button', { name: new RegExp(code) }),
+);
 
 /**
  * Mount a locked-token DispenserForm, run the optional picker steps, fill
@@ -151,7 +162,7 @@ async function driveCreate({ steps = [], pricingSteps = [], generationError, wal
         // eslint-disable-next-line no-await-in-loop
         await domAct(async () => { step(utils); await drainMicrotasks(); });
     }
-    const create = utils.getByRole('button', { name: 'Create dispenser' });
+    const create = utils.getByRole('button', { name: 'Create Dispenser' });
     expect(create.disabled).toBe(false);
     await domAct(async () => {
         fireEvent.click(create);
@@ -186,6 +197,10 @@ async function renderForm({ generationError, addressLoadError, walletId = 'w' } 
     return { calls, utils };
 }
 
+// The dispenser address and the fiat and oracle pricing live in the closed Dispenser Terms section.
+const openTerms = (utils) => {
+    fireEvent.click(utils.getByRole('button', { name: /^Dispenser Terms/ }));
+};
 const openDispenserAddressPicker = (utils) => {
     fireEvent.click(utils.getByRole('button', { name: 'Change dispenser address' }));
 };
@@ -221,6 +236,10 @@ describe('DispenserForm GET_ADDRESS by address mode', () => {
         const raw = 'dispenserAddress: either `signer` or `password` is required';
         const { calls, utils } = await renderForm({ generationError: new Error(raw), walletId: 'w-picker-error' });
 
+        await domAct(async () => {
+            openTerms(utils);
+            await drainMicrotasks();
+        });
         await domAct(async () => {
             openDispenserAddressPicker(utils);
             await drainMicrotasks();
@@ -259,7 +278,7 @@ describe('DispenserForm GET_ADDRESS by address mode', () => {
 
     it('mode existing: a reused dispenser address rides as GET_ADDRESS, and nothing is derived', async () => {
         const { calls } = await driveCreate({
-            steps: [openDispenserAddressPicker, pickAddress(REUSABLE.address)],
+            steps: [openTerms, openDispenserAddressPicker, pickAddress(REUSABLE.address)],
         });
         expect(calls.some((c) => c.method === 'generateDispenserAddress')).toBe(false);
         const { composed, submitted } = composeAndSubmitParams(calls);
@@ -269,7 +288,7 @@ describe('DispenserForm GET_ADDRESS by address mode', () => {
 
     it('mode current: picking the source itself omits GET_ADDRESS so the protocol defaults to SOURCE', async () => {
         const { calls } = await driveCreate({
-            steps: [openDispenserAddressPicker, pickAddress(SOURCE.address)],
+            steps: [openTerms, openDispenserAddressPicker, pickAddress(SOURCE.address)],
         });
         expect(calls.some((c) => c.method === 'generateDispenserAddress')).toBe(false);
         const { composed, submitted } = composeAndSubmitParams(calls);
@@ -283,12 +302,17 @@ describe('DispenserForm Mode B pricing', () => {
         let triggerWasHidden = false;
         const { calls } = await driveCreate({
             pricingSteps: [
-                (utils) => fireEvent.click(utils.getByRole('button', { name: /Advanced options/ })),
+                openTerms,
+                openFiatPicker,
+                pickFiat('USD'),
                 (utils) => {
-                    setValue(utils, 'Priced in fiat', 'USD');
                     setValue(utils, /^Oracle address/, '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2');
                 },
-                (utils) => { triggerWasHidden = utils.queryByLabelText(/^Trigger price/) === null; },
+                // Quick keeps the Get card but holds the native price: empty and disabled.
+                (utils) => {
+                    const trigger = utils.queryByLabelText(/^Trigger price/);
+                    triggerWasHidden = trigger === null || (trigger.disabled && trigger.value === '');
+                },
             ],
         });
         const { composed, submitted } = composeAndSubmitParams(calls);

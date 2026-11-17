@@ -17,10 +17,10 @@ const componentsRoot = join(sharedRoot, 'components');
 const uiRoot = join(sharedRoot, '../ui');
 const tokensPath = join(sharedRoot, '../ui/tokens.css');
 const viewPrivateKeyStylesPath = join(sharedRoot, 'routes/ViewPrivateKey.module.css');
+// BackupReminderCard and QueuedBroadcastBanner left this list when their
+// boxes became the kit Notice (the Notice Standard).
 const cardModules = [
-    'BackupReminderCard.module.css',
     'CollectiblesView.module.css',
-    'QueuedBroadcastBanner.module.css',
     'TotalBalanceHero.module.css',
 ];
 const routeModules = [
@@ -32,7 +32,6 @@ const routeModules = [
 ];
 const tokenCleanupModules = [
     'ActionIntentSummary.module.css',
-    'AlertsOverlay.module.css',
     'AmountField.module.css',
     'BackupReminderCard.module.css',
     'BalanceChanges.module.css',
@@ -57,7 +56,6 @@ const statusModalModules = [
     'NoticeModal.module.css',
     'OriginIdentity.module.css',
     'OwnerWithdrawWarning.module.css',
-    'PlatformSwitcher.module.css',
     'PortfolioChart.module.css',
 ];
 const pixelTokenModules = [
@@ -248,16 +246,21 @@ it('uses shared tokens for route control, icon, and loader geometry', () => {
         expect(withoutComments(css), file)
             .not.toMatch(/(?:gap|font-size|border-radius)\s*:[^;}]*(?:\d*\.)?\d+px/);
     }
-    expect(readFileSync(join(uiRoot, 'QuickActionTile.module.css'), 'utf8')).toMatch(
-        /\.icon\s*\{[^}]*width:\s*var\(--xc-icon-sm\)[^}]*height:\s*var\(--xc-icon-sm\)/s,
-    );
+    // The approved redesign draws the quick action as a round tinted button (a 52px circle
+    // holding a token-sized glyph), so the circle is sized in the tile rule, not from an icon token.
+    const quickTileCss = readFileSync(join(uiRoot, 'QuickActionTile.module.css'), 'utf8');
+    expect(quickTileCss).toMatch(/\.tile\.tile\.tile \.icon\s*\{[^}]*width:\s*52px[^}]*height:\s*52px/s);
+    expect(quickTileCss).toMatch(/\.icon\s*\{[^}]*border-radius:\s*50%/s);
+    expect(quickTileCss).toMatch(/--xc-icon-size:\s*(?:22px|var\(--xc-icon-md\))/);
     expect(imported).not.toMatch(/(?:margin|padding|outline-offset):[^;]*-?2px/);
     expect(issue).not.toMatch(/outline-offset:\s*-?2px/);
-    expect(loading).toMatch(
-        /\.dots > span\s*\{[^}]*width:\s*var\(--xc-space-2\)[^}]*height:\s*var\(--xc-space-2\)/s,
-    );
+    // The loading screen is the fading logo plus one progress bar.
+    expect(loading).toMatch(/\.bootLogo\s*\{[^}]*composes:\s*standardSize from '\.\/BootLogo\.module\.css';[^}]*animation:\s*bootFade/s);
+    expect(loading).toMatch(/\.bootBar\s*\{/);
 });
 
+// The unused inline-code and revealed-key rules that carried the hairlines
+// are gone, so the stylesheet keeps no raw pixels.
 it('limits ViewPrivateKey raw pixels to documented hairlines and sub-scale insets', () => {
     const css = readFileSync(viewPrivateKeyStylesPath, 'utf8');
     const lines = css.split('\n');
@@ -270,11 +273,7 @@ it('limits ViewPrivateKey raw pixels to documented hairlines and sub-scale inset
         }];
     });
 
-    expect(rawPixelDeclarations.map(({ declaration }) => declaration)).toEqual([
-        'padding: 2px var(--xc-space-1)',
-        'border: 1px solid var(--xc-border)',
-        'border: 1px solid var(--xc-border)',
-    ]);
+    expect(rawPixelDeclarations.map(({ declaration }) => declaration)).toEqual([]);
     for (const { precedingLine } of rawPixelDeclarations) {
         expect(precedingLine).toMatch(/^\/\* .+ \*\/$/);
     }
@@ -353,7 +352,8 @@ it('uses tokens for geometry in the requested component modules', () => {
 
 it('uses the shared padding and radius for explicit card modules', () => {
     const tokens = readFileSync(tokensPath, 'utf8');
-    expect(tokens).toContain('--xc-card-pad: var(--xc-space-4);');
+    // Ruling G80: card insets are 8px.
+    expect(tokens).toContain('--xc-card-pad: var(--xc-space-2);');
     expect(tokens).toContain('--xc-card-radius: var(--xc-radius-md);');
 
     // A card module either composes the shared card (ui/Card.module.css)
@@ -369,25 +369,19 @@ it('uses the shared padding and radius for explicit card modules', () => {
 it('tokenizes shared component dimensions except documented pixel exceptions', () => {
     const expectedPixelDeclarations = {
         'ActionIntentSummary.module.css': [],
-        'AlertsOverlay.module.css': [
-            'max-width: min(380px, 100%)',
-            'border-bottom: 1px solid var(--xc-border)',
-            'padding: 1px var(--xc-space-2)',
-            'outline: 2px solid var(--xc-focus-ring)',
-            'outline-offset: 2px',
-        ],
         'AmountField.module.css': [],
-        'BackupReminderCard.module.css': [
-            'flex: 1 1 240px',
-            'outline: 2px solid var(--xc-focus-ring)',
-            'outline-offset: 2px',
-        ],
+        // A kit Notice now (the Notice Standard): no pixel exceptions left.
+        'BackupReminderCard.module.css': [],
         'BalanceChanges.module.css': [
             'border-bottom: 1px solid var(--xc-border-soft, var(--xc-border))',
             'border-top: 1px solid var(--xc-border-soft, var(--xc-border))',
         ],
         'CollectiblesView.module.css': [
             'outline: 2px solid var(--xc-focus-ring)',
+            'outline-offset: -2px',
+            // Wide Home's selected card (G115): the focus ring's own inset
+            // geometry in the accent colour; no outline-width token exists.
+            'outline: 2px solid var(--xc-accent-primary)',
             'outline-offset: -2px',
             'outline: 2px solid var(--xc-on-accent)',
             'outline-offset: 2px',
@@ -400,12 +394,6 @@ it('tokenizes shared component dimensions except documented pixel exceptions', (
         const css = readFileSync(join(componentsRoot, file), 'utf8');
         expect(declarationsWithPixels(css), file).toEqual(expectedPixelDeclarations[file]);
     }
-
-    const alerts = readFileSync(join(componentsRoot, 'AlertsOverlay.module.css'), 'utf8');
-    expect(alerts).toContain('--xc-slide-in-offset: var(--xc-space-5)');
-    expect(alerts).toContain('translateX(var(--xc-slide-in-offset))');
-    expect(alerts).toMatch(/\.close\s*\{[^}]*width: var\(--xc-control-h-sm\);[^}]*height: var\(--xc-control-h-sm\)/s);
-    expect(alerts).toContain('border-inline-start: var(--xc-space-1) solid');
 
     const collectibles = readFileSync(join(componentsRoot, 'CollectiblesView.module.css'), 'utf8');
     expect(collectibles).toContain('font-size: var(--xc-text-2xl);');
@@ -432,13 +420,6 @@ it('keeps the audited component geometry on shared design tokens', () => {
         'calc(var(--xc-space-4) + env(safe-area-inset-right, 0))',
     );
     expect(cssByFile['NoticeModal.module.css']).toContain('padding: var(--xc-card-pad);');
-    expect(cssByFile['PlatformSwitcher.module.css']).toMatch(
-        /\.trigger\s*\{[^}]*border-radius:\s*var\(--xc-control-radius\);[^}]*width:\s*var\(--xc-control-h-md\);[^}]*height:\s*var\(--xc-control-h-md\)/s,
-    );
-    expect(cssByFile['PlatformSwitcher.module.css']).not.toMatch(/padding:\s*var\(--xc-space-2\) 10px/);
-    expect(cssByFile['PlatformSwitcher.module.css']).toContain(
-        'calc(100vw - var(--xc-space-3) - var(--xc-space-3))',
-    );
     expect(cssByFile['PortfolioChart.module.css']).toContain(
         'padding-inline: var(--xc-control-pad-x-sm);',
     );

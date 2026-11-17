@@ -27,7 +27,9 @@ import { pathToAddressN } from '../../../packages/signers-trezor/src/trezorForma
 // independently-hardcoded copy of the same coin-type the chain descriptors'
 // derivationPaths declare. The two agree today, but nothing guards against a
 // future descriptor edit silently diverging hardware from software derivation
-// for the same account (uuid 980fe12c). This test locks the two together.
+// for the same account (uuid 980fe12c). This test locks the two together for
+// the mainnet coins. The test coins derive at the device's own slip44 1'
+// instead (operator ruling 2026-11-15), pinned in their own block below.
 const TREZOR_COIN_TO_MAINNET_DESCRIPTOR_ID = {
     btc: 'bitcoin-mainnet',
     ltc: 'litecoin-mainnet',
@@ -48,6 +50,12 @@ describe('coinTypeFor vs chain descriptor coin-type parity', () => {
         it(`${trezorCoin}: coinTypeFor matches the ${descriptorId} descriptor's coin-type slot`, () => {
             expect(coinTypeFor(trezorCoin)).toBe(descriptorCoinType(descriptorId));
         });
+    });
+
+    // Firmware defs bitcoin_testnet.json, bitcoin_regtest.json and
+    // litecoin_testnet.json each carry slip44 1.
+    it.each(['test', 'regtest', 'tltc'])('%s: coinTypeFor is the firmware test coin type 1\'', (trezorCoin) => {
+        expect(coinTypeFor(trezorCoin)).toBe("1'");
     });
 });
 
@@ -178,7 +186,7 @@ describe('TrezorSigner.getStatus', () => {
         expect(await s.getStatus()).toBe('disconnected');
     });
 
-    it.each(['bitcoin-testnet', 'bitcoin-regtest', 'litecoin-testnet', 'dogecoin-testnet'])(
+    it.each(['litecoin-regtest', 'dogecoin-testnet', 'dogecoin-regtest'])(
         'returns "unsupported-network" for %s, a chain the Trezor path cannot sign on',
         async (chainId) => {
             expect(await makeSigner().getStatus({ chainId })).toBe('unsupported-network');
@@ -187,7 +195,10 @@ describe('TrezorSigner.getStatus', () => {
 
     it('returns "available" for every supported chain and when no chainId is given', async () => {
         const s = makeSigner();
-        for (const chainId of ['bitcoin-mainnet', 'litecoin-mainnet', 'dogecoin-mainnet']) {
+        for (const chainId of [
+            'bitcoin-mainnet', 'bitcoin-testnet', 'bitcoin-regtest',
+            'litecoin-mainnet', 'litecoin-testnet', 'dogecoin-mainnet',
+        ]) {
             expect(await s.getStatus({ chainId })).toBe('available');
         }
         expect(await s.getStatus({})).toBe('available');

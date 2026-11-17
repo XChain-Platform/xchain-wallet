@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Rendered gate for the Automatic Donation System notice. The notice informs
+// Rendered gate for the Automatic Donations notice. The notice informs
 // and does not ask: one Continue button, no decline or skip control, no
 // field or switch, no per-chain amount, and Continue leaves the ads setting
 // untouched so the default (on) still holds on Home.
@@ -43,11 +43,11 @@ const DECLINE_COPY = /decline|skip|not now|no thanks|maybe later|turn off|disabl
 const AMOUNT_COPY = /\b(sats?|satoshis?|LTC|DOGE|BTC|XCP|USD)\b|[$€£]\s?\d|\d[\d,.]*\s?%?\s?(sats?|LTC|DOGE|BTC)\b|\d,\d{3}/i;
 
 const noticeHeading = (page) =>
-    page.getByRole('heading', { name: 'Automatic Donation System', exact: true });
+    page.getByRole('heading', { name: 'Automatic Donations', exact: true });
 
 async function assertNotice(page) {
     await expect(noticeHeading(page)).toBeVisible({ timeout: kdfStepTimeout() });
-    const form = page.getByRole('form', { name: 'Automatic Donation System' });
+    const form = page.getByRole('form', { name: 'Automatic Donations' });
     await expect(form, 'the notice is a form-page surface').toBeVisible();
 
     // The header Back is disabled on the notice after create and after import.
@@ -94,7 +94,7 @@ async function createToNotice(page) {
     await expect(next).toBeEnabled({ timeout: 30_000 });
     await next.click();
     const words = await readRecoveryPhrase(page);
-    await page.getByLabel(/written down|saved my recovery phrase/i).check();
+    await page.getByRole('checkbox', { name: /written down|saved my recovery phrase/i }).check();
     await page.getByRole('button', { name: 'Verify recovery phrase' }).click();
     await completeRecoveryPhraseChallenge(page, words);
     await page.getByRole('button', { name: 'Create wallet' }).click();
@@ -105,10 +105,11 @@ async function continueToHome(page) {
     await expect(unlockedAnyScreen(page)).toBeVisible({ timeout: kdfStepTimeout() });
     // The ads setting is not written: the default (on) still holds in Settings.
     await openSettings(page);
-    await page.getByRole('button', { name: /^Automatic donation system/ }).click();
-    const toggle = page.getByRole('switch', { name: 'Turn on Automatic Donation System', exact: true });
-    await expect(toggle).toBeVisible();
-    await expect(toggle, 'Continue leaves the default on').toBeChecked();
+    await page.getByRole('button', { name: /^Automatic Donations/ }).click();
+    const perTransaction = page.getByRole('combobox', { name: 'Per transaction', exact: true });
+    await expect(perTransaction).toBeVisible();
+    await expect(perTransaction, 'Continue leaves the default on').toHaveText(/\$0\.05/);
+    await expect(page.getByTestId('ads-hero')).toContainText('$0.05 per transaction');
     await page.getByRole('button', { name: 'Back to settings', exact: true }).click();
     if (await nav(page).count() === 0) {
         await page.getByRole('button', { name: 'Back', exact: true }).click();

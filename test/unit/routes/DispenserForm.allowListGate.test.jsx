@@ -71,7 +71,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 /** A host whose list #2701 was created with `created` and now resolves to `current`. */
-function recordingMessaging({ created, current, derivedHeld = false }) {
+function recordingMessaging({ created, current, derivedHeld = false, listName = null }) {
     const calls = [];
     const target = {
         getAddressesByChain: () => Promise.resolve({
@@ -83,7 +83,7 @@ function recordingMessaging({ created, current, derivedHeld = false }) {
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
         getWalletBalances: () => Promise.resolve({ [CHAIN]: [] }),
         getListsForSource: ({ address }) => Promise.resolve(address === SOURCE.address
-            ? [{ action_index: Number(LIST), type: 2, status: 'valid', block_index: 10 }]
+            ? [{ action_index: Number(LIST), type: 2, status: 'valid', block_index: 10, ...(listName ? { name: listName } : {}) }]
             : []),
         getListByActionIndex: ({ actionIndex }) => Promise.resolve(actionIndex === LIST ? {
             action_index: Number(LIST),
@@ -143,9 +143,19 @@ async function fillAmounts(utils) {
     });
 }
 
+/**
+ * The address control lives in the closed Dispenser Terms section; the
+ * allow-list and block-list controls in the closed Lists section.
+ */
+async function openTerms(utils, title = 'Dispenser Terms') {
+    const header = utils.getByRole('button', { name: new RegExp(`^${title}`) });
+    if (header.getAttribute('aria-expanded') !== 'true') await step(() => fireEvent.click(header));
+}
+
 /** Open the allow-list picker and return the row's member-count text before picking it. */
 async function pickAllowList(utils) {
-    await step(() => fireEvent.click(utils.getByRole('button', { name: 'Set allow-list' })));
+    await openTerms(utils, 'Lists');
+    await step(() => fireEvent.click(utils.getByRole('button', { name: 'Allow list: None set' })));
     const row = utils.getByText(`Address list #${LIST}`).closest('button');
     const countText = row.textContent;
     await step(() => fireEvent.click(row));
@@ -153,17 +163,19 @@ async function pickAllowList(utils) {
 }
 
 async function pickBlockList(utils) {
-    await step(() => fireEvent.click(utils.getByRole('button', { name: 'Set block-list' })));
+    await openTerms(utils, 'Lists');
+    await step(() => fireEvent.click(utils.getByRole('button', { name: 'Block list: None set' })));
     const row = utils.getByText(`Address list #${LIST}`).closest('button');
     await step(() => fireEvent.click(row));
 }
 
 async function pickDispenserAddress(utils, address) {
+    await openTerms(utils);
     await step(() => fireEvent.click(utils.getByRole('button', { name: 'Change dispenser address' })));
     await step(() => fireEvent.click(utils.getByRole('button', { name: `View address ${address}` })));
 }
 
-const clickCreate = (utils) => step(() => fireEvent.click(utils.getByRole('button', { name: 'Create dispenser' })));
+const clickCreate = (utils) => step(() => fireEvent.click(utils.getByRole('button', { name: 'Create Dispenser' })));
 
 describe('DispenserForm allow-list self-check reads the list as the network resolves it', () => {
     it('an edit that added the dispenser address clears the warning, and the picker counts the edit', async () => {
@@ -182,6 +194,27 @@ describe('DispenserForm allow-list self-check reads the list as the network reso
         const compose = calls.find((c) => c.method === 'composeForConfirm');
         expect(compose, 'the preview opened').toBeTruthy();
         expect(compose.args.actionData.params).toMatchObject({ GET_ADDRESS: REUSABLE.address, ALLOW_LIST: LIST });
+    });
+});
+
+describe('DispenserForm list fields show the list name (G114)', () => {
+    it('reads None set when empty, the list name once picked, and List #N for an unnamed list', async () => {
+        const named = recordingMessaging({ created: [SOURCE.address], current: [SOURCE.address], listName: 'Buyers' });
+        const utils = await mountForm(named.messaging);
+        await openTerms(utils, 'Lists');
+        expect(utils.getByRole('button', { name: 'Allow list: None set' })).toBeTruthy();
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Allow list: None set' })));
+        await step(() => fireEvent.click(utils.getByText(`Buyers (List #${LIST})`).closest('button')));
+        expect(utils.getByRole('button', { name: new RegExp(`^Allow list: Buyers \\(List #${LIST}\\)`) })).toBeTruthy();
+        // Clearing returns to the empty state.
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Clear allow list' })));
+        expect(utils.getByRole('button', { name: 'Allow list: None set' })).toBeTruthy();
+        cleanup();
+
+        const unnamed = recordingMessaging({ created: [SOURCE.address], current: [SOURCE.address] });
+        const again = await mountForm(unnamed.messaging);
+        await pickBlockList(again);
+        expect(again.getByRole('button', { name: new RegExp(`^Block list: List #${LIST}`) })).toBeTruthy();
     });
 });
 
@@ -225,7 +258,7 @@ describe('DispenserForm allow-list self-check judges the address the dispenser o
         expect(utils.container.textContent).toContain(warning);
         await step(() => fireEvent.click(utils.getByTestId('confirm-reject')));
 
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Clear' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Clear allow list' })));
         expect(utils.container.textContent).not.toContain(warning);
     });
 });
@@ -234,28 +267,28 @@ describe('DispenserForm Create feedback', () => {
     it('names a missing token instead of disabling Create', async () => {
         const { messaging } = recordingMessaging({ created: [], current: [] });
         const utils = await mountForm(messaging, '');
-        const create = utils.getByRole('button', { name: 'Create dispenser' });
+        const create = utils.getByRole('button', { name: 'Create Dispenser' });
         expect(create.disabled).toBe(false);
 
         await clickCreate(utils);
-        expect(utils.getByRole('alert').textContent).toContain('Token ticker is required.');
+        expect(utils.getByRole('alert', { name: 'Form errors' }).textContent).toContain('Token ticker is required.');
     });
 
     it('keeps Create actionable and names each missing required amount', async () => {
         const { messaging } = recordingMessaging({ created: [], current: [] });
         const utils = await mountForm(messaging);
-        const create = utils.getByRole('button', { name: 'Create dispenser' });
+        const create = utils.getByRole('button', { name: 'Create Dispenser' });
         expect(create.disabled).toBe(false);
 
         await clickCreate(utils);
-        expect(utils.getByRole('alert').textContent)
+        expect(utils.getByRole('alert', { name: 'Form errors' }).textContent)
             .toContain('Per-fill give amount must be a positive number.');
 
         await step(() => {
             fireEvent.change(utils.getByLabelText(/^Give amount/), { target: { value: '10' } });
         });
         await clickCreate(utils);
-        expect(utils.getByRole('alert').textContent)
+        expect(utils.getByRole('alert', { name: 'Form errors' }).textContent)
             .toContain('Escrow amount must be a positive number.');
     });
 
@@ -269,6 +302,19 @@ describe('DispenserForm Create feedback', () => {
 
         expect(utils.getByText(/both the allow-list and the block-list/)).toBeInTheDocument();
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
+    });
+
+    it('reopens the closed Lists section on each Create while one list holds both slots', async () => {
+        const { messaging } = recordingMessaging({ created: [SOURCE.address], current: [SOURCE.address] });
+        const utils = await mountForm(messaging);
+        await pickAllowList(utils);
+        await pickBlockList(utils);
+        await fillAmounts(utils);
+        const lists = utils.getByRole('button', { name: /^Lists/ });
+        await step(() => fireEvent.click(lists));
+        expect(lists.getAttribute('aria-expanded')).toBe('false');
+        await clickCreate(utils);
+        expect(lists.getAttribute('aria-expanded')).toBe('true');
     });
 });
 

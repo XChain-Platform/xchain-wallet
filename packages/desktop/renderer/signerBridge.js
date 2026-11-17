@@ -30,6 +30,10 @@
 // Cross-package relative path so smoke tests (plain Node) resolve
 // without the pnpm workspace symlink. Vite picks up either form.
 import { bindRendererPortBridge } from '../../core/src/signers/index.js';
+import {
+    sessionSignerFor,
+    sessionSignerForRecord,
+} from '../../core/src/signers/hardwareReconnect.js';
 
 /** @type {Map<string, import('@xchain-wallet/core/signers/Signer.js').Signer>} */
 const liveSigners = new Map();
@@ -76,7 +80,9 @@ function ensureBridge() {
 /**
  * Register a live Signer so main-process `action.*.hw` handlers can
  * reach it. Called from `PairSignerForm`'s `onSignerPaired` hook
- * after the SignerRecord is persisted in the vault.
+ * after the SignerRecord is persisted in the vault. A Trezor or Ledger
+ * is stored inside a session signer, which reports each sign to the
+ * sign page and reopens the device after a lock.
  *
  * @param {string} signerId
  * @param {import('@xchain-wallet/core/signers/Signer.js').Signer} signer
@@ -89,8 +95,23 @@ export function registerSigner(signerId, signer) {
         throw new Error('signerBridge.registerSigner: signer must implement Signer');
     }
     const { bridge } = ensureBridge();
-    liveSigners.set(signerId, signer);
+    liveSigners.set(signerId, sessionSignerFor(liveSigners.get(signerId), signerId, signer));
     bridge.announce([signerId]);
+}
+
+/**
+ * Register a paired Trezor or Ledger from its SignerRecord at unlock, with no
+ * device open yet: the first sign opens it.
+ *
+ * @param {{ id: string, vendor: string, model?: string, deviceIdentifier?: string }} record
+ */
+export function registerHardwareRecord(record) {
+    if (typeof record?.id !== 'string' || record.id.length === 0) {
+        throw new Error('signerBridge.registerHardwareRecord: record id is required');
+    }
+    const { bridge } = ensureBridge();
+    liveSigners.set(record.id, sessionSignerForRecord(liveSigners.get(record.id), record));
+    bridge.announce([record.id]);
 }
 
 /** @param {string} signerId */

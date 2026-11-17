@@ -35,7 +35,7 @@ const SIZES = [
 const NAV_ROUTES = ['History', 'Marketplace', 'Contracts', 'Dispensers', 'Contacts', 'Lists', 'Payments due'];
 
 // Settings screens whose section headings or card titles are checked.
-const SETTINGS_SECTIONS = ['Display', 'Connected sites', 'Automatic donation system', 'Keyboard'];
+const SETTINGS_SECTIONS = ['Display', 'Connected sites', 'Automatic Donations', 'Keyboard'];
 
 async function enterDemoWallet(page) {
     await page.goto('/');
@@ -166,7 +166,7 @@ for (const [width, height] of SIZES) {
             expectScreen(`Settings > ${section}`, screen, tokens, { stackedGap: false });
             // Per-network blocks and shortcut groups title themselves with the
             // card or section role, never a raw size.
-            const role = section === 'Keyboard' ? tokens.sectionTitle : section === 'Automatic donation system' ? tokens.cardTitle : null;
+            const role = section === 'Keyboard' ? tokens.sectionTitle : section === 'Automatic Donations' ? tokens.cardTitle : null;
             for (const chain of role ? screen.bare : []) {
                 expect(chain, `Settings > ${section}: heading "${chain.text}"`).toMatchObject(role);
             }

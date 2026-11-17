@@ -6,14 +6,15 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const source = readFileSync(
-    join(process.cwd(), 'packages/core/src/shared/routes/ManageToken.jsx'),
+    join(process.cwd(), 'packages/core/src/shared/components/TokenOwnerActions.jsx'),
     'utf8',
 );
 
-describe('ManageToken owner notice removal', () => {
-    it('contains neither the non-owner warning nor an Owned by hero line', () => {
+describe('issuer actions: owner notice removal', () => {
+    it('contains neither the non-owner warning, ownership pre-lock, nor an Owned by hero line', () => {
         expect(source).not.toContain('thisWalletDoesnTHold');
         expect(source).not.toContain('ownedBy');
-        expect(source).toContain('disabled: blockIssuerActions');
+        expect(source).not.toContain('blockIssuerActions');
+        expect(source).not.toContain('ownerActionUnavailable');
     });
 });

@@ -3,12 +3,14 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// On phone widths every Manage token tab (Actions and Details, ruling U78)
-// fits the strip, so none sits cut off past the edge of the screen.
+// On phone widths every tab of My Tokens' token page fits the strip, so none
+// sits cut off past the edge of the screen. The page is the one asset page
+// (operator ruling 2026-11-15): Actions, Details and History, headed by the
+// token's name.
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 
-const TABS = ['Actions', 'Details'];
+const TABS = ['Actions', 'Details', 'History'];
 
 async function openManagedToken(page) {
     await page.keyboard.press('ControlOrMeta+k');
@@ -19,7 +21,7 @@ async function openManagedToken(page) {
     await expect(palette).toBeHidden();
     await page.getByLabel('Search your tokens by ticker or description').fill('XCP');
     await page.getByRole('button', { name: 'Open XCP token details' }).first().click();
-    await expect(page.getByRole('heading', { name: 'Manage token' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'XCP', exact: true })).toBeVisible();
 }
 
 for (const width of [320, 360, 412]) {
@@ -28,7 +30,7 @@ for (const width of [320, 360, 412]) {
         await createWallet(page);
         await openManagedToken(page);
 
-        const strip = page.getByRole('tablist', { name: 'Manage token view' });
+        const strip = page.getByRole('tablist', { name: 'Coin or token view' });
         await strip.scrollIntoViewIfNeeded();
         const fit = await strip.evaluate((el) => ({
             client: el.clientWidth,

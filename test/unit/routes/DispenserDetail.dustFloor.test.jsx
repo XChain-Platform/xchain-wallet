@@ -19,6 +19,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { DispenserDetail } from '../../../packages/core/src/shared/routes/DispenserDetail.jsx';
 
 const CHAIN = 'dogecoin-testnet';
@@ -55,7 +56,11 @@ const DUST_PRICED_SPARSE = { ...DUST_PRICED, action_index: '3049', escrow_remain
 // Priced comfortably above the floor: the check must stay silent here.
 const NORMAL_PRICED = { ...DUST_PRICED, action_index: '3050', get_amount: '2.00000000' };
 
-function mount(dispenser, { addresses = [buyerAddress], dogeSats = '1000000000', settings = {} } = {}) {
+function mount(dispenser, {
+    addresses = [buyerAddress], dogeSats = '1000000000', settings = {}, walletMode = 'full',
+} = {}) {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const messaging = {
         getSettings: vi.fn().mockResolvedValue(settings),
         buildSendPsbtRequest: vi.fn().mockResolvedValue({
@@ -87,10 +92,17 @@ function mount(dispenser, { addresses = [buyerAddress], dogeSats = '1000000000',
     return messaging;
 }
 
-const buyButton = () => screen.findByRole('button', { name: /^Buy \d+ fills?$/ });
-const fillsInput = () => screen.findByLabelText(/^Fills/i);
+const buyButton = () => screen.findByRole('button', { name: /^Buy \d+ Dispenses?$/ });
+// The buy panel is the Buy page a buyer's first action row opens, and its
+// count field is the stepper's "How Many Dispenses".
+const fillsInput = async () => {
+    const buyRow = screen.queryByTestId('dispenser-buy-row')
+        || (screen.queryByLabelText(/^How Many Dispenses/i) ? null : await screen.findByTestId('dispenser-buy-row'));
+    if (buyRow) fireEvent.click(buyRow);
+    return screen.findByLabelText(/^How Many Dispenses/i);
+};
 
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); resetWalletModes(); });
 
 describe('coin-paid dispenser priced below the dust floor', () => {
     it('defaults Fills to the smallest whole purchase and states it in plain language', async () => {
@@ -115,7 +127,7 @@ describe('coin-paid dispenser priced below the dust floor', () => {
             'Buying fewer than 51 fills builds a payment under 0.001 DOGE, which every '
             + 'node refuses. Enter at least 51 fills to buy from this dispenser.',
         );
-        expect(await buyButton()).toBeDisabled();
+        expect(await buyButton()).toBeEnabled();
 
         fireEvent.change(await fillsInput(), { target: { value: '51' } });
         await waitFor(() => expect(screen.queryByTestId('buy-dust-block')).toBeNull());
@@ -132,9 +144,9 @@ describe('coin-paid dispenser priced below the dust floor', () => {
         );
         // No fill count fixes it: the floor is unreachable however Fills is set.
         expect(screen.queryByTestId('min-fills-notice')).toBeNull();
-        expect(await buyButton()).toBeDisabled();
+        expect(await buyButton()).toBeEnabled();
         fireEvent.change(await fillsInput(), { target: { value: '20' } });
-        expect(await buyButton()).toBeDisabled();
+        expect(await buyButton()).toBeEnabled();
     });
 
     it('stays silent when the per-fill price already clears the floor', async () => {
@@ -147,12 +159,12 @@ describe('coin-paid dispenser priced below the dust floor', () => {
     });
 
     it('holds the watch-only unsigned build to the same floor', async () => {
-        const messaging = mount(DUST_PRICED, { settings: { walletMode: 'watcher' } });
+        const messaging = mount(DUST_PRICED, { walletMode: 'watcher' });
         await fillsInput();
         fireEvent.change(await fillsInput(), { target: { value: '10' } });
         await screen.findByTestId('buy-dust-block');
-        const build = await screen.findByRole('button', { name: 'Create unsigned transaction' });
-        expect(build).toBeDisabled();
+        const build = await screen.findByRole('button', { name: 'Create Unsigned Transaction' });
+        expect(build).toBeEnabled();
         fireEvent.click(build);
         expect(messaging.buildSendPsbtRequest).not.toHaveBeenCalled();
 

@@ -1,20 +1,38 @@
+/* One market per row: the row's 24h chart fills it behind the open button. */
 .row {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: var(--xc-space-2);
+    min-width: 0;
     padding: var(--xc-space-3);
     color: var(--xc-text);
-    cursor: pointer;
-    transition: background-color 120ms ease;
+    overflow: hidden;
 }
 
 .row + .row {
     border-top: 1px solid var(--xc-border);
 }
 
-.row:hover {
-    background: var(--xc-bg-muted);
+/* The faint area chart behind the row. It takes no pointer events, so the
+   whole row stays the open button and the chart's own title never shows. */
+.rowChart {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
 }
+
+/* The rows sit in one list card, always one column: a list that wraps into
+   two columns reads as two lists (operator 2026-11-13). Wide content shows
+   the market beside the list instead. */
+.marketsGrid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    column-gap: var(--xc-space-2);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
 
 /* The asset selector is one card: artwork with its chain overlay, the asset
    name for a token, and a chevron. Receive's selector is icon-only now, so
@@ -25,7 +43,8 @@
     align-items: center;
     gap: var(--xc-space-3);
     width: 100%;
-    margin-block-end: var(--xc-space-3);
+    /* The list page's own 8px gap spaces the selector from the list (G93). */
+    margin-block-end: 0;
     color: var(--xc-text);
     text-align: start;
 }
@@ -69,85 +88,89 @@
     display: contents;
 }
 
-.searchField {
-    flex: 1 1 140px;
-    min-width: 0;
-}
-
-.searchField > * {
-    margin-bottom: 0;
-}
-
-/* The search shares its row with the market tabs, whose labels are 13px at
-   every width (G43), so its text takes the small control size to match (U07).
-   The token stays 1rem on touch screens, where the tabs drop to their own row
-   and a smaller field would zoom the page on focus. */
-.searchField input {
-    font-size: var(--xc-control-font-sm);
-}
-
-.starButton {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: var(--xc-tap-min);
-    min-height: var(--xc-tap-min);
-    padding: 0;
-    border: 0;
-    background: none;
-    font: inherit;
-    font-size: 1.1rem;
-    line-height: 1;
-    cursor: pointer;
-}
-
+/* The open button sits above the row chart and lets it show through (the
+   kit ListRow draws it borderless on a transparent background). */
 .marketButton {
+    position: relative;
     display: flex;
     align-items: center;
     min-height: var(--xc-tap-min);
     gap: var(--xc-space-2);
     flex: 1;
     min-width: 0;
-    min-height: var(--xc-tap-min);
     padding: 0;
-    border: 0;
-    background: none;
     color: inherit;
     font: inherit;
     text-align: start;
     cursor: pointer;
 }
 
-/* The change and depth figures keep their full width. A trailing slot capped at
-   half the row centred an overflowing figure column, so at larger text sizes
-   the depth pill spilled past the button into the row padding; the pair name
-   gives way instead. */
+/* The kit row paints its hover fill on the button, which would sit over the
+   chart inside it. The button stays transparent and draws no press ring; the
+   row beneath the chart takes the standard list-row hover fill instead. */
+.row .marketButton:is(:hover, :active):not(:disabled) {
+    background: transparent;
+    box-shadow: none;
+}
+
+/* Browsers without :has() (Chrome 102) simply show no hover fill on the row. */
+@supports selector(:has(*)) {
+    @media (hover: hover) and (pointer: fine) {
+        .row:not([data-selected='true']):has(.marketButton:hover:not(:disabled)) {
+            background: var(--xc-control-bg-hover);
+        }
+    }
+}
+
+/* The token name gives way with an ellipsis (a ticker may run to 250
+   characters) so the figures keep their full width. */
+.marketContent {
+    min-width: 0;
+}
+
+.marketName {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 700;
+}
+
+.marketDepth {
+    white-space: nowrap;
+}
+
+/* The figures never give way to the name. A trailing slot capped at half the
+   row centred an overflowing figure column at larger text sizes. */
 .marketButton .marketTrailing {
     flex: 0 0 auto;
     max-width: none;
 }
 
-.pairChip {
-    flex-shrink: 1;
-    min-width: 0;
-    max-width: 100%;
+/* Last price over the 24h change, straight on the row's tint as in the
+   approved Variant 2 (no box behind them). On the 6% tint the change keeps
+   at least 5.0:1 and the price 12.7:1 in every theme, high contrast included. */
+.figures {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: calc(var(--xc-space-1) / 2);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
-.pairTick {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
+.price {
+    color: var(--xc-text);
+    font-weight: 600;
 }
 
-/* The quote side (usually a short coin) keeps its full width up to half the
-   chip, so the long side is the one that gives way. */
-.pairTick:last-child {
-    flex-shrink: 0;
-    max-width: 50%;
-}
-
-.marketButton:disabled {
-    cursor: not-allowed;
+.change {
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    /* A signed percent keeps its sign in front on a right-to-left page. */
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .pagination {
@@ -164,24 +187,109 @@
     font-size: var(--xc-text-sm);
 }
 
-/* The tab strip keeps its natural width beside the search field when there is
-   room. On a phone it takes its own full-width row and each tab shares it, so
-   the strip's underline and the selected tab's underline span the row. */
-.marketTabs {
-    flex: 1 1 100%;
+/* The DEX's layout box, measured by MarketsList.jsx: the list page alone on
+   narrow content, the list and the market side by side on wide content. The
+   layout is the shared list-and-detail split's (PanelSplit.module.css, where
+   each rule says why): the body that stops scrolling, the 8px gap, the two
+   scrolling panels and the list's 36%, 272 to 400px share. */
+.layoutRoot {
+    composes: layoutRoot from '../components/PanelSplit.module.css';
 }
 
-.marketTabs > * {
-    flex: 1 1 0;
+.twoPanelBody {
+    composes: twoPanelBody from '../components/PanelSplit.module.css';
 }
 
-@media (min-width: 600px) {
-    .marketTabs {
-        flex: 0 0 auto;
-        width: auto;
+.twoPanel {
+    composes: twoPanel from '../components/PanelSplit.module.css';
+}
+
+.listPanel {
+    composes: listPanel from '../components/PanelSplit.module.css';
+    /* No gap: the list body carries the 8px under the header line inside its
+       scroll, so a gap here doubled it to 16px (operator 2026-11-16). */
+    gap: 0;
+}
+
+.listHeader {
+    composes: listHeader from '../components/PanelSplit.module.css';
+}
+
+.listBody {
+    composes: listBody from '../components/PanelSplit.module.css';
+}
+
+.marketPanel {
+    composes: detailPanel from '../components/PanelSplit.module.css';
+}
+
+/* The row whose market the right panel shows reads like the side menu's active
+   item: a light brand tint and the brand bar on the leading edge, no border.
+   The tint stays faint so the row chart and the muted orders line keep their
+   contrast. */
+.row[data-selected='true'] {
+    background: color-mix(in srgb, var(--xc-accent-primary) 10%, transparent);
+    box-shadow: var(--xc-shadow-nav-indicator);
+}
+
+:global([dir='rtl']) .row[data-selected='true'] {
+    box-shadow: inset -3px 0 0 var(--xc-accent-primary, var(--xc-text));
+}
+
+@media (forced-colors: active) {
+    .row[data-selected='true'] {
+        border-inline-start: 3px solid Highlight;
     }
-
-    .marketTabs > * {
-        flex: 0 1 auto;
-    }
 }
+
+
+/* Two panels: the market's tools join the list filter on the DEX header
+   line, 8px apart, so neither panel carries a row of floating buttons. */
+.headerTools {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+}
+
+.headerSlot {
+    display: contents;
+}
+
+/* The line between the two panels, with the 8px gap on each side. It is
+   also the resize handle: 13px of hit area centred on the 1px line, which
+   turns accent on hover, focus and drag. */
+.panelDivider {
+    position: relative;
+    flex: 0 0 1px;
+    align-self: stretch;
+    background: var(--xc-border);
+    cursor: col-resize;
+    /* No pan or double-tap zoom, so a touch drag reaches the resize
+       handler, but pinch zoom stays available (WCAG 1.4.4). */
+    touch-action: pinch-zoom;
+    outline: none;
+}
+
+.panelDivider::before {
+    content: '';
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: -6px;
+    width: 13px;
+}
+
+.panelDivider:hover,
+.panelDivider:focus-visible,
+.panelDivider[data-dragging] {
+    background: var(--xc-accent-primary);
+}
+
+.panelDivider:focus-visible {
+    box-shadow: 0 0 0 1px var(--xc-accent-primary);
+}
+
+/* Composes from PanelSplit.module.css: a change there needs this file rebuilt too. */
+/* Rebuilt with PanelSplit.module.css 2026-11-16 (scrollbar lane). */
+/* Rebuilt with PanelSplit.module.css 2026-11-16 (header separator). */
+/* Rebuilt with PanelSplit.module.css 2026-11-16 (list to the bottom edge). */
+/* Rebuilt with PanelSplit.module.css 2026-11-16 (separator edges). */

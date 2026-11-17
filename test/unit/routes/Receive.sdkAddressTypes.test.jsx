@@ -36,10 +36,12 @@ describe('Receive when the stored address type is p2tr', () => {
         );
 
         await waitFor(() => expect(getSupportedAddressTypes).toHaveBeenCalled());
-        const select = await screen.findByLabelText('Address type');
-        await waitFor(() => expect(select.value).toBe('p2wpkh'));
-        expect([...select.options].map((o) => o.value)).not.toContain('p2tr');
+        // Receive no longer shows an Address type select; it opens on the
+        // default type, so the SDK-supported filter shows as the segwit address
+        // on screen and no P2TR offer anywhere.
         expect(await screen.findByDisplayValue('bcrt1qsegwit')).toBeTruthy();
+        expect(screen.queryByLabelText('Address type')).toBeNull();
+        expect(screen.queryByRole('option', { name: /P2TR|Taproot/i })).toBeNull();
         expect(screen.queryByDisplayValue('bcrt1ptaproot')).toBeNull();
     });
 });

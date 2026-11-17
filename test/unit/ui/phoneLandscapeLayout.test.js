@@ -41,8 +41,9 @@ function mediaBody(css, query) {
 describe('phone landscape layout', () => {
     it('reduces persistent shell chrome without removing navigation targets', () => {
         expect(appHeader).toContain(landscapeQuery);
-        // Persistent chrome keeps its own inset; only Screen.body applies the page gutter.
-        expect(appHeader).not.toContain('var(--xc-page-gutter)');
+        // The app bar's inset is the page gutter less a 2px optical step (G82), so
+        // its buttons line up with the page header's in every window.
+        expect(appHeader).toContain('var(--xc-page-gutter)');
         expect(appHeader).toMatch(/\.bar\s*\{[\s\S]*?padding: var\(--xc-space-1\) var\(--xc-space-2\);/);
         expect(bottomBar).toContain(landscapeQuery);
         expect(bottomBar).toMatch(/\.bar\s*\{\s*min-height: 2\.75rem;/);
@@ -75,7 +76,10 @@ describe('phone landscape layout', () => {
     });
 
     it('keeps core chrome on its own inset and the popup recovery panel on the page gutter', () => {
-        expect(pageHeader).not.toMatch(/margin-inline-(?:start|end):\s*calc/);
+        // The only calc margin is the Back chevron stepping its glyph onto the logo line.
+        const calcMargins = pageHeader.match(/margin-inline-(?:start|end):\s*calc[^;]*;/g) || [];
+        expect(calcMargins).toEqual(['margin-inline-start: calc(var(--xc-icon-size, 16px) / -3);']);
+        expect(pageHeader).toMatch(/\.header \.back > span\s*\{\s*margin-inline-start: calc/);
         expect(routeError).not.toContain('var(--xc-page-gutter)');
         expect(routeError).toMatch(/\.recovery\s*\{[^}]*padding: var\(--xc-space-4\);/);
         expect(popup).toMatch(/\.popup-background-connection\s*\{[\s\S]*?padding: var\(--xc-page-top\) var\(--xc-page-gutter\);/);

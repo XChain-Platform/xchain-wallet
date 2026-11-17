@@ -178,11 +178,12 @@ export class VaultValidationError extends Error {
  * @property {Uint8Array} masterKey               32 bytes; caller retains lifetime
  * @property {Uint8Array} [aad]                     optional format parameter; production shells omit it
  * @property {boolean} [autoSave]                 default true
+ * @property {object} [settingsMigrationCtx]      prices for the settings migrations (flows/legacyRates.js builds it); absent means no price, so legacy queues drop
  */
 
 export class Vault {
     /** @param {VaultOpts} opts */
-    constructor({ backend, masterKey, aad, autoSave = true }) {
+    constructor({ backend, masterKey, aad, autoSave = true, settingsMigrationCtx = undefined }) {
         if (!backend) throw new Error('Vault: backend is required');
         if (!(masterKey instanceof Uint8Array) || masterKey.length !== 32) {
             throw new Error('Vault: masterKey must be a 32-byte Uint8Array');
@@ -204,7 +205,15 @@ export class Vault {
         // absorbed only by the tail so later operations can still proceed.
         this._writeTail = Promise.resolve();
 
-        this.wallets = makeCollection(this, 'wallets', migrateWallet, validateWallet);
+        // A v3 wallet takes its mode from the raw stored settings. The legacy
+        // key has no default, so settings writes keep it until every wallet
+        // has been read forward.
+        this.wallets = makeCollection(
+            this,
+            'wallets',
+            (r) => migrateWallet(r, { legacyWalletMode: this._doc?.settings?.walletMode }),
+            validateWallet,
+        );
         this.accounts = makeCollection(this, 'accounts', migrateAccount, validateAccount);
         this.addresses = makeCollection(this, 'addresses', migrateAddress, validateAddress);
         this.contacts = makeCollection(this, 'contacts', migrateContact, validateContact);
@@ -298,7 +307,7 @@ export class Vault {
         // that never overrode them. Readers always see the full record
         // (inflate on get); writers hand in a full record which is
         // validated full, then reduced to deltas (deflate on put).
-        this.settings = makeSingleton(this, 'settings', migrateSettings, validateSettings, {
+        this.settings = makeSingleton(this, 'settings', (r) => migrateSettings(r, settingsMigrationCtx), validateSettings, {
             inflate: inflateSettings,
             deflate: deflateSettings,
         });
@@ -600,6 +609,19 @@ export class Vault {
             logConsole.record({ source: 'vault', level: 'info', message: nextKey ? 'rekey' : 'reseal wallets' });
             return true;
         });
+    }
+
+    /**
+     * A copy of the key this vault is sealed under, for a caller that must seal
+     * a record beside the vault under the same key: the recovery-phrase reset
+     * record (flows/phraseRecovery.js) keeps its recovery key sealed under it and
+     * the key itself in its bundle. The caller zeroes the copy.
+     *
+     * @returns {Uint8Array}
+     */
+    exportMasterKeyCopy() {
+        this._assertOpen();
+        return new Uint8Array(this._masterKey);
     }
 
     /** Whether this handle is open: false once close() or clear() has run, or before open(). */

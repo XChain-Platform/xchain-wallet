@@ -181,7 +181,8 @@ describe('extension popup main-screen accessibility', () => {
                 onLockWallet={() => {}}
             />,
         );
-        await screen.findByRole('region', { name: 'Active address balance' });
+        // The balance hero is named for the wallet whose balance it shows.
+        await screen.findByRole('region', { name: WALLET.name });
         await expectNoSeriousAxeViolations(container);
     });
 
@@ -204,7 +205,7 @@ describe('extension popup main-screen accessibility', () => {
     it('scans a Chrome-delivered approval request at popup size', async () => {
         window.history.replaceState(null, '', '/approval.html?id=approval-1');
         const { container } = render(<Router />);
-        await screen.findByText('Connect to XChain Wallet?');
+        await screen.findByRole('heading', { level: 1, name: 'Connect Wallet' });
         await screen.findByLabelText('Share Main');
         await expectNoSeriousAxeViolations(container);
     });

@@ -1,16 +1,14 @@
-.filterRow {
+/* Shared list directory: one entry is the list's facts card with its action
+   list (Choose list or Open list, G101) 8px under it (G41), and the next
+   entry starts 16px below. The facts card is Issue token's details list. */
+.entry {
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
+    flex-direction: column;
     gap: var(--xc-space-2);
-    width: 100%;
-}
-
-.searchControl {
-    flex: 1 1 12rem;
     min-width: 0;
+    margin-block-end: var(--xc-space-4);
 }
 
-.searchControl > * {
-    margin-bottom: 0;
+.entry > dl {
+    margin: 0;
 }

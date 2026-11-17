@@ -68,7 +68,7 @@ describe('regression/issue-summary-label', () => {
         fireEvent.change(await screen.findByLabelText('Ticker'), { target: { value: 'LABELTEST' } });
         fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '1000' } });
         fireEvent.change(screen.getByLabelText('New owner address'), { target: { value: 'not-an-address' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
         const alert = await screen.findByRole('alert', { name: 'Form errors' });
         await waitFor(() => expect(alert.textContent).toMatch(/Transfer ownership address is not valid/));
         expect(alert.textContent).not.toMatch(/Transfer ownership to:/);

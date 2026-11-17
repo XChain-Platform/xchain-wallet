@@ -65,7 +65,7 @@ return (
             <LiveExample label="signed-not-broadcast, signed bytes not saved">
                 <ResultScreen state="signed-not-broadcast" what="mint" onDone={noop} unsaved />
             </LiveExample>
-            <LiveExample label="unsigned (watcher wallet)">
+            <LiveExample label="unsigned (another phone signs)">
                 <ResultScreen
                     state="unsigned"
                     result={{ psbtHex: '70736274ff01007102000000010000000000000000000000000000000000000000000000000000000000000000ffffffff', encoding: 'PSBT' }}

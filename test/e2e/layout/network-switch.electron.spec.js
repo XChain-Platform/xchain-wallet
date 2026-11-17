@@ -45,8 +45,28 @@ async function acceptLicense(page) {
     await accept.click();
 }
 
+/** From the Settings index, opens Network and Fees > Network (the page listing the environment rows). */
+async function openNetworkPage(page) {
+    await page.getByRole('button', { name: /^Network and Fees\b/ }).click();
+    await page.getByRole('button', { name: /^Network\s*(?:Mainnet|Testnet|Regtest|-)$/ }).click();
+}
+
+/** An environment row on the Network page, named "Select <Name>". */
+function networkOption(page, network) {
+    const label = network.charAt(0).toUpperCase() + network.slice(1);
+    return page.getByRole('button', { name: `Select ${label}`, exact: true });
+}
+
+/** The environment the Network page marks current, lower-cased ("regtest"). */
+async function currentNetwork(page) {
+    const current = page.locator('button[data-network-option][aria-current="true"]');
+    await expect(current).toBeVisible();
+    const label = await current.getAttribute('aria-label');
+    return label.replace(/^Select /, '').toLowerCase();
+}
+
 async function switchActiveNetwork(page, network) {
-    await page.getByLabel('Active network', { exact: true }).selectOption(network);
+    await networkOption(page, network).click();
     const label = network.charAt(0).toUpperCase() + network.slice(1);
     await expect(page.getByRole('dialog', { name: `Switch to ${label}?` }))
         .toBeVisible();
@@ -86,22 +106,28 @@ test('desktop network round trip leaves Receive usable', async () => {
         await expect(unlockedShell(page)).toBeVisible({ timeout: 120_000 });
 
         await openSettings(page);
-        await page.getByRole('button', { name: /^Developer mode/ }).click();
+        await page.getByRole('button', { name: /^Advanced\b/ }).click();
+        await page.getByRole('button', { name: /^Developer mode\b/ }).click();
         const developerMode = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
         if (!(await developerMode.isChecked())) {
             await developerMode.click();
             await expect(developerMode).toBeChecked();
         }
-        await page.getByRole('button', { name: 'Back to settings' }).click();
+        // Back twice: row page to the Advanced group page, then to the index.
+        const back = page.getByRole('button', { name: 'Back to settings', exact: true }).filter({ visible: true }).first();
+        await back.click();
+        await back.click();
+        await openNetworkPage(page);
 
         // The demo may start on either network; go to the other one and back.
-        const start = await page.getByLabel('Active network', { exact: true }).inputValue();
+        const start = await currentNetwork(page);
         const away = start === 'regtest' ? 'mainnet' : 'regtest';
         await switchActiveNetwork(page, away);
         await expectNoCredentialError(page, runtimeErrors);
 
         await openSettings(page);
-        await expect(page.getByLabel('Active network', { exact: true })).toHaveValue(away);
+        await openNetworkPage(page);
+        expect(await currentNetwork(page)).toBe(away);
         await switchActiveNetwork(page, start);
         await expectNoCredentialError(page, runtimeErrors);
 

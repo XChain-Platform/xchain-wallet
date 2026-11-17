@@ -10,7 +10,6 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { AddressField } from '../../../packages/core/src/ui/AddressField.jsx';
 import { AddressCombobox } from '../../../packages/core/src/ui/AddressCombobox.jsx';
 import { AmountField } from '../../../packages/core/src/shared/components/AmountField.jsx';
-import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 import fieldIconStyles from '../../../packages/core/src/ui/FieldIconButton.module.css';
 import inputStyles from '../../../packages/core/src/ui/Input.module.css';
 
@@ -87,7 +86,7 @@ describe('<AddressField>', () => {
         const amountInput = screen.getByRole('textbox', { name: 'Amount (BTC)' });
         expect(amountInput.parentElement.parentElement).toHaveClass(inputStyles[size]);
         expect(screen.getByRole('button', { name: 'Use max available amount' }))
-            .toHaveClass(buttonStyles[size]);
+            .toHaveClass(fieldIconStyles.button);
     });
 
     it('trims surrounding whitespace from a plain pasted address', () => {

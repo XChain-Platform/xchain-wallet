@@ -37,6 +37,7 @@
        (extension popup / dev variant) regardless of root font metrics */
     min-width: 200px;
     width: max-content;
+    max-width: calc(100vw - 2 * var(--xc-page-gutter, 8px));
     background: var(--xc-surface-raised, #1B2231);
     border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-radius-md);
@@ -145,6 +146,11 @@
     text-transform: uppercase;
 }
 
+/* Wallet scope: the shared SectionHeader above each account's addresses; only its spacing is local. */
+.accountHeading {
+    margin: var(--xc-space-3) 0 var(--xc-space-1);
+}
+
 .hiddenToggle {
     appearance: none;
     width: 100%;
@@ -203,174 +209,17 @@
     color: var(--xc-text-muted);
 }
 
-/* Green "Active" pill marking the chain's active (operating) address.
-   Used both as the small bubble on a list row and the detail-view badge. */
+/* The "Active" bubble marking the chain's active (operating) address on its
+   list row: the same bubble My Wallets and My Accounts use (WalletPicker
+   .activeBadge). View Address carries no pills (AddressDetail). */
 .addrActive {
     flex: 0 0 auto;
-    padding: 2px var(--xc-space-2);
-    border-radius: 999px;
-    font-size: 10px;
-    font-weight: 800;
-    letter-spacing: 0.06em;
-    color: var(--xc-text-inverted);
-    text-transform: uppercase;
-    box-shadow: var(--xc-shadow-sm);
-    /* raw-color-ok: the pill keeps one fixed green gradient in every theme; its end stop only matches the light success fill (U97) by value. */
-    background: linear-gradient(180deg, #22c55e, #16a34a);
-}
-
-/* Top of the address detail view (address + label), no card wrapper. */
-.detailTop {
-    margin-bottom: var(--xc-space-3);
-}
-
-.detailName {
-    font-size: var(--xc-text-lg);
-    font-weight: 600;
-    color: var(--xc-text);
-    word-break: break-word;
-    margin-bottom: var(--xc-space-1);
-}
-
-.detailNameEmpty {
-    color: var(--xc-text-muted);
-    font-weight: 500;
-}
-
-/* The address and its Copy button share a wrapping row with a gap, so on a
-   wide screen the button sits beside the address instead of touching its
-   last character, and on a phone it drops below the wrapped address. */
-.detailAddr {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--xc-space-2);
-    font-family: var(--xc-font-mono);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    word-break: break-all;
-}
-
-.detailAddr > :first-child {
-    min-width: 0;
-}
-
-/* Detail cards under the quick actions on the address detail view. */
-.tabPanel {
-    composes: card from '../../ui/Card.module.css';
-}
-
-.detailField {
-    margin-top: var(--xc-space-3);
-}
-
-.detailLabel {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    font-weight: 700;
-    margin-bottom: 2px;
-}
-
-/* "Address" caption (left) + optional "Active" pill (right) on the detail view. */
-.detailLabelRow {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--xc-space-2);
-}
-
-.detailValue {
-    font-size: var(--xc-text-md);
-    word-break: break-all;
-}
-
-/* Inline label editor: input grows, Save button hugs the right. */
-.labelRow {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-}
-
-.labelRow > :first-child {
-    flex: 1 1 auto;
-    min-width: 0;
-    margin-bottom: 0;
-}
-
-/* Size the Save button to at least a quarter of the row (one tile of the
-   four-up quick actions below, same gap), so it matches the Delete button
-   where that is wide enough. On a phone a column is narrower than the icon and
-   label, so the button grows to fit them instead of breaking "Save" onto one
-   letter per line. */
-.labelRow > :last-child {
-    flex: 0 0 auto;
-    min-width: calc((100% - 3 * var(--xc-space-2)) / 4);
-}
-
-/* The kit label span sets its own white-space, so the no-wrap goes on it. */
-.labelRow > :last-child > span {
-    white-space: nowrap;
-}
-
-/* Action row under the detail card, mirroring the contacts detail: up to
-   five tiles stay on one row at a 360 px phone. */
-.quickActions {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(56px, 1fr));
-    gap: var(--xc-space-2);
-    margin-top: var(--xc-space-2);
-}
-
-.quickAction {
-    appearance: none;
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-accent-primary);
-    border-radius: var(--xc-radius-md);
     padding: 0 var(--xc-space-2);
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    gap: var(--xc-space-1);
-    cursor: pointer;
-    color: var(--xc-text);
-    font-family: inherit;
+    border-radius: var(--xc-radius-pill);
+    background: var(--xc-success-bg);
+    color: var(--xc-success);
     font-size: var(--xc-text-xs);
-    font-weight: 600;
-    min-height: var(--xc-tap-min);
-    text-align: center;
-}
-
-.quickAction:hover:not(:disabled) {
-    background: var(--xc-bg-muted);
-}
-
-.quickAction:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
-.quickAction:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-}
-
-.quickAction > span {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--xc-space-1);
-}
-
-.quickActionIcon {
-    width: var(--xc-icon-sm);
-    height: var(--xc-icon-sm);
-    border-radius: 50%;
-    background: transparent;
-    color: var(--xc-accent-text);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+    font-weight: 700;
 }
 
 /* Box-shadow focus rings are not painted in forced-colors mode, so give
@@ -383,4 +232,11 @@
         background: SelectedItem;
         color: SelectedItemText;
     }
+}
+
+/* The add or import menu opens from the plus at the end of the title line,
+   so it anchors to that edge. */
+.addMenuWrap > .addMenu {
+    inset-inline-start: auto;
+    inset-inline-end: 0;
 }

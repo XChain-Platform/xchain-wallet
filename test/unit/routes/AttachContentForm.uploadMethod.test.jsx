@@ -35,8 +35,7 @@ const OWNER = {
     signerId: 'signer-1',
 };
 const FILE_BYTES = 2000;
-// Develop names the artwork ceiling in the hint under the chooser.
-const FILE_LIMIT = /^Up to [\d,]+ bytes with the current title and memo\.$/;
+const FILE_LABEL = /^Artwork file \(up to [\d.,]+ (KB|MB)\)$/;
 
 afterEach(() => {
     cleanup();
@@ -83,22 +82,22 @@ function pickMethod(name) {
     fireEvent.click(trigger());
     fireEvent.click(screen.getByRole('option', { name: (n) => n.startsWith(name) }));
 }
-function capOf(hint) {
-    const [, n] = hint.textContent.match(/([\d,]+) bytes/);
-    return Number(n.replace(/,/g, ''));
+function capOf(field) {
+    const [, n, unit] = field.labels[0].textContent.match(/([\d.,]+) (KB|MB)/);
+    return Math.floor(Number(n.replace(/,/g, '')) * (unit === 'MB' ? 1024 * 1024 : 1024));
 }
-const limitHint = () => screen.getByText(FILE_LIMIT);
 async function ready(client) {
-    await waitFor(() => expect(screen.getByLabelText('From')).toHaveValue(client.owner.address));
-    return limitHint();
+    await waitFor(() => expect(screen.getByLabelText('From address')).toHaveValue(client.owner.address));
+    return screen.getByLabelText(FILE_LABEL);
 }
 async function pickFile(size = FILE_BYTES) {
     fireEvent.change(screen.getByLabelText('Choose file to attach'), {
         target: { files: [new File([new Uint8Array(size)], 'art.png', { type: 'image/png' })] },
     });
-    await screen.findByText('art.png');
+    await waitFor(() => expect(screen.getByLabelText(FILE_LABEL)).toHaveValue('art.png'));
 }
 function pickFastFee() {
+    fireEvent.click(screen.getByRole('button', { name: /^Speed and Fees\b/, expanded: false }));
     fireEvent.click(document.querySelector('button[aria-label="Fast"]'));
 }
 function expectedFees(chainId, { title = '', tier = 'normal' } = {}) {
@@ -138,7 +137,7 @@ describe('AttachContentForm upload method', () => {
         const client = messagingFor(opts);
         mount(client);
         const field = await ready(client);
-        await waitFor(() => expect(trigger()).toHaveAccessibleName('Upload method: Standard'));
+        expect(trigger()).toHaveAccessibleName('Upload method: Standard');
         fireEvent.click(trigger());
         const [taproot, standard] = screen.getAllByRole('option');
         expect(taproot).toHaveAttribute('aria-disabled', 'true');
@@ -153,7 +152,7 @@ describe('AttachContentForm upload method', () => {
         const field = await ready(client);
         expect(capOf(field)).toBeGreaterThan(300_000);
         pickMethod('Standard');
-        expect(capOf(limitHint())).toBeLessThan(8192);
+        expect(capOf(screen.getByLabelText(FILE_LABEL))).toBeLessThan(8192);
     });
 
     it.each([
@@ -175,7 +174,7 @@ describe('AttachContentForm upload method', () => {
         await ready(client);
         await pickFile();
         if (method === 'Standard') pickMethod('Standard');
-        fireEvent.click(screen.getByRole('button', { name: 'Attach artwork' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Attach Artwork' }));
 
         // The review page names the method and its estimated fee.
         const form = await screen.findByRole('form', { name: 'Review artwork upload' });
@@ -183,7 +182,7 @@ describe('AttachContentForm upload method', () => {
         expect(within(form).getByTestId('review-upload-method')).toHaveTextContent(method);
         expect(within(form).getByTestId('review-upload-fee')).toHaveTextContent(`${fees[key].coinAmount} BTC`);
 
-        fireEvent.click(within(form).getByRole('button', { name: 'Upload file' }));
+        fireEvent.click(within(form).getByRole('button', { name: 'Upload File' }));
         await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
         const { encoderOpts } = composeForConfirm.mock.calls[0][0];
         if (request) {
@@ -194,8 +193,7 @@ describe('AttachContentForm upload method', () => {
         }
         await screen.findByTestId('confirm-modal');
         expect(await screen.findByText(`Upload method: ${method}.`)).toBeInTheDocument();
-        // No confirm-fee-network row on develop: the estimate rides feeText.
-        expect(screen.getByTestId('confirm-modal')).toHaveTextContent(`Network fee: ${fees[key].coinAmount} BTC (estimate)`);
+        expect(screen.getByTestId('confirm-fee-network')).toHaveTextContent(fees[key].coinAmount);
     });
 
     it('re-prices each option when the fee tier changes', async () => {

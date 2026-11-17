@@ -81,24 +81,18 @@ function mountHome(messaging, { withProvider, onResumeCoinpay } = {}) {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('Home renders its coinpay resume cards from the shared scan', () => {
-    it('shows a card for a pending obligation the provider scanned, and resumes it', async () => {
+    it('renders no Payment due card on Home while a payment is due (it lives behind the bell)', async () => {
         const messaging = makeMessaging();
         const onResumeCoinpay = vi.fn();
         mountHome(messaging, { withProvider: true, onResumeCoinpay });
 
-        const card = await screen.findByRole('button', {
-            name: /Payment due: pay 0\.5 to complete matched order #77/,
-        });
-        // Two addresses, ONE scan: the provider's. A Home that still scanned
-        // for itself would have made four reads here.
-        expect(messaging.getCoinpayObligationsForAddress).toHaveBeenCalledTimes(ADDRS.length);
-
-        act(() => { card.click(); });
-        expect(onResumeCoinpay).toHaveBeenCalledWith({
-            chainId: CHAIN,
-            address: ADDRS[0],
-            orderMatchActionIndex: '77',
-        });
+        // The provider's scan still finds the obligation (the bell reads it)...
+        await waitFor(() => expect(messaging.getCoinpayObligationsForAddress).toHaveBeenCalledTimes(ADDRS.length));
+        await act(async () => { await Promise.resolve(); });
+        // ...but Home draws no card for it.
+        expect(screen.queryByText(/Payment due/)).toBeNull();
+        expect(screen.queryByRole('group', { name: /payments/i })).toBeNull();
+        expect(onResumeCoinpay).not.toHaveBeenCalled();
     });
 
     it('reads no coinpay obligations on the 20 s balance poll', async () => {
@@ -107,16 +101,16 @@ describe('Home renders its coinpay resume cards from the shared scan', () => {
         // to be driven apart rather than waited on.
         vi.useFakeTimers();
         const messaging = makeMessaging();
-        // No provider: Home falls back to its own instance, which is the
-        // extension popup's shape and the harder case - if a coinpay read can
-        // ride the balance beat at all, it rides it here.
+        // No provider and no header: Home runs no coinpay scan of its own (the
+        // header's hook owns it), so a coinpay read riding the balance beat
+        // would be Home's alone.
         mountHome(messaging);
 
         await act(async () => { await vi.advanceTimersByTimeAsync(1); });
         const afterMountBalances = messaging.getWalletBalances.mock.calls.length;
         const afterMountReads = messaging.getCoinpayObligationsForAddress.mock.calls.length;
         expect(afterMountBalances).toBeGreaterThan(0);
-        expect(afterMountReads).toBe(ADDRS.length);
+        expect(afterMountReads).toBe(0);
 
         // Two full balance beats, still inside the hook's 60 s window.
         await act(async () => { await vi.advanceTimersByTimeAsync(BALANCE_POLL_INTERVAL_MS); });

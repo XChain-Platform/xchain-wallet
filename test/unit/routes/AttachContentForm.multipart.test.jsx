@@ -84,22 +84,28 @@ function mount(client, sourceAddress = SOURCE.address) {
     );
 }
 
+// The artwork file field: its label carries the live ceiling.
+function artworkField() {
+    return screen.getByLabelText(/^Artwork file \(up to /).closest('[data-file-field]');
+}
+
 async function pickMultipartFile() {
     await screen.findByLabelText('Choose file to attach');
-    await waitFor(() => expect(screen.getByLabelText('From')).toHaveValue(SOURCE.address));
-    fireEvent.drop(screen.getByRole('group', { name: 'Artwork file' }), {
+    await waitFor(() => expect(screen.getByLabelText('From address')).toHaveValue(SOURCE.address));
+    fireEvent.drop(artworkField(), {
         dataTransfer: { files: [new File([BYTES], 'art.txt', { type: 'text/plain' })] },
     });
-    await waitFor(() => expect(screen.getByText('390.6 KB')).toBeInTheDocument());
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Attach artwork' })).toBeEnabled());
+    await waitFor(() => expect(screen.getByText(/^390\.\d KB$/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Attach Artwork' })).toBeEnabled());
 }
 
 async function openMultipartLink(client) {
     await pickMultipartFile();
-    expect(screen.getByText('Up to 12,000,000 bytes with the current title and memo.')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Attach artwork' }));
+    // The multi-part lane lifts the field's ceiling into megabytes.
+    expect(screen.getByLabelText(/^Artwork file \(up to [\d.,]+ MB\)$/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Attach Artwork' }));
     await screen.findByRole('form', { name: 'Review artwork upload' });
-    fireEvent.click(screen.getByRole('button', { name: 'Upload file' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Upload File' }));
     await screen.findByRole('form', { name: 'Review artwork link' });
     expect(client.getActionByTxid).toHaveBeenCalledWith({ chainId: CHAIN, txid: TXID });
     expect(client.getActionByIndex).toHaveBeenCalledWith({ chainId: CHAIN, actionIndex: '71' });
@@ -126,7 +132,7 @@ describe('new multipart artwork upload', () => {
             linkTarget: { tick: 'ART', issueActionIndex: '7' },
         }));
         expect(screen.getByText('Artwork file record').nextElementSibling).toHaveTextContent('BTC#71');
-        fireEvent.click(screen.getByRole('button', { name: 'Link artwork to ART' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Link Artwork to ART' }));
         const approve = await screen.findByTestId('confirm-approve');
         await waitFor(() => expect(approve).toBeEnabled());
         fireEvent.click(approve);
@@ -171,9 +177,9 @@ describe('incomplete multipart artwork manifest', () => {
         const client = clientFor({ getActionByIndex: vi.fn().mockResolvedValue(pending) });
         mount(client);
         await pickMultipartFile();
-        fireEvent.click(screen.getByRole('button', { name: 'Attach artwork' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Attach Artwork' }));
         await screen.findByRole('form', { name: 'Review artwork upload' });
-        fireEvent.click(screen.getByRole('button', { name: 'Upload file' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Upload File' }));
 
         expect(await screen.findByText(
             'Not every part of the file is confirmed yet. The link review will open once the file is complete.',
@@ -193,17 +199,18 @@ describe('unsupported multipart artwork lane', () => {
         });
         mount(client);
         await screen.findByLabelText('Choose file to attach');
-        expect(screen.queryByText('Up to 12,000,000 bytes with the current title and memo.')).toBeNull();
-        fireEvent.drop(screen.getByRole('group', { name: 'Artwork file' }), {
+        expect(screen.queryByLabelText(/^Artwork file \(up to [\d.,]+ MB\)$/)).toBeNull();
+        fireEvent.drop(artworkField(), {
             dataTransfer: { files: [new File([new Uint8Array(40_000)], 'art.txt', { type: 'text/plain' })] },
         });
-        expect(await screen.findByRole('alert')).toHaveTextContent('max 32 KB');
+        // A drop takes the same checks as a pick (the walk's file field).
+        expect(await screen.findByRole('alert')).toHaveTextContent('on-chain ceiling is');
         fireEvent.change(screen.getByLabelText('Choose file to attach'), {
             target: { files: [new File(['picked'], 'art.txt', { type: 'text/plain' })] },
         });
 
         expect(await screen.findByRole('alert')).toHaveTextContent('on-chain ceiling is');
-        fireEvent.click(screen.getByRole('button', { name: 'Attach artwork' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Attach Artwork' }));
         expect(await screen.findByRole('alert')).toHaveTextContent('Pick a file first.');
         expect(client.fileMultipart).not.toHaveBeenCalled();
     });

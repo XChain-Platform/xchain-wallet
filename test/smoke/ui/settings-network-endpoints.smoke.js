@@ -83,7 +83,8 @@ assert.match(
 
 // Settings.jsx wiring
 const settingsSrc = readFileSync(settingsPath, 'utf8');
-assert.match(settingsSrc, /import \{ NetworkEndpointsSection \}/, 'Settings.jsx imports section');
+assert.match(settingsSrc, /import \{ NetworkEndpointsSection(?:, endpointsNetworkSectionFor)? \}/, 'Settings.jsx imports section');
+assert.match(settingsSrc, /endpointsNetworkSectionFor\(id\)/, 'Settings.jsx resolves a network endpoint page id');
 const idx = settingsSrc.indexOf("id: 'network-endpoints'");
 const block = settingsSrc.slice(idx, idx + 600);
 assert.match(block, /kind:\s*'internal-drill'/);

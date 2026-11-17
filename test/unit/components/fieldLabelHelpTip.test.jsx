@@ -46,7 +46,8 @@ const FIELD_CASES = [
     {
         name: 'Select',
         label: 'Network',
-        selector: 'select',
+        // Select renders the themed dropdown trigger, never a native select (ruling G96).
+        selector: '[data-xc-select]',
         help: 'Choose the network for this transaction.',
         renderField: (props = {}) => (
             <Select label="Network" optional defaultValue="mainnet" {...props}>
@@ -60,7 +61,7 @@ const FIELD_CASES = [
 
 describe('field label help tip', () => {
     it.each(FIELD_CASES)(
-        'places $name help after the Optional pill and before the counter',
+        'places $name help before the Optional pill and the counter',
         ({ label, selector, help, renderField, hasCounter, hasAction }) => {
             const { container } = render(renderField({ help }));
             const control = screen.getByLabelText(label, { selector });
@@ -78,8 +79,9 @@ describe('field label help tip', () => {
             expect(row).not.toContainElement(control);
             expect([...row.children]).toEqual([
                 labelNode,
-                pill,
+                // Ruling G25: the label, the help tip, the Optional pill, then the counter.
                 tipWrap,
+                pill,
                 ...(counter ? [counter] : []),
             ]);
             if (action) {

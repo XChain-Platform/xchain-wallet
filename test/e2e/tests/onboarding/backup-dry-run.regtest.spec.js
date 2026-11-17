@@ -83,8 +83,9 @@ async function openDryRunForm(page) {
     const main = page.getByRole('main');
     await main.getByRole('button', { name: /^Backup/ }).first().click();
 
-    const open = main.getByRole('button', { name: 'Test…', exact: true });
-    await expect(open, 'the Backup section offers no "Test…" action').toBeVisible({ timeout: 30_000 });
+    // The Test backup page opens straight on its form (no intro button).
+    const open = main.getByRole('button', { name: /^Test backup\b/ }).first();
+    await expect(open, 'Backup and Recovery offers no "Test backup" row').toBeVisible({ timeout: 30_000 });
     await open.click();
     await expect(page.getByLabel('Recovery phrase to test')).toBeVisible({ timeout: 30_000 });
 }
@@ -99,7 +100,7 @@ async function openDryRunForm(page) {
 async function runDryRun(page, { mnemonic, passphrase = '' }) {
     await page.getByLabel('Recovery phrase to test').fill(mnemonic);
     if (passphrase) await page.getByLabel('Extra passphrase').fill(passphrase);
-    await page.getByRole('button', { name: 'Run test', exact: true }).click();
+    await page.getByRole('button', { name: 'Run Test', exact: true }).click();
 
     const matched = page.getByText(MATCH_TEXT);
     const mismatched = page.getByText(MISMATCH_TEXT);
@@ -110,9 +111,7 @@ async function runDryRun(page, { mnemonic, passphrase = '' }) {
 /** Returns to the dry-run form from a report, ready for the next candidate. */
 async function resetToForm(page) {
     await page.getByRole('button', { name: 'Done', exact: true }).click();
-    const open = page.getByRole('main').getByRole('button', { name: 'Test…', exact: true });
-    await expect(open).toBeVisible({ timeout: 30_000 });
-    await open.click();
+    // Done returns the direct page to its form; there is no Test button to press.
     await expect(page.getByLabel('Recovery phrase to test')).toBeVisible({ timeout: 30_000 });
 }
 

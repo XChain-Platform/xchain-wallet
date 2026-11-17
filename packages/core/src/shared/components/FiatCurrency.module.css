@@ -1,0 +1,107 @@
+/* Copyright © 2025–2026 Dankest, LLC
+ * Based on XChain Platform by Dankest, LLC – https://dankest.llc
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * This file is part of XChain Platform. Licensed under the GNU Affero
+ * General Public License v3.0 or later; see LICENSE.md. A commercial
+ * license (without AGPL source-disclosure terms) is available -
+ * contact legal@dankest.llc.
+ */
+
+/* The Fiat currency field's symbol mark and name, and the picker page's rows.
+   The field's control itself is TokenField's, so both pickers look alike. */
+
+/* The currency's symbol in a round mark, sized like a token icon. */
+.symbol {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: var(--xc-icon-md);
+    block-size: var(--xc-icon-md);
+    border-radius: 50%;
+    background: var(--xc-bg-muted);
+    color: var(--xc-text);
+    font-weight: 600;
+    font-size: var(--xc-text-xs);
+    line-height: 1;
+    overflow: hidden;
+}
+
+/* A picker row's mark, the size of a token picker row's icon. */
+.rowSymbol {
+    inline-size: 32px;
+    block-size: 32px;
+    font-size: var(--xc-text-sm);
+}
+
+/* The full name after the code in the field, muted like a sub line. */
+.name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--xc-text-muted);
+}
+
+/* One card wrapping every currency, like the contacts and token pickers:
+   rows split by a hairline divider and highlighted on hover. */
+.list {
+    composes: flush from '../../ui/Card.module.css';
+    list-style: none;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.row {
+    padding: var(--xc-space-3);
+    border-block-start: 1px solid var(--xc-border);
+    border-radius: 0;
+}
+
+.list li:first-child .row {
+    border-block-start: none;
+}
+
+.row:hover,
+.row:focus-visible {
+    background: var(--xc-bg-muted);
+}
+
+.row:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: calc(var(--xc-space-1) / -2);
+}
+
+.rowTitle {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.rowCode {
+    font-weight: 700;
+}
+
+.rowName {
+    font-weight: 400;
+}
+
+.check {
+    display: inline-flex;
+    align-items: center;
+    color: var(--xc-accent-primary);
+}
+
+/* Box-shadow focus rings are not painted in forced-colors mode, so give
+ * this control a real outline there (WCAG 2.4.7). */
+@media (forced-colors: active) {
+    .row:focus-visible {
+        outline: 2px solid var(--xc-focus-ring);
+        outline-offset: calc(var(--xc-space-1) / -2);
+    }
+}

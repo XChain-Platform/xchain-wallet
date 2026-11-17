@@ -11,6 +11,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 import { estimateNativeSendFeeTiers } from '../../../packages/core/src/flows/feeEstimate.js';
 
@@ -32,10 +33,11 @@ const HD = {
     signerId: 'signer-1',
 };
 const FILE_BYTES = 2000;
-const FILE_LABEL = /^File \(up to [\d,]+ bytes\)$/;
+const FILE_LABEL = /^File \(up to [\d.,]+ (KB|MB)\)$/;
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     uploadMethodLib.estimateUploadMethodFees.mockClear();
 });
 
@@ -74,22 +76,18 @@ function pickMethod(name) {
     fireEvent.click(trigger());
     fireEvent.click(screen.getByRole('option', { name: (n) => n.startsWith(name) }));
 }
-// Develop's file labels name the ceiling in bytes.
 function capOf(field) {
-    const [, n] = field.labels[0].textContent.match(/([\d,]+) bytes/);
-    return Number(n.replace(/,/g, ''));
+    const [, n, unit] = field.labels[0].textContent.match(/([\d.,]+) (KB|MB)/);
+    return Math.floor(Number(n.replace(/,/g, '')) * (unit === 'MB' ? 1024 * 1024 : 1024));
 }
 async function pickFile(size = FILE_BYTES) {
-    fireEvent.change(await screen.findByLabelText(FILE_LABEL), {
+    fireEvent.change(await screen.findByLabelText('File to publish'), {
         target: { files: [new File([new Uint8Array(size)], 'art.bin', { type: 'application/octet-stream' })] },
     });
-    await screen.findByText('art.bin');
-}
-// Develop asks for the permanence acknowledgement before review.
-function ackForever() {
-    fireEvent.click(screen.getByRole('checkbox'));
+    await waitFor(() => expect(screen.getByLabelText(FILE_LABEL)).toHaveValue('art.bin'));
 }
 function pickFastFee() {
+    fireEvent.click(screen.getByRole('button', { name: /^Speed and Fees\b/, expanded: false }));
     fireEvent.click(document.querySelector('button[aria-label="Fast"]'));
 }
 function expectedFees(chainId, { title = '', memo = '', tier = 'normal' } = {}) {
@@ -125,9 +123,12 @@ describe('PublishFileForm upload method', () => {
         ['Dogecoin', { chainId: 'dogecoin-mainnet', address: { ...HD, address: 'DPublishPublishPublishPublishPublish' } },
             'Dogecoin has no Taproot.'],
     ])('disables Taproot upload with its reason for %s', async (_name, opts, reason) => {
+        if (opts.walletMode === 'watcher') {
+            publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode: 'watcher' }], activeWalletId: 'wallet-1' });
+        }
         mount(messagingFor(opts));
         await screen.findByLabelText(FILE_LABEL);
-        await waitFor(() => expect(trigger()).toHaveAccessibleName('Upload method: Standard'));
+        expect(trigger()).toHaveAccessibleName('Upload method: Standard');
         fireEvent.click(trigger());
         const [taproot, standard] = screen.getAllByRole('option');
         expect(taproot).toHaveAttribute('aria-disabled', 'true');
@@ -152,11 +153,10 @@ describe('PublishFileForm upload method', () => {
         mount(messagingFor());
         await screen.findByLabelText(FILE_LABEL);
         pickMethod('Standard');
-        fireEvent.change(screen.getByLabelText(FILE_LABEL), {
+        fireEvent.change(screen.getByLabelText('File to publish'), {
             target: { files: [new File([new Uint8Array(20_000)], 'big.bin', { type: 'application/octet-stream' })] },
         });
-        expect(await screen.findByText(/^That file is 20,000 bytes; with this metadata the on-chain ceiling is [\d,]+ bytes\.$/))
-            .toBeInTheDocument();
+        expect(await screen.findByRole('alert')).toHaveTextContent(/That file is [\d.,]+ KB/);
     });
 
     it.each([
@@ -176,8 +176,7 @@ describe('PublishFileForm upload method', () => {
         }));
         await pickFile();
         if (method === 'Standard') pickMethod('Standard');
-        ackForever();
-        fireEvent.click(screen.getByRole('button', { name: 'Publish file' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish File' }));
         await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
         const { encoderOpts } = composeForConfirm.mock.calls[0][0];
         if (request) {
@@ -191,8 +190,8 @@ describe('PublishFileForm upload method', () => {
         // Until the composed transactions state their exact fee, the facts
         // card's network fee row shows the picked method's estimate.
         const fees = expectedFees('bitcoin-mainnet');
-        expect(screen.getByTestId('confirm-modal'))
-            .toHaveTextContent(`Network fee: ${fees[request ? 'taproot' : 'standard'].coinAmount} BTC (estimate)`);
+        expect(screen.getByTestId('confirm-fee-network'))
+            .toHaveTextContent(fees[request ? 'taproot' : 'standard'].coinAmount);
     });
 
     it('re-prices each option when the fee tier changes', async () => {
@@ -207,10 +206,10 @@ describe('PublishFileForm upload method', () => {
     });
 
     it('names the method and its fee on the watcher review', async () => {
+        publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode: 'watcher' }], activeWalletId: 'wallet-1' });
         mount(messagingFor({ walletMode: 'watcher' }));
         await pickFile();
-        ackForever();
-        fireEvent.click(screen.getByRole('button', { name: 'Publish file' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish File' }));
         await screen.findByRole('form', { name: 'Review publish' });
         const fees = expectedFees('bitcoin-mainnet');
         expect(screen.getByTestId('review-upload-method')).toHaveTextContent('Standard');
@@ -256,19 +255,13 @@ describe('PublishFileForm upload method', () => {
 
     it('carries the pick into Encrypted mode', async () => {
         mount(messagingFor({
-            overrides: {
-                getOwnedTokens: vi.fn().mockResolvedValue([{ tick: 'GATE', chainId: 'bitcoin-mainnet', ownerAddress: HD.address }]),
-                listGatedKeys: vi.fn().mockResolvedValue([]),
-                getTokenInfo: vi.fn().mockResolvedValue({ creator: HD.address, divisibility: 8 }),
-            },
+            overrides: { getOwnedTokens: vi.fn().mockResolvedValue([{ tick: 'GATE' }]), listGatedKeys: vi.fn().mockResolvedValue([]) },
         }));
         await screen.findByLabelText(FILE_LABEL);
         pickMethod('Standard');
-        fireEvent.click(screen.getByRole('radio', { name: 'Encrypted & token-gated' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Token: Select a token' }));
-        fireEvent.click((await screen.findAllByRole('listitem')).find((row) => row.textContent.includes('GATE')));
-        fireEvent.click(await screen.findByRole('button', { name: 'Continue to file' }));
-        await screen.findByRole('button', { name: /^Token: GATE/ });
+        fireEvent.click(screen.getByRole('button', { name: /^Publish as: / }));
+        fireEvent.click(screen.getByRole('option', { name: (n) => n.startsWith('Encrypted & token-gated') }));
+        await screen.findByRole('button', { name: /^Token:/ });
         expect(trigger()).toHaveAccessibleName('Upload method: Standard');
     });
 });

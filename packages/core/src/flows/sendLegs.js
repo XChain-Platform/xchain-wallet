@@ -40,6 +40,7 @@
 //   a gated tick is refused with the single-send path named as the way through.
 
 import { tickerForCoin } from '../registry/coinTicker.js';
+import { formatWithThousands } from '../shared/utils/amountFormat.js';
 import { getGatedGroupsForSend } from './gatedSendGuard.js';
 
 /*
@@ -273,6 +274,11 @@ export async function assertNoGatedLegs({ sdkRegistry, chainRegistry, chainId, l
     }
 }
 
+// An amount as a person reads it: thousands grouped, every place kept.
+function shownAmount(amount) {
+    return formatWithThousands(amount) || String(amount ?? '');
+}
+
 /**
  * Human-readable summary for the pending-transaction record and the confirm
  * screens. Single leg keeps the wording the wallet already used.
@@ -285,7 +291,7 @@ export function summarizeSendLegs(legs) {
     if (legs.length === 1) {
         const [leg] = legs;
         const memoTail = leg.memo ? ` (memo: "${leg.memo}")` : '';
-        return `Send ${leg.amount} ${leg.tick} to ${leg.to}${memoTail}`;
+        return `Send ${shownAmount(leg.amount)} ${leg.tick} to ${leg.to}${memoTail}`;
     }
     /** @type {Map<string, string>} */
     const totals = new Map();
@@ -293,7 +299,7 @@ export function summarizeSendLegs(legs) {
         const tick = leg.tick.toUpperCase();
         totals.set(tick, addDecimals(totals.get(tick) || '0', leg.amount));
     }
-    const totalsText = [...totals.entries()].map(([tick, amount]) => `${amount} ${tick}`).join(', ');
+    const totalsText = [...totals.entries()].map(([tick, amount]) => `${shownAmount(amount)} ${tick}`).join(', ');
     return `Send ${totalsText} to ${legs.length} recipients`;
 }
 

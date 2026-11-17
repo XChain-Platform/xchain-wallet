@@ -150,7 +150,8 @@ describe('ActivityRow block line', () => {
 
         const confirmed = container.querySelector('[data-history-key="confirmed"]');
         const pending = container.querySelector('[data-history-key="pending"]');
-        expect(confirmed).toHaveTextContent('Block 123,456');
+        expect(confirmed).toHaveTextContent('Block 123456');
+        expect(confirmed).not.toHaveTextContent('123,456');
         expect(confirmed.querySelector(`.${rowStyles.block}`)).not.toBeNull();
         expect(pending).not.toHaveTextContent(/Block/);
         expect(pending.querySelector(`.${rowStyles.block}`)).toBeNull();

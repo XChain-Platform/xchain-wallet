@@ -36,7 +36,7 @@ assert.match(cmp, /onClick=\{onOpenPicker\}/, 'click opens the picker via the ho
 assert.match(cmp, /type="button"/, 'control is a button');
 
 // empty state + labels
-assert.match(cmp, /placeholder = 'Select a token'/, 'default empty-state placeholder');
+assert.match(cmp, /placeholder = t\('components\.tokenField\.selectAToken'\)/, 'default empty-state placeholder');
 assert.match(cmp, /const hasValue = Boolean\(chainId && tick\)/, 'renders the empty state when no value');
 assert.match(cmp, /aria-label=\{accessibleName\}/, 'button carries an accessible name with the selection');
 
@@ -65,11 +65,14 @@ for (const cls of ['field', 'label', 'control', 'text', 'tick', 'placeholder', '
     assert.match(css, new RegExp(`\\.${cls}\\b`), `CSS hook .${cls}`);
 }
 
-// --- Send keeps asset selection icon-only -------------------------------
+// --- Send uses the standard Token field for its asset ---------------------
 
-assert.doesNotMatch(sendJs, /import \{ TokenField \}/, 'Send does not import the text-bearing TokenField');
+assert.match(sendJs, /import \{ TokenField \}/, 'Send imports the standard TokenField');
 assert.match(sendJs, /import \{ TickerIcon \}/, 'Send renders the shared token icon');
-assert.match(sendJs, /<SelectedTokenHero[\s\S]{0,500}onChangeAsset=\{onChangeAsset/, 'Send wires its icon-only hero to the asset picker');
-assert.match(sendJs, /<AssetIconPicker[\s\S]{0,300}onOpen=\{\(\) => setTokenPickerRecipientId/, 'recipient asset icons open the token picker');
+assert.match(sendJs, /<TokenField[\s\S]{0,300}id="send-token"[\s\S]{0,600}onOpenPicker=\{\(\) => setTokenPickerRecipientId\(PRIMARY_TOKEN_PICKER\)\}/, 'Send wires its asset field to the token picker');
+// Multi's add-recipient form uses the same standard Token field, opening the
+// same picker (tokens only) through Send's picker state.
+assert.match(sendJs, /onOpenTokenPicker=\{\(\) => setTokenPickerRecipientId\(MULTI_TOKEN_PICKER\)\}/,
+    'the Multi recipient Token field opens the token picker');
 
 console.log('token-field smoke OK');

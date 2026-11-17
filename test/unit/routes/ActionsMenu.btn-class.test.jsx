@@ -6,11 +6,11 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// The entry rows of the actions menu use ActionsMenu.module.css .entry.
-// Every one of those rows carries the shared
-// Button base class in its markup, so the layout harness reads it as a kit
-// button and the press, focus and hidden states match every other button.
-// The row stylesheet keeps its card look through Card.module.css and never
+// The entry rows of the actions menu are the shared ActionList rows (G101,
+// ruling 2026-11-13), the kit ListRow Settings draws, so they no longer carry
+// the Button base or the .entry card. ActionsMenu.module.css still holds the
+// old entry classes that Wallet Details borrows; that sheet keeps its card
+// look through Card.module.css and never
 // pulls the Button sheet in through composes, which would ship a second copy
 // of it in the chunk and re-apply .btn over other buttons' overrides.
 
@@ -36,13 +36,11 @@ function draw(node) {
 }
 
 function menuItems(container) {
-    expect(typeof buttonStyles.btn).toBe('string');
-    expect(buttonStyles.btn.length).toBeGreaterThan(0);
-    return [...container.querySelectorAll('[data-xc-menu-item]')];
+    return [...container.querySelectorAll('li > button')];
 }
 
-describe('menu entry rows carry the shared Button base', () => {
-    it('gives every actions menu entry the Button btn class', () => {
+describe('menu entry rows are the shared ActionList rows', () => {
+    it('draws every actions menu entry as an ActionList row, not a Button card', () => {
         const { container } = draw(
             <ActionsMenu
                 onBack={() => {}}
@@ -57,8 +55,31 @@ describe('menu entry rows carry the shared Button base', () => {
         expect(items).toHaveLength(3);
         for (const item of items) {
             expect(item.tagName).toBe('BUTTON');
-            expect([...item.classList]).toContain(buttonStyles.btn);
-            expect([...item.classList]).toContain(rowStyles.entry);
+            // G101: the kit ListRow, not the Button base or the old card entry.
+            expect([...item.classList]).not.toContain(buttonStyles.btn);
+            expect([...item.classList]).not.toContain(rowStyles.entry);
+            expect(item.hasAttribute('data-xc-menu-item')).toBe(false);
+        }
+        // G97: an entry that opens its page ends in the standard chevron; an
+        // unavailable one opens nothing and carries none.
+        const [issue, swap, destroy] = items;
+        expect(issue.lastElementChild.getAttribute('aria-hidden')).toBe('true');
+        expect(issue.lastElementChild.querySelector('svg')).toBeTruthy();
+        expect(swap.lastElementChild.querySelector('svg')).toBeTruthy();
+        expect(swap.textContent).toContain('Trade one token for another');
+        expect(destroy.getAttribute('aria-disabled')).toBe('true');
+        expect(destroy.textContent).toContain('Unavailable: No tokens to destroy');
+        // The off row's only svg is its icon; no chevron.
+        expect(destroy.querySelectorAll('svg')).toHaveLength(1);
+    });
+
+    it('drops the old card-grid list classes now the page draws ActionList cards', () => {
+        const css = readFileSync(
+            join(process.cwd(), 'packages/core/src/shared/routes/ActionsMenu.module.css'),
+            'utf8',
+        );
+        for (const name of ['listFull', 'listPopup', 'entryHead', 'entryReason']) {
+            expect(css, name).not.toMatch(new RegExp(`\\.${name}\\b`));
         }
     });
 

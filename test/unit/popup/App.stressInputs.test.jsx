@@ -298,8 +298,8 @@ describe('session status replies without a string state (NW)', () => {
             installBackground();
             sessionReply.override = () => Promise.resolve(value);
             render(<App />);
-            const retry = await screen.findByRole('button', { name: 'Try again' }, { timeout: 15_000 });
-            expect(screen.getByRole('heading', { name: "The wallet couldn't start.", level: 1 })).toBeInTheDocument();
+            const retry = await screen.findByRole('button', { name: 'Try Again' }, { timeout: 15_000 });
+            expect(screen.getByRole('heading', { name: 'Wallet Unavailable', level: 1 })).toBeInTheDocument();
             expect(screen.queryByRole('heading', { name: 'Home', level: 1 })).not.toBeInTheDocument();
 
             const before = vi.mocked(getSessionStatus).mock.calls.length;
@@ -319,7 +319,7 @@ describe('session status replies without a string state (NW)', () => {
         sessionReply.override = () => Promise.resolve({ state: 'unlocked' });
         render(<App />);
         await screen.findByRole('heading', { name: 'Home', level: 1 }, { timeout: 15_000 });
-        expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Try Again' })).not.toBeInTheDocument();
     });
 });
 
@@ -361,14 +361,14 @@ describe('200 wallets and 500 tokens (SC)', () => {
         expect(tooWide).toEqual([]);
 
         fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
-        fireEvent.click(await screen.findByRole('button', { name: /This wallet/i }));
+        fireEvent.click(await screen.findByRole('button', { name: /^Wallets/ }));
         const switchButton = await screen.findByRole(
             'button',
-            { name: /Switch \/ rename|Open wallets/i },
+            { name: /^My Wallets/ },
             { timeout: 10_000 },
         );
         fireEvent.click(switchButton);
-        await screen.findByRole('heading', { name: 'Wallets' }, { timeout: 15_000 });
+        await screen.findByRole('heading', { name: 'My Wallets' }, { timeout: 15_000 });
         const last = await screen.findByText(new RegExp(`^200 N{116}$`), {}, { timeout: 15_000 });
         const rowsTooWide = [...document.querySelectorAll('[style]')]
             .filter((node) => Number.parseFloat(node.style.width) > POPUP_WIDTH);
@@ -379,8 +379,18 @@ describe('200 wallets and 500 tokens (SC)', () => {
             fireEvent.click(row);
             await new Promise((resolve) => setTimeout(resolve, 0));
         });
-        await waitFor(() => expect(localStorage.getItem('xc:activeWallet')).toBe('w200'), { timeout: 15_000 });
-        await waitFor(() => expect(screen.getByTitle(/^200 N{116}$/)).toBeInTheDocument(), { timeout: 15_000 });
+        // A wallet row opens that wallet's page (Actions and Details tabs);
+        // its Set as active wallet row does the switch.
+        expect(await screen.findByRole('tab', { name: 'Details' }, { timeout: 15_000 })).toBeInTheDocument();
+        expect(JSON.parse(localStorage.getItem('xc:activeWallet')).id).toBe('w1');
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /Set as active wallet/ }));
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        });
+        await waitFor(() => expect(JSON.parse(localStorage.getItem('xc:activeWallet')).id).toBe('w200'), { timeout: 15_000 });
+        // The page stays on the wallet, now the active one, so its Set as
+        // active wallet row goes away.
+        await waitFor(() => expect(screen.queryByRole('button', { name: /Set as active wallet/ })).toBeNull(), { timeout: 15_000 });
         await waitFor(() => expect(bg.sent.some((m) => m.type === 'account.list' && m.request?.walletId === 'w200'))
             .toBe(true), { timeout: 15_000 });
     });

@@ -31,6 +31,7 @@ assert.match(
 );
 assert.match(formSrc, /if \(!isWatcherMode && !isHwSource && \(!signerReady && password\.length === 0\)\) return;/);
 assert.match(formSrc, /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<ResultScreen/);
-assert.match(formSrc, /\{isWatcherMode \? \([\s\S]+?t\('common\.watcherBuildsUnsigned'\)/);
-assert.match(formSrc, /Create unsigned transaction/);
+assert.match(formSrc, /singleEncode = !isWatcherMode/);
+assert.match(formSrc, /<ConfirmActionModal[\s\S]+?credentials=\{<p[^>]*>\{t\('common\.watcherBuildsUnsigned'\)\}<\/p>\}/);
+assert.match(formSrc, /<FormAction[\s\S]+?<Icon\.CoinsIcon \/>[\s\S]+?>\s*Pay Dividend\s*<\/FormAction>/);
 console.log('dividend-watcher-mode smoke OK');

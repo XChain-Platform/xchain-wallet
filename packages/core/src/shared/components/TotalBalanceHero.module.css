@@ -1,5 +1,6 @@
+/* Flat app blue: the card carries no gradient. */
 .hero {
-    background: linear-gradient(180deg, var(--xc-accent-primary) 0%, var(--xc-accent-primary-hover) 100%);
+    background: var(--xc-accent-primary);
     color: var(--xc-on-accent);
     border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-card-radius);
@@ -34,13 +35,6 @@
     color: color-mix(in srgb, var(--xc-on-accent) 85%, transparent);
 }
 
-.scope {
-    font-weight: 500;
-    margin-inline-start: var(--xc-space-1);
-    color: color-mix(in srgb, var(--xc-on-accent) 60%, transparent);
-    text-transform: none;
-    letter-spacing: 0;
-}
 
 /* Home's slot for the one balance actions menu. */
 .actions {
@@ -208,14 +202,6 @@
     min-width: 0;
 }
 
-.metaRight {
-    flex: 0 0 auto;
-    color: color-mix(in srgb, var(--xc-on-accent) 70%, transparent);
-    font-size: var(--xc-text-xs);
-    font-weight: 500;
-    text-align: end;
-}
-
 .changePositive,
 .changeNegative,
 .changeNeutral {
@@ -246,11 +232,137 @@
     }
 }
 
-/* Engines disagree on whether gradients survive forced-colors mode, so pin
- * the surface and its label to one system pair instead of guessing. */
+/* Pin the surface and its label to one system pair in forced-colors mode
+ * instead of guessing how the engine maps the app blue. */
 @media (forced-colors: active) {
     .hero {
         background: var(--xc-accent-primary);
         color: var(--xc-on-accent);
     }
+}
+
+/* The hero toggles, shown as a row of buttons in the card. */
+.inlineActions {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+}
+
+/* A row holding the inline buttons sizes its actions column to them at every
+   width. TotalBalanceHero sets the class, since the Safari 16 baseline has
+   no :has(). */
+.row.rowWithActions {
+    grid-template-columns: minmax(0, 1fr) max-content;
+}
+
+.inlineActions.inlineActions {
+    justify-self: end;
+    width: max-content;
+    margin-inline-start: 0;
+}
+
+/* The card's buttons are frosted white circles on the brand card. */
+/* Compact card: the round buttons are 32px so the caption row is only as
+   tall as the wallet name, and the rows sit closer together. */
+.eye.eye {
+    position: relative;
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    min-height: 32px;
+    --xc-icon-size: var(--xc-icon-sm);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+    color: var(--xc-on-accent);
+}
+
+.eye.eye:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* A switched-on card button looks the same as the others, with
+   no ring, so every circle in the card is drawn alike. */
+.eye.eye[aria-pressed='true'],
+.eye.eye[aria-pressed='true']:not(:disabled) {
+    box-shadow: none;
+    border: 0;
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* The wallet's name as the card caption, at a readable size. */
+.label.walletLabel {
+    font-size: var(--xc-text-xl);
+    font-weight: 700;
+    line-height: 1.2;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--xc-on-accent);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* The change sits on a small dark pill in full-strength green or red, so it
+   stays bright and readable over the blue and the chart. The figures are
+   larger and heavier so the bright green and red reach full strength on
+   screen instead of being thinned by small-text smoothing. */
+.changePositive.changePositive,
+.changeNegative.changeNegative {
+    display: inline-block;
+    padding: 2px var(--xc-space-2);
+    border-radius: var(--xc-radius-pill);
+    background: rgba(0, 0, 0, 0.55);
+    text-shadow: none;
+    font-size: var(--xc-text-md);
+    font-weight: 800;
+}
+
+.changePositive.changePositive {
+    color: var(--xc-brand-card-gain);
+}
+
+.changeNegative.changeNegative {
+    color: var(--xc-brand-card-loss);
+}
+
+/* The masked change takes the same pill box as the figure, so
+   hiding the balance leaves the card's height exactly as it was. */
+.hiddenChange {
+    display: inline-block;
+    padding: 2px var(--xc-space-2);
+    border-radius: var(--xc-radius-pill);
+    background: rgba(0, 0, 0, 0.55);
+    font-size: var(--xc-text-md);
+    font-weight: 800;
+}
+
+/* The up/down figure sits above the balance. The hero lays its
+   caption, buttons, change line and balance out on one grid, with the row
+   wrapper stepping aside so its cells join that grid. */
+.hero.hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    grid-template-areas:
+        'label actions'
+        'meta meta'
+        'amount amount';
+    align-items: center;
+    column-gap: var(--xc-space-2);
+    row-gap: 2px;
+}
+
+.hero.hero > .row {
+    display: contents;
+}
+
+.hero.hero > .meta {
+    grid-area: meta;
+    justify-self: start;
+}
+
+/* A transparent layer keeps each round button's touch target at the touch floor. */
+.eye.eye::before {
+    content: '';
+    position: absolute;
+    inset: calc((32px - max(32px, var(--xc-control-hit-min, 24px))) / 2);
 }

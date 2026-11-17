@@ -6,6 +6,7 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { selectOption } from '../../helpers/selectOption.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { SignCredentials } from '../../../packages/core/src/shared/components/SignCredentials.jsx';
 import { AddAccountForm } from '../../../packages/core/src/shared/routes/AddAccountForm.jsx';
@@ -91,8 +92,8 @@ describe('route field help tips', () => {
             </MessagingProvider>,
         );
 
-        const field = await screen.findByLabelText('Purpose', { selector: 'select' });
-        fireEvent.change(field, { target: { value: 'dispenser' } });
+        const field = await screen.findByLabelText('Purpose', { selector: '[data-xc-select]' });
+        selectOption(field, 'dispenser');
         await waitFor(() => expect(screen.getByRole('button', { name: 'About Purpose' })).toBeTruthy());
         expectHelpTip({
             label: 'Purpose',

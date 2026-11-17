@@ -66,7 +66,7 @@ function mount(messaging) {
 async function openDetail(messaging) {
     mount(messaging);
     fireEvent.click(await screen.findByRole('button', { name: `View address ${IMPORTED}` }));
-    await screen.findByRole('button', { name: /Use/ });
+    await screen.findByRole('button', { name: /^Set active/ });
 }
 
 describe('D-64: Use reports a refusal in the user\'s language', () => {
@@ -78,7 +78,7 @@ describe('D-64: Use reports a refusal in the user\'s language', () => {
             }),
         });
         await openDetail(messaging);
-        fireEvent.click(screen.getByRole('button', { name: /Use/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^Set active/ }));
 
         const alert = await screen.findByRole('alert');
         expect(alert.textContent).not.toMatch(/setActiveAddress/);
@@ -92,7 +92,7 @@ describe('D-64: Use reports a refusal in the user\'s language', () => {
             }),
         });
         await openDetail(messaging);
-        fireEvent.click(screen.getByRole('button', { name: /Use/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^Set active/ }));
 
         const alert = await screen.findByRole('alert');
         expect(alert.textContent).toMatch(/This wallet is locked/);
@@ -120,8 +120,9 @@ describe('D-64: the other Addresses failures', () => {
             }),
         });
         await openDetail(messaging);
-        fireEvent.change(screen.getByLabelText(/Address label/i), { target: { value: 'Paper key' } });
-        fireEvent.click(screen.getByRole('button', { name: /^Save label$/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^Edit label/ }));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Address label' }), { target: { value: 'Paper key' } });
+        fireEvent.click(screen.getByRole('button', { name: /^Save Label$/ }));
 
         const alert = await screen.findByRole('alert');
         expect(alert.textContent).not.toMatch(/setAddressLabel|Cannot read propert/);

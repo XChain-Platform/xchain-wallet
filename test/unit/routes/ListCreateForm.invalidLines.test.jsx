@@ -90,7 +90,7 @@ describe('ListCreateForm invalid and wrong-network lines', () => {
         expect(document.body.textContent).not.toMatch(/invalid skipped/);
         expect(screen.getByText(/1 address is for another network\. This list is published on the selected network, so remove it to continue\./)).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Publish list' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Publish List$/ }));
         expect(await screen.findByText('Remove 2 invalid addresses before reviewing.')).toBeInTheDocument();
         expect(runConfirm).not.toHaveBeenCalled();
     });

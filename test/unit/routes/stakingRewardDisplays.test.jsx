@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { buildRows } from '../../../packages/core/src/shared/routes/StakingList.jsx';
-import { splitRewards } from '../../../packages/core/src/shared/routes/OperatorDashboard.jsx';
+import { unclaimedRewards } from '../../../packages/core/src/flows/stakingDashboard.js';
 
 const rewards = [{ action_index: 'reward-1', amount: '10' }];
 const rewardClaims = [
@@ -37,10 +37,10 @@ describe('validator reward displays', () => {
         expect(rows[0].rewardLabel).toBe('+6 XCHAIN reward');
     });
 
-    it('splits the operator totals from accruals and valid claims', () => {
-        expect(splitRewards(rewards, rewardClaims)).toEqual({
-            pending: '6',
-            lifetime: '10',
-        });
+    // Stake detail's Claimable and Earned bubbles read these two figures.
+    it('splits the claimable and earned totals from accruals and valid claims', () => {
+        const totals = unclaimedRewards({ rewards, claims: rewardClaims });
+        expect(totals.unclaimed).toBe('6');
+        expect(totals.accrued).toBe('10');
     });
 });

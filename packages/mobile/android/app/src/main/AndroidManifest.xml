@@ -5,11 +5,13 @@
     <!--
       allowBackup="false" is the single most consequential attribute in this
       file (§1). Android's default would ship the vault ciphertext
-      into Google cloud backup, and carry settings, contacts and connected
-      sites there effectively in the clear. The Keystore key that decrypts
-      the vault does not transfer, so the restored copy would be
-      undecryptable anyway: the default costs the user their privacy and
-      gives them nothing back. The two rules files below say the same thing
+      into Google cloud backup, together with the plaintext WebView
+      localStorage (history cache, message read marks with counterparty
+      addresses, UI preferences). Settings, contacts and connected sites
+      are inside the encrypted vault. The Keystore key that decrypts
+      the vault does not transfer, so the restored vault would be
+      undecryptable anyway: the default leaks the localStorage data and
+      gives the user nothing back. The two rules files below say the same thing
       to the two API generations that read them, so flipping this attribute
       alone cannot quietly re-enable the upload.
     -->

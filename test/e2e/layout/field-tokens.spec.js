@@ -40,8 +40,9 @@ function readFields() {
     return out;
 }
 
-const SUBPAGES = ['This wallet', 'Display', 'Privacy', 'Safety', 'Wallet mode', 'Backup', 'Fees', 'Connected sites',
-    'Automatic donation system', 'Developer mode', 'About', 'Network & endpoints', 'Notifications', 'Keyboard'];
+// The Settings index lists groups; each opens a page of rows.
+const SUBPAGES = ['Wallets', 'Security', 'Backup and Recovery', 'Privacy and Sites', 'Appearance', 'Notifications',
+    'Network and Fees', 'Advanced'];
 
 const escapeRegExp = (v) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -82,12 +83,17 @@ test('dark mode fields share the field tokens', async ({ page }, testInfo) => {
     // Developer mode adds the Network & endpoints page.
     try {
         await gotoSection(page, 'Settings');
-        await page.getByRole('main').getByRole('button', { name: /^Developer mode/ }).click();
+        await page.getByRole('main').getByRole('button', { name: /^Advanced\b/ }).click();
+        await page.getByRole('main').getByRole('button', { name: /^Developer mode\b/ }).click();
         const dev = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
         if (!(await dev.isChecked())) await dev.click();
         await snap('settings-Developer mode on');
-        await page.getByRole('button', { name: 'Back to settings' }).click();
-        await page.getByRole('main').getByRole('button', { name: /^Network & endpoints/i }).first().click();
+        // Back twice: row page to the Advanced group page, then to the index.
+        const back = page.getByRole('button', { name: 'Back to settings', exact: true }).filter({ visible: true }).first();
+        await back.click();
+        await back.click();
+        await page.getByRole('main').getByRole('button', { name: /^Network and Fees\b/ }).click();
+        await page.getByRole('main').getByRole('button', { name: /^Network endpoints\b/i }).first().click();
         await snap('settings-Network & endpoints');
     } catch (err) { screens['settings-dev'] = [{ error: String(err.message).slice(0, 120) }]; }
 

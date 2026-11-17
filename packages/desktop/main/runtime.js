@@ -62,6 +62,7 @@ import {
     PRE_HOST_MESSAGE_TYPES,
 } from '@xchain-wallet/extension/src/background/sessionMeta.js';
 import { serializeError } from '@xchain-wallet/extension/src/background/MessageHost.js';
+import { createLockedAutopay } from '@xchain-wallet/core/notifications/index.js';
 // The pure idle decision, shared with the extension backstop so the two
 // shells cannot drift on what "idle" means.
 import {
@@ -180,6 +181,13 @@ export function createRuntime(deps) {
         deadlineWatcher: null,
         dispenserEscrowWatcher: null,
         coinpayAutopayWatcher: null,
+        // PC-16 Phase B: auto pay keeps paying armed orders after a lock (OS
+        // screen lock and suspend included) for as long as main runs. The
+        // session lives in main's memory only, never the keychain or disk;
+        // the renderer sees plain status and a Stop call.
+        lockedAutopay: deps.notify
+            ? createLockedAutopay({ shellKind: 'desktop', notify: deps.notify, logger: console })
+            : null,
         // PC-16: pre-unlocked software signers, populated by the shared
         // wallet.unlock handler while the password is in scope. A keychain
         // restore can also populate wallets sealed under the vault key; any
@@ -378,6 +386,9 @@ async function runSystemAutoLock(runtime) {
 }
 
 async function lockRuntimeForAutoLock(runtime, store, reason) {
+    // Armed auto pay moves to its locked session first, so an idle lock, an
+    // OS screen lock or a suspend locks the wallet without stopping it.
+    await captureLockedAutopay(runtime);
     // Stop watchers first so nothing signs while the cached key is removed.
     tearDownHost(runtime);
     runtime.autoLockCleanupPending = true;
@@ -605,9 +616,9 @@ export async function ensureHost(runtime) {
 
         // PC-16 CoinPay auto-pay engine. Desktop main is the spec's best
         // fire-and-forget home (tray-capable, no worker eviction). Pays
-        // only when the signer pool holds the wallet's signer, i.e. after
-        // a password unlock; a keychain-only session is notify-only with
-        // the ObligationsView banner explaining how to arm.
+        // when the signer pool holds the wallet's signer: after a password
+        // unlock, or after a keychain restore for the primary wallet (the
+        // pool populate above). Once locked, runtime.lockedAutopay pays.
         if (runtime.notify && !runtime.coinpayAutopayWatcher) {
             runtime.coinpayAutopayWatcher = new notificationsLib.CoinpayAutopayWatcher({
                 vault,
@@ -618,8 +629,12 @@ export async function ensureHost(runtime) {
                 reservationLedger: runtime.host.host.reservationLedger,
                 notify: runtime.notify,
                 shellKind: 'desktop',
+                // Shared with the locked session so a lock or unlock hands
+                // the payer lease over instead of waiting it out.
+                ...(runtime.lockedAutopay && { instanceId: runtime.lockedAutopay.instanceId }),
                 logger: console,
             });
+            runtime.coinpayAutopayWatcher.seedAttempted?.(runtime.lockedAutopay?.takeHandoff() ?? []);
             runtime.coinpayAutopayWatcher.start();
             runtime.coinpayAutopayWatcher.refresh().catch(() => { /* WS triggers are best-effort */ });
         }
@@ -677,10 +692,38 @@ export function tearDownHost(runtime) {
         runtime.signerPool = new signersLib.SignerPool();
     }
     if (runtime.vault) {
-        try { runtime.vault.close(); } catch (_err) { /* already closed */ }
+        // A vault locked auto pay took is the session's to close.
+        if (!runtime.lockedAutopay?.holdsVault(runtime.vault)) {
+            try { runtime.vault.close(); } catch (_err) { /* already closed */ }
+        }
         runtime.vault = null;
     }
     runtime.host = null;
+}
+
+/**
+ * PC-16 Phase B: hand armed auto pay to its locked session just before a lock
+ * zeroes the signer pool. Nothing armed, or no open vault (a repeat lock),
+ * does nothing, and the lock runs exactly as before. Never throws.
+ *
+ * @param {DesktopRuntime} runtime
+ * @returns {Promise<boolean>} whether the session took the vault
+ */
+export async function captureLockedAutopay(runtime) {
+    if (!runtime?.lockedAutopay || !runtime.vault || !runtime.host) return false;
+    try {
+        return await runtime.lockedAutopay.lock({
+            vault: runtime.vault,
+            signerPool: runtime.signerPool,
+            chainRegistry: runtime.chainRegistry,
+            sdkRegistry: runtime.sdkRegistry,
+            reservationLedger: runtime.host?.host?.reservationLedger,
+            watcher: runtime.coinpayAutopayWatcher,
+        });
+    } catch (err) {
+        console.error('[xchain] locked auto pay could not start:', err);
+        return false;
+    }
 }
 
 /**
@@ -737,6 +780,8 @@ export function tearDownHost(runtime) {
  */
 export async function wipeRuntimeStores(runtime) {
     if (!runtime) throw new Error('wipeRuntimeStores: runtime is required');
+    // The vault being erased is the one locked auto pay holds.
+    try { await runtime.lockedAutopay?.end('wallet-wipe'); } catch { /* the wipe goes on */ }
     tearDownHost(runtime);
     // Seal the shared queue store so a broadcast the torn-down host still has
     // on the network writes nothing back; the next unlock gets a fresh one.
@@ -895,14 +940,26 @@ export async function handleIpcMessage(runtime, message) {
                     walletId: opts.walletId,
                     run: () => restoreLabelSyncBestEffort({ ...opts, vault: runtime.vault }),
                 }),
-                onLocked: (result) => {
+                onLocked: async (result) => {
                     runtime.autoLockCleanupPending = result?.secretsCleared === false;
+                    // Armed auto pay moves to its locked session before the
+                    // teardown zeroes the pool (PC-16 Phase B).
+                    await captureLockedAutopay(runtime);
                     tearDownHost(runtime);
                     // An explicit lock ends the window the stamp described.
                     if (!runtime.autoLockCleanupPending) {
                         runtime.autoLockStore?.clear().catch(() => { /* best-effort */ });
                     }
                 },
+                // The Locked screen's auto pay line and Stop, and the end of
+                // locked auto pay before any unlock, create or import.
+                ...(runtime.lockedAutopay && {
+                    lockedAutopay: runtime.lockedAutopay,
+                    beforeSessionStart: (type) => runtime.lockedAutopay.end(type === 'wallet.unlock' ? 'unlock' : 'wallet-switch'),
+                }),
+                // wallet.hardware.balances keeps the open vault's price-data
+                // switch; with no open vault the defaults apply.
+                readSettings: () => (runtime.vault ? runtime.vault.settings.get() : null),
             });
             // A locked wallet whose KDF metadata cannot be read can never unlock:
             // reading it here sends the renderer to the damaged-vault screen

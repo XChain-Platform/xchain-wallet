@@ -98,11 +98,13 @@ async function mount({ destinationRows = [TOKEN_PAID] } = {}) {
         });
     }
     vi.useRealTimers();
+    // Every viewer opens on Actions; a buyer's first row opens the Buy page.
+    fireEvent.click(await screen.findByTestId('dispenser-buy-row'));
     await screen.findByText(/250 MEMEVALID available/);
     return messaging;
 }
 
-const buyButton = () => screen.findByRole('button', { name: /^Buy \d+ fills?$/ });
+const buyButton = () => screen.findByRole('button', { name: /^Buy \d+ Dispenses?$/ });
 
 async function openReview() {
     const buy = await buyButton();

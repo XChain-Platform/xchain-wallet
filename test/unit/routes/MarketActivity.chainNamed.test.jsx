@@ -14,7 +14,7 @@
 // chain, so identical rows still read differently to a screen reader.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MarketActivity } from '../../../packages/core/src/shared/routes/MarketActivity.jsx';
@@ -52,11 +52,17 @@ describe('Marketplace rows spanning several chains', () => {
     it('shows no network name as row text and names the chain through the token icon', async () => {
         renderMarket();
         await screen.findByRole('region', { name: 'Marketplace activity' });
-        await screen.findByRole('region', { name: 'Open dispensers' });
-        await vi.waitFor(() => {
-            expect(document.querySelectorAll('section[aria-label="Recent DEX swaps"] li').length).toBeGreaterThan(1);
-        });
-        for (const label of ['Open dispensers', 'Open DEX orders', 'Recent dispenses', 'Recent DEX swaps']) {
+        // Offers (dispensers and orders together), Swaps and Trades are tabs; each
+        // shows one list card.
+        for (const [tab, label] of [
+            ['Offers', 'Offers'],
+            ['Swaps', 'Recent DEX swaps'],
+            ['Trades', 'Recent trades'],
+        ]) {
+            fireEvent.click(await screen.findByRole('tab', { name: tab }));
+            await vi.waitFor(() => {
+                expect(document.querySelectorAll(`section[aria-label="${label}"] li`).length).toBeGreaterThan(1);
+            });
             const section = screen.getByRole('region', { name: label });
             const rows = [...section.querySelectorAll('li')];
             expect(rows.length, label).toBeGreaterThan(1);
@@ -65,7 +71,10 @@ describe('Marketplace rows spanning several chains', () => {
             }
             const iconNames = rows.map((li) => li.querySelector('[role="img"][aria-label]')?.getAttribute('aria-label'));
             for (const name of iconNames) expect(name, label).toMatch(/ on (Bitcoin|Litecoin|Dogecoin)/);
-            expect(new Set(iconNames).size, `${label} icon names`).toBe(rows.length);
+            // Offers lists a dispenser and an order per chain, told apart by their
+            // Dispenser or Order tag; within one tag, each chain's icon name is its own.
+            const identities = rows.map((li, i) => `${iconNames[i]}|${/Dispenser/.test(li.textContent) ? 'dispenser' : 'other'}`);
+            expect(new Set(identities).size, `${label} icon names`).toBe(rows.length);
         }
     });
 

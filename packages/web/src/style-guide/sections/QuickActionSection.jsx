@@ -5,7 +5,6 @@
 
 import { Icon } from '@xchain-wallet/core/ui';
 import { QuickActionTile } from '@xchain-wallet/core/ui/QuickActionTile.jsx';
-import homeStyles from '@xchain-wallet/core/shared/routes/Home.module.css';
 import { Section, Guidance, Markup, LiveExample } from '../StyleGuidePage.jsx';
 
 export function QuickActionSection() {
@@ -14,10 +13,10 @@ export function QuickActionSection() {
             id="quick-action"
             title="Quick-action tile"
             tag="CANONICAL primary-CTA tile"
-            kicker="The shared quick-action tile: a square with rounded corners, the icon centred and the label on its own line under it. Home and token detail draw their quick actions with this one component, so the example changes when they change."
+            kicker="The shared quick-action tile: a square with rounded corners, the icon centred and the label on its own line under it. Token detail draws its quick actions with this one component, so the example changes when it changes."
         >
             <Guidance
-                what={<>A <code>QuickActionTile</code>: a secondary <code>Button</code> with the shared tile class and icon slot. The screen's row (Home <code>.quickActions</code>) is a grid that gives every tile the same width and height.</>}
+                what={<>A <code>QuickActionTile</code>: a secondary <code>Button</code> with the shared tile class and icon slot. The screen's row (token detail) is a grid that gives every tile the same width and height.</>}
                 when={<>A short row of primary actions at the top of a screen (Home and token detail: Send, Receive, Exchange, More).</>}
                 whenNot={<>One action: a plain Button. Toolbar actions: the PageHeader trailing slot.</>}
                 doRule={<>✓ Pair every icon with a label · keep the tiles the same height</>}
@@ -30,7 +29,7 @@ export function QuickActionSection() {
 </div>`}
             </Markup>
             <LiveExample label="Home quick actions">
-                <div className={homeStyles.quickActions}>
+                <div style={{ display: 'grid', gridAutoFlow: 'column', gridAutoColumns: 'minmax(0, 5.5rem)', justifyContent: 'center', gap: 'var(--xc-space-2)' }}>
                     <QuickActionTile icon={<Icon.SendIcon />}>Send</QuickActionTile>
                     <QuickActionTile icon={<Icon.ReceiveIcon />}>Receive</QuickActionTile>
                     <QuickActionTile icon={<Icon.MarketIcon />}>Exchange</QuickActionTile>

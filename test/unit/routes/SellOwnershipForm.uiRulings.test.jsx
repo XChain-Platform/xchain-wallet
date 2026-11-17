@@ -37,6 +37,7 @@ vi.mock('../../../packages/core/src/shared/routes/AddressList.jsx', () => ({
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { SellOwnershipForm } from '../../../packages/core/src/shared/routes/SellOwnershipForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 
 function messagingWith(overrides = {}) {
     return {
@@ -80,6 +81,14 @@ function messagingWith(overrides = {}) {
 }
 
 function mount(messaging = messagingWith()) {
+    // A wallet's mode is published by the shell from the wallet list, not read
+    // from settings; the harness publishes the mode the settings mock names.
+    Promise.resolve(messaging.getSettings?.()).then((settings) => {
+        publishWalletModes({
+            wallets: [{ id: 'wallet-1', walletMode: settings?.walletMode || 'full' }],
+            activeWalletId: 'wallet-1',
+        });
+    });
     return render(
         <MessagingProvider shell="web" messaging={messaging}>
             <SellOwnershipForm
@@ -94,6 +103,7 @@ function mount(messaging = messagingWith()) {
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     __clearTokenInfoCache();
 });
 
@@ -101,7 +111,9 @@ describe('SellOwnershipForm UI rulings', () => {
     it('starts with Network then the standard From field and puts static help in tips', async () => {
         mount();
 
-        const from = await screen.findByLabelText('From');
+        // The From section (closed on load) holds Network then "From address".
+        const from = await screen.findByLabelText('From address');
+        fireEvent.click(screen.getByRole('button', { name: /^From/ }));
         const network = screen.getByRole('button', { name: /^Network:/ });
         expect(network.compareDocumentPosition(from) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(from).toHaveAttribute('readonly');
@@ -109,14 +121,19 @@ describe('SellOwnershipForm UI rulings', () => {
         expect(screen.getByRole('button', { name: 'Choose source address' })).toBeInTheDocument();
         expect(screen.queryByText('Selling the name')).not.toBeInTheDocument();
 
-        for (const label of ['From', 'How to sell', 'Get paid in', 'Expires after (blocks)', 'Memo']) {
+        // The optional terms are closed sections; open them to reach their tips.
+        fireEvent.click(screen.getByRole('button', { name: /^Expiration/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^Memo/ }));
+        for (const label of ['From address', 'Sell via', 'Get paid in', 'Expires after (blocks)']) {
             expect(screen.getByRole('button', { name: `About ${label}` })).toBeInTheDocument();
         }
+        // A memo alone in its Memo section has no label row and no tip (ruling).
+        expect(screen.queryByRole('button', { name: 'About Memo' })).toBeNull();
         expect(screen.getByRole('button', { name: /^About Price/ })).toBeInTheDocument();
         expect(screen.queryByText('Open order: anyone can take the offer at your price; cancel before it matches.'))
             .not.toBeInTheDocument();
 
-        const submit = screen.getByRole('button', { name: 'List name for sale' });
+        const submit = screen.getByRole('button', { name: /^List ownership for sale$/i });
         expect(submit.className).toMatch(/success/);
         expect(submit.querySelector('svg')).not.toBeNull();
     });
@@ -132,31 +149,31 @@ describe('SellOwnershipForm UI rulings', () => {
         fireEvent.change(price, { target: { value: '1.123456789' } });
         expect(await screen.findByText('Amount can have at most 8 decimal places.')).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Another token' }));
-        const tokenField = screen.getByRole('button', { name: 'Price token: Select a token' });
+        const tokenField = screen.getByRole('button', { name: 'Get paid in: BTC on Bitcoin' });
         expect(tokenField).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'About Price token' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'About Get paid in' })).toBeInTheDocument();
         fireEvent.click(tokenField);
         fireEvent.click(await screen.findByRole('button', { name: /^Select GOLD on Bitcoin/ }));
 
-        expect(await screen.findByRole('button', { name: 'Price token: GOLD on Bitcoin' })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: 'Get paid in: GOLD on Bitcoin' })).toBeInTheDocument();
         expect(screen.getByRole('textbox', { name: 'Price (GOLD)' })).toHaveValue('1');
     });
 
     it('switches Network, keeps a cross-chain source pick, and clears the old price token', async () => {
         mount();
-        await screen.findByLabelText('From');
-        fireEvent.click(screen.getByRole('tab', { name: 'Another token' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Price token: Select a token' }));
+        await screen.findByLabelText('From address'); // The From section labels the field "From address".
+        fireEvent.click(screen.getByRole('button', { name: 'Get paid in: BTC on Bitcoin' }));
         fireEvent.click(await screen.findByRole('button', { name: /^Select GOLD on Bitcoin/ }));
-        expect(await screen.findByRole('button', { name: 'Price token: GOLD on Bitcoin' })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: 'Get paid in: GOLD on Bitcoin' })).toBeInTheDocument();
 
+        fireEvent.click(screen.getByRole('button', { name: /^From/ })); // The picker icon sits in the closed From section.
         fireEvent.click(screen.getByRole('button', { name: 'Choose source address' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Pick Litecoin source' }));
 
-        await waitFor(() => expect(screen.getByLabelText('From')).toHaveValue(LTC_ADDRESS.address));
+        await waitFor(() => expect(screen.getByLabelText('From address')).toHaveValue(LTC_ADDRESS.address));
         expect(screen.getByRole('button', { name: /^Network:/ })).toHaveTextContent('Litecoin');
-        expect(screen.getByRole('button', { name: 'Price token: Select a token' })).toBeInTheDocument();
+        // The old price token is cleared: the field asks for an asset again.
+        expect(screen.getByRole('button', { name: 'Get paid in: Select an asset' })).toBeInTheDocument();
     });
 
     it('keeps the watcher form and review actions green with the sale icon and action name', async () => {
@@ -166,13 +183,14 @@ describe('SellOwnershipForm UI rulings', () => {
         }));
 
         fireEvent.change(await screen.findByRole('textbox', { name: 'Price (BTC)' }), { target: { value: '5' } });
-        const formSubmit = screen.getByRole('button', { name: 'List name for sale' });
+        const formSubmit = screen.getByRole('button', { name: /^List ownership for sale$/i });
         expect(formSubmit.className).toMatch(/success/);
         expect(formSubmit.querySelector('svg')).not.toBeNull();
         fireEvent.click(formSubmit);
 
-        const reviewSubmit = await screen.findByRole('button', { name: /Create unsigned transaction: list name for sale/i });
+        const reviewSubmit = await screen.findByRole('button', { name: 'Approve' });
         expect(reviewSubmit.className).toMatch(/success/);
         expect(reviewSubmit.querySelector('svg')).not.toBeNull();
+        expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument();
     });
 });

@@ -11,7 +11,8 @@
 import { expect } from '@playwright/test';
 import { compareDecimal, subtractDecimal } from '../../../packages/core/src/shared/utils/mintHeadroom.js';
 import { waitForShownTxid } from './pendingHistory.js';
-import { openPaletteCommand } from './wallet.js';
+import { pickOption } from './pickOption.js';
+import { FROM_ADDRESS_LABEL, openPaletteCommand, revealChainPicker } from './wallet.js';
 import { approveConfirm, expectConfirmModal } from './regtest.js';
 import { TESTNET_ADDRESS_RE, TESTNET_CHAIN_LABEL } from './testnet.js';
 
@@ -69,8 +70,7 @@ export async function mintTestnetXchain(page, amount, opts) {
     await openPaletteCommand(page, 'Advanced action');
 
     const network = page.getByRole('button', { name: /^Network:/ }).first();
-    await expect(network, 'no "Network" chain picker on this screen')
-        .toBeVisible({ timeout: 30_000 });
+    await revealChainPicker(page, network, 'Network');
     if (!((await network.getAttribute('aria-label')) || '').includes(TESTNET_CHAIN_LABEL)) {
         await network.click();
         await page.getByRole('dialog', { name: 'Network' })
@@ -80,11 +80,11 @@ export async function mintTestnetXchain(page, amount, opts) {
     await expect(network).toHaveAttribute('aria-label', new RegExp(TESTNET_CHAIN_LABEL), {
         timeout: 15_000,
     });
-    await expect(page.getByLabel('From', { exact: true })).toHaveValue(TESTNET_ADDRESS_RE, {
+    await expect(page.getByLabel(FROM_ADDRESS_LABEL)).toHaveValue(TESTNET_ADDRESS_RE, {
         timeout: 15_000,
     });
 
-    await page.getByLabel('Action', { exact: true }).selectOption('MINT');
+    await pickOption(page.getByLabel('Action', { exact: true }), 'MINT');
     await page.getByRole('textbox', { name: 'TICK', exact: true }).fill('XCHAIN');
     await page.getByRole('textbox', { name: 'AMOUNT', exact: true }).fill(String(amount));
     await page.getByRole('button', { name: 'Sign action' }).click();

@@ -11,6 +11,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 import { estimateNativeSendFeeTiers } from '../../../packages/core/src/flows/feeEstimate.js';
 
@@ -32,11 +33,12 @@ const OWNER = {
     signerId: 'signer-1',
 };
 const FILE_BYTES = 2000;
-const FILE_LABEL = /^File \(up to [\d,]+ bytes\)$/;
+const FILE_LABEL = /^File \(up to [\d.,]+ (KB|MB)\)$/;
 const TICKERS = { 'bitcoin-mainnet': 'BTC', 'litecoin-mainnet': 'LTC', 'dogecoin-mainnet': 'DOGE' };
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     uploadMethodLib.estimateUploadMethodFees.mockClear();
 });
 
@@ -81,10 +83,9 @@ function pickMethod(name) {
     fireEvent.click(trigger());
     fireEvent.click(screen.getByRole('option', { name: (n) => n.startsWith(name) }));
 }
-// Develop's file labels name the ceiling in bytes.
 function capOf(field) {
-    const [, n] = field.labels[0].textContent.match(/([\d,]+) bytes/);
-    return Number(n.replace(/,/g, ''));
+    const [, n, unit] = field.labels[0].textContent.match(/([\d.,]+) (KB|MB)/);
+    return Math.floor(Number(n.replace(/,/g, '')) * (unit === 'MB' ? 1024 * 1024 : 1024));
 }
 async function ready() {
     await waitFor(() => expect(screen.getByRole('button', { name: /^Token: GATE/ })).toBeEnabled());
@@ -94,14 +95,10 @@ async function pickFile(size = FILE_BYTES) {
     fireEvent.change(screen.getByLabelText('File to publish'), {
         target: { files: [new File([new Uint8Array(size)], 'members.bin', { type: 'application/octet-stream' })] },
     });
-    // Develop names the picked file in one metadata line under the chooser.
-    await screen.findByText((text) => text.startsWith('members.bin'));
-}
-// Develop asks for the permanence acknowledgement before any publish.
-function ackForever() {
-    fireEvent.click(screen.getByRole('checkbox', { name: /forever|permanent/i }));
+    await waitFor(() => expect(screen.getByLabelText(FILE_LABEL)).toHaveValue('members.bin'));
 }
 function pickFastFee() {
+    fireEvent.click(screen.getByRole('button', { name: /^Speed and Fees\b/, expanded: false }));
     fireEvent.click(document.querySelector('button[aria-label="Fast"]'));
 }
 function expectedFees(chainId, { title = '', tier = 'normal' } = {}) {
@@ -139,9 +136,12 @@ describe('GatedPublishForm upload method', () => {
         ['Dogecoin', { chainId: 'dogecoin-mainnet', owner: { ...OWNER, address: 'DGateOwnerGateOwnerGateOwnerGateOwn' } },
             'Dogecoin has no Taproot.'],
     ])('disables Taproot upload with its reason for %s', async (_name, opts, reason) => {
+        if (opts.walletMode === 'watcher') {
+            publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode: 'watcher' }], activeWalletId: 'wallet-1' });
+        }
         mount(messagingFor(opts));
         const field = await ready();
-        await waitFor(() => expect(trigger()).toHaveAccessibleName('Upload method: Standard'));
+        expect(trigger()).toHaveAccessibleName('Upload method: Standard');
         fireEvent.click(trigger());
         const [taproot, standard] = screen.getAllByRole('option');
         expect(taproot).toHaveAttribute('aria-disabled', 'true');
@@ -177,8 +177,7 @@ describe('GatedPublishForm upload method', () => {
         await ready();
         await pickFile();
         if (method === 'Standard') pickMethod('Standard');
-        ackForever();
-        fireEvent.click(screen.getByRole('button', { name: 'Publish file' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish File' }));
         await waitFor(() => expect(composeGatedPublishForConfirm).toHaveBeenCalledTimes(1));
         expect(composeGatedPublishForConfirm.mock.calls[0][0].encoding).toBe(encoding);
         await screen.findByTestId('confirm-modal');
@@ -186,8 +185,8 @@ describe('GatedPublishForm upload method', () => {
         // Until the composed transactions state their exact fee, the facts
         // card's network fee row shows the picked method's estimate.
         const fees = expectedFees('bitcoin-mainnet');
-        expect(screen.getByTestId('confirm-modal'))
-            .toHaveTextContent(`Network fee: ${fees[encoding ? 'taproot' : 'standard'].coinAmount} BTC (estimate)`);
+        expect(screen.getByTestId('confirm-fee-network'))
+            .toHaveTextContent(fees[encoding ? 'taproot' : 'standard'].coinAmount);
     });
 
     it('re-prices each option when the fee tier changes', async () => {
@@ -203,12 +202,12 @@ describe('GatedPublishForm upload method', () => {
     });
 
     it('builds the watcher PSBT on Standard with no encoding', async () => {
+        publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode: 'watcher' }], activeWalletId: 'wallet-1' });
         const buildGatedPublishPsbtRequest = vi.fn().mockResolvedValue({ psbtHex: '70736274ff' });
         mount(messagingFor({ walletMode: 'watcher', overrides: { buildGatedPublishPsbtRequest } }));
         await ready();
         await pickFile();
-        ackForever();
-        fireEvent.click(await screen.findByRole('button', { name: /^Create transaction for signing$/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^Create transaction for signing$/i }));
         await waitFor(() => expect(buildGatedPublishPsbtRequest).toHaveBeenCalledTimes(1));
         expect(buildGatedPublishPsbtRequest.mock.calls[0][0]).not.toHaveProperty('encoding');
     });

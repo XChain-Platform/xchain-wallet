@@ -107,9 +107,10 @@ export async function getMultisigCosignerInfo({ vault, walletId, addressId, sign
     if (!account || account.walletId !== walletId) {
         throw new Error('multisigCosignerInfo: that address does not belong to this wallet');
     }
-    // An imported key or watch-only address has no seed behind it.
+    // An imported key, a hardware wallet address or an address another phone
+    // signs for has no seed in this wallet behind it.
     if (address.source !== 'hd') {
-        throw new Error('multisigCosignerInfo: an imported or watch-only address has no master fingerprint; pick an address this wallet derived');
+        throw new Error('multisigCosignerInfo: an imported key, a hardware wallet address or an address another phone signs for has no master fingerprint here; pick an address this wallet derived');
     }
 
     const info = await deriveCosignerKeys({

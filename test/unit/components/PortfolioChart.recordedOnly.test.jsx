@@ -183,13 +183,13 @@ describe('PortfolioChart on a real wallet', () => {
         });
     });
 
-    it('draws a neutral, centered line when only one recorded price is available', async () => {
+    it('treats one recorded price as no history rather than drawing it flat', async () => {
+        // A flat line from one sample would state a past value the wallet
+        // never read (operator ruling 2026-11-16: the chart is real value).
         mount('real-wallet-1', { prices: { 'bitcoin-mainnet': { sparkline: [70000] } } });
 
-        await waitFor(() => expect(document.querySelector('svg polyline')).not.toBeNull());
-        expect(document.querySelector('svg polyline').getAttribute('stroke'))
-            .toBe('var(--xc-text-muted)');
-        expect(screen.getByRole('img', { name: /^Portfolio performance chart\..*\(0\.00%\)/ })).toBeInTheDocument();
+        expect(await screen.findByText('No price history for this range yet.')).toBeInTheDocument();
+        expect(document.querySelector('svg polyline')).toBeNull();
     });
 
     it('labels the chart calculation with the selected period', async () => {

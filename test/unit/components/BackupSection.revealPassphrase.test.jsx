@@ -50,7 +50,7 @@ function mount(revealMnemonicRequest) {
 async function revealSeed() {
     fireEvent.click(screen.getByRole('button', { name: 'Show…' }));
     fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'pw' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Reveal phrase' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal Phrase' }));
     await waitFor(() => expect(screen.getByText('Your recovery phrase')).toBeTruthy());
 }
 
@@ -118,7 +118,7 @@ describe('BackupSection reveal: stored 25th-word passphrase', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Show…' }));
         expect(guard).toHaveBeenLastCalledWith(true);
         fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'pw' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Reveal phrase' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal Phrase' }));
         await waitFor(() => expect(screen.getByText('Your recovery phrase')).toBeTruthy());
 
         const sheet = document.querySelector('[data-xc-recovery-sheet]');
@@ -161,7 +161,7 @@ describe('BackupSection reveal: stored 25th-word passphrase', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Show…' }));
         fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'pw' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Reveal phrase' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal Phrase' }));
         view.rerender(
             <MessagingProvider shell="popup" messaging={{ revealMnemonicRequest }}>
                 <BackupSection activeWallet={{ id: 'w2', name: 'Hot' }} />
@@ -237,9 +237,9 @@ describe('BackupSection reveal: stored 25th-word passphrase', () => {
         mount(revealMnemonicRequest);
         await revealSeed();
 
-        expect(screen.queryByRole('button', { name: 'Print recovery sheet' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Print Recovery Sheet' })).toBeNull();
         fireEvent.click(screen.getByLabelText('Reveal recovery phrase'));
-        fireEvent.click(screen.getByRole('button', { name: 'Print recovery sheet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Print Recovery Sheet' }));
 
         expect(print).toHaveBeenCalledOnce();
         expect(document.body).not.toHaveClass('xc-print-recovery-sheet');
@@ -280,7 +280,7 @@ describe('BackupSection reveal: a failed password check', () => {
     async function submitWrongPassword() {
         fireEvent.click(screen.getByRole('button', { name: 'Show…' }));
         fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'typo' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Reveal phrase' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal Phrase' }));
     }
 
     it.each(['AeadAuthError', 'InvalidPasswordError'])('says the password is wrong for %s, not the cipher text', async (name) => {

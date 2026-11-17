@@ -37,6 +37,7 @@ import { createAddress } from '../schemas/address.js';
 import { addressSourceForSignerKind } from '../schemas/constants.js';
 import { NoMatchingAccountError } from './receiveAddress.js';
 import { unlockWallet } from './unlockWallet.js';
+import { hardwareWalletRecord, refuseHardwareWallet } from './hardwareWallet.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { defaultAddressTypeForWallet } from './_defaultAddressType.js';
 import { indexSpaceSharedForAccount } from './_addressIndexSpace.js';
@@ -127,6 +128,8 @@ export async function dispenserAddress({
         throw new Error('dispenserAddress: walletId is required');
     }
     if (!providedSigner && (typeof password !== 'string' || password.length === 0)) {
+        // A hardware wallet derives only through its device; no password helps.
+        refuseHardwareWallet(await hardwareWalletRecord(vault, walletId), 'a new address without it connected');
         throw new Error('dispenserAddress: either `signer` or `password` is required');
     }
     if (!chainRegistry) throw new Error('dispenserAddress: chainRegistry is required');

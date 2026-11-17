@@ -108,8 +108,13 @@ describe('AddressPreferencesForm shared confirmation', () => {
             await drain();
         });
 
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Update preferences' })));
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Continue to confirmation' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Update Preferences' })));
+        expect(utils.getByTestId('confirm-sentence')).toHaveTextContent('Set Address Preferences');
+        expect(utils.getByRole('button', { name: 'Reject' })).toBeTruthy();
+        expect(utils.getByRole('button', { name: 'Approve' })).toBeTruthy();
+        // The first G127 page approves the refreshed preference facts. Its
+        // Approve composes the transaction and opens the signing G127 page.
+        await step(() => fireEvent.click(utils.getByTestId('confirm-approve')));
 
         const compose = calls.find((call) => call.method === 'composeForConfirm');
         expect(compose.args.actionData).toEqual({
@@ -117,6 +122,7 @@ describe('AddressPreferencesForm shared confirmation', () => {
             params: { FEE_PREFERENCE: '2', REQUIRE_MEMO: '0', DISPENSER_PREFERENCE: '1' },
         });
         expect(calls.some((call) => call.method === 'addressPreferencesAction')).toBe(false);
+        expect(utils.getByTestId('confirm-sentence')).toHaveTextContent('Set Address Preferences');
         expect(utils.getByTestId('confirm-source').textContent).toContain(ADDRESS.slice(0, 6));
 
         await step(() => fireEvent.click(utils.container.querySelector('[data-testid="confirm-approve"]')));

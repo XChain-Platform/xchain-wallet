@@ -11,8 +11,8 @@
 // Smoke for §20 / G041: Home.jsx signer-mode variant (Step 3 of 3).
 //
 // Pins:
-//   - Home.jsx imports WALLET_MODE_DEFAULT and derives `walletMode` /
-//     `isSignerMode` from settings.
+//   - Home.jsx derives `walletMode` / `isSignerMode` from the active
+//     wallet's own record (§20), never from settings.
 //   - Home.jsx accepts `onSignPsbt` / `onSignMessage` / `onVerifySignature`
 //     props (documented + threaded into the signer body).
 //   - When `isSignerMode` is true, the regular HomeTabs / quick actions
@@ -55,16 +55,18 @@ const desktopAppSrc = readFileSync(
 
 // ─── 1. Home.jsx imports + derivation ----------------------------
 
+// §20: the mode is the active wallet's own record field, never settings.
 assert.match(
     homeSrc,
-    /import \{[^}]*\bWALLET_MODE_DEFAULT\b[^}]*\} from '\.\.\/\.\.\/schemas\/settings\.js';/,
-    'Home.jsx imports WALLET_MODE_DEFAULT from schemas/settings',
+    /import \{ walletModeOf \} from '\.\.\/\.\.\/schemas\/wallet\.js';/,
+    'Home.jsx reads the mode off the wallet record',
 );
 assert.match(
     homeSrc,
-    /const walletMode = settings\.settings\?\.walletMode \|\| WALLET_MODE_DEFAULT;/,
-    'derives walletMode from useSettings hook with default fallback',
+    /const walletMode = activeWalletRecord \? walletModeOf\(activeWalletRecord\) : publishedMode\.walletMode;/,
+    'derives walletMode from the active wallet, falling back to the published mode',
 );
+assert.doesNotMatch(homeSrc, /settings\??\.walletMode/, 'Home.jsx never reads the legacy settings key');
 assert.match(
     homeSrc,
     /const isSignerMode = walletMode === 'signer';/,
@@ -104,12 +106,14 @@ assert.match(
     /function SignerHomeBody\(\{ onSignPsbt, onSignMessage, onVerifySignature[,}]/,
     'SignerHomeBody defined with the three sign / verify props',
 );
-assert.match(homeSrc, /Sign a transaction/, 'marquee CTA label "Sign a transaction"');
-assert.match(homeSrc, /Sign a message/, 'secondary CTA label "Sign a message"');
-assert.match(homeSrc, /Verify a signature/, 'tertiary CTA label "Verify a signature"');
+assert.match(homeSrc, /Sign a Transaction/, 'marquee CTA label "Sign a Transaction"');
+assert.match(homeSrc, /Sign a Message/, 'secondary CTA label "Sign a Message"');
+assert.match(homeSrc, /Verify a Signature/, 'tertiary CTA label "Verify a Signature"');
+// The banner is a Notice Standard info note (G120) whose bold title line
+// names the mode.
 assert.match(
     homeSrc,
-    /<strong[^>]*>Signer mode<\/strong>/,
+    /<Notice tone="info" title="Signer for another phone">/,
     'explanatory banner identifies the mode',
 );
 // Each CTA disabled when its handler prop is missing.

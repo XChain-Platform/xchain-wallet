@@ -32,7 +32,11 @@ const stripComments = (src) => src.split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*
 // ---- TokenDetail: no document-context sinks for gated bytes -------------
 const detail = read('packages', 'core', 'src', 'shared', 'routes', 'TokenDetail.jsx');
 const detailCode = stripComments(detail);
-assert.doesNotMatch(detailCode, /window\.open/, 'TokenDetail never window.opens gated plaintext');
+// The one window.open is the explorer link, which carries a URL and no bytes.
+assert.ok(
+    (detailCode.match(/window\.open\([^)]*\)/g) || []).every((call) => /^window\.open\(explorerUrl, '_blank', 'noopener,noreferrer'\)$/.test(call)),
+    'TokenDetail never window.opens gated plaintext',
+);
 assert.doesNotMatch(detailCode, /createObjectURL/, 'TokenDetail builds no blob URLs itself (viewer owns them)');
 assert.match(detail, /import \{ GatedFileViewer \} from '\.\.\/components\/GatedFileViewer\.jsx'/,
     'TokenDetail routes unlocked bytes into the sandboxed viewer');

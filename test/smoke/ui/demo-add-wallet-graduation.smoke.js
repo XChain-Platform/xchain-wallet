@@ -136,8 +136,14 @@ assert.match(
 );
 assert.match(
     onboardingSrc,
-    /Leave the demo first/,
+    // The smoke runner swaps t('key') for its English text; a direct run reads the key.
+    /title=(?:\{t\('onboarding\.leaveTheDemoFirst'\)\}|"Leave the Demo First")/,
     'the gate explains itself rather than silently disabling the lane',
+);
+assert.match(
+    read('packages', 'core', 'src', 'i18n', 'locales', 'en', 'onboarding.js'),
+    /'onboarding\.leaveTheDemoFirst': 'Leave the Demo First'/,
+    'the gate title reads Leave the Demo First',
 );
 for (const lane of ['create', 'import', 'import-freewallet']) {
     assert.match(

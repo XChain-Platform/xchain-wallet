@@ -20,6 +20,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react';
 import React from 'react';
+import { feeForRate, networkFeeEditor } from '../../helpers/customNetworkFee.js';
 
 // The pickers are whole screens of their own. Stubbed to the one fact each case
 // is about (which chain the picker was opened on), so this stays about the move
@@ -39,11 +40,13 @@ vi.mock('../../../packages/core/src/shared/components/OwnAddressPickerScreen.jsx
 }));
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import {
     BridgeMoveForm,
     BridgePendingPanel,
 } from '../../../packages/core/src/shared/routes/BridgeMoveForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
+import { __clearFeeScheduleCache } from '../../../packages/core/src/shared/hooks/useFeeSchedule.js';
 
 const BTC = 'bitcoin-mainnet';
 const DOGE = 'dogecoin-mainnet';
@@ -91,6 +94,8 @@ function mount(opts = {}) {
             },
         }));
     }
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode: opts.walletMode || 'full' }], activeWalletId: 'w' });
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue(byChain),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
@@ -100,7 +105,8 @@ function mount(opts = {}) {
         getWalletBalances: vi.fn().mockResolvedValue(walletBalances),
         getTokenInfo: opts.getTokenInfo || vi.fn().mockResolvedValue(opts.tokenInfo ?? null),
         requoteNativeFee: opts.requoteNativeFee || vi.fn().mockResolvedValue(opts.feeQuote ?? null),
-        getSettings: vi.fn().mockResolvedValue({ walletMode: opts.walletMode || 'full' }),
+        getSettings: vi.fn().mockResolvedValue({}),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'w', name: 'W', walletMode: opts.walletMode || 'full' }]),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
         composeForConfirm: opts.composeForConfirm || vi.fn().mockResolvedValue({
@@ -112,6 +118,7 @@ function mount(opts = {}) {
         }),
         preflight: vi.fn().mockResolvedValue({ verdict: 'pass', findings: [] }),
         ...(opts.buildActionPsbtRequest ? { buildActionPsbtRequest: opts.buildActionPsbtRequest } : {}),
+        ...(opts.getFeeSchedule ? { getFeeSchedule: opts.getFeeSchedule } : {}),
     };
     const messaging = new Proxy(base, {
         get(target, prop) {
@@ -142,9 +149,11 @@ const moveButton = (name = 'Move') => screen.getByRole('button', { name });
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     vi.clearAllMocks();
     vi.useRealTimers();
     __clearTokenInfoCache();
+    __clearFeeScheduleCache();
 });
 
 async function advanceFeeQuote() {
@@ -180,7 +189,9 @@ describe('BridgeMoveForm: the destination is resolved from the user\'s own accou
         await advanceFeeQuote();
         expect(requoteNativeFee).toHaveBeenCalled();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Move from: Bitcoin' }));
+        // The source network is the Network field of the closed From section.
+        fireEvent.click(screen.getByRole('button', { name: /^From\b/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Network: Bitcoin' }));
         fireEvent.click(screen.getByRole('button', { name: /Select Dogecoin/ }));
         expect(amountInput()).toHaveValue('');
         expect(screen.queryByText(/protocol fee is/i)).toBeNull();
@@ -225,7 +236,7 @@ describe('BridgeMoveForm: the destination is resolved from the user\'s own accou
         expect(field).toHaveValue('typed destination');
 
         fireEvent.click(screen.getByRole('button', { name: 'Choose receiving address' }));
-        expect(await screen.findByText('Receive at')).toBeInTheDocument();
+        expect(await screen.findByText('Receive At')).toBeInTheDocument();
         // The picker is opened on the DESTINATION chain: an address from the
         // source chain is not spendable at the far end.
         expect(screen.getByTestId('picker-chain').textContent).toBe(DOGE);
@@ -258,12 +269,12 @@ describe('BridgeMoveForm: the destination is resolved from the user\'s own accou
         fireEvent.change(field, { target: { value: 'not an address' } });
         expect(await screen.findAllByText('This is not a valid address.', {}, WAIT)).not.toHaveLength(0);
         expect(field).toHaveAttribute('aria-invalid', 'true');
-        expect(moveButton()).toBeDisabled();
+        expect(moveButton()).toBeEnabled();
 
         fireEvent.change(field, { target: { value: bitcoinOnly } });
         expect(await screen.findAllByText(/Bitcoin mainnet address, not a Dogecoin mainnet address/i, {}, WAIT))
             .not.toHaveLength(0);
-        expect(moveButton()).toBeDisabled();
+        expect(moveButton()).toBeEnabled();
 
         fireEvent.change(field, { target: { value: '' } });
         fireEvent.paste(field, { clipboardData: { getData: () => `  ${validDogecoin}  ` } });
@@ -271,13 +282,18 @@ describe('BridgeMoveForm: the destination is resolved from the user\'s own accou
         await waitFor(() => expect(moveButton()).not.toBeDisabled(), WAIT);
     });
 
-    it('shows one exact route notice and removes the duplicate network and arrival rows', async () => {
+    it('shows one exact route notice on the confirm screen and removes the duplicate network and arrival rows', async () => {
         mount();
         await waitFor(() => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address), WAIT);
         fireEvent.change(amountInput(), { target: { value: '10' } });
-        expect(screen.getByText(
-            'Locks 10 XCHAIN on Bitcoin and credits it on Dogecoin after 6 confirmations (~60 min).'
-            + ' The credit cannot be undone or redirected.',
+        // The form carries no standing notice; the lock-and-credit fact is on the confirm screen.
+        expect(screen.queryByText(/Locks 10 XCHAIN on Bitcoin/)).toBeNull();
+        fireEvent.click(moveButton());
+        expect(await screen.findByText(
+            // That it can't be undone is the warnings card's BRIDGE_MOVE line.
+            'Locks 10 XCHAIN on Bitcoin and credits it on Dogecoin after 6 confirmations (~60 min).',
+            {},
+            WAIT,
         )).toBeInTheDocument();
         expect(screen.queryByText('Source network')).toBeNull();
         expect(screen.queryByText('Destination network')).toBeNull();
@@ -291,9 +307,11 @@ describe('BridgeMoveForm: the destination is resolved from the user\'s own accou
             balances: { FUFU: '10' },
             tokenInfo: { bridgeChains: 'DOGE', minDepth: '8' },
         });
+        await waitFor(() => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address), WAIT);
+        fireEvent.change(amountInput(), { target: { value: '1' } });
+        fireEvent.click(moveButton());
         expect(await screen.findByText(
-            'Locks the amount on Bitcoin and credits it on Dogecoin after 8 confirmations (~80 min).'
-            + ' The credit cannot be undone or redirected.',
+            'Locks 1 FUFU on Bitcoin and credits it on Dogecoin after 8 confirmations (~80 min).',
             {},
             WAIT,
         )).toBeInTheDocument();
@@ -347,7 +365,8 @@ describe('BridgeMoveForm: the destination is resolved from the user\'s own accou
         fireEvent.click(moveButton());
 
         expect(await screen.findByText('1.25', {}, WAIT)).toBeInTheDocument();
-        expect(screen.getByText(DOGE_ADDRESS.address)).toBeInTheDocument();
+        // The destination is present in full in the facts card (G127).
+        expect(screen.getByTestId('confirm-facts').querySelector(`[title="${DOGE_ADDRESS.address}"]`)).not.toBeNull();
         expect(screen.getByText('keep me')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
 
@@ -364,7 +383,7 @@ describe('BridgeMoveForm: unhappy path - no destination account', () => {
         expect(msg.textContent).toContain('Use Receive to create one first');
         expect(msg.textContent).toContain('cannot be redirected once it applies');
         expect(screen.queryByLabelText('Receive at')).toBeNull();
-        expect(moveButton()).toBeDisabled();
+        expect(moveButton()).toBeEnabled();
     });
 
     it('does not treat an empty address group as a usable destination', async () => {
@@ -372,7 +391,7 @@ describe('BridgeMoveForm: unhappy path - no destination account', () => {
         expect(await screen.findByText(/You have no address on another network yet/i, {}, WAIT))
             .toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /^Move to:/ })).toBeNull();
-        expect(moveButton()).toBeDisabled();
+        expect(moveButton()).toBeEnabled();
     });
 });
 
@@ -386,7 +405,7 @@ describe('BridgeMoveForm: unhappy path - a chain the token cannot bridge to', ()
         });
         const msg = await screen.findByText(/cannot move to the selected destination network/i, {}, WAIT);
         expect(msg.textContent).not.toMatch(/Bitcoin|Litecoin|mainnet|regtest|testnet|not mainnet/i);
-        expect(moveButton()).toBeDisabled();
+        expect(moveButton()).toBeEnabled();
     });
 
     it('offers only the origin network for a bridged copy, so a burn cannot be aimed anywhere else', async () => {
@@ -408,7 +427,7 @@ describe('BridgeMoveForm: unhappy path - a chain the token cannot bridge to', ()
         expect(offered[0]).toContain('Bitcoin');
         expect(offered.join(' ')).not.toContain('Litecoin');
         // And the button says what the leg really is.
-        expect(moveButton('Move back')).toBeInTheDocument();
+        expect(moveButton(/^Move back$/i)).toBeInTheDocument();
     });
 
     it('explains when the wallet has another network but no address on the only supported destination', async () => {
@@ -422,7 +441,7 @@ describe('BridgeMoveForm: unhappy path - a chain the token cannot bridge to', ()
         expect(msg.textContent).toContain('Use Receive there to create one first');
         expect(msg.textContent).not.toMatch(/Bitcoin|Dogecoin|mainnet|regtest|testnet|not mainnet/i);
         expect(screen.queryByRole('button', { name: /^Move to:/ })).toBeNull();
-        expect(moveButton('Move back')).toBeDisabled();
+        expect(moveButton(/^Move back$/i)).toBeEnabled();
     });
 });
 
@@ -440,7 +459,8 @@ describe('BridgeMoveForm: unhappy path - amount below the protocol fee', () => {
         const warning = screen.getByText(/costs 0.05 XCHAIN in protocol fees/i);
         expect(warning.textContent).toContain('Moving 0.01 XCHAIN');
         expect(warning.textContent).toContain('more than the amount you are moving');
-        expect(screen.getByText('0.05 XCHAIN')).toBeInTheDocument();
+        // The Fees section's Protocol fee line names the quoted fee.
+        expect(document.querySelector('[data-fees-row="protocol"]')).toHaveTextContent('0.05 XCHAIN');
 
         // The fee is quoted for the exact action string, not read off a constant.
         const call = messaging.requoteNativeFee.mock.calls.at(-1)[0];
@@ -483,7 +503,7 @@ describe('BridgeMoveForm: unhappy path - amount below the protocol fee', () => {
         vi.useFakeTimers();
         fireEvent.change(amountInput(), { target: { value: '1' } });
         await advanceFeeQuote();
-        expect(screen.getByText('0.05 XCHAIN')).toBeInTheDocument();
+        expect(document.querySelector('[data-fees-row="protocol"]')).toHaveTextContent('0.05 XCHAIN');
         expect(screen.queryByText(/more than the amount you are moving/i)).toBeNull();
     });
 });
@@ -524,7 +544,7 @@ describe('BridgeMoveForm: unhappy path - amount above balance', () => {
         fireEvent.change(amountInput(), { target: { value: '11' } });
         const msg = await screen.findByText(/You hold 10 XCHAIN at the source address/i, {}, WAIT);
         expect(msg.textContent).toContain('cannot be partly funded');
-        expect(moveButton()).toBeDisabled();
+        expect(moveButton()).toBeEnabled();
     });
 
     it('allows exactly the balance', async () => {
@@ -547,7 +567,9 @@ describe('BridgeMoveForm: invalid action fields', () => {
             WAIT,
         );
         fireEvent.click(moveButton());
-        expect(await screen.findByText('Enter an amount to move.')).toBeInTheDocument();
+        // The list at the top and the field's own line both say it.
+        expect(await screen.findAllByText('Enter an amount to move.')).toHaveLength(2);
+        expect(screen.getByLabelText(/^Amount/)).toHaveAttribute('aria-invalid', 'true');
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -559,11 +581,11 @@ describe('BridgeMoveForm: invalid action fields', () => {
         );
         fireEvent.change(amountInput(), { target: { value: '0' } });
         expect(await screen.findByText('Enter a positive amount to move.')).toBeInTheDocument();
-        expect(moveButton()).toBeDisabled();
+        expect(moveButton()).toBeEnabled();
 
         fireEvent.change(amountInput(), { target: { value: '.' } });
         expect(screen.getByText('Enter a positive amount to move.')).toBeInTheDocument();
-        expect(moveButton()).toBeDisabled();
+        expect(moveButton()).toBeEnabled();
     });
 
     it('blocks a negative amount with plain decimal guidance', async () => {
@@ -574,7 +596,7 @@ describe('BridgeMoveForm: invalid action fields', () => {
         );
         fireEvent.change(amountInput(), { target: { value: '-1' } });
         expect(await screen.findByText(/Enter a valid decimal amount/i)).toBeInTheDocument();
-        expect(moveButton()).toBeDisabled();
+        expect(moveButton()).toBeEnabled();
     });
 
     it('blocks XCHAIN amounts beyond its on-chain decimal precision', async () => {
@@ -586,7 +608,7 @@ describe('BridgeMoveForm: invalid action fields', () => {
         fireEvent.change(amountInput(), { target: { value: '0.123456789' } });
         expect(await screen.findByText('Amount can have at most 8 decimal places.'))
             .toBeInTheDocument();
-        expect(moveButton()).toBeDisabled();
+        expect(moveButton()).toBeEnabled();
     });
 
     it('blocks memo delimiters that cannot be serialized', async () => {
@@ -598,7 +620,7 @@ describe('BridgeMoveForm: invalid action fields', () => {
         fireEvent.change(amountInput(), { target: { value: '1' } });
         fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'left|right' } });
         expect(await screen.findByText('Memo cannot contain "|" or ";".')).toBeInTheDocument();
-        expect(moveButton()).toBeDisabled();
+        expect(moveButton()).toBeEnabled();
     });
 
     it('blocks a memo above the on-chain character limit', async () => {
@@ -611,7 +633,7 @@ describe('BridgeMoveForm: invalid action fields', () => {
         fireEvent.change(screen.getByLabelText('Memo'), { target: { value: `${'😀'.repeat(125)}aa` } });
         expect(await screen.findByText('Memo is 252 characters; the network accepts at most 250 characters.'))
             .toBeInTheDocument();
-        expect(moveButton()).toBeDisabled();
+        expect(moveButton()).toBeEnabled();
     });
 
     it('blocks malformed source and destination addresses before compose', async () => {
@@ -619,7 +641,7 @@ describe('BridgeMoveForm: invalid action fields', () => {
         const messaging = mount({ byChain: { [BTC]: [badSource], [DOGE]: [DOGE_ADDRESS] } });
         expect(await screen.findByText('This is not a valid address.', {}, WAIT))
             .toBeInTheDocument();
-        expect(moveButton()).toBeDisabled();
+        expect(moveButton()).toBeEnabled();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
 
         cleanup();
@@ -627,7 +649,7 @@ describe('BridgeMoveForm: invalid action fields', () => {
         const second = mount({ byChain: { [BTC]: [BTC_ADDRESS], [DOGE]: [badDestination] } });
         expect(await screen.findAllByText('This is not a valid address.', {}, WAIT))
             .not.toHaveLength(0);
-        expect(moveButton()).toBeDisabled();
+        expect(moveButton()).toBeEnabled();
         expect(second.composeForConfirm).not.toHaveBeenCalled();
 
         cleanup();
@@ -635,7 +657,7 @@ describe('BridgeMoveForm: invalid action fields', () => {
         const third = mount({ byChain: { [BTC]: [missingId], [DOGE]: [DOGE_ADDRESS] } });
         expect(await screen.findByText(/No usable source address is available/i, {}, WAIT))
             .toBeInTheDocument();
-        expect(moveButton()).toBeDisabled();
+        expect(moveButton()).toBeEnabled();
         expect(third.composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -644,12 +666,12 @@ describe('BridgeMoveForm: invalid action fields', () => {
         const messaging = mount({ byChain: { [BTC]: [BTC_ADDRESS], [DOGE]: [emptyDestination] } });
         await waitFor(() => expect(screen.getByLabelText('Receive at')).toHaveValue(''), WAIT);
         fireEvent.change(amountInput(), { target: { value: '1' } });
-        expect(moveButton()).toBeDisabled();
+        expect(moveButton()).toBeEnabled();
         await act(async () => {
             moveButton().closest('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
         });
-        expect(await screen.findByText(/Enter a destination address/i, {}, WAIT))
-            .toBeInTheDocument();
+        expect((await screen.findAllByText(/Enter a destination address/i, {}, WAIT)).length)
+            .toBeGreaterThan(0);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -657,7 +679,7 @@ describe('BridgeMoveForm: invalid action fields', () => {
         mount({ initialTick: '^0', balances: { '^0': '10' } });
         expect(await screen.findByText(/Token can be a name, or \^ followed by the token's number/i, {}, WAIT))
             .toBeInTheDocument();
-        expect(moveButton()).toBeDisabled();
+        expect(moveButton()).toBeEnabled();
 
         cleanup();
         const messaging = mount();
@@ -666,14 +688,28 @@ describe('BridgeMoveForm: invalid action fields', () => {
             WAIT,
         );
         fireEvent.change(amountInput(), { target: { value: '1' } });
+        // The fee selector sits in the closed Fees section.
+        fireEvent.click(screen.getByRole('button', { name: /^Speed and Fees\b/ }));
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), { target: { value: '3' } });
-        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '1.123456789' } });
+        // Custom opened the Network fee line's one editor (G113).
+        fireEvent.change(networkFeeEditor(), { target: { value: '' } });
         fireEvent.click(moveButton());
-        expect(await screen.findAllByText('Custom fee rate can have at most 8 decimal places.')).toHaveLength(1);
-        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '50000' } });
+        expect(await screen.findAllByText('Enter a custom network fee.')).toHaveLength(1);
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+        await screen.findByRole('form', { name: 'Move across networks' }, WAIT);
+        const feeToggle = screen.getByRole('button', { name: /^Speed and Fees\b/ });
+        if (feeToggle.getAttribute('aria-expanded') !== 'true') fireEvent.click(feeToggle);
+        await waitFor(() => expect(
+            screen.getByRole('button', { name: /^Speed and Fees\b/ }),
+        ).toHaveAttribute('aria-expanded', 'true'), WAIT);
+        fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), { target: { value: '2' } });
+        fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), { target: { value: '3' } });
+        fireEvent.change(networkFeeEditor(), { target: { value: feeForRate(50000, BTC) } });
         fireEvent.click(moveButton());
         expect(await screen.findAllByText('Enter a rate no higher than 1,000 sat/vB.')).toHaveLength(1);
-        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+        expect(messaging.composeForConfirm).toHaveBeenLastCalledWith(expect.objectContaining({
+            encoderOpts: expect.objectContaining({ feePerKb: 50000000 }),
+        }));
     });
 
     it('refuses review when fresh bridge settings differ from the displayed route', async () => {
@@ -686,7 +722,8 @@ describe('BridgeMoveForm: invalid action fields', () => {
             balances: { FUFU: '10' },
             getTokenInfo,
         });
-        await waitFor(() => expect(screen.getByText(/after 6 confirmations/i)).toBeInTheDocument(), WAIT);
+        // The route is known once the first token read has opened the destination.
+        await waitFor(() => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address), WAIT);
         fireEvent.change(amountInput(), { target: { value: '1' } });
         fireEvent.click(moveButton());
 
@@ -722,7 +759,7 @@ describe('BridgeMoveForm: one message for the current state', () => {
             WAIT,
         );
         fireEvent.click(moveButton());
-        expect(await screen.findByText('Enter an amount to move.', {}, WAIT)).toBeInTheDocument();
+        expect((await screen.findAllByText('Enter an amount to move.', {}, WAIT)).length).toBeGreaterThan(0);
 
         fireEvent.change(amountInput(), { target: { value: '11' } });
         await screen.findByText(/You hold 10 XCHAIN at the source address/i, {}, WAIT);
@@ -734,12 +771,13 @@ describe('BridgeMoveForm: one message for the current state', () => {
             .mockResolvedValueOnce({ bridgeChains: 'DOGE', minDepth: '6' })
             .mockResolvedValue({ bridgeChains: 'LTC', minDepth: '12' });
         mount({ initialTick: 'FUFU', balances: { FUFU: '10' }, getTokenInfo });
-        await waitFor(() => expect(screen.getByText(/after 6 confirmations/i)).toBeInTheDocument(), WAIT);
+        // The route is known once the first token read has opened the destination.
+        await waitFor(() => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address), WAIT);
         fireEvent.change(amountInput(), { target: { value: '1' } });
         fireEvent.click(moveButton());
 
-        await screen.findByText('This token cannot move to the selected destination network.', {}, WAIT);
-        expect(screen.queryByText(/bridge settings changed/i)).toBeNull();
+        expect(await screen.findByText(/bridge settings changed/i, {}, WAIT)).toBeInTheDocument();
+        expect(screen.queryByText('This token cannot move to the selected destination network.')).toBeNull();
     });
 });
 
@@ -754,7 +792,8 @@ describe('BridgeMoveForm: a Review refusal takes focus', () => {
         );
         moveButton().focus();
         fireEvent.click(moveButton());
-        const refusal = await screen.findByText('Enter an amount to move.', {}, WAIT);
+        const refusal = await screen.findByRole('alert', { name: 'Form errors' }, WAIT);
+        expect(refusal).toHaveTextContent('Enter an amount to move.');
         await waitFor(() => expect(document.activeElement?.contains(refusal)).toBe(true), WAIT);
     });
 
@@ -770,5 +809,25 @@ describe('BridgeMoveForm: a Review refusal takes focus', () => {
         fireEvent.click(moveButton());
         const alert = await screen.findByRole('alert', {}, WAIT);
         await waitFor(() => expect(document.activeElement).toBe(alert), WAIT);
+    });
+});
+
+// XBRIDGE pays one flat fee (GAS_SCHEDULE.XBRIDGE_BASE) for every
+// user-broadcast version, so Speed and Fees shows it from the chain's fee
+// schedule before the form is complete enough to quote.
+describe('BridgeMoveForm: protocol fee before review', () => {
+    it('shows the flat XBRIDGE fee with no amount entered, never Priced at review', async () => {
+        const getFeeSchedule = vi.fn().mockResolvedValue({
+            gasPrice: '0.00001',
+            gasSchedule: { XBRIDGE_BASE: 5000 },
+            prices: { available: false },
+        });
+        mount({ getFeeSchedule });
+        await waitFor(
+            () => expect(document.querySelector('[data-fees-row="protocol"]')).toHaveTextContent('0.05 XCHAIN'),
+            WAIT,
+        );
+        expect(document.querySelector('[data-fees-row="protocol"]').textContent).not.toMatch(/Priced at review/);
+        expect(getFeeSchedule).toHaveBeenCalledTimes(1);
     });
 });

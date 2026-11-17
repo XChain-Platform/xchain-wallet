@@ -8,12 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, Checkbox, CopyButton, EmptyState, FormNotice, FormPage, FormSection, Icon, InfoTip, Input, ListPage, ListRow, MultisigBadge, NetworkField, PageHeader, Screen, Select, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { AddressText, Button, ChainBadge, Checkbox, EmptyState, FormNotice, FormPage, Icon, Input, ListPage, ListRow, MultisigBadge, NetworkField, PageHeader, Screen, SectionHeader, Select, Skeleton, StatusMessage, useFormErrors } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { isDemoWallet } from '../../flows/demoMode.js';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
+import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
+import { IconSelect } from '../../ui/IconSelect.jsx';
 import { ConfirmModal } from '../components/ConfirmModal.jsx';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import { useToast } from '../components/ToastHost.jsx';
@@ -21,34 +23,32 @@ import { AddAddressModal, addressTypeHint } from './AddAddressModal.jsx';
 import { coinFromChainId, formatAmount, fiatValue, formatFiat } from '../components/BalanceList.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { titleCase } from '../utils/titleCase.js';
 import { offeredAddressType } from '../utils/supportedAddressTypes.js';
 import { useSupportedAddressTypes } from '../hooks/useSupportedAddressTypes.js';
 import { addressTypeLabel } from '../utils/addressTypeLabel.js';
 import { recordLastUsedChain } from '../chainSelection.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { t } from '../../i18n/index.js';
+import { BackupAfterKeyImportPrompt } from '../components/BackupAfterKeyImportPrompt.jsx';
 import '../../i18n/locales/en/addressList.js';
-import '../../i18n/locales/en/execute.js';
 import '../../i18n/locales/en/history.js';
 import '../../i18n/locales/en/importWallet.js';
-import '../../i18n/locales/en/multisig.js';
 import '../../i18n/locales/en/receive.js';
 import '../../i18n/locales/en/routes.js';
 import '../../i18n/locales/en/send.js';
 import '../../i18n/locales/en/settings.js';
-import '../../i18n/locales/en/verifySignature.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useProtectedScreen } from '../utils/screenGuard.js';
-import { blurNumberInputOnWheel } from '../utils/formInput.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
-import {
-    feePreferenceLabel,
-    requireMemoLabel,
-    dispenserPreferenceLabel,
-} from '../../flows/addressPreferences.js';
+// View Address, the detail branch: this list owns its data and writes.
+import { AddressDetail } from './AddressDetail.jsx';
 import styles from './History.module.css';
 import local from './AddressList.module.css';
+
+// The coin families the shared filter's network picker offers.
+const NETWORK_FAMILIES = ['bitcoin', 'litecoin', 'dogecoin'];
 import wifStyles from './AddressList.wif.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -118,10 +118,13 @@ export function deleteAddressMessage({ record, holdings = [], balanceStatus = 'l
         parts.push('It is the only address on this network, so the network leaves the wallet until you add one.');
     }
     const derived = DERIVED_SOURCES.has(record?.source) && typeof record?.derivationPath === 'string';
-    if (derived) {
+    const onDevice = record?.source === 'trezor' || record?.source === 'ledger';
+    if (derived && onDevice) {
+        parts.push('Its key stays on your hardware wallet, so it is not lost: Add address > Generate re-derives the lowest missing address before any new one.');
+    } else if (derived) {
         parts.push('Its key comes from your recovery phrase, so it is not lost: Add address > Generate re-derives the lowest missing address before any new one.');
     } else if (record?.source === 'watch-only') {
-        parts.push('A watch-only address can be added again from its address string.');
+        parts.push('Another phone holds its key, so this address can be added again from its address string.');
     } else {
         parts.push('An imported key is gone unless you have a separate backup.');
     }
@@ -144,10 +147,15 @@ export function deleteAddressMessage({ record, holdings = [], balanceStatus = 'l
  * @param {object} props
  * @param {string} props.walletId
  * @param {string} [props.accountId]   active BIP44 account; when set, only that account's addresses are shown
+ * @param {'account' | 'wallet'} [props.scope]   'account' (default) lists the active account's addresses; 'wallet' (Settings > Wallets > My Addresses) lists every account's addresses, grouped under a heading per account with the active account first
  * @param {() => void} props.onBack
- * @param {() => void} [props.onReceive]
+ * @param {(sel?: { chainId: string, address: string }) => void} [props.onReceive]   the detail view's Receive tile; hands back the address shown
  * @param {(address: { id: string, address: string, source: string, chain: string, network: string, derivationPath: string | null, label: string }) => void} [props.onShowPrivateKey]   §17.7: when supplied, the detail view exposes a "Secret" affordance for non-multisig rows with a record, handing that address back to the caller (shell wires it to <ViewPrivateKey>)
  * @param {(sel: { chainId: string, address: string }) => void} [props.onEditPreferences]   PC-32: when supplied, the detail view's On-chain preferences card exposes an Edit affordance (shell wires it to <AddressPreferencesForm>)
+ * @param {any | null} [props.selectedAddress]   address detail restored by the shell history
+ * @param {(address: any | null) => void} [props.onSelectedAddressChange]   keeps the selected detail on the shell history entry
+ * @param {() => void} [props.onDetailBack]   pops the address detail item to the Addresses list
+ * @param {() => void} [props.onExportBackup]   opens this wallet's Export Backup page; when supplied, a private key import is followed by the prompt to save a backup file (operator ruling 2026-11-16)
  * @param {Record<string, boolean>} [props.addressUsageByKey]   picker mode only: chain-and-address keyed receive usage, so a used address is marked
  * @param {Array<{ key: string, label: string, sublabel?: string, onSelect: () => void }>} [props.pickerActions]   picker mode only: caller-supplied rows rendered above the address list (e.g. Dispenser's "New dispenser address"); unaffected by search/filters
  * @param {boolean} [props.networkLocked]   picker mode only: the list stays on `networkFilter` and the network switch is hidden, for a form bound to one chain
@@ -156,10 +164,15 @@ export function deleteAddressMessage({ record, holdings = [], balanceStatus = 'l
 export function AddressList({
     walletId,
     accountId,
+    scope = 'account',
     onBack,
     onReceive,
     onShowPrivateKey,
     onEditPreferences,
+    selectedAddress = null,
+    onSelectedAddressChange,
+    onDetailBack,
+    onExportBackup,
     networkFilter = 'all',
     tokenQuery = '',
     pickerMode = false,
@@ -172,6 +185,11 @@ export function AddressList({
 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
+    // Wallet scope reads with no account, so the host answers for every
+    // account of the wallet in one read; the active account only picks the
+    // heading order and the Active badges.
+    const walletScope = scope === 'wallet' && !pickerMode;
+    const readAccountId = walletScope ? undefined : accountId;
     const confirmDialog = useConfirmModal();
     const { showToast, announce } = useToast();
     const { settings } = useSettings();
@@ -192,15 +210,20 @@ export function AddressList({
     const [sourceFilter, setSourceFilter] = useState('all');
 
     // Selected address row -> shows the address detail view in place of the list.
-    const [selected, setSelected] = useState(/** @type {any | null} */ (null));
+    const [selected, setSelected] = useState(/** @type {any | null} */ (selectedAddress));
+    // View Address is an item on the Addresses route. Keep it in the shell's
+    // history context so a child action can pop back to this exact address.
+    useEffect(() => {
+        setSelected(selectedAddress || null);
+    }, [selectedAddress]);
+    useEffect(() => {
+        onSelectedAddressChange?.(selected);
+    }, [selected, onSelectedAddressChange]);
     // Bump to refetch addresses + balances after a label edit or delete.
     const [reloadKey, setReloadKey] = useState(0);
-    // Inline label editor state for the detail view.
-    const [labelDraft, setLabelDraft] = useState('');
+    // The detail view's label write in flight (its Edit label form waits on it).
     const [labelSaving, setLabelSaving] = useState(false);
     const [detailAction, setDetailAction] = useState(/** @type {'use' | 'delete' | null} */ (null));
-    // Brief "copied" feedback on the inline address copy icon.
-    const [addrCopied, setAddrCopied] = useState(false);
     const [showHidden, setShowHidden] = useState(false);
     const [visibilitySaving, setVisibilitySaving] = useState(false);
     const [addressWindow, setAddressWindow] = useState(() => ({
@@ -234,13 +257,6 @@ export function AddressList({
     // "+" menu in the header: ordinary or advanced generation, plus import.
     const [addMenuOpen, setAddMenuOpen] = useState(false);
     const [showAddModal, setShowAddModal] = useState(false);
-    const [showAdvancedGenerate, setShowAdvancedGenerate] = useState(false);
-    const [advancedChainId, setAdvancedChainId] = useState('');
-    const [advancedAddressType, setAdvancedAddressType] = useState('');
-    const [advancedDerivationIndex, setAdvancedDerivationIndex] = useState('');
-    const [advancedBusy, setAdvancedBusy] = useState(false);
-    const [advancedError, setAdvancedError] = useState(/** @type {string | null} */ (null));
-    const advancedGenerateLockRef = useRef(false);
     const addMenuRef = useRef(null);
     useEffect(() => {
         if (!addMenuOpen) return undefined;
@@ -273,7 +289,7 @@ export function AddressList({
         }
         let cancelled = false;
         Promise.resolve()
-            .then(() => messaging.getWalletBalances(walletId, accountId))
+            .then(() => messaging.getWalletBalances(walletId, readAccountId))
             .then((byChain) => {
                 if (cancelled) return;
                 const valid = byChain !== null && typeof byChain === 'object' && !Array.isArray(byChain)
@@ -286,7 +302,7 @@ export function AddressList({
                 if (!cancelled) setBalanceRead({ status: 'failed', byChain: null });
             });
         return () => { cancelled = true; };
-    }, [walletId, accountId, messaging]);
+    }, [walletId, readAccountId, messaging]);
 
     const balancesByChain = balanceRead.byChain;
 
@@ -419,6 +435,9 @@ export function AddressList({
     const [wifBusy, setWifBusy] = useState(false);
     const [wifError, setWifError] = useState(/** @type {string | null} */ (null));
     const [wifNotice, setWifNotice] = useState(/** @type {string | null} */ (null));
+    // A private key has no recovery phrase: after an import, offer the backup file.
+    const [backupPrompt, setBackupPrompt] = useState(false);
+    const wifFormErrors = useFormErrors();
 
     // D-64: which address type to pre-select depends on the WALLET, not just
     // the chain. A counterwallet-legacy wallet keeps its balances on p2pkh,
@@ -447,8 +466,7 @@ export function AddressList({
         setWifInput('');
         setWifPassword('');
         setWifNotice(null);
-        setShowAdvancedGenerate(false);
-        setAdvancedError(null);
+        setShowAddModal(false);
     }
     useEffect(() => {
         let live = true;
@@ -477,27 +495,23 @@ export function AddressList({
         setWifPassword('');
         setWifWarningAck(false);
         setWifError(null);
+        wifFormErrors.reset();
     }
 
     async function handleImportWif(event) {
         event.preventDefault();
         if (wifBusy) return;
-        if (!wifWarningAck) {
-            setWifError('Please acknowledge the backup warning before importing.');
-            return;
-        }
-        if (!wifChainId) {
-            setWifError('Pick a network.');
-            return;
-        }
-        if (wifInput.trim().length === 0) {
-            setWifError('Paste a WIF private key.');
-            return;
-        }
-        if (!signerReady && wifPassword.length === 0) {
-            setWifError('Wallet password is required to encrypt the imported key.');
-            return;
-        }
+        setWifError(null);
+        if (!wifFormErrors.validate({
+            'wif-network': !wifChainId ? 'Pick a network.' : null,
+            'wif-private-key': wifInput.trim().length === 0 ? 'Paste a WIF private key.' : null,
+            'wif-password': !signerReady && wifPassword.length === 0
+                ? 'Wallet password is required to encrypt the imported key.'
+                : null,
+            'wif-warning-ack': !wifWarningAck
+                ? 'Please acknowledge the backup warning before importing.'
+                : null,
+        })) return;
         if (typeof messaging.importWifRequest !== 'function') {
             setWifError('Import WIF is not available in this shell.');
             return;
@@ -523,9 +537,10 @@ export function AddressList({
             });
             const importedAddress = r?.address?.address || '(unknown)';
             setWifNotice(`Imported ${importedAddress}.`);
+            if (typeof onExportBackup === 'function') setBackupPrompt(true);
             resetWifForm();
             setShowWifForm(false);
-            const byChain = await messaging.getAddressesByChain(walletId, accountId);
+            const byChain = await messaging.getAddressesByChain(walletId, readAccountId);
             setAddressesByChain(byChain || {});
         } catch (err) {
             // D-64: this used to render `err.message` verbatim, so an SDK
@@ -545,7 +560,7 @@ export function AddressList({
 
     useEffect(() => {
         let cancelled = false;
-        messaging.getAddressesByChain(walletId, accountId)
+        messaging.getAddressesByChain(walletId, readAccountId)
             .then((byChain) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
@@ -554,7 +569,19 @@ export function AddressList({
                 if (!cancelled) setLoadError(userFacingMessage(err, 'Could not load the addresses for this wallet. Try again.'));
             });
         return () => { cancelled = true; };
-    }, [walletId, accountId, messaging, reloadKey]);
+    }, [walletId, readAccountId, messaging, reloadKey]);
+
+    // Wallet scope only: the account names for the group headings, one
+    // read for the whole wallet (never one per account).
+    const [accountList, setAccountList] = useState(/** @type {Array<{ id: string, name?: string }> | null} */ (null));
+    useEffect(() => {
+        if (!walletScope || !walletId || typeof messaging.listAccounts !== 'function') return undefined;
+        let cancelled = false;
+        Promise.resolve(messaging.listAccounts(walletId))
+            .then((list) => { if (!cancelled) setAccountList(Array.isArray(list) ? list : []); })
+            .catch(() => { if (!cancelled) setAccountList([]); });
+        return () => { cancelled = true; };
+    }, [walletScope, walletId, messaging]);
 
     useEffect(() => {
         let cancelled = false;
@@ -591,73 +618,6 @@ export function AddressList({
         [addressesByChain, settings],
     );
 
-    const effectiveAdvancedChainId = advancedChainId || wifChainIds[0] || '';
-    const advancedDescriptor = effectiveAdvancedChainId
-        ? chainRegistry.get(effectiveAdvancedChainId)
-        : null;
-    const advancedOfferedTypes = useSupportedAddressTypes(advancedDescriptor);
-    const advancedDefaultType = advancedDescriptor
-        ? flowsLib.defaultAddressTypeForFormat(advancedDescriptor, walletFormat)
-        : '';
-    const effectiveAdvancedAddressType = offeredAddressType(
-        advancedAddressType || advancedDefaultType,
-        advancedOfferedTypes,
-        advancedDefaultType,
-    );
-
-    function resetAdvancedGenerate() {
-        setAdvancedAddressType('');
-        setAdvancedChainId('');
-        setAdvancedDerivationIndex('');
-        setAdvancedError(null);
-    }
-
-    async function handleAdvancedGenerate(event) {
-        event.preventDefault();
-        if (advancedGenerateLockRef.current) return;
-        const derivationIndex = Number(advancedDerivationIndex);
-        if (!effectiveAdvancedChainId) {
-            setAdvancedError('Pick a coin.');
-            return;
-        }
-        if (
-            advancedDerivationIndex.trim() === ''
-            || !Number.isInteger(derivationIndex)
-            || derivationIndex < 0
-            || derivationIndex > 0x7fffffff
-        ) {
-            setAdvancedError('Enter an address number from 0 to 2147483647.');
-            return;
-        }
-        if (typeof messaging.generateReceiveAddress !== 'function') {
-            setAdvancedError('Address generation is not available in this shell.');
-            return;
-        }
-        advancedGenerateLockRef.current = true;
-        setAdvancedBusy(true);
-        setAdvancedError(null);
-        try {
-            await messaging.generateReceiveAddress({
-                walletId,
-                chainId: effectiveAdvancedChainId,
-                accountId,
-                addressType: effectiveAdvancedAddressType,
-                derivationIndex,
-            });
-            resetAdvancedGenerate();
-            setShowAdvancedGenerate(false);
-            setReloadKey((k) => k + 1);
-        } catch (err) {
-            setAdvancedError(userFacingMessage(
-                err,
-                'Could not generate that address. Check the address number and try again.',
-            ));
-        } finally {
-            advancedGenerateLockRef.current = false;
-            setAdvancedBusy(false);
-        }
-    }
-
     const rows = useMemo(() => {
         if (!addressesByChain) return [];
         const multisigByAddress = new Map(
@@ -682,6 +642,7 @@ export function AddressList({
                     chainId,
                     address: a.address,
                     label: a.label || '',
+                    accountId: a.accountId || null,
                     multisig: matched,
                     record: a,
                 });
@@ -738,14 +699,47 @@ export function AddressList({
     }, [addressesByChain, network, query, sourceFilter, multisigs, bitcoinChainId]);
 
     const hiddenRows = rows.filter((row) => row.record?.hidden === true);
+    // Wallet scope: one group per account, the active account first, then
+    // the wallet's other accounts in their list order; keys the wallet owns
+    // without an account (imported keys, multisig) close the list. Headings
+    // show once the account names have arrived and there is more than one.
+    const groupAccounts = (() => {
+        if (!walletScope || !Array.isArray(accountList)) return [];
+        const active = accountList.find((a) => a.id === accountId);
+        return [...(active ? [active] : []), ...accountList.filter((a) => a.id !== accountId)];
+    })();
+    const groupIndexOf = (row) => {
+        const i = groupAccounts.findIndex((a) => a.id === row.accountId);
+        return i === -1 ? groupAccounts.length : i;
+    };
+    const showGroupHeadings = walletScope && groupAccounts.length > 1;
     const listedRows = rows.filter((row) => (
         row.record?.hidden !== true || (!pickerMode && showHidden)
-    ));
+    )).map((row, i) => ({ row, i, g: showGroupHeadings ? groupIndexOf(row) : 0 }))
+        .sort((x, y) => (x.g - y.g) || (x.i - y.i))
+        .map((x) => x.row);
     const addressListScope = [query, network, sourceFilter, showHidden ? 'hidden' : 'visible'].join('\u0000');
     const visibleAddressCount = addressWindow.scope === addressListScope
         ? addressWindow.count
         : ADDRESS_WINDOW_SIZE;
     const renderedAddressRows = listedRows.slice(0, visibleAddressCount);
+    /** @type {Array<{ key: string, title: string | null, rows: typeof renderedAddressRows }>} */
+    const addressGroups = [];
+    for (const row of renderedAddressRows) {
+        const gi = showGroupHeadings ? groupIndexOf(row) : 0;
+        const key = showGroupHeadings ? String(gi) : 'all';
+        let g = addressGroups[addressGroups.length - 1];
+        if (!g || g.key !== key) {
+            g = {
+                key,
+                title: !showGroupHeadings ? null
+                    : (groupAccounts[gi]?.name || t('addressList.group.imported')),
+                rows: [],
+            };
+            addressGroups.push(g);
+        }
+        g.rows.push(row);
+    }
 
     const showMoreAddresses = () => {
         setAddressWindow((current) => ({
@@ -771,99 +765,6 @@ export function AddressList({
         );
     }
 
-    if (showAdvancedGenerate) {
-        return (
-            <Screen
-                variant={variant}
-                header={(
-                    <PageHeader
-                        onBack={advancedBusy ? undefined : () => {
-                            resetAdvancedGenerate();
-                            setShowAdvancedGenerate(false);
-                        }}
-                        title={t('routes.addressList.generateAtIndex')}
-                    />
-                )}
-            >
-                <FormPage
-                    label={t('routes.addressList.generateAddressAtIndex')}
-                    onSubmit={handleAdvancedGenerate}
-                    status={advancedError ? (
-                        <StatusMessage variant="error">
-                            {advancedError}
-                        </StatusMessage>
-                    ) : null}
-                    actions={(
-                        <Button
-                            type="submit"
-                            variant="primary"
-                            size="md"
-                            loading={advancedBusy}
-                            disabled={advancedBusy || !effectiveAdvancedChainId}
-                            data-testid="advanced-address-generate"
-                        >
-                            {t('routes.addressList.generate')}
-                        </Button>
-                    )}
-                >
-                    <NetworkField
-                        label={t('routes.addressList.coin')}
-                        help={t('addressList.advancedNetworkHelp')}
-                        value={effectiveAdvancedChainId}
-                        onChange={(nextChainId) => {
-                            setAdvancedChainId(nextChainId);
-                            setAdvancedAddressType('');
-                            setAdvancedError(null);
-                        }}
-                        chainIds={wifChainIds}
-                        chainRegistry={chainRegistry}
-                        disabled={advancedBusy}
-                    />
-                    {advancedDescriptor ? (
-                        <Select
-                            label={t('receive.addressType')}
-                            value={effectiveAdvancedAddressType}
-                            onChange={(e) => {
-                                setAdvancedAddressType(e.target.value);
-                                setAdvancedError(null);
-                            }}
-                            disabled={advancedBusy}
-                        >
-                            {/* Select uses native options because the kit has no option primitive. */}
-                            {advancedOfferedTypes.map((type) => {
-                                const hint = addressTypeHint(advancedDescriptor, type);
-                                return (
-                                    <option key={type} value={type}>
-                                        {type.toUpperCase()}{hint ? t('routes.addressList.startsWith', { hint }) : ''}
-                                    </option>
-                                );
-                            })}
-                        </Select>
-                    ) : null}
-                    <Input
-                        label={t('routes.addressList.derivationIndex')}
-                        type="number"
-                        inputMode="numeric"
-                        enterKeyHint="go"
-                        autoComplete="off"
-                        min={0}
-                        max={0x7fffffff}
-                        step={1}
-                        value={advancedDerivationIndex}
-                        onChange={(e) => {
-                            setAdvancedDerivationIndex(e.target.value);
-                            setAdvancedError(null);
-                        }}
-                        onWheel={blurNumberInputOnWheel}
-                        help={t('routes.addressList.useTheExactExternalIndex')}
-                        disabled={advancedBusy}
-                        autoFocus
-                    />
-                </FormPage>
-            </Screen>
-        );
-    }
-
     // Import address is its own page (not an inline bar): the + menu
     // navigates here, and back returns to the list. The success notice
     // renders back on the list after the import completes.
@@ -873,14 +774,17 @@ export function AddressList({
                 variant={variant}
                 header={(
                     <PageHeader
+                        // A sub-screen of Addresses: Back closes the form in place.
+                        nested
                         onBack={() => { setShowWifForm(false); resetWifForm(); }}
-                        title={t('routes.addressList.importAddress')}
+                        title={titleCase(t('routes.addressList.importAddress'))}
                     />
                 )}
             >
                 <FormPage
                     label={t('routes.addressList.importAddress')}
                     onSubmit={handleImportWif}
+                    errors={wifFormErrors}
                     status={wifError ? (
                         <StatusMessage variant="error">{wifError}</StatusMessage>
                     ) : null}
@@ -890,13 +794,13 @@ export function AddressList({
                             variant="primary"
                             size="md"
                             loading={wifBusy}
-                            disabled={!wifWarningAck || wifInput.trim().length === 0 || (!signerReady && wifPassword.length === 0) || !wifChainId}
                         >
                             {t('importWallet.import')}
                         </Button>
                     )}
                 >
                         <NetworkField
+                            id="wif-network"
                             label={t('send.fields.chain')}
                             help={t('addressList.wifNetworkHelp')}
                             value={wifChainId}
@@ -916,23 +820,25 @@ export function AddressList({
                         {wifChainId ? (
                             <Select
                                 label={t('receive.addressType')}
+                                help={t('addressList.wifTypeHelp')}
                                 value={effectiveWifAddressType}
                                 onChange={(e) => setWifAddressType(e.target.value)}
                                 disabled={wifBusy}
                             >
-                                {/* Select uses native options because the kit has no option primitive. */}
                                 {wifOfferedTypes.map((type) => {
                                     const hint = addressTypeHint(wifDescriptor, type);
                                     return (
-                                        <option key={type} value={type}>
+                                        <Select.Option key={type} value={type} icon={<Icon.AddressIcon />}>
                                             {type.toUpperCase()}{hint ? t('routes.addressList.startsWith', { hint }) : ''}
-                                        </option>
+                                        </Select.Option>
                                     );
                                 })}
                             </Select>
                         ) : null}
                         <Input
+                            id="wif-private-key"
                             label={t('importWallet.wif.key')}
+                            help={t('addressList.wifKeyHelp')}
                             type={wifRevealed ? 'text' : 'password'}
                             value={wifInput}
                             onChange={(e) => {
@@ -957,16 +863,20 @@ export function AddressList({
                             {wifRevealed ? t('routes.addressList.hidePrivateKey') : t('routes.addressList.showPrivateKey')}
                         </Button>
                         <Input
+                            id="wif-label"
                             label={t('routes.addressList.label')}
+                            help={t('addressList.wifLabelHelp')}
                             optional
                             value={wifLabel}
                             onChange={(e) => setWifLabel(e.target.value)}
                             placeholder={t('routes.addressList.eGColdStorage2024')}
                             autoComplete="off"
+                            spellCheck={false}
                             disabled={wifBusy}
                         />
                         {signerReady ? null : (
                         <Input
+                            id="wif-password"
                             type="password"
                             label={t('send.gated.passwordLabel')}
                             help={t('routes.addressList.requiredEvenWhileUnlockedYour')}
@@ -979,16 +889,19 @@ export function AddressList({
                             disabled={wifBusy}
                         />
                         )}
-                        <FormNotice variant="warning" role={null} lead={t('routes.addressList.notCoveredByYourRecovery')}>
+                        <FormNotice variant="warning" role={null} title={t('routes.addressList.notCoveredByYourRecovery')}>
                             {t('routes.addressList.keepACopyOfThe')}
                         </FormNotice>
                         <Checkbox
+                            id="wif-warning-ack"
                             className={wifStyles.wifAck}
                             label={t('routes.addressList.iUnderstandThisKeyIs')}
                             help={t('addressList.wifAckHelp')}
                             checked={wifWarningAck}
+                            error={wifFormErrors.errorFor('wif-warning-ack')}
                             onChange={(e) => {
                                 setWifWarningAck(e.target.checked);
+                                wifFormErrors.clear('wif-warning-ack');
                                 if (wifError) setWifError(null);
                             }}
                             disabled={wifBusy}
@@ -998,28 +911,23 @@ export function AddressList({
         );
     }
 
-    const header = (
-        <PageHeader
-            onBack={onBack}
-            title={title || (pickerMode ? t('routes.addressList.chooseAddress') : t('home.addresses'))}
-        />
-    );
     // The page header holds only the title and Back, so the add and import
     // menu sits in the content actions row, the first item below any notice.
     const addMenu = (
         <div className={local.addMenuWrap} ref={addMenuRef}>
+            {/* An icon-only plus on the title line opens the add or import menu. */}
             <Button
                 type="button"
-                variant="success"
+                variant="ghost"
                 size="sm"
                 icon={<Icon.PlusIcon />}
                 onClick={() => setAddMenuOpen((o) => !o)}
                 aria-haspopup="menu"
                 aria-expanded={addMenuOpen}
+                aria-label={t('routes.addressList.addOrImportAddress')}
+                title={t('routes.addressList.addOrImportAddress')}
                 data-testid="address-add-menu"
-            >
-                {t('routes.addressList.addOrImportAddress')}
-            </Button>
+            />
             {addMenuOpen ? (
                 /* The kit has no menu-list container, so native list semantics group its menu items. */
                 <ul className={local.addMenu} role="menu">
@@ -1033,22 +941,6 @@ export function AddressList({
                         >
                             <span className={local.addMenuIcon} aria-hidden="true"><Icon.PlusIcon /></span>
                             {t('routes.addressList.addAddress')}
-                        </Button>
-                    </li>
-                    <li>
-                        <Button
-                            type="button"
-                            role="menuitem"
-                            className={local.addMenuItem}
-                            onClick={() => {
-                                setAddMenuOpen(false);
-                                setAdvancedError(null);
-                                setShowAdvancedGenerate(true);
-                            }}
-                            data-testid="address-add-at-index"
-                        >
-                            <span className={local.addMenuIcon} aria-hidden="true"><Icon.PlusIcon /></span>
-                            {t('routes.addressList.generateAtIndexAdvanced')}
                         </Button>
                     </li>
                     <li>
@@ -1076,6 +968,46 @@ export function AddressList({
             ) : null}
         </div>
     );
+    // The title line holds the plus (add or import) and the standard filter
+    // (search, then network, then address type); the page below is the list.
+    const header = (
+        <PageHeader
+            onBack={onBack}
+            title={title || (pickerMode ? t('routes.addressList.chooseAddress') : t('home.addresses'))}
+            trailing={(
+                <>
+                    {/* Filter first, the plus at the far right, as on every page. */}
+                    <ListFilterMenu
+                        query={query}
+                        onQueryChange={setQuery}
+                        active={sourceFilter !== 'all'}
+                        label={t('routes.addressList.filterAddresses')}
+                        searchPlaceholder={t('routes.addressList.search')}
+                        searchLabel={t('routes.addressList.searchAddresses')}
+                        // Home's network picker, from the shared filter.
+                        chainRegistry={pickerMode && networkLocked ? null : chainRegistry}
+                        coinFamilies={NETWORK_FAMILIES}
+                        networkFilter={network || 'all'}
+                        onNetworkFilterChange={setNetwork}
+                    >
+                        <IconSelect
+                            size="md"
+                            aria-label={t('routes.addressList.filterByAddressType')}
+                            value={sourceFilter}
+                            onChange={setSourceFilter}
+                            options={[
+                                { value: 'all', label: 'All addresses', icon: <Icon.AddressIcon /> },
+                                { value: 'normal', label: 'Normal', icon: <Icon.KeyIcon /> },
+                                { value: 'imported', label: 'Imported', icon: <Icon.DownloadIcon /> },
+                                { value: 'misc', label: 'Misc', icon: <Icon.MoreIcon /> },
+                            ]}
+                        />
+                    </ListFilterMenu>
+                    {addMenu}
+                </>
+            )}
+        />
+    );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>{children}</Screen>
     );
@@ -1084,14 +1016,13 @@ export function AddressList({
         return wrap(
             <ListPage
                 notices={<StatusMessage variant="error">{loadError}</StatusMessage>}
-                actions={addMenu}
             />,
         );
     }
 
     if (!addressesByChain) {
         return wrap(
-            <ListPage actions={addMenu}>
+            <ListPage>
                 <div role="status" aria-label={t('routes.addressList.loadingAddresses')}>
                     <Skeleton.List rows={5} />
                 </div>
@@ -1102,43 +1033,17 @@ export function AddressList({
     // Address detail view: shown in place of the list when a row is tapped.
     if (selected) {
         const d = chainRegistry.get(selected.chainId);
-        const canSecret = !!(onShowPrivateKey && selected.record && !selected.multisig);
+        // A hardware wallet address keeps its key on the device, so it has no
+        // private key page to open.
+        const onDevice = selected.record?.source === 'trezor' || selected.record?.source === 'ledger';
+        const canSecret = !!(onShowPrivateKey && selected.record && !selected.multisig && !onDevice);
         const canDelete = !!selected.record?.id;
-        const fields = [
-            ...(d ? [{ label: 'Network', value: <ChainBadge descriptor={d} size="sm" showName={false} /> }] : []),
-            { label: 'Balance', value: amountTextFor(selected) },
-            { label: 'Type', value: typeLabelFor(selected) },
-        ];
+        // "SegWit (starts with bc1q)": the format in plain words with its prefix.
+        let addressFormatText = null;
         if (selected.record?.addressType) {
             const type = selected.record.addressType;
             const prefix = addressTypeHint(d, type);
-            fields.push({
-                label: 'Address format',
-                value: prefix ? `${addressTypeLabel(type)} (starts with ${prefix})` : addressTypeLabel(type),
-                hint: 'This controls how the address begins and which services can send to it. Some older services cannot use newer formats.',
-            });
-        }
-        if (selected.multisig) {
-            // The badge, not a template string: interpolating .scheme printed the
-            // stored identifier ("2-of-2 (taproot-musig2)") on the one multisig
-            // surface that did not already render <MultisigBadge> (XC review #4384).
-            fields.push({
-                label: 'Multisig',
-                value: (
-                    <MultisigBadge
-                        threshold={selected.multisig.threshold}
-                        cosignerCount={selected.multisig.cosignerCount}
-                        scheme={selected.multisig.scheme}
-                    />
-                ),
-            });
-        }
-        if (selected.record?.derivationPath) {
-            fields.push({
-                label: t('multisig.share.derivationPath'),
-                value: selected.record.derivationPath,
-                hint: 'Where this account sits inside your recovery phrase. Different paths produce different addresses from the same phrase; it is a technical detail you rarely need to change.',
-            });
+            addressFormatText = prefix ? `${addressTypeLabel(type)} (starts with ${prefix})` : addressTypeLabel(type);
         }
         const explorerUrl = explorerPageUrl({
             chainId: selected.chainId,
@@ -1147,12 +1052,13 @@ export function AddressList({
             settings,
         });
         const overCeiling = selected.multisig?.overCeiling === true;
-        const saveLabel = async () => {
-            if (!selected.record?.id || labelSaving) return;
+        // Resolves true once saved, so the Edit label form closes only then.
+        const saveLabel = async (draft) => {
+            if (!selected.record?.id || labelSaving) return false;
             const targetId = selected.record.id;
             setLabelSaving(true);
             try {
-                const next = labelDraft.trim();
+                const next = String(draft || '').trim();
                 const result = await messaging.setAddressLabel(targetId, next);
                 const savedLabel = typeof result?.label === 'string'
                     ? result.label
@@ -1173,8 +1079,10 @@ export function AddressList({
                     ]),
                 ));
                 announce('Address label saved.');
+                return true;
             } catch (err) {
                 setLoadError(userFacingMessage(err, 'Could not save that label. Try again.'));
+                return false;
             } finally {
                 setLabelSaving(false);
             }
@@ -1296,206 +1204,51 @@ export function AddressList({
                 setDetailAction(null);
             }
         };
+        const hasRecord = !!selected.record?.id;
         return (
-            <Screen variant={variant} header={<PageHeader onBack={() => setSelected(null)} title={t('routes.addressList.viewAddress')} />}>
-                <ListPage notices={overCeiling ? <StatusMessage variant="warning" role="alert">{t('multisig.overCeilingNotice')}</StatusMessage> : null}>
-                    <div className={local.detailTop}>
-                    {overCeiling ? null : (<>
-                    <div className={local.detailLabelRow}>
-                        <span className={local.detailLabel}>{t('verifySignature.address')}</span>
-                        {isActiveRow(selected) ? (
-                            <span className={local.addrActive}>{t('settings.developer.active')}</span>
-                        ) : null}
-                    </div>
-                    <div className={local.detailAddr}>
-                        <AddressText address={selected.address} truncate={false} />
-                        <span title={addrCopied ? t('history.copy.copied') : t('history.copy.walletAddress')}>
-                            <CopyButton
-                                value={selected.address}
-                                label={addrCopied ? t('history.copy.copied') : t('history.copy.walletAddress')}
-                                onCopied={() => {
-                                    setAddrCopied(true);
-                                    setTimeout(() => setAddrCopied(false), 1200);
-                                }}
-                            />
-                        </span>
-                    </div>
-                    </>)}
-                    <div className={local.detailLabel} style={overCeiling ? undefined : { marginTop: 'var(--xc-space-3)' }}>
-                        {t('routes.addressList.label')}
-                        {selected.record?.id ? (
-                            <InfoTip aria={t('routes.addressList.help', { label: t('routes.addressList.label') })} label={t('routes.addressList.labelHelp')} />
-                        ) : null}
-                    </div>
-                    {selected.record?.id ? (
-                        <div className={local.labelRow}>
-                            <Input
-                                label=""
-                                value={labelDraft}
-                                onChange={(e) => setLabelDraft(e.target.value)}
-                                placeholder={t('receive.addALabel')}
-                                aria-label={t('receive.addressLabel')}
-                                autoComplete="off"
-                            />
-                            {/* The label form's one forward action: green, named, with its icon even while unchanged. */}
-                            <Button
-                                size="md"
-                                variant="success"
-                                icon={<Icon.SaveIcon />}
-                                loading={labelSaving}
-                                disabled={labelDraft.trim() === (selected.label || '')}
-                                onClick={saveLabel}
-                            >
-                                {t('receive.saveLabel')}
-                            </Button>
-                        </div>
-                    ) : (
-                        <div className={`${local.detailName} ${selected.label ? '' : local.detailNameEmpty}`}>
-                            {selected.label || t('routes.addressList.noLabel')}
-                        </div>
-                    )}
-                    </div>
-
-                    <div className={local.quickActions} role="group" aria-label={t('routes.addressList.addressActions')}>
-                    {selected.record?.id && !isActiveRow(selected) ? (
-                        <Button
-                            type="button"
-                            size="sm"
-                            className={local.quickAction}
-                            onClick={setAsActive}
-                            disabled={detailAction !== null}
-                            aria-busy={detailAction === 'use'}
-                            title={isActiveRow(selected) ? t('routes.addressList.thisIsTheActiveAddress') : t('routes.addressList.makeThisTheActiveAddress')}
-                        >
-                            <span className={local.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>
-                            <span>{detailAction === 'use' ? t('routes.addressList.switching') : t('settings.biometric.use')}</span>
-                        </Button>
-                    ) : null}
-                    {selected.record?.id && typeof messaging.setAddressHidden === 'function' ? (
-                        <Button
-                            type="button"
-                            size="sm"
-                            className={local.quickAction}
-                            onClick={toggleAddressHidden}
-                            disabled={visibilitySaving}
-                        >
-                            <span className={local.quickActionIcon} aria-hidden="true">
-                                {selected.record.hidden ? <Icon.EyeIcon /> : <Icon.EyeOffIcon />}
-                            </span>
-                            <span>{selected.record.hidden ? t('settings.display.unhide2') : t('settings.developer.hide')}</span>
-                        </Button>
-                    ) : null}
-                    {canSecret ? (
-                        <Button
-                            type="button"
-                            size="sm"
-                            className={local.quickAction}
-                            onClick={() => onShowPrivateKey?.(selected.record)}
-                        >
-                            <span className={local.quickActionIcon} aria-hidden="true"><Icon.KeyIcon /></span>
-                            <span>{t('routes.addressList.secret')}</span>
-                        </Button>
-                    ) : null}
-                    {explorerUrl ? (
-                        <Button
-                            type="button"
-                            size="sm"
-                            className={local.quickAction}
-                            onClick={() => {
-                                try { window.open(explorerUrl, '_blank', 'noopener,noreferrer'); } catch { /* no-op */ }
-                            }}
-                        >
-                            <span className={local.quickActionIcon} aria-hidden="true"><Icon.ExternalLinkIcon /></span>
-                            <span>{t('routes.addressList.xchain')}</span>
-                        </Button>
-                    ) : null}
-                    {canDelete ? (
-                        <Button
-                            type="button"
-                            size="sm"
-                            className={local.quickAction}
-                            onClick={removeAddress}
-                            disabled={detailAction !== null}
-                            aria-busy={detailAction === 'delete'}
-                        >
-                            <span className={local.quickActionIcon} aria-hidden="true"><Icon.TrashIcon /></span>
-                            <span>{detailAction === 'delete' ? t('routes.addressList.deleting') : t('settings.notifications.delete')}</span>
-                        </Button>
-                    ) : null}
-                    </div>
-
-                    <div className={local.tabPanel}>
-                    <FormSection title={t('routes.addressList.about')} headingLevel="h3">
-                        {/* The testid is derived from the label so every detail field is
-                            addressable without hand-maintaining a list. Before it, a spec
-                            reading a field had to find the label text and walk to its
-                            sibling by xpath, which silently reads the WRONG field the day
-                            someone wraps the value in another element. */}
-                        {fields.map((f) => (
-                            <div key={f.label} className={local.detailField}>
-                                <div className={local.detailLabel}>
-                                    {f.label}
-                                    {f.hint ? <InfoTip aria={t('routes.addressList.help', { label: f.label })} label={f.hint} /> : null}
-                                </div>
-                                <div
-                                    className={local.detailValue}
-                                    data-testid={'address-detail-' + f.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}
-                                >
-                                    {f.value}
-                                </div>
-                            </div>
-                        ))}
-                    </FormSection>
-                    {/* PC-32: on-chain ADDRESS v0 preferences for this address. */}
-                    <FormSection
-                        title={t('routes.addressList.onChainPreferences')}
-                        headingLevel="h3"
-                    >
-                        <div className={local.detailValue}>
-                            {chainPrefsError
-                                ? chainPrefsError
-                                : (chainPrefs
-                                    ? (chainPrefs.onChain ? t('routes.addressList.customPreferencesSet') : t('routes.addressList.protocolDefaults'))
-                                    : t('common.loading'))}
-                        </div>
-                        {chainPrefs ? (
-                            <>
-                                <div className={local.detailField}>
-                                    <div className={local.detailLabel}>{t('execute.protocolFee')}</div>
-                                    <div className={local.detailValue}>{feePreferenceLabel(chainPrefs.feePreference)}</div>
-                                </div>
-                                <div className={local.detailField}>
-                                    <div className={local.detailLabel}>{t('routes.addressList.incomingSends')}</div>
-                                    <div className={local.detailValue}>{requireMemoLabel(chainPrefs.requireMemo)}</div>
-                                </div>
-                                <div className={local.detailField}>
-                                    <div className={local.detailLabel}>{t('routes.addressList.dispensers')}</div>
-                                    <div className={local.detailValue}>{dispenserPreferenceLabel(chainPrefs.dispenserPreference)}</div>
-                                </div>
-                            </>
-                        ) : null}
-                        {onEditPreferences ? (
-                            <div className={local.detailField}>
-                                <Button
-                                    size="md"
-                                    variant="secondary"
-                                    onClick={() => onEditPreferences({ chainId: selected.chainId, address: selected.address })}
-                                >
-                                    {t('routes.addressList.editOnChainPreferences')}
-                                </Button>
-                            </div>
-                        ) : null}
-                    </FormSection>
-                    </div>
-                    {confirmDialog.request ? (
-                        <ConfirmModal
-                            {...confirmDialog.request}
-                            onConfirm={confirmDialog.onConfirm}
-                            onCancel={confirmDialog.onCancel}
-                        />
-                    ) : null}
-                </ListPage>
-            </Screen>
+            <AddressDetail
+                key={`${selected.chainId}:${selected.address}`}
+                variant={variant}
+                onBack={() => {
+                    setSelected(null);
+                    if (onDetailBack) onDetailBack();
+                }}
+                selected={selected}
+                descriptor={d}
+                active={isActiveRow(selected)}
+                balanceText={amountTextFor(selected)}
+                typeText={typeLabelFor(selected)}
+                addressFormatText={addressFormatText}
+                chainPrefs={chainPrefs}
+                chainPrefsError={chainPrefsError}
+                chainPrefsPending={!chainPrefs && !chainPrefsError && !isDemoWallet(walletId)
+                    && typeof messaging.getAddressPreferences === 'function'}
+                explorerUrl={explorerUrl}
+                overCeiling={overCeiling}
+                canSecret={canSecret}
+                onShowSecret={() => onShowPrivateKey?.(selected.record)}
+                // The shells' Receive opens the chain's Receive screen; the
+                // selection rides along for a shell that can target it.
+                onReceive={onReceive ? () => onReceive({ chainId: selected.chainId, address: selected.address }) : undefined}
+                onEditPreferences={onEditPreferences
+                    ? () => onEditPreferences({ chainId: selected.chainId, address: selected.address })
+                    : undefined}
+                onSaveLabel={hasRecord ? saveLabel : undefined}
+                labelSaving={labelSaving}
+                onToggleHidden={hasRecord && typeof messaging.setAddressHidden === 'function' ? toggleAddressHidden : undefined}
+                visibilitySaving={visibilitySaving}
+                onSetActive={hasRecord && !isActiveRow(selected) ? setAsActive : undefined}
+                onDelete={canDelete ? removeAddress : undefined}
+                detailAction={detailAction}
+            >
+                {confirmDialog.request ? (
+                    <ConfirmModal
+                        {...confirmDialog.request}
+                        onConfirm={confirmDialog.onConfirm}
+                        onCancel={confirmDialog.onCancel}
+                    />
+                ) : null}
+            </AddressDetail>
         );
     }
 
@@ -1505,7 +1258,7 @@ export function AddressList({
 
     if (activeChainIds.length === 0 && multisigs.length === 0) {
         return wrap(
-            <ListPage actions={addMenu}>
+            <ListPage>
                 <EmptyState
                     title={t('history.empty.noAddressesTitle')}
                     body={t('routes.addressList.generateAReceiveAddressTo')}
@@ -1518,40 +1271,20 @@ export function AddressList({
     }
 
     return wrap(
-        <ListPage actions={addMenu} toolbar={(
-            <>
-                <div className={local.searchField}>
-                    <Input
-                        type="search"
-                        enterKeyHint="search"
-                        autoCapitalize="off"
-                        placeholder={t('routes.addressList.search')}
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        autoComplete="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                        aria-label={t('routes.addressList.searchAddresses')}
-                    />
-                </div>
-                {pickerMode && networkLocked ? null : <NetworkFilterDropdown value={network} onChange={setNetwork} iconOnly={!pickerMode} fieldTrigger={pickerMode} />}
-            </>
-        )}>
-            <Tabs
-                aria-label={t('routes.addressList.filterByAddressType')}
-                items={[
-                    { id: 'all', label: 'All' },
-                    { id: 'normal', label: 'Normal' },
-                    { id: 'imported', label: 'Imported' },
-                    { id: 'misc', label: 'Misc' },
-                ]}
-                value={sourceFilter}
-                onChange={setSourceFilter}
-            />
+        <ListPage>
             {wifNotice ? (
                 <div className={wifStyles.wifBar}>
                     <p className={wifStyles.wifNotice} role="status">{wifNotice}</p>
                 </div>
+            ) : null}
+            {backupPrompt && typeof onExportBackup === 'function' ? (
+                <BackupAfterKeyImportPrompt
+                    onSaveBackup={() => {
+                        setBackupPrompt(false);
+                        onExportBackup();
+                    }}
+                    onDismiss={() => setBackupPrompt(false)}
+                />
             ) : null}
 
 
@@ -1581,8 +1314,11 @@ export function AddressList({
             ) : (
             <>
             {/* The kit has no list container, so native list semantics expose the address rows. */}
-            <ul className={local.addrList} aria-label={t('home.addresses')}>
-                {renderedAddressRows.map((row) => {
+            {addressGroups.map((group) => (
+            <Fragment key={group.key}>
+            {group.title ? <SectionHeader as="h3" title={group.title} className={local.accountHeading} /> : null}
+            <ul className={local.addrList} aria-label={group.title || t('home.addresses')}>
+                {group.rows.map((row) => {
                     const d = chainRegistry.get(row.chainId);
                     const used = addressUsageByKey[`${row.chainId}:${String(row.address || '').toLowerCase()}`] === true;
                     const unavailable = pickerMode && row.record && pickerUnavailableReason
@@ -1597,10 +1333,10 @@ export function AddressList({
                                     if (unavailable) return;
                                     if (pickerMode && onPick && row.record) { onPick(row.record, row.chainId); return; }
                                     setSelected(row);
-                                    setLabelDraft(row.label || '');
                                 }}
                                 aria-label={t('routes.addressList.viewAddress2', { address: row.address })}
                                 aria-busy="false"
+                                chevron
                                 title={(
                                     <span className={local.addrRowMain}>
                                         {(row.label || isActiveRow(row) || row.record?.hidden || (pickerMode && used) || unavailable) ? (
@@ -1624,7 +1360,7 @@ export function AddressList({
                                         ) : null}
                                         <span className={local.addrLine1}>
                                             {d ? <ChainBadge descriptor={d} size="sm" showName={false} /> : null}
-                                            <AddressText address={row.address} />
+                                            <AddressText address={row.address} fit />
                                             {row.multisig ? (
                                                 <MultisigBadge
                                                     threshold={row.multisig.threshold}
@@ -1649,6 +1385,8 @@ export function AddressList({
                     );
                 })}
             </ul>
+            </Fragment>
+            ))}
             {visibleAddressCount < listedRows.length ? (
                 <div className={styles.pagination} aria-live="polite">
                     <span className={styles.paginationCount}>

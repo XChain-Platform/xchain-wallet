@@ -69,27 +69,23 @@ afterEach(() => {
 });
 
 describe('NotificationsSection forward action and icons', () => {
-    it('shows Request permission and Add alert as green form actions, with icons', () => {
+    it('shows Request permission as the one green form action, with an icon', () => {
         setPermission('default');
         render(<NotificationsSection walletId="wallet-1" />);
 
-        const request = screen.getByRole('button', { name: 'Request permission' });
-        const addAlert = screen.getByRole('button', { name: 'Add alert' });
+        const request = screen.getByRole('button', { name: 'Request Permission' });
         expect(request.className).toMatch(/success/);
         expect(request.querySelector('svg')).not.toBeNull();
-        expect(addAlert.className).toMatch(/success/);
-        expect(addAlert.querySelector('svg')).not.toBeNull();
-        expect(successButtons()).toEqual([request, addAlert]);
+        expect(successButtons()).toEqual([request]);
     });
 
-    it('keeps only the price-alert form action green once permission is granted', () => {
+    it('has no green action once permission is granted: the alert form moved to its own page', () => {
         setPermission('granted');
         render(<NotificationsSection walletId="wallet-1" />);
 
-        expect(screen.queryByRole('button', { name: 'Request permission' })).toBeNull();
-        expect(successButtons()).toEqual([
-            screen.getByRole('button', { name: 'Add alert' }),
-        ]);
+        expect(screen.queryByRole('button', { name: 'Request Permission' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Add Alert' })).toBeNull();
+        expect(successButtons()).toEqual([]);
     });
 
     it('gives the revoke button an icon and keeps it out of green', async () => {
@@ -103,40 +99,21 @@ describe('NotificationsSection forward action and icons', () => {
         };
         try {
             render(<NotificationsSection walletId="wallet-1" />);
-            const revoke = await screen.findByRole('button', { name: 'Revoke permission' });
+            const revoke = await screen.findByRole('button', { name: 'Revoke Permission' });
             expect(revoke.querySelector('svg')).not.toBeNull();
             expect(revoke.className).not.toMatch(/success/);
-            expect(successButtons()).toEqual([
-                screen.getByRole('button', { name: 'Add alert' }),
-            ]);
+            expect(successButtons()).toEqual([]);
         } finally {
             globalThis.chrome = prior;
         }
     });
 
-    it('gives every button an icon: alert rows, sound previews and the form', () => {
+    it('gives every button an icon: sound previews and the permission row', () => {
         setPermission('granted');
         render(<NotificationsSection walletId="wallet-1" />);
 
-        expect(screen.getByRole('button', { name: 'Re-arm' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: /^Edit/ })).toBeTruthy();
-        expect(screen.getByRole('button', { name: /^Remove/ })).toBeTruthy();
-        expect(screen.getAllByRole('button', { name: /^Preview/ }).length).toBeGreaterThan(0);
         const bare = allButtons().filter((b) => !b.hasAttribute('aria-expanded') && b.querySelector('svg') === null);
         expect(bare.map((b) => b.textContent || b.getAttribute('aria-label'))).toEqual([]);
-    });
-
-    it('keeps Remove danger and Re-arm, Edit and Preview out of green', () => {
-        setPermission('granted');
-        render(<NotificationsSection walletId="wallet-1" />);
-
-        expect(screen.getByRole('button', { name: /^Remove/ }).className).toMatch(/danger/);
-        for (const name of ['Re-arm', /^Edit/]) {
-            expect(screen.getByRole('button', { name })).not.toHaveProperty('className', expect.stringMatching(/success/));
-        }
-        expect(successButtons()).toEqual([
-            screen.getByRole('button', { name: 'Add alert' }),
-        ]);
     });
 });
 
@@ -159,6 +136,6 @@ describe('NotificationsSection help tips', () => {
         setPermission('granted');
         render(<NotificationsSection walletId="wallet-1" />);
 
-        expect(screen.getAllByRole('button', { name: /^About the .* sound$/ }).length).toBeGreaterThan(0);
+        expect(screen.getAllByRole('button', { name: /^About .* sound$/ }).length).toBeGreaterThan(0);
     });
 });

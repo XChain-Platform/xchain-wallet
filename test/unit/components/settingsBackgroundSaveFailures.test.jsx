@@ -4,6 +4,7 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { selectOption } from '../../helpers/selectOption.js';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 
@@ -33,12 +34,8 @@ vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
 const { PrivacySection } = await import(
     '../../../packages/core/src/shared/components/settings/PrivacySection.jsx'
 );
-const { NetworkEndpointsSection } = await import(
-    '../../../packages/core/src/shared/components/settings/NetworkEndpointsSection.jsx'
-);
-const { FeesSection } = await import(
-    '../../../packages/core/src/shared/components/settings/FeesSection.jsx'
-);
+// These pages list networks; the harness opens a network's page like Settings.
+const { EndpointsHarness: NetworkEndpointsSection, FeesHarness: FeesSection } = await import('./networkRowHarness.jsx');
 const { NotificationsSection } = await import(
     '../../../packages/core/src/shared/components/settings/NotificationsSection.jsx'
 );
@@ -78,9 +75,9 @@ describe('background settings save failures', () => {
         renderSection(<AppearanceSection />);
         const control = screen.getByRole('combobox', { name: 'Theme' });
 
-        fireEvent.change(control, { target: { value: 'dark' } });
+        selectOption(control, 'dark');
         expect(await screen.findByRole('alert')).toHaveTextContent(VAULT_CONFLICT_MESSAGE);
-        fireEvent.change(control, { target: { value: 'light' } });
+        selectOption(control, 'light');
         expect(await screen.findByRole('alert')).toHaveTextContent('storage failed');
     });
 
@@ -101,12 +98,13 @@ describe('background settings save failures', () => {
 
     it('shows an endpoint error in the edited chain and restores the persisted URL', async () => {
         renderSection(<NetworkEndpointsSection />);
+        fireEvent.click(document.querySelector('[data-network-row="bitcoin-mainnet"] button'));
         const block = screen.getByRole('region', { name: 'Bitcoin' });
         const control = within(block).getByRole('textbox', { name: 'Explorer URL' });
         const previous = control.value;
 
         fireEvent.change(control, { target: { value: 'https://private.example.com' } });
-        fireEvent.click(within(block).getByRole('button', { name: 'Save endpoints' }));
+        fireEvent.click(within(block).getByRole('button', { name: 'Save Endpoints' }));
 
         expect(await within(block).findByRole('alert')).toHaveTextContent('storage failed');
         expect(control.value).toBe(previous);
@@ -125,10 +123,11 @@ describe('background settings save failures', () => {
             },
         };
         renderSection(<FeesSection />);
-        const block = screen.getByText('Bitcoin').parentElement;
+        fireEvent.click(document.querySelector('[data-network-row="bitcoin-mainnet"] button'));
+        const block = screen.getByRole('group', { name: 'Bitcoin' });
         const control = within(block).getByLabelText('Bitcoin fee strategy');
 
-        fireEvent.change(control, { target: { value: 'fast' } });
+        selectOption(control, 'fast');
 
         expect(await within(block).findByRole('alert')).toHaveTextContent(
             'Could not save this fee setting. Try again.',

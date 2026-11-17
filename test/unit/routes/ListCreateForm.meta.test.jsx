@@ -76,7 +76,7 @@ async function ready(messaging) {
 }
 
 async function publish() {
-    fireEvent.click(screen.getByRole('button', { name: 'Publish list' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Publish List$/ }));
     await waitFor(() => expect(runConfirm).toHaveBeenCalled());
     return runConfirm.mock.calls[0][0].actionData.params;
 }
@@ -136,7 +136,7 @@ describe('ListCreateForm name and description', () => {
         await ready(messaging);
         fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'a'.repeat(65) } });
         expect(await screen.findByText('Too long.')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Publish list' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Publish List$/ }));
         expect(await screen.findByText('Fix the list name and description first.')).toBeInTheDocument();
         expect(runConfirm).not.toHaveBeenCalled();
     });
@@ -146,7 +146,7 @@ describe('ListCreateForm name and description', () => {
         await ready(messaging);
         fireEvent.change(await screen.findByLabelText('Name'), { target: { value: '-' } });
         expect(await screen.findByText('A single - is not allowed.')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Publish list' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Publish List$/ }));
         await screen.findByText('Fix the list name and description first.');
         expect(runConfirm).not.toHaveBeenCalled();
     });

@@ -69,11 +69,11 @@ describe('MultisigSigningSession collector errors', () => {
         const list = await screen.findByRole('list', { name: 'Multisig sessions' });
         fireEvent.click(within(list).getByRole('button'));
         await screen.findByLabelText('Multisig signing progress');
-        fireEvent.click(screen.getByRole('button', { name: 'Import cosigner reply' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Import cosigner reply/ }));
         fireEvent.change(screen.getByLabelText('Cosigner reply chunks'), {
             target: { value: 'XCW:1/1:00000000:AA==' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Submit chunks' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Submit Chunks' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent(COLLECTOR_ERROR_MESSAGE);
         expect(screen.queryByText(/crc32 mismatch|xcw-qr|SHA256/i)).toBeNull();
@@ -82,7 +82,7 @@ describe('MultisigSigningSession collector errors', () => {
             expect.stringMatching(/xcw-qr: crc32 mismatch/i),
         );
 
-        fireEvent.click(screen.getByRole('button', { name: 'Clear received reply' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Clear Received Reply' }));
         expect(screen.queryByRole('alert')).toBeNull();
         expect(screen.getByLabelText('Cosigner reply chunks')).toHaveValue('');
     });

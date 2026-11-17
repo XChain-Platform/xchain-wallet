@@ -85,18 +85,24 @@ function mount(dispenses) {
 
 // The amount also appears in the stats hero, so rows are found in the named activity list.
 const rowOf = (text) => {
-    const list = screen.getByRole('list', { name: /^(Dispenses|Dispenser lifecycle)$/ });
+    const list = screen.getByRole('list', { name: 'Dispenser activity' });
     const li = within(list).getAllByRole('listitem').find((el) => el.textContent.includes(text));
     if (!li) throw new Error(`no list row containing ${text}`);
     return li;
 };
 const untilRows = () => waitFor(() => rowOf('DOGESWAP'));
+// The page opens on Actions; the fills are rows of the Activity tab's one
+// dated list.
+const openFills = async () => {
+    fireEvent.click(await screen.findByRole('tab', { name: /^Activity$/ }));
+};
 
 afterEach(() => cleanup());
 
 describe('dispenser detail: refused dispenses', () => {
     it('marks a refused row Invalid with the reason, and leaves the honoured row as it was', async () => {
         mount([HONOURED, REFUSED]);
+        await openFills();
         await untilRows();
 
         const refused = rowOf('500 DOGESWAP');
@@ -115,28 +121,33 @@ describe('dispenser detail: refused dispenses', () => {
 
     it('keeps the refused attempt in the list rather than dropping it', async () => {
         mount([HONOURED, REFUSED]);
+        await openFills();
         await untilRows();
         expect(rowOf('500 DOGESWAP')).toBeInTheDocument();
     });
 
     it('excludes the refused amount from the vended total', async () => {
         mount([HONOURED, REFUSED]);
-        await untilRows();
+        // The totals are on the Details tab; the page opens on Actions (G102).
+        fireEvent.click(await screen.findByRole('tab', { name: /^Details$/ }));
         // 100 honoured; the 500 attempt moved nothing.
-        expect(screen.getByTestId('vended-total')).toHaveTextContent('100 DOGESWAP in 1 fill');
-        expect(screen.getByText('1 of 1,000 this fill')).toBeInTheDocument();
+        expect(await screen.findByTestId('vended-total')).toHaveTextContent('100 DOGESWAP in 1 fill');
+        expect(screen.getByText(/1 of 1,000 this fill/)).toBeInTheDocument();
     });
 
     it('shows no vended total when every dispense was refused', async () => {
         mount([REFUSED]);
+        await openFills();
         await untilRows();
+        fireEvent.click(screen.getByRole('tab', { name: /^Details$/ }));
+        expect(await screen.findByText(/0 of 1,000 this fill/)).toBeInTheDocument();
         expect(screen.queryByTestId('vended-total')).toBeNull();
     });
 
-    it('carries the marker into the lifecycle timeline', async () => {
+    it('names the refused row as refused and the honoured one as dispensed', async () => {
         mount([HONOURED, REFUSED]);
+        await openFills();
         await untilRows();
-        fireEvent.click(screen.getByRole('tab', { name: 'Lifecycle' }));
         const refused = rowOf('500 DOGESWAP');
         expect(refused).toHaveTextContent(/Dispense refused/);
         expect(within(refused).getByTestId('dispense-invalid')).toHaveTextContent(/Invalid/);

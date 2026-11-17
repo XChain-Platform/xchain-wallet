@@ -157,7 +157,7 @@ export async function validatorsForChain({ sdkRegistry, chainId, opts }) {
  * Per-capability MIN_STAKE thresholds for capability staking, read live
  * from the hub. Returns an array of { capability, min_stake, disabled }
  * rows, or null when the hub is unreachable / not configured (e.g. regtest)
- * or the linked SDK predates the getter. Backs StakeForm's live "which
+ * or the linked SDK predates the getter. Backs the Staking form's live "which
  * capabilities does this stake qualify for" readout. Capabilities are
  * global governance config; chainId only selects which SDK's hub to ask.
  *

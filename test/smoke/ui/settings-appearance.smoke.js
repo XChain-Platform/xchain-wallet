@@ -76,7 +76,8 @@ assert.doesNotMatch(src, /<span[^>]*>\s*Accent color\s*<\/span>/, 'no Accent col
 const settingsSrc = readFileSync(settingsPath, 'utf8');
 assert.match(
     settingsSrc,
-    /import \{ AppearanceSection \} from '\.\.\/components\/settings\/AppearanceSection\.jsx'/,
+    // The row pages also import the theme and motion summary helpers.
+    /import \{ AppearanceSection\b[^}]*\} from '\.\.\/components\/settings\/AppearanceSection\.jsx'/,
     'Settings.jsx imports AppearanceSection',
 );
 const idx = settingsSrc.indexOf("id: 'appearance'");

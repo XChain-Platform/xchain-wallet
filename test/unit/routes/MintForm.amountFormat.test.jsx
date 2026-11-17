@@ -81,7 +81,9 @@ afterEach(() => {
 describe('MintForm amount format and help tips', () => {
     it('gives the From label its help tip', async () => {
         mountMint();
-        expect(await screen.findByRole('button', { name: 'About From' })).toBeInTheDocument();
+        // From is a closed standard section; its field is From address.
+        fireEvent.click(await screen.findByRole('button', { name: /^From / }));
+        expect(await screen.findByRole('button', { name: 'About From address' })).toBeInTheDocument();
     });
 
     it('pads a whole amount to an 8-place token once the edit ends', async () => {
@@ -108,6 +110,10 @@ describe('MintForm amount format and help tips', () => {
         mountMint({ initialTick: '' });
         await amountField();
         expect(maxButton()).toBeDisabled();
-        expect(submitButton()).toBeDisabled();
+        // G22: Mint stays enabled; pressing it marks the empty fields instead.
+        expect(submitButton()).not.toBeDisabled();
+        fireEvent.click(submitButton());
+        expect(await screen.findByText('Pick the token to mint.')).toBeInTheDocument();
+        expect(screen.getByText('Enter how much to mint.')).toBeInTheDocument();
     });
 });

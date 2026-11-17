@@ -175,9 +175,11 @@ describe('Transfer ownership address validation (D-81)', () => {
     it('still errors with a reason on an empty address', async () => {
         const q = await mountTransfer();
 
-        expect(q.submit().disabled).toBe(true);
-        // Empty is the one state the button guards; the form-level branch
-        // stays in place for the submit paths that bypass it.
+        // G22: the button stays enabled; a press marks the empty field
+        // with its own message rather than an address-format error.
+        expect(q.submit().disabled).toBe(false);
+        fireEvent.click(q.submit());
+        await waitFor(() => expect(q.alerts()).toMatch(/Enter the new owner address/));
         expect(q.alerts()).not.toMatch(/not a valid/i);
     });
 });

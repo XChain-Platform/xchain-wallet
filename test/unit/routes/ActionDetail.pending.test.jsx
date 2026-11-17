@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// M2.3 on the standalone detail page and on the card it shares with
-// History. The page already tolerated a missing action index by
+// M2.3 on the standalone detail page and on the inline card History
+// expands. The page already tolerated a missing action index by
 // accident: the SPV check and the LINK peer fetch happened to no-op on
 // the conditions they lean on. This drives the deliberate version, where
 // the sections a pending entry cannot fill are suppressed rather than
@@ -23,6 +23,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ActionDetail } from '../../../packages/core/src/shared/routes/ActionDetail.jsx';
 import { DetailCard } from '../../../packages/core/src/shared/routes/History.jsx';
+import { detailsPanel, fact, queryFact } from '../../helpers/detailFacts.js';
 
 const detailStyles = readFileSync('packages/core/src/shared/routes/History.module.css', 'utf8');
 
@@ -114,10 +115,22 @@ function renderDetail(entry, messaging = stubMessaging()) {
 
 afterEach(() => { cleanup(); });
 
+/** Each status bar step's accessible text, in order. */
+function statusSteps() {
+    const bar = screen.getByRole('list', { name: 'Transaction Status' });
+    return within(bar).getAllByRole('listitem').map((li) => li.textContent);
+}
+
+async function findPendingBar() {
+    await waitFor(() => expect(statusSteps()).toEqual([
+        'Signed, Complete', 'Broadcast, Complete', 'Confirmed, In Progress', 'Processed, Not Started',
+    ]));
+}
+
 describe('ActionDetail on a pending entry', () => {
     it('does not title the page with an action index the entry does not have', async () => {
         const { view } = renderDetail(pendingEntry());
-        await screen.findByRole('region', { name: 'Pending transaction' });
+        await findPendingBar();
         // "#0" is a real action on every chain; naming it here would
         // point the user at somebody else's transaction.
         expect(view.container.textContent).not.toContain('#0');
@@ -125,22 +138,24 @@ describe('ActionDetail on a pending entry', () => {
 
     it('still titles a confirmed entry with its index', async () => {
         const { view } = renderDetail(confirmedEntry());
-        await waitFor(() => expect(view.container.textContent).toContain('#1,255'));
+        await waitFor(() => expect(view.container.textContent).toContain('#1255'));
+        // An action index is an identifier: raw digits, never grouped (G123).
+        expect(view.container.textContent).not.toContain('#1,255');
     });
 
     it('asks for no SPV verdict, having no indexed action to check', async () => {
         const { messaging } = renderDetail(pendingEntry());
-        await screen.findByRole('region', { name: 'Pending transaction' });
+        await findPendingBar();
         expect(messaging.verifyAction).not.toHaveBeenCalled();
     });
 
     it('fetches no LINK peer for a transaction no indexer has paired yet', async () => {
         const { messaging } = renderDetail(pendingEntry());
-        await screen.findByRole('region', { name: 'Pending transaction' });
+        await findPendingBar();
         expect(messaging.getActionByIndex).not.toHaveBeenCalled();
     });
 
-    it('verifies and pairs a confirmed entry, so the suppression is the pending branch', async () => {
+    it('verifies a confirmed entry, so the suppression is the pending branch', async () => {
         const { messaging } = renderDetail(confirmedEntry({
             link: {
                 peerChainId: 'bitcoin-regtest',
@@ -149,34 +164,41 @@ describe('ActionDetail on a pending entry', () => {
                 linkActionIndex: '43',
             },
         }));
-        await waitFor(() => expect(messaging.getActionByIndex).toHaveBeenCalled());
         await waitFor(() => expect(messaging.verifyAction).toHaveBeenCalled());
+        // The LINK peer showed only under Raw Data, which the page dropped
+        // (2026-11-13), so nothing fetches it any more.
+        expect(messaging.getActionByIndex).not.toHaveBeenCalled();
     });
 
-    it('carries the pending branch onto the page', async () => {
-        renderDetail(pendingEntry());
-        const panel = await screen.findByRole('region', { name: 'Pending transaction' });
-        expect(within(panel).getByText('Pending, not yet validated by the service.')).toBeTruthy();
+    it('shows the pending state only in the status bar, with no notice text', async () => {
+        const { view } = renderDetail(pendingEntry());
+        await findPendingBar();
+        // Operator ruling 2026-11-13: the bar alone says where a pending
+        // action is; no second "pending" notice or explanation.
+        expect(screen.queryByRole('region', { name: 'Pending transaction' })).toBeNull();
+        expect(view.container.textContent).not.toMatch(/not yet validated/i);
+        expect(view.container.textContent).not.toMatch(/sign a replacement/i);
     });
 
-    it('uses plain labels, translated action codes, copy controls, and explorer links', () => {
+    it('uses plain labels, translated action codes, no copy buttons, and explorer links', async () => {
         renderDetail(confirmedEntry());
-        fireEvent.click(screen.getByText('Details'));
-        const details = screen.getByRole('tabpanel');
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        const details = detailsPanel();
 
-        expect(within(details).getByRole('rowheader', { name: 'Action' })
-            .closest('tr').querySelector('td').textContent).toBe('Receive');
-        expect(within(details).getByRole('rowheader', { name: 'Transaction ID' })).toBeTruthy();
-        expect(within(details).getByRole('rowheader', { name: 'From' })).toBeTruthy();
-        expect(within(details).getByRole('rowheader', { name: 'To' })).toBeTruthy();
-        expect(within(details).queryByRole('rowheader', { name: 'tx_hash' })).toBeNull();
-        expect(within(details).queryByRole('rowheader', { name: 'block_index' })).toBeNull();
-        expect(screen.getByText('Confirmed')).toBeTruthy();
+        expect(fact('Action').textContent).toBe('Receive');
+        expect(fact('Transaction ID')).toBeTruthy();
+        expect(fact('From')).toBeTruthy();
+        expect(fact('To')).toBeTruthy();
+        expect(queryFact('tx_hash')).toBeNull();
+        expect(queryFact('block_index')).toBeNull();
+        expect(statusSteps()[2]).toBe('Confirmed, Complete');
 
-        expect(screen.getByRole('button', { name: 'Copy transaction ID' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Copy from address' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Copy to address' })).toBeTruthy();
-        expect(screen.getByRole('link', { name: 'XChain' }).getAttribute('href'))
+        // Copying lives in the Actions list; no value in Details carries
+        // its own copy button (operator ruling 2026-11-13).
+        expect(within(details).queryAllByRole('button', { name: /copy/i })).toHaveLength(0);
+        // The explorer link is a row of the Actions view's action list (G101).
+        fireEvent.click(screen.getByRole('tab', { name: 'Actions' }));
+        expect(screen.getByRole('link', { name: /^View on the explorer/ }).getAttribute('href'))
             .toMatch(/\/RLTC\/action\/1255$/);
     });
 
@@ -187,7 +209,7 @@ describe('ActionDetail on a pending entry', () => {
     });
 });
 
-describe('DetailCard suppresses the LINK section on a pending entry', () => {
+describe('DetailCard shows Actions | Details only', () => {
     function renderCard(entry) {
         const messaging = stubMessaging();
         const view = render(
@@ -195,49 +217,41 @@ describe('DetailCard suppresses the LINK section on a pending entry', () => {
                 MessagingProvider,
                 { shell: 'web', messaging },
                 React.createElement(DetailCard, {
-                    entry, peerCache: {}, walletId: 'w1',
+                    entry, walletId: 'w1',
                 }),
             ),
         );
         return { messaging, view };
     }
 
-    it('renders no peer block for a pending entry that carries a link record', async () => {
-        const { view } = renderCard(pendingEntry());
-        fireEvent.click(screen.getByText('Raw data'));
-        // The raw payload itself still renders; only the peer half of
-        // the tab is gone.
-        expect(view.container.querySelector('pre')).toBeTruthy();
-        expect(view.container.textContent).not.toContain('Linked transaction ·');
-    });
-
-    it('renders the peer block once the same transaction has a block', async () => {
-        const { view } = renderCard(confirmedEntry({
+    it('offers no Status or Raw data view and no peer block, pending or confirmed', () => {
+        for (const entry of [pendingEntry(), confirmedEntry({
             link: {
                 peerChainId: 'bitcoin-regtest',
                 peerCoinTicker: 'BTC',
                 peerActionIndex: '42',
                 linkActionIndex: '43',
             },
-        }));
-        fireEvent.click(screen.getByText('Raw data'));
-        expect(view.container.textContent).toContain('Linked transaction ·');
+        })]) {
+            const { view } = renderCard(entry);
+            expect(screen.getAllByRole('tab').map((tab) => tab.textContent.trim())).toEqual(['Actions', 'Details']);
+            fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+            expect(view.container.querySelector('pre')).toBeNull();
+            expect(view.container.textContent).not.toContain('Linked transaction ·');
+            expect(within(detailsPanel()).queryByRole('list', { name: 'Transaction status' })).toBeNull();
+            view.unmount();
+        }
     });
 
-    it('labels an oracle-priced zero in Details without changing Raw', () => {
+    it('labels an oracle-priced zero in Details', () => {
         const raw = {
             action: 'DISPENSER', get_amount: '0', fiat_code: 'USD',
             oracle_address: 'bc1qoracleoracleoracleoracleoracleoracle',
         };
-        const { view } = renderCard(confirmedEntry({ action: 'DISPENSER', raw }));
-        fireEvent.click(screen.getByText('Details'));
-        const label = screen.getByRole('rowheader', { name: 'Get amount' });
-        expect(label.closest('tr').querySelector('td').textContent)
+        renderCard(confirmedEntry({ action: 'DISPENSER', raw }));
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        expect(fact('Get amount').textContent)
             .toBe("Varies: set from the oracle's USD price at each purchase");
-
-        fireEvent.click(screen.getByText('Raw data'));
-        expect(view.container.querySelector('pre').textContent).toContain('"get_amount": "0"');
-        expect(view.container.querySelector('pre').textContent).not.toContain('Varies');
     });
 
     it('words an oracle-priced zero without a fiat code as the oracle price', () => {
@@ -246,20 +260,18 @@ describe('DetailCard suppresses the LINK section on a pending entry', () => {
             oracle_address: 'bc1qoracleoracleoracleoracleoracleoracle',
         };
         renderCard(confirmedEntry({ action: 'DISPENSER', raw }));
-        fireEvent.click(screen.getByText('Details'));
-        const label = screen.getByRole('rowheader', { name: 'Get amount' });
-        expect(label.closest('tr').querySelector('td').textContent)
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        expect(fact('Get amount').textContent)
             .toBe("Varies: set from the oracle's price at each purchase");
     });
 
     it('labels zero allow and block lists as none in History details', () => {
         const raw = { action: 'ORDER', allow_list: '0', block_list: 0 };
         const { view } = renderCard(confirmedEntry({ action: 'ORDER', raw }));
-        fireEvent.click(screen.getByText('Details'));
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
 
         for (const key of ['Allow list', 'Block list']) {
-            const label = screen.getByRole('rowheader', { name: key });
-            expect(label.closest('tr').querySelector('td').textContent).toBe('None');
+            expect(fact(key).textContent).toBe('None');
         }
         expect(view.container.textContent).not.toMatch(/list #0/i);
     });

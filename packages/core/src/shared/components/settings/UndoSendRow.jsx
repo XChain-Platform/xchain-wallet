@@ -48,6 +48,7 @@ export function UndoSendRow() {
         <>
             <ToggleRow
                 label={t('settings.undoSend.label')}
+                help={t('settings.help.undoSend')}
                 hint={held
                     ? t('settings.undoSend.hintAvailable')
                     : t('settings.undoSend.hintUnavailable')}

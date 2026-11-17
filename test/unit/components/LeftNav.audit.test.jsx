@@ -11,7 +11,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import {
     LeftNav,
     LEFT_NAV_VIEW_GROUPS,
@@ -32,6 +32,8 @@ const baseProps = {
     onOpenSettings: vi.fn(),
     onLock: vi.fn(),
     hasVmAddress: true,
+    hasBtcAddress: true,
+    hasGovernanceAddress: true,
 };
 
 function readRepoFile(relativePath) {
@@ -66,11 +68,13 @@ describe('LeftNav route state', () => {
 
     it.each([
         ['send-picker', 'Send'],
-        ['receive-picker', 'Receive'],
-        ['markets-picker', 'DEX'],
+        ['markets-picker', 'Exchange (DEX)'],
         ['contract-stake', 'Contracts'],
-        ['list-transfer', 'Lists'],
-        ['coinpay', 'Payments due'],
+        ['manage-token', 'My Tokens'],
+        ['governance-poll-detail', 'Governance'],
+        ['stake-detail', 'Staking'],
+        ['bet-market-detail', 'Betting markets'],
+        ['cosigner-detail', 'My Agents'],
         ['connected-sites', 'Settings'],
     ])('highlights %s under %s', (currentView, label) => {
         const { container } = render(<LeftNav {...baseProps} currentView={currentView} />);
@@ -79,6 +83,14 @@ describe('LeftNav route state', () => {
         expect(current).toHaveLength(1);
         expect(current[0]).toHaveTextContent(label);
     });
+
+    it.each(['scan', 'list-transfer', 'coinpay'])(
+        'leaves %s unselected because it stays in the main menu',
+        (currentView) => {
+            const { container } = render(<LeftNav {...baseProps} currentView={currentView} />);
+            expect(container.querySelectorAll('[aria-current="page"]')).toHaveLength(0);
+        },
+    );
 
     it('matches an unknown shell fallback to Home', () => {
         expect(activeLeftNavItem('unknown-route')).toBe('home');
@@ -102,12 +114,32 @@ describe('LeftNav rail interaction', () => {
         render(<LeftNav {...baseProps} />);
 
         expect(screen.getByRole('button', { name: 'Home' })).toHaveAttribute('title', 'Home');
-        expect(screen.getByRole('button', { name: 'DEX' })).toHaveAttribute('title', 'DEX');
+        expect(screen.getByRole('button', { name: 'Exchange (DEX)' }))
+            .toHaveAttribute('title', 'Exchange (DEX)');
         expect(screen.getByRole('button', { name: 'Settings' })).toHaveAttribute('title', 'Settings');
         const lock = screen.getByRole('button', { name: 'Lock wallet' });
         expect(lock).toHaveAttribute('title', 'Lock wallet');
-        expect(lock).toHaveClass(buttonStyles.secondary);
-        expect(lock.parentElement).toHaveClass(navStyles.action);
+        // A plain row like Settings at every width (operator 2026-11-13).
+        expect(lock).not.toHaveClass(buttonStyles.secondary);
+        expect(lock).toHaveClass(buttonStyles.ghost);
+        expect(lock).toHaveClass(navStyles.item);
+    });
+
+    it('renders the layout 5 groups and exact destination order', () => {
+        render(<LeftNav {...baseProps} />);
+        const nav = screen.getByRole('navigation', { name: 'Primary navigation' });
+        const labels = (group) => within(nav).getByRole('list', { name: group })
+            .querySelectorAll('button');
+        const names = (group) => [...labels(group)].map((button) => button.textContent.trim());
+
+        expect(names('Wallet')).toEqual(['Home', 'History', 'Send', 'Receive', 'My Tokens']);
+        expect(names('Trade')).toEqual(['Exchange (DEX)', 'Marketplace', 'Dispensers', 'Betting markets']);
+        expect(names('Network')).toEqual(['Governance', 'Staking']);
+        expect(names('Build')).toEqual(['Contracts', 'My Agents']);
+        expect(names('Social')).toEqual(['Messaging', 'Contacts']);
+        for (const removed of ['Scan', 'Lists', 'Payments due']) {
+            expect(within(nav).queryByRole('button', { name: removed })).toBeNull();
+        }
     });
 
     it('moves focus with arrows and Home or End without activating a route', () => {
@@ -153,6 +185,7 @@ describe('LeftNav rail interaction', () => {
         expect(css).toMatch(/background:\s*var\(--xc-surface-raised\)/);
         expect(css).toMatch(/color:\s*var\(--xc-text\)/);
         expect(css).toMatch(/border-inline-end:\s*1px solid var\(--xc-border\)/);
-        expect(css).toMatch(/\.action > button\s*\{[\s\S]*?gap:\s*var\(--xc-space-3\);[\s\S]*?padding-inline:\s*calc\(var\(--xc-space-1\) - 1px\)/);
+        expect(css).toMatch(/\.groupLabel\s*\{[\s\S]*?text-transform:\s*uppercase/);
+        expect(css).toMatch(/data-xc-side-menu='icons'[\s\S]*?\.groupDivider\s*\{[\s\S]*?display:\s*block/);
     });
 });

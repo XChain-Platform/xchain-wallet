@@ -27,17 +27,46 @@
     min-width: 0;
 }
 
+/* The leading icon is a flex child of the row, so the row's centre alignment
+   centres it vertically whatever the copy's height. A caller may set
+   --xc-switch-icon-color to tint it. */
+.icon {
+    --xc-icon-size: 1rem;
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    color: var(--xc-switch-icon-color, var(--xc-text-muted));
+}
+
 .label {
     color: var(--xc-text);
-    font-size: var(--xc-text-sm);
+    font-size: var(--xc-switch-label-size, var(--xc-text-sm));
     font-weight: 500;
     overflow-wrap: anywhere;
+}
+
+/* A label with a help tip: the tip follows the label text on its line. */
+.labelLine {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-label-help-gap);
+    min-width: 0;
+}
+
+.labelLine > .label {
+    min-width: 0;
+}
+
+.labelHelp {
+    flex: none;
+    /* The row gap spaces the tip; drop the tip's own start margin, as Input does. */
+    margin-inline-start: 0;
 }
 
 .description {
     margin-block-start: 2px;
     color: var(--xc-text-muted);
-    font-size: var(--xc-text-xs);
+    font-size: var(--xc-switch-description-size, var(--xc-text-xs));
     line-height: 1.3;
     overflow-wrap: anywhere;
 }
@@ -99,12 +128,12 @@
 
 .input:checked + .track {
     justify-content: flex-end;
-    border-color: var(--xc-control-selected);
-    background: var(--xc-control-selected);
+    border-color: var(--xc-switch-on);
+    background: var(--xc-switch-on);
 }
 
 .input:checked + .track .thumb {
-    background: var(--xc-control-selected-text);
+    background: var(--xc-switch-on-thumb);
 }
 
 .root:hover .input:not(:disabled):not(:checked) + .track {
@@ -113,8 +142,8 @@
 }
 
 .root:hover .input:not(:disabled):checked + .track {
-    border-color: var(--xc-accent-primary-hover);
-    background: var(--xc-accent-primary-hover);
+    border-color: var(--xc-switch-on);
+    background: var(--xc-switch-on);
 }
 
 .input:focus-visible + .track {
@@ -122,27 +151,13 @@
     outline-offset: 2px;
 }
 
-.input:disabled + .track {
-    border-color: var(--xc-control-disabled-border);
-    filter: saturate(var(--xc-disabled-saturation));
-}
-
-.input:disabled:not(:checked) + .track {
-    background: var(--xc-control-disabled-bg);
-}
-
-.input:disabled:not(:checked) + .track .thumb {
-    background: var(--xc-control-disabled-text);
-}
-
+/* A switch that cannot change (locked by policy, busy) keeps its on or off
+   look and its label colours: a control never looks disabled (G130,
+   operator 2026-11-16). Its taps are ignored and the input is disabled for
+   assistive technology; the reason sits in the row's description. The root
+   keeps its `disabled` class as a hook with no look of its own. */
 .disabled {
-    color: var(--xc-control-disabled-text);
-    cursor: not-allowed;
-}
-
-.disabled .label,
-.disabled .description {
-    color: var(--xc-control-disabled-text);
+    --xc-switch-locked: 1;
 }
 
 @media (forced-colors: active) {
@@ -163,10 +178,5 @@
 
     .input:checked + .track .thumb {
         background: HighlightText;
-    }
-
-    .input:disabled + .track {
-        border-color: GrayText;
-        filter: none;
     }
 }

@@ -4,7 +4,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { DelegationActionForm } from '../../../packages/core/src/shared/routes/DelegationActionForm.jsx';
+// The staking-delegate and staking-revoke routes: the one Staking form on the network.
+import { NetworkDelegationRoute as DelegationActionForm } from '../../helpers/stakingFormRoutes.jsx';
 
 const CHAIN = 'bitcoin-mainnet';
 const KEY = 'c'.repeat(64);

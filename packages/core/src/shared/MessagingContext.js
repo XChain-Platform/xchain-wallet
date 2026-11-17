@@ -38,6 +38,7 @@ import { createContext } from 'react';
  * @property {(opts: { walletId: string, currentPassword: string, newPassword: string }) => Promise<{ changed: true, vaultRekeyed: boolean, walletIds: string[] }>} [changePassword]
  * @property {(walletId: string, accountId?: string, chainId?: string, opts?: { fresh?: boolean }) => Promise<any>} [getWalletBalances]
  * @property {(walletId: string, accountId?: string) => Promise<any>} [getAddressesByChain]
+ * @property {() => Promise<Record<string, string[]>>} [getAddressesByWallet]
  * @property {(walletId: string, chainId: string, accountId?: string) => Promise<any>} [getNewestAddress]
  * @property {(chainId: string) => Promise<{ supported: string[]|null }>} [getSupportedAddressTypes]
  * @property {(walletId: string, accountId?: string) => Promise<any>} [getActiveAddresses]

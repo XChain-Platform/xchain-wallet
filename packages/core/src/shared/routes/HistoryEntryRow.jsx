@@ -9,7 +9,6 @@
 // contact legal@dankest.llc.
 
 import { memo } from 'react';
-import { VerifiedBadge } from '@xchain-wallet/core/ui';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { tickerForCoin, tickerForDescriptor } from '../../registry/coinTicker.js';
 import { t } from '../../i18n/index.js';
@@ -17,18 +16,17 @@ import '../../i18n/locales/en/history.js';
 import '../../i18n/locales/en/pending.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { ActivityRow, actionIconForAction } from '../components/ActivityRow.jsx';
+import { Icon } from '../../ui/index.js';
 import { classifyEntryAction, classifyEntryStatus } from '../utils/historyFilter.js';
 import { contractDisplayLabel } from './contractResponseShape.js';
-import { truncateAddress } from '../../ui/AddressText.jsx';
 import {
-    formatDecimalAmount,
     isDisplayableAmount,
     formatHistoryAmount,
     formatHistoryAmountForSpeech,
 } from '../utils/amountFormat.js';
 import { activityRowAmount, activityRowAmountQualifier, activityRowTick } from '../utils/activityAmount.js';
 import styles from './History.module.css';
-import { DoubleChevron, PENDING_WARNING_STATES, chainRegistry, coinOfChainId, describePendingAction, historyAmountDirection, peerAddressOfEntry, pendingCopyFor, pendingStateOf } from './HistoryShared.jsx';
+import { DoubleChevron, PENDING_WARNING_STATES, chainRegistry, coinOfChainId, describePendingAction, historyAmountDirection, pendingCopyFor, pendingStateOf } from './HistoryShared.jsx';
 import { DetailCard } from './HistoryDetailCard.jsx';
 
 /**
@@ -224,7 +222,7 @@ function recordDivisibility(raw) {
     return raw?.divisible === false ? 0 : 8;
 }
 
-export const EntryRow = memo(function EntryRow({ entry, selected, opensDetail = false, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed, networkAvailable = true }) {
+export const EntryRow = memo(function EntryRow({ entry, selected, splitRow = false, opensDetail = false, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed, networkAvailable = true }) {
     const d = chainRegistry.get(entry.chainId);
     const [balancesHidden] = useBalancesHidden();
     const settledAmount = settledAmountAnnotation(entry);
@@ -275,19 +273,17 @@ export const EntryRow = memo(function EntryRow({ entry, selected, opensDetail = 
     );
     const namedContext = contractRowLabel(entry)
         || (receiveLabel ? t('history.row.receivedAt', { label: receiveLabel }) : '');
-    // A row names its counterparty, so a send shows where it went. The
-    // address keeps both identifying ends: an end-clipped one showed only its
-    // first characters on a phone.
-    // A raw broadcast has no address to name, so the row names the transaction
-    // by its txid.
-    const counterparty = namedContext ? '' : (peerAddressOfEntry(entry) || entry.source || entry.txHash || '');
-    const contextLabel = namedContext || counterparty;
-    const contextText = namedContext || truncateAddress(counterparty);
+    // A row shows no address and no verification pill: the action, its
+    // details, the time and the status only. The counterparty address and the
+    // proof verdict live on the action's detail page.
+    const contextNode = namedContext
+        ? <span title={namedContext}>{namedContext}</span>
+        : null;
     const linkedTo = entry.link
         ? t('history.row.linkedTo', { ticker: entry.link.peerCoinTicker, index: entry.link.peerActionIndex })
         : '';
     const block = entry.blockIndex
-        ? t('history.row.block', { block: formatDecimalAmount(entry.blockIndex) })
+        ? t('history.row.block', { block: String(entry.blockIndex) })
         : '';
     const rowDescription = block ? [
         block,
@@ -300,7 +296,9 @@ export const EntryRow = memo(function EntryRow({ entry, selected, opensDetail = 
             <ActivityRow
                 onClick={() => onClick(entry)}
                 data-history-row
-                className={`${styles.row} ${selected ? styles.rowSelected : ''}`}
+                className={styles.row}
+                data-xc-split-row={splitRow ? '' : undefined}
+                aria-current={splitRow && selected ? 'true' : undefined}
                 // A row that opens the detail page is a link to it, not a
                 // disclosure: no expand chevron and no expanded state.
                 aria-expanded={opensDetail ? undefined : selected}
@@ -318,10 +316,7 @@ export const EntryRow = memo(function EntryRow({ entry, selected, opensDetail = 
                 subtitle={(
                     <>
                         {linkedTo ? <span role="img" aria-label={linkedTo} title={linkedTo}>🔗</span> : null}
-                        {verify ? (
-                            <VerifiedBadge status={verify.status} reason={verify.reason} size="sm" details={false} />
-                        ) : null}
-                        {contextLabel ? <span title={contextLabel}>{contextText}</span> : null}
+                        {contextNode}
                     </>
                 )}
                 amount={amount}
@@ -336,9 +331,14 @@ export const EntryRow = memo(function EntryRow({ entry, selected, opensDetail = 
                 selected={selected}
                 aria-description={rowDescription || undefined}
                 decoration={showConnector ? <span className={styles.connector} aria-hidden="true" /> : null}
-                trailing={opensDetail ? null : <DoubleChevron direction={selected ? 'up' : 'down'} />}
+                // A row that opens its detail page ends in the Back-sized
+                // forward chevron every tappable list row carries; an inline
+                // disclosure row keeps its expand chevron.
+                trailing={opensDetail
+                    ? <span className={styles.rowChevron} data-row-chevron><Icon.ForwardIcon /></span>
+                    : <DoubleChevron direction={selected ? 'up' : 'down'} />}
             />
-            {selected ? (
+            {selected && !opensDetail ? (
                 <DetailCard
                     entry={entry}
                     peerCache={peerCache}

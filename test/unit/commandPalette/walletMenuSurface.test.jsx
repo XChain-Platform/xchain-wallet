@@ -67,25 +67,27 @@ function integratedCommands() {
 }
 
 describe('CommandPalette wallet menu surface', () => {
-    it('renders group boxes in catalogue order with footer rows', () => {
+    it('renders group boxes in catalogue order, Settings as a row and Lock as a header button', () => {
         const { container } = renderMenu();
         const root = screen.getByRole('dialog', { name: 'Wallet menu' });
         const groups = Array.from(container.querySelectorAll('[data-wallet-menu-group]'));
 
         expect(root).toHaveAttribute('data-wallet-menu', '');
         expect(groups.map((group) => group.getAttribute('data-wallet-menu-group'))).toEqual([
-            'wallet', 'assets', 'trade', 'earn', 'people', 'actions',
+            'wallet', 'assets', 'trade', 'earn', 'governance', 'people', 'wallets', 'actions',
         ]);
-        expect(screen.getByRole('button', { name: 'Settings' })).toHaveAttribute(
+        expect(screen.getByRole('option', { name: 'Settings' })).toHaveAttribute(
             'data-wallet-menu-row',
             'settings',
         );
-        expect(screen.getByRole('button', { name: 'Lock wallet' })).toHaveAttribute(
-            'data-wallet-menu-row',
-            'lock',
-        );
+        const lock = screen.getByRole('button', { name: 'Lock wallet' });
+        expect(lock).toHaveAttribute('title', 'Lock wallet');
+        expect(lock).not.toHaveAttribute('data-wallet-menu-row');
+        expect(lock).not.toHaveAttribute('data-destructive');
+        expect(container.querySelector('header')).toContainElement(lock);
         expect(screen.getByRole('option', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
         expect(screen.getByRole('combobox')).toHaveAttribute('placeholder', 'Search the wallet');
+        expect(screen.getAllByRole('option').every((row) => row.querySelector(`.${styles.rowChevron}`))).toBe(true);
     });
 
     it('exposes catalogue groups and rows through the controlled listbox', () => {
@@ -94,7 +96,7 @@ describe('CommandPalette wallet menu surface', () => {
         const listbox = screen.getByRole('listbox', { name: 'Commands' });
         const groups = within(listbox).getAllByRole('group');
         const home = within(listbox).getByRole('option', { name: 'Home' });
-        const settings = screen.getByRole('button', { name: 'Settings' });
+        const settings = within(listbox).getByRole('option', { name: 'Settings' });
 
         expect(input).toHaveAttribute('aria-controls', listbox.id);
         expect(groups.map((group) => group.getAttribute('aria-labelledby'))).toEqual([
@@ -102,13 +104,15 @@ describe('CommandPalette wallet menu surface', () => {
             'xc-wallet-menu-group-assets',
             'xc-wallet-menu-group-trade',
             'xc-wallet-menu-group-earn',
+            'xc-wallet-menu-group-governance',
             'xc-wallet-menu-group-people',
+            'xc-wallet-menu-group-wallets',
             'xc-wallet-menu-group-actions',
         ]);
         expect(home).toHaveAttribute('aria-selected', 'true');
         expect(input).toHaveAttribute('aria-activedescendant', home.id);
-        expect(listbox).not.toContainElement(settings);
-        expect(settings).not.toHaveAttribute('tabindex', '-1');
+        expect(listbox).toContainElement(settings);
+        expect(listbox).not.toContainElement(screen.getByRole('button', { name: 'Lock wallet' }));
     });
 
     it('closes before catalogue and footer callbacks run', () => {
@@ -123,7 +127,7 @@ describe('CommandPalette wallet menu surface', () => {
         });
 
         fireEvent.click(screen.getByRole('option', { name: 'Send' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+        fireEvent.click(screen.getByRole('option', { name: 'Settings' }));
         fireEvent.click(screen.getByRole('button', { name: 'Lock wallet' }));
 
         expect(order).toEqual([
@@ -293,6 +297,14 @@ describe('CommandPalette wallet menu surface', () => {
         for (const [query, id] of [
             ['rec', 'xc-cmd-nav-receive'],
             ['all', 'xc-cmd-nav-actions'],
+            // The grouped full menu: a label that starts with the query leads
+            // its group, ahead of an earlier box's label that only contains it.
+            ['sign', 'xc-cmd-sign-message'],
+            ['swap', 'xc-cmd-trade-swap'],
+            ['contract', 'xc-cmd-nav-contracts'],
+            ['my orders', 'xc-cmd-nav-my-orders'],
+            ['broadcast', 'xc-cmd-create-broadcast'],
+            ['my wallets', 'xc-cmd-nav-wallet-picker'],
         ]) {
             fireEvent.change(input, { target: { value: query } });
             expect(screen.getAllByRole('option')[0]).toHaveAttribute('id', id);

@@ -55,14 +55,14 @@ test('kit navigation and filter controls work on populated routes', async ({ pag
 
     await test.step('Home tabs select and focus the next tab with an arrow key', async () => {
         const tabs = page.getByRole('main').getByRole('tablist', { name: 'Wallet view' });
-        const coins = tabs.getByRole('tab', { name: 'Coins' });
-        const tokens = tabs.getByRole('tab', { name: 'Tokens' });
+        const balances = tabs.getByRole('tab', { name: 'Balances' });
+        const nfts = tabs.getByRole('tab', { name: 'NFTs' });
 
-        await expect(coins).toHaveAttribute('aria-selected', 'true');
-        await coins.focus();
-        await coins.press('ArrowRight');
-        await expect(tokens).toBeFocused();
-        await expect(tokens).toHaveAttribute('aria-selected', 'true');
+        await expect(balances).toHaveAttribute('aria-selected', 'true');
+        await balances.focus();
+        await balances.press('ArrowRight');
+        await expect(nfts).toBeFocused();
+        await expect(nfts).toHaveAttribute('aria-selected', 'true');
     });
 
     await test.step('History chips and the segmented view expose their selected state', async () => {
@@ -141,7 +141,7 @@ test('choice controls retain their values through order and Send review', async 
         await main.getByLabel('Amount', { exact: true }).fill('2');
 
         await expect(give.getByRole('radio', { name: 'A token' })).toBeChecked();
-        await main.getByRole('button', { name: 'Place order', exact: true }).click();
+        await main.getByRole('button', { name: 'Place Order', exact: true }).click();
         await expect(page.getByTestId('confirm-modal')).toBeVisible();
         await page.getByTestId('confirm-reject').click();
 

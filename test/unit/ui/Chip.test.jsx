@@ -64,7 +64,8 @@ describe('<Chip>', () => {
         expect(css).toMatch(/border-radius:\s*var\(--xc-radius-pill\)/);
         expect(css).toMatch(/\.toggle:focus-visible\s*{[^}]*outline:\s*2px solid var\(--xc-control-focus-ring\)/s);
         expect(css).toMatch(/\.pressed[^}]*background:\s*var\(--xc-control-selected\)/s);
-        expect(css).toMatch(/\.toggle:disabled\s*{[^}]*border-color:\s*var\(--xc-control-disabled-border\)/s);
+        // G130: a disabled chip keeps its colours.
+        expect(css).not.toMatch(/\.toggle:disabled\s*{/);
         expect(css).not.toMatch(/color-mix\(|:has\(/);
     });
 

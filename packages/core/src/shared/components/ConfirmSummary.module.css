@@ -1,0 +1,258 @@
+/*
+ * Copyright © 2025–2026 Dankest, LLC
+ * Based on XChain Platform by Dankest, LLC – https://dankest.llc
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * This file is part of XChain Platform. Licensed under the GNU Affero
+ * General Public License v3.0 or later; see LICENSE.md. A commercial
+ * license (without AGPL source-disclosure terms) is available -
+ * contact legal@dankest.llc.
+ */
+
+/* The K6 action confirm page (operator ruling 2026-11-11): hero, address
+   card, before and after card, cost card, the network check line and the
+   collapsed technical details, 8px apart like every other block in the walk. */
+
+.stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+/* A notice in the stack (the network check line, an error, a refusal) takes
+   the stack's 8px gap instead of its own block margin. */
+.stack > [data-variant] {
+    margin: 0;
+}
+
+/* --- hero --- */
+
+.hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--xc-space-1);
+    padding-block: var(--xc-space-2) 0;
+    text-align: center;
+    min-width: 0;
+}
+
+/* The shared hero avatar is 88px; the confirm hero draws it at 64px. */
+.heroMark {
+    --xc-avatar-size-hero: calc(var(--xc-space-8) * 2);
+    --xc-avatar-pip-hero: var(--xc-space-6);
+    display: inline-flex;
+    margin-block-end: var(--xc-space-1);
+}
+
+.heroAmount {
+    margin: 0;
+    font-size: calc(var(--xc-text-2xl) * 1.25);
+    font-weight: 800;
+    line-height: 1.15;
+    color: var(--xc-text);
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+}
+
+.heroAmount bdi {
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+.in {
+    color: var(--xc-success);
+}
+
+.out {
+    color: var(--xc-danger);
+}
+
+.heroTicker {
+    font-size: var(--xc-text-lg);
+    font-weight: 700;
+}
+
+.heroLine {
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: var(--xc-space-1);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+    min-width: 0;
+}
+
+.chainIcon {
+    inline-size: var(--xc-text-md);
+    block-size: var(--xc-text-md);
+    border-radius: 50%;
+    display: inline-block;
+    flex: none;
+}
+
+/* --- cards --- */
+
+.card {
+    composes: card from '../../ui/Card.module.css';
+    display: grid;
+    margin: 0;
+    min-width: 0;
+}
+
+.row {
+    display: grid;
+    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: var(--xc-space-3);
+    padding-block: var(--xc-space-2);
+    border-block-end: 1px solid var(--xc-border);
+    font-size: var(--xc-text-sm);
+    min-width: 0;
+}
+
+.row:first-child {
+    padding-block-start: 0;
+}
+
+.row:last-child {
+    padding-block-end: 0;
+    border-block-end: 0;
+}
+
+.label {
+    margin: 0;
+    color: var(--xc-text-muted);
+    min-width: 0;
+}
+
+.value {
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    column-gap: var(--xc-space-1);
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.value bdi {
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+.after {
+    font-weight: 700;
+    color: var(--xc-text);
+}
+
+.arrow {
+    display: inline-flex;
+    color: var(--xc-text-muted);
+    --xc-icon-size: var(--xc-text-md);
+}
+
+.arrow svg {
+    inline-size: var(--xc-text-md);
+    block-size: var(--xc-text-md);
+}
+
+.amount {
+    font-weight: 700;
+    color: var(--xc-text);
+}
+
+.fiat {
+    font-weight: 400;
+    color: var(--xc-text-muted);
+}
+
+.totalRow .label {
+    color: var(--xc-text);
+    font-weight: 700;
+}
+
+.totalRow .amount {
+    font-weight: 800;
+}
+
+/* The full cost line the composed transaction could not split into an
+   amount (an estimate the form passed as text): one row, end aligned. */
+.textRow {
+    grid-template-columns: minmax(0, 1fr);
+    text-align: end;
+    font-weight: 700;
+}
+
+/* The address the action happens on: label and the full address with only
+   its middle cut, in the address list's monospace treatment. */
+.addressValue {
+    margin: 0;
+    display: flex;
+    justify-content: flex-end;
+    min-width: 0;
+    font-weight: 700;
+}
+
+/* A fact moved off the form: muted, under the cost card. */
+.notice {
+    margin: 0;
+    font-size: var(--xc-text-sm);
+    line-height: 1.4;
+    color: var(--xc-text-muted);
+    overflow-wrap: anywhere;
+}
+
+/* --- technical details --- */
+
+.tech {
+    min-width: 0;
+}
+
+.techSummary {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    min-height: var(--xc-tap-min);
+    padding-block: var(--xc-space-1);
+    color: var(--xc-accent-text);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    cursor: pointer;
+    list-style: none;
+}
+
+.techSummary::-webkit-details-marker {
+    display: none;
+}
+
+.techSummary svg {
+    inline-size: var(--xc-text-md);
+    block-size: var(--xc-text-md);
+    transition: transform 120ms ease;
+}
+
+.tech[open] > .techSummary svg {
+    transform: rotate(180deg);
+}
+
+.techBody {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    padding-block-start: var(--xc-space-2);
+    min-width: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .techSummary svg {
+        transition: none;
+    }
+}

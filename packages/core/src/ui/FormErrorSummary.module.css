@@ -1,40 +1,26 @@
-/* The validation summary is an inline error message, so its box is the
-   <StatusMessage variant="error"> row: FormErrorSummary.jsx puts the
-   StatusMessage.module.css row, error, icon and text classes on it. Only the
-   summary's own parts (its heading, the linked list and the recovery link)
-   live here. */
-.heading {
-    margin: 0;
-    font-weight: 600;
-}
-
+/* The form error notice is the danger Notice: FormErrorSummary.jsx puts the
+   StatusMessage.module.css row, error, icon, text and title classes on it.
+   Only the notice's own list lives here; its one action is Notice's own
+   (NoticeAction, a kit secondary Button). The list is plain text: no links and no underlines (Notice Standard,
+   2026-11-15). */
 .list {
-    margin: var(--xc-help-gap) 0 0;
+    margin: var(--xc-space-1) 0 0;
     padding-inline-start: var(--xc-space-5);
+    list-style: disc;
 }
 
-/* A form-level failure has no heading above it, so the list starts flush. */
+/* A single problem, or a form-level failure, is a plain line with no bullet. */
 .listBare {
     margin: 0;
-    padding-inline-start: var(--xc-space-5);
-}
-
-.link {
-    color: inherit;
-    text-decoration: underline;
-}
-
-.recovery {
-    margin-top: var(--xc-help-gap);
-    color: inherit;
-    background: transparent;
-    border: 0;
     padding: 0;
-    text-decoration: underline;
-    cursor: pointer;
-    font: inherit;
-    /* The WCAG 2.2 AA 2.5.8 pointer-target floor. */
-    min-height: var(--xc-tap-min);
-    display: inline-flex;
-    align-items: center;
+    list-style: none;
+}
+
+/* Under the title the single line keeps the title's 4px gap. */
+p + .listBare {
+    margin-top: var(--xc-space-1);
+}
+
+.list li + li {
+    margin-top: var(--xc-space-1);
 }

@@ -9,11 +9,11 @@
 // contact legal@dankest.llc.
 
 // Routes that are not plain forms but still compose a transaction (voting,
-// the oracle console) show the same inline demo note and keep their action
-// buttons disabled in a demo wallet.
+// the oracle console) show no demo notice in a demo wallet and compose
+// nothing; an action is refused only when pressed.
 
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { clearDemoWalletId, markDemoWallet } from '../../../packages/core/src/flows/demoMode.js';
@@ -62,7 +62,7 @@ beforeEach(() => { clearDemoWalletId(); markDemoWallet('demo-w'); });
 afterEach(() => { cleanup(); clearDemoWalletId(); });
 
 describe('demo wallets on non-form compose surfaces', () => {
-    it('PollDetail keeps the ballot browsable with Vote disabled', async () => {
+    it('PollDetail keeps the ballot browsable with no standing demo notice', async () => {
         const compose = mount(PollDetail, { chainId: CHAIN, pollIndex: 7 }, {
             governancePoll: vi.fn().mockResolvedValue({
                 action_index: 7,
@@ -78,19 +78,48 @@ describe('demo wallets on non-form compose surfaces', () => {
             governanceVotes: vi.fn().mockResolvedValue([]),
         });
 
-        await screen.findByRole('checkbox', { name: '0: Stable' });
-        await waitFor(() => expect(
-            screen.getAllByRole('status').some((node) => DEMO_NOTE.test(node.textContent || '')),
-        ).toBe(true));
-        expect(screen.getByRole('button', { name: 'Vote' })).toBeDisabled();
+        await screen.findByRole('button', { name: 'Vote for Stable' });
+        // No standing demo warning: the user knows the wallet is a demo.
+        expect(screen.queryByText(DEMO_NOTE)).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Create a Real Wallet' })).toBeNull();
         expect(compose).not.toHaveBeenCalled();
     });
 
-    it('OracleConsole shows the note above the market list', async () => {
+    // G92: no demo-only disabled button. A demo choice row stays enabled,
+    // and the tap is what answers with the refusal; it never opens Cast Vote.
+    it('PollDetail keeps a demo choice row enabled and refuses the tap', async () => {
+        const compose = mount(PollDetail, { chainId: CHAIN, pollIndex: 7 }, {
+            governancePoll: vi.fn().mockResolvedValue({
+                action_index: 7,
+                tick: 'VOTE',
+                question: 'Choose a release channel',
+                options: ['Stable', 'Preview'],
+                tally_mode: 'approval',
+                weight_mode: 'balance',
+                max_selections: 1,
+                end_block: 120,
+                poll_status: 'open',
+            }),
+            governanceVotes: vi.fn().mockResolvedValue([]),
+        });
+
+        const vote = await screen.findByRole('button', { name: 'Vote for Stable' });
+        await waitFor(() => expect(vote).toBeEnabled());
+        expect(screen.queryByText(DEMO_NOTE)).toBeNull();
+
+        fireEvent.click(vote);
+        expect(await screen.findByText(DEMO_NOTE)).toBeInTheDocument();
+        // Still the poll page: Cast Vote never opened and nothing composed.
+        expect(screen.getByRole('button', { name: 'Vote for Stable' })).toBeInTheDocument();
+        expect(screen.queryByRole('form', { name: 'Cast Vote' })).toBeNull();
+        expect(compose).not.toHaveBeenCalled();
+    });
+
+    it('OracleConsole shows no demo notice above the market list', async () => {
         const compose = mount(OracleConsole, { accountId: 'acct-1' });
-        await waitFor(() => expect(
-            screen.getAllByRole('status').some((node) => DEMO_NOTE.test(node.textContent || '')),
-        ).toBe(true));
+        await screen.findByText('No markets yet');
+        expect(screen.queryByText(DEMO_NOTE)).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Create a Real Wallet' })).toBeNull();
         expect(compose).not.toHaveBeenCalled();
     });
 
@@ -103,7 +132,7 @@ describe('demo wallets on non-form compose surfaces', () => {
             }),
             governanceVotes: vi.fn().mockResolvedValue([]),
         });
-        await screen.findByRole('checkbox', { name: '0: A' });
+        await screen.findByRole('button', { name: 'Vote for A' });
         expect(screen.queryByText(DEMO_NOTE)).toBeNull();
     });
 });

@@ -8,28 +8,25 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 2, Step 4 (piece 2b): Token Creation Wizard
-// scaffold.
+// Smoke for the Issue a Token route and its one form.
 //
 // Asserts:
-//   1. packages/core/src/shared/routes/TokenWizard.jsx exists + exports
-//      the TokenWizard component + the ISSUE-v0 composer used by Step 5
-//      and Step 6 is file-local (not exported from the module's
-//      public surface; we don't want wallet callers composing params
-//      directly; they go through messaging.issueToken).
-//   2. The four guided wizard stages plus 'done' are present as state
-//      literals; each stage wires to the next via setStage.
-//   3. All six templates appear in the TEMPLATES table and every one of
-//      them is interactive. "Community" is NOT one of them.
-//      merged it into Utility because it composed a byte-identical
-//      ISSUE and sold "dividend-enabled" as though a template could
-//      confer it, when DIVIDEND has no per-token opt-in at all.
-//   4. Review stage consumes decoder.decodeAction with action: 'ISSUE'
-//      and the composed params; that's the contract with Piece 2a.
-//   5. Review continues into the shared confirmation flow, whose approval
-//      calls messaging.issueToken with the prebuilt transaction.
-//   6. Ticker text passes through unchanged to the decoder and backend.
-//   7. The CSS module ships the stage UI, card, and responsive grid styles.
+//   1. TokenWizard.jsx is a thin route that renders IssueTokenForm; it holds
+//      no composer and has no stylesheet of its own.
+//   2. The "Start from" presets (Meme, Utility, Collectible, Limited edition,
+//      Subtoken) exist, and "Community" is NOT one of them: it composed a
+//      byte-identical ISSUE to Utility and sold "dividend-enabled" as a
+//      choice when every token can pay dividends.
+//   3. Each preset fills the settings its kind of token needs: Meme locks all
+//      supply paths, Collectible is a locked 1 of 1, Limited edition is a fair
+//      mint (cap locked, nothing minted, minting left open).
+//   4. A subtoken's ISSUE carries TICK = PARENT.CHILD, neither half recased.
+//   5. Review consumes decoder.decodeAction with action: 'ISSUE' and the
+//      composed params, then continues into the shared confirmation flow,
+//      whose approval calls messaging.issueToken with the prebuilt transaction.
+//   6. The ticker passes through unchanged and the divisible switch maps to
+//      DECIMALS 8 or 0.
+//   7. The wallet menu opens the route and both shells render it.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync, existsSync } from 'node:fs';
@@ -40,359 +37,215 @@ const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 const sharedRoutes = join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes');
 
-const wizardPath = join(sharedRoutes, 'TokenWizard.jsx');
-const cssPath = join(sharedRoutes, 'TokenWizard.module.css');
+const routePath = join(sharedRoutes, 'TokenWizard.jsx');
+const formPath = join(sharedRoutes, 'IssueTokenForm.jsx');
 
-assert.ok(existsSync(wizardPath), 'TokenWizard.jsx exists');
-assert.ok(existsSync(cssPath), 'TokenWizard.module.css exists');
+assert.ok(existsSync(routePath), 'TokenWizard.jsx exists');
+assert.ok(existsSync(formPath), 'IssueTokenForm.jsx exists');
 
-const src = readFileSync(wizardPath, 'utf8');
-const css = readFileSync(cssPath, 'utf8');
+const route = readFileSync(routePath, 'utf8');
+const src = readFileSync(formPath, 'utf8');
 
-// --- 1. Public surface -------------------------------------------------
+// --- 1. The route is a thin host ----------------------------------------
 
+assert.ok(/export function TokenWizard\b/.test(route), 'TokenWizard is a named export');
+assert.ok(/return <IssueTokenForm\b/.test(route), 'TokenWizard renders IssueTokenForm');
 assert.ok(
-    /export function TokenWizard\b/.test(src),
-    'TokenWizard is a named export',
+    !/composeIssueParams|TEMPLATE_COMPOSERS|setStage\(/.test(route),
+    'the route holds no composer and no step state',
 );
 assert.ok(
-    !/export function composeIssueParams/.test(src),
-    'composeIssueParams stays file-local (not exported)',
+    !existsSync(join(sharedRoutes, 'TokenWizard.module.css'))
+        && !existsSync(join(sharedRoutes, 'tokenWizardIcons.jsx')),
+    'the retired wizard stylesheet and icon module are gone',
+);
+assert.ok(
+    /export function IssueTokenForm\b/.test(src),
+    'IssueTokenForm is a named export',
 );
 
-// --- 2. Four guided stages + done --------------------------------------
+// --- 2. Presets; no Community ------------------------------------------
 
-for (const stage of ['template', 'chain', 'details', 'preview', 'done']) {
+const presetBlock = src.match(/const ISSUE_PRESETS = \{[\s\S]*?\n\};/);
+assert.ok(presetBlock, 'ISSUE_PRESETS found');
+for (const id of ['meme', 'utility', 'collectible', 'edition', 'subtoken']) {
     assert.ok(
-        src.includes(`'${stage}'`),
-        `wizard tracks stage "${stage}"`,
+        new RegExp(`\\b${id}:`).test(presetBlock[0]),
+        `ISSUE_PRESETS includes "${id}"`,
     );
-}
-// State transitions: template to chain, chain to details, details to
-// preview, and successful shared confirmation to done.
-for (const transition of [
-    "setStage('chain')",
-    "setStage('details')",
-    "setStage('preview')",
-    "setStage('done')",
-]) {
-    assert.ok(src.includes(transition), `wizard performs ${transition}`);
-}
-
-// --- 3. Six templates; all interactive --------------------------------
-
-for (const id of ['meme', 'utility', 'collectible', 'edition', 'subtoken', 'custom']) {
     assert.ok(
-        new RegExp(`id: '${id}'`).test(src),
-        `TEMPLATES includes "${id}"`,
+        new RegExp(`value: '${id}'`).test(src),
+        `the Start from picker offers "${id}"`,
     );
 }
-const templateBlocks = [...src.matchAll(/\{\s*id:\s*'(\w+)',[^}]*interactive:\s*(true|false)[^}]*\}/g)];
-const interactiveMap = Object.fromEntries(
-    templateBlocks.map((m) => [m[1], m[2] === 'true']),
-);
-for (const id of ['meme', 'utility', 'collectible', 'edition', 'subtoken', 'custom']) {
-    assert.equal(
-        interactiveMap[id],
-        true,
-        `${id} template is interactive`,
-    );
-}
-// the retired Community card must not come back. Re-adding it
-// re-creates the false choice, and the harm is the inverse reading: an
-// issuer who picked Utility believes dividends are closed to them and
-// pays a second ISSUE fee to re-create the token under Community.
 assert.ok(
-    !/id: 'community'/.test(src),
-    'Community is NOT a template (merged into Utility)',
+    !/community/i.test(presetBlock[0]) && !/value: 'community'/.test(src),
+    'Community is NOT a preset (merged into Utility)',
 );
-// ... and a stale 'community' id must still land on Utility rather than
-// falling through to Custom, which shows other fields and composes a
-// different ISSUE.
+const utilityOption = src.match(/value: 'utility'[^}]*\}/);
+assert.ok(utilityOption, 'utility option found');
 assert.ok(
-    /TEMPLATE_ALIASES\s*=\s*\{[^}]*community:\s*'utility'/.test(src),
-    'legacy community id aliases to utility',
+    /dividend/i.test(utilityOption[0]) && /every token/i.test(utilityOption[0]),
+    'the Utility option says dividends work on every token',
 );
 
-// --- 3a. The dividend copy the merge exists to deliver ---------------
+// --- 3. What each preset fills in ---------------------------------------
 
-// The Utility card carries the plain statement, and the template stage
-// repeats it once for the whole picker: dividends are a property of
-// every token, not a switch a template flips.
-const utilityCard = src.match(/\{\s*id:\s*'utility',[\s\S]*?\},/);
-assert.ok(utilityCard, 'utility template card found');
-assert.ok(
-    /dividend/i.test(utilityCard[0]) && /every token/i.test(utilityCard[0]),
-    'utility tagline says dividends work on every token',
-);
-// U79: the dividends note under the template list is removed; the Utility
-// tagline above still says dividends work on every token.
-assert.ok(
-    !/Any token you issue here can pay dividends/.test(src),
-    'template stage carries no dividends note under the list',
-);
-
-// --- 3b. Per-template composers present -----------------------------
-
-for (const key of ['meme', 'utility', 'collectible', 'edition', 'subtoken', 'custom']) {
+const meme = presetBlock[0].match(/meme:\s*\{[^\n]*\}/);
+assert.ok(meme, 'meme preset found');
+assert.ok(/divisible: false/.test(meme[0]), 'meme is non-divisible');
+for (const lock of ['maxSupply', 'maxMint', 'minting', 'mintSupply']) {
     assert.ok(
-        new RegExp(`\\b${key}\\s*\\(form\\)\\s*\\{`).test(src),
-        `TEMPLATE_COMPOSERS includes a ${key}(form) composer`,
+        new RegExp(`${lock}: true`).test(meme[0]),
+        `meme locks ${lock} (fixed supply must be the token's own promise)`,
     );
 }
-// Meme locks on creation.
-const memeBlock = src.match(/meme\(form\)\s*\{[\s\S]*?\n\s*\},/);
-assert.ok(memeBlock, 'meme composer block found');
+const collectible = presetBlock[0].match(/collectible:\s*\{[^\n]*\}/);
+assert.ok(collectible, 'collectible preset found');
 assert.ok(
-    memeBlock[0].includes("LOCK_MAX_SUPPLY = '1'"),
-    'meme composer sets LOCK_MAX_SUPPLY',
+    /supply: '1'/.test(collectible[0]) && /initialMint: '1'/.test(collectible[0]),
+    'collectible is a 1 of 1',
 );
-assert.ok(
-    memeBlock[0].includes("LOCK_MINT = '1'"),
-    'meme composer sets LOCK_MINT',
-);
-assert.ok(
-    memeBlock[0].includes("DECIMALS = '0'"),
-    'meme composer is non-divisible',
-);
-// The third lock. LOCK_MAX_SUPPLY + LOCK_MINT leave MINT_SUPPLY
-// re-issuable, so without this the template's "fixed supply" rests on the
-// indexer's ISSUE_MINT_SUPPLY_CUMULATIVE_CAP flag day rather than on the token.
-assert.ok(
-    memeBlock[0].includes("LOCK_MINT_SUPPLY = '1'"),
-    'meme composer sets LOCK_MINT_SUPPLY (fixed supply must be the token\'s own promise)',
-);
-// Collectible hard-wires supply=1 and locks.
-const collBlock = src.match(/collectible\(form\)\s*\{[\s\S]*?\n\s*\},/);
-assert.ok(collBlock, 'collectible composer block found');
-assert.ok(
-    /MAX_SUPPLY\s*=\s*'1'/.test(collBlock[0]),
-    'collectible composer pins MAX_SUPPLY=1',
-);
-// All three locks, or the 1-of-1 is only a 1-of-1 on a chain whose
-// cumulative-cap flag day has already passed.
-for (const flag of ['LOCK_MAX_SUPPLY', 'LOCK_MINT', 'LOCK_MINT_SUPPLY']) {
+for (const lock of ['maxSupply', 'minting', 'mintSupply']) {
     assert.ok(
-        collBlock[0].includes(`${flag} = '1'`),
-        `collectible composer sets ${flag}`,
+        new RegExp(`${lock}: true`).test(collectible[0]),
+        `collectible locks ${lock}`,
     );
 }
-// Edition is the fair-mint pattern (mirrors sdk.nft.edition({mint})):
-// declared cap locked at issuance, public MINT window left open.
-const edBlock = src.match(/edition\(form\)\s*\{[\s\S]*?\n\s*\},/);
-assert.ok(edBlock, 'edition composer block found');
+const edition = presetBlock[0].match(/edition:\s*\{[^\n]*\}/);
+assert.ok(edition, 'edition preset found');
 assert.ok(
-    edBlock[0].includes("LOCK_MAX_SUPPLY = '1'"),
-    'edition composer locks the declared cap',
+    /initialMint: '0'/.test(edition[0]),
+    'edition mints nothing at issuance (fair mint: no MINT_SUPPLY)',
 );
 assert.ok(
-    edBlock[0].includes("DECIMALS = '0'"),
-    'edition composer is non-divisible',
+    /maxSupply: true/.test(edition[0]) && !/minting: true/.test(edition[0]),
+    'edition locks the declared cap but leaves minting open',
 );
 assert.ok(
-    /p\.MAX_MINT\s*=/.test(edBlock[0]),
-    'edition composer sets MAX_MINT (the public mint window)',
+    /mintAddressMax: '1'/.test(edition[0]),
+    'edition limits each address to one mint',
 );
-for (const field of ['MINT_ADDRESS_MAX', 'MINT_START_BLOCK', 'MINT_STOP_BLOCK']) {
+for (const field of ['MINT_ADDRESS_MAX', 'MINT_START_BLOCK', 'MINT_STOP_BLOCK', 'MAX_MINT']) {
     assert.ok(
-        new RegExp(`p\\.${field}\\s*=`).test(edBlock[0]),
-        `edition composer supports ${field}`,
+        new RegExp(`p\\.${field} = `).test(src),
+        `composition supports ${field}`,
     );
 }
-assert.ok(
-    !/p\.MINT_SUPPLY\s*=/.test(edBlock[0]),
-    'edition composer does NOT pre-mint (no MINT_SUPPLY; fair mint)',
-);
-assert.ok(
-    !/p\.LOCK_MINT\s*=/.test(edBlock[0]),
-    'edition composer does NOT lock minting (the window must stay open)',
-);
-// Subtoken joins parent.child.
-const subBlock = src.match(/subtoken\(form\)\s*\{[\s\S]*?\n\s*\},/);
-assert.ok(subBlock, 'subtoken composer block found');
-assert.ok(
-    /parent\}\.\$\{child/.test(subBlock[0]) || /parent.*\.\$\{child/.test(subBlock[0]),
-    'subtoken composer joins parent.child for TICK',
-);
 
-// --- 3c. Per-template field visibility map --------------------------
+// --- 4. Subtoken ticker --------------------------------------------------
 
 assert.ok(
-    /TEMPLATE_FIELDS\s*=\s*\{/.test(src),
-    'wizard defines TEMPLATE_FIELDS visibility map',
-);
-// Collectible hides supply (composer pins it to 1).
-const fieldsBlock = src.match(/TEMPLATE_FIELDS\s*=\s*\{[\s\S]*?\n\};/);
-assert.ok(fieldsBlock, 'TEMPLATE_FIELDS block found');
-const collFields = fieldsBlock[0].match(/collectible:\s*\{[^}]*\}/);
-assert.ok(collFields, 'collectible field map exists');
-assert.ok(
-    !/\bsupply:\s*true/.test(collFields[0]),
-    'collectible does NOT show the supply field',
-);
-const edFields = fieldsBlock[0].match(/edition:\s*\{[^}]*\}/);
-assert.ok(edFields, 'edition field map exists');
-assert.ok(
-    /\bsupply:\s*true/.test(edFields[0])
-        && /\bmaxMint:\s*true/.test(edFields[0])
-        && /\bperAddressMax:\s*true/.test(edFields[0]),
-    'edition shows supply + mint-window fields',
-);
-const subFields = fieldsBlock[0].match(/subtoken:\s*\{[^}]*\}/);
-assert.ok(subFields, 'subtoken field map exists');
-assert.ok(
-    /parentToken:\s*true/.test(subFields[0]),
-    'subtoken shows the parentToken field',
+    /`\$\{parentToken\.trim\(\)\}\.\$\{ticker\.trim\(\)\}`/.test(src),
+    'a subtoken joins PARENT.CHILD for TICK',
 );
 
-// --- 4. Review wires through decoder ----------------------------------
+// --- 5. Review wires through the decoder and shared confirmation --------
 
 assert.ok(
     /decoder\s+as\s+decoderLib|decoderLib\.decodeAction/.test(src),
-    'wizard imports the decoder',
+    'the form imports the decoder',
 );
 assert.ok(
     /action:\s*['"]ISSUE['"]/.test(src),
-    'wizard calls decoder with action: "ISSUE"',
+    'the form calls the decoder with action: "ISSUE"',
 );
 assert.ok(
     src.includes('actionParams'),
-    'wizard computes actionParams for the decoder + backend',
+    'the form computes actionParams for the decoder and the backend',
 );
 assert.ok(
     src.includes('decoded.warnings'),
-    'wizard renders the decoder warnings array',
+    'the form renders the decoder warnings array',
 );
-
-// --- 5. Shared confirmation wires through messaging.issueToken --------
-
 assert.ok(
     /messaging\.issueToken\s*\(/.test(src),
-    'wizard calls messaging.issueToken from shared confirmation approval',
+    'the form calls messaging.issueToken from the confirmed approval',
 );
 assert.ok(
     /prebuiltPsbt/.test(src) && /actionConfirm\.run/.test(src),
-    'wizard signs the same prebuilt transaction shown by shared confirmation',
+    'the form signs the same prebuilt transaction shown by shared confirmation',
 );
 
-// --- 6. ISSUE v0 composer --------------------------------------------
+// --- 6. Composition ------------------------------------------------------
 
-// The chain records ticker case verbatim, so the wizard must not rewrite it.
+// The chain records ticker case verbatim, so the form must not rewrite it.
 assert.ok(
-    /TICK:\s*String\(form\.name \|\| ''\)\.trim\(\)/.test(src),
-    'wizard preserves ticker case in the composer',
-);
-// MINT_SUPPLY defaults to MAX_SUPPLY on create so the initial supply
-// lands in the creator's wallet. Shared across Meme/Utility/Subtoken/
-// Custom composers via the seedSupply helper.
-assert.ok(
-    /p\.MAX_SUPPLY\s*=\s*supply/.test(src)
-        && /p\.MINT_SUPPLY\s*=\s*supply/.test(src),
-    'seedSupply helper sets MAX_SUPPLY + MINT_SUPPLY together',
-);
-// Divisible toggle → DECIMALS = 8 or 0.
-assert.ok(
-    /form\.divisible\s*\?\s*'8'\s*:\s*'0'/.test(src),
-    'composer maps divisible → DECIMALS 8 / 0',
-);
-// Custom template flips LOCK_MAX_SUPPLY + LOCK_MINT when lockOnCreate
-// is true (Meme + Collectible set them unconditionally; covered in
-// Section 3b above).
-assert.ok(
-    src.includes("p.LOCK_MAX_SUPPLY = '1'"),
-    'composer sets LOCK_MAX_SUPPLY when lockOnCreate is true',
+    /TICK: issueTick,/.test(src) && !/TICK: issueTick\.toUpperCase/.test(src),
+    'the form preserves ticker case in the ISSUE',
 );
 assert.ok(
-    src.includes("p.LOCK_MINT = '1'"),
-    'composer sets LOCK_MINT when lockOnCreate is true',
+    /p\.DECIMALS = divisible \? '8' : '0'/.test(src),
+    'composition maps divisible to DECIMALS 8 or 0',
 );
-// Transfer-ownership (Custom-only).
 assert.ok(
-    /p\.TRANSFER\s*=\s*form\.transferTo/.test(src),
-    'composer sets TRANSFER from form.transferTo',
+    /if \(transferTo\.trim\(\)\) p\.TRANSFER = transferTo\.trim\(\)/.test(src),
+    'composition sets TRANSFER from the ownership field',
+);
+assert.ok(
+    /p\.MINT_SUPPLY = /.test(src) && /p\.MAX_SUPPLY = /.test(src),
+    'composition sets MAX_SUPPLY and MINT_SUPPLY',
+);
+assert.ok(
+    !/export function composeIssueParams/.test(src),
+    'composeIssueParams is not exported',
 );
 
-// --- 7. CSS module -----------------------------------------------------
+// --- 7. Shared messaging + shell context ---------------------------------
 
-for (const cls of [
-    '.progress',
-    '.templateGrid',
-    '.templateCard',
-    '.detailsList',
-    '.actions',
-]) {
-    assert.ok(
-        css.includes(cls),
-        `TokenWizard.module.css defines ${cls}`,
-    );
-}
-assert.ok(!/^\.warnings\s*\{/m.test(css), 'TokenWizard warnings render through StatusMessage, not a route box');
-assert.ok(/<(?:StatusMessage|FormNotice) variant="warning" role="alert"/.test(src), 'TokenWizard warnings use the shared warning message');
-assert.ok(src.includes('<FormPage'), 'TokenWizard delegates its page card to FormPage');
+assert.ok(src.includes('useMessaging'), 'the form reads messaging + shell via useMessaging');
+assert.ok(/screenVariantFor\(shell\)/.test(src), 'the form picks the Screen variant from the shell');
 assert.ok(
-    /<ListRow[\s\S]*?styles\.templateCard[\s\S]*?title={\([\s\S]*?<TemplateIcon \/>[\s\S]*?{t\.name}[\s\S]*?subtitle={t\.tagline}/.test(src),
-    'TokenWizard delegates template cards to ListRow',
+    /<FormFrame\b/.test(src) && /<FromSection\b/.test(src) && /<FeeSection\b/.test(src) && /<FormAction\b/.test(src),
+    'the form is built from the Form Standard parts',
 );
-// Templates are rows of one flush card split by dividers, never a grid of
-// bordered cards inside the page card (operator ruling 2026-11-06).
-assert.ok(
-    /\.templateGrid\s*\{[^}]*composes:\s*flush from '\.\.\/\.\.\/ui\/Card\.module\.css'/s.test(css)
-        && /\.templateGrid > li \+ li\s*\{[^}]*border-top:\s*1px solid var\(--xc-border\)/s.test(css),
-    'template rows sit in one flush card with divider lines',
-);
-assert.ok(
-    /\.templateCard\.templateCard\s*\{[^}]*border:\s*0/s.test(css)
-        && !/\.templateCard\s*\{[^}]*var\(--xc-border-strong\)/s.test(css),
-    'template rows draw no box of their own',
-);
-assert.ok(!/grid-template-columns:\s*repeat\(2, 1fr\)/.test(css), 'template rows stay one column at every width');
-assert.ok(!/<button\b/.test(src), 'TokenWizard has no route-level raw button');
-assert.ok(!/(^|\n)\.card\s*\{/.test(css), 'TokenWizard has no route-level page card');
+assert.ok(!/<button\b/.test(src), 'the form has no raw button');
 
-// --- 8. Uses the shared messaging + shell context ---------------------
+// --- 8. Wallet menu entry + App.jsx routing ------------------------------
+// Home has no bottom action row; Create token is a wallet menu row that
+// opens the route.
 
-assert.ok(
-    src.includes('useMessaging'),
-    'wizard reads messaging + shell via useMessaging',
-);
-assert.ok(
-    /screenVariantFor\(shell\)/.test(src),
-    'wizard picks Screen variant from shell',
-);
-
-// --- 9. Home entry + App.jsx routing (Step 7) ----------------------
-
-const home = readFileSync(
-    join(sharedRoutes, 'Home.jsx'),
+const home = readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8');
+assert.ok(!/onCreateToken/.test(home), 'Home carries no Create token entry of its own');
+const walletMenuSrc = readFileSync(
+    join(wsRoot, 'packages', 'core', 'src', 'shared', 'walletMenu.js'),
     'utf8',
 );
 assert.ok(
-    /onCreateToken/.test(home)
-        && /onClick=\{\(\) => runNetworkAction\('Creating a token', onCreateToken\)\}/.test(home)
-        && /t\('home.createTokenOffline'\)/.test(home),
-    'Home wires onCreateToken through the offline network-action gate',
+    /id: 'wizard', labelKey: 'walletMenu\.row\.createToken'/.test(walletMenuSrc),
+    'the wallet menu carries the Create token row that opens the route',
 );
 
 for (const [shell, appPath] of [
     ['popup', join(wsRoot, 'packages', 'extension', 'src', 'popup', 'App.jsx')],
     ['web', join(wsRoot, 'packages', 'web', 'src', 'App.jsx')],
+    ['desktop', join(wsRoot, 'packages', 'desktop', 'renderer', 'App.jsx')],
 ]) {
     const app = readFileSync(appPath, 'utf8');
+    assert.ok(app.includes("'wizard'"), `${shell} App.jsx tracks the wizard sub-route`);
+    assert.ok(/<TokenWizard\b/.test(app), `${shell} App.jsx renders TokenWizard`);
+    assert.ok(!/onCreateToken=\{/.test(app), `${shell} App.jsx passes no onCreateToken to Home`);
+    // Issue subtoken on a token's page opens the wizard with that token as the
+    // parent, and only that entry does: every Create token entry clears the
+    // form source first, so a stale token never prefills a new token.
+    const wizardBlock = app.match(/<TokenWizard\b[\s\S]*?\/>/)?.[0] || '';
     assert.ok(
-        app.includes("'wizard'"),
-        `${shell} App.jsx tracks the wizard sub-route`,
+        /initialChainId=\{subtokenParentFromToken \? tokenDetailRef\?\.chainId : undefined\}/.test(wizardBlock)
+            && /initialParentTick=\{subtokenParentFromToken \? tokenDetailRef\?\.tick : undefined\}/.test(wizardBlock),
+        `${shell} App.jsx prefills the wizard's parent from the token it was opened on`,
     );
     assert.ok(
-        /<TokenWizard\b/.test(app),
-        `${shell} App.jsx renders TokenWizard`,
+        /const subtokenParentFromToken = formSource === 'manage-token' \|\| formSource === 'token-detail';/.test(app),
+        `${shell} App.jsx takes the parent only from a token page source`,
     );
+    assert.ok(/onIssueSubtoken[=:][^\n]*'wizard'/.test(app), `${shell} App.jsx opens Issue subtoken on the wizard`);
+    const createEntries = app.split('\n').filter((line) => line.includes("setUnlockedView('wizard')"));
     assert.ok(
-        /onCreateToken=\{activeWalletId/.test(app)
-            || /onCreateToken=\{/.test(app),
-        `${shell} App.jsx passes onCreateToken to Home`,
+        createEntries.length >= 2 && createEntries.every((line) => line.includes('setFormSource(null); setUnlockedView(\'wizard\')')),
+        `${shell} App.jsx clears the form source on every Create token entry`,
     );
 }
 
 console.log(
-    'OK: token wizard smoke (file exists, 4 guided stages, accurate progress, 6 templates all interactive, no Community card + legacy alias, dividend copy present, per-template composers + field-visibility map, decoder wiring, shared confirmation issueToken call-site, Home entry + both App.jsx sub-routes, CSS classes present)',
+    'OK: issue token route smoke (thin route over IssueTokenForm, 5 presets and no Community, preset locks and fair mint, subtoken ticker, decoder and shared confirmation wiring, menu entry + both App.jsx sub-routes)',
 );

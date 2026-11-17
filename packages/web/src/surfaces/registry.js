@@ -81,11 +81,23 @@ export const SURFACE_VIEWS = Object.freeze({
         'markets',
         'markets-picker',
         'market',
+        // The Trade page a market opens.
+        'market-trade',
         'market-activity',
         'swap',
         'my-swaps',
+        // One swap, opened from its My Swaps row.
+        'swap-detail',
+        // Swap Details' Edit and Cancel forms.
+        'edit-swap',
+        'cancel-swap',
         'create-order',
         'my-orders',
+        // One order, opened from its My Orders row.
+        'order-detail',
+        // Order detail's Edit and Cancel forms.
+        'edit-order',
+        'cancel-order',
         'cross-chain-swap',
         'cross-chain-order',
     ]),
@@ -101,7 +113,7 @@ export const SURFACE_VIEWS = Object.freeze({
  * instead of quietly shipping a hidden-profile artifact with a DEX in it.
  *
  * Shared components a hidden surface merely USES are not listed: ReceivePicker
- * also serves the `receive-picker` view, so its presence proves nothing.
+ * is a thin wrapper over the shared TokenPicker, so its presence proves nothing.
  *
  * @type {Record<string, readonly string[]>}
  */
@@ -109,10 +121,18 @@ export const SURFACE_MODULES = Object.freeze({
     dex: Object.freeze([
         'shared/routes/MarketsList.jsx',
         'shared/routes/MarketView.jsx',
+        // The Trade page (also drawn in place by MarketView).
+        'shared/routes/MarketTrade.jsx',
         'shared/routes/MarketActivity.jsx',
         'shared/routes/CreateOrderForm.jsx',
         'shared/routes/MyOrdersView.jsx',
+        'shared/routes/OrderDetail.jsx',
+        'shared/routes/EditOrderForm.jsx',
+        'shared/routes/CancelOrderForm.jsx',
         'shared/routes/MySwapsView.jsx',
+        'shared/routes/SwapDetail.jsx',
+        'shared/routes/EditSwapForm.jsx',
+        'shared/routes/CancelSwapForm.jsx',
         'shared/routes/SwapForm.jsx',
         'shared/routes/CrossChainSwapForm.jsx',
         'shared/routes/CrossChainOrderForm.jsx',

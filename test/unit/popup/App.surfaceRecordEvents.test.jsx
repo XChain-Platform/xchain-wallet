@@ -62,6 +62,7 @@ function boot({ wallets, holdWalletList = false }) {
     const listeners = new Set();
     const state = { wallets: wallets.map((w) => ({ ...w })), session: 'unlocked' };
     const sent = [];
+    const all = [];
     let holding = holdWalletList;
     const heldReplies = [];
     vi.stubGlobal('chrome', {
@@ -70,6 +71,7 @@ function boot({ wallets, holdWalletList = false }) {
             getURL: (path) => `chrome-extension://wallet/${path}`,
             sendMessage: vi.fn((message, callback) => {
                 sent.push(message.type);
+                all.push(message);
                 if (message.type === 'session.status') {
                     callback({ ok: true, result: { state: state.session } });
                 } else if (message.type === 'wallet.list') {
@@ -110,10 +112,16 @@ function boot({ wallets, holdWalletList = false }) {
         for (const answer of heldReplies.splice(0)) answer();
         for (let i = 0; i < 10; i += 1) await Promise.resolve();
     };
-    return { state, sent, emit, deliver, releaseWalletList, listHeld: () => heldReplies.length > 0 };
+    return { state, sent, all, emit, deliver, releaseWalletList, listHeld: () => heldReplies.length > 0 };
 }
 
 const count = (sent, type) => sent.filter((entry) => entry === type).length;
+
+// The wallet name no longer sits in the header, and Home shows no balance card
+// here, so the wallet on screen is the one the screens last asked the
+// background about.
+const shownWalletId = (all) => all.filter((m) => m.request?.walletId).at(-1)?.request?.walletId ?? null;
+const askedBalancesFor = (all, walletId) => all.some((m) => m.request?.walletId === walletId);
 
 describe('popup reacts to a wallet removed in another surface', () => {
     it('lands on Welcome when the removed wallet was the last one', async () => {
@@ -127,7 +135,7 @@ describe('popup reacts to a wallet removed in another surface', () => {
         const sessionReads = count(sent, 'session.status');
         await emit('wallets', { change: 'removed', walletId: 'w1' });
 
-        expect(await screen.findByRole('button', { name: 'Create new wallet' })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: 'Create New Wallet' })).toBeInTheDocument();
         expect(count(sent, 'session.status')).toBeGreaterThan(sessionReads);
     });
 
@@ -146,7 +154,7 @@ describe('popup reacts to a wallet removed in another surface', () => {
         await emit('wallets', { change: 'removed', walletId: 'w1' });
         await act(async () => { await releaseWalletList(); });
 
-        expect(await screen.findByRole('button', { name: 'Create new wallet' })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: 'Create New Wallet' })).toBeInTheDocument();
         expect(count(sent, 'session.status')).toBeGreaterThan(1);
     });
 
@@ -167,7 +175,7 @@ describe('popup reacts to a wallet removed in another surface', () => {
         const sessionReads = count(sent, 'session.status');
         deliver('wallets', { change: 'removed', walletId: 'w1' });
 
-        expect(await screen.findByRole('button', { name: 'Create new wallet' })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: 'Create New Wallet' })).toBeInTheDocument();
         expect(count(sent, 'session.status')).toBeGreaterThan(sessionReads);
     });
 
@@ -293,62 +301,62 @@ describe('an open review survives record changes made in another surface', () =>
         localStorage.setItem('xchain.activeWallet', 'w1');
         const { container } = render(<App />);
         await screen.findByRole('heading', { name: 'Home', level: 1 });
-        await screen.findByText('Alpha');
+        await waitFor(() => expect(shownWalletId(env.all)).toBe('w1'));
         await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
         return { ...env, heading: container.querySelector('h1') };
     }
 
     it('keeps the open screen and its wallet when another surface switches wallet during a review', async () => {
-        const { heading, emit } = await twoWallets();
+        const { heading, emit, all } = await twoWallets();
         reviewOpen = true;
         localStorage.setItem('xchain.activeWallet', 'w2');
         await emit('wallet', { walletId: 'w2' });
         await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
         expect(heading.isConnected).toBe(true);
-        expect(screen.getByText('Alpha')).toBeInTheDocument();
+        expect(shownWalletId(all)).toBe('w1');
     });
 
     it('takes the wallet another surface chose during a review at the next navigation', async () => {
-        const { emit } = await twoWallets();
+        const { emit, all } = await twoWallets();
         reviewOpen = true;
         localStorage.setItem('xchain.activeWallet', 'w2');
         await emit('wallet', { walletId: 'w2' });
         reviewOpen = false;
         const history = screen.getAllByRole('button', { name: /^History\b/ })[0];
         await act(async () => { history.click(); });
-        expect(await screen.findByText('Bravo')).toBeInTheDocument();
+        await waitFor(() => expect(shownWalletId(all)).toBe('w2'));
     });
 
     it('takes the wallet another surface chose as soon as the review is cancelled', async () => {
-        const { emit } = await twoWallets();
+        const { emit, all } = await twoWallets();
         reviewOpen = true;
         localStorage.setItem('xchain.activeWallet', 'w2');
         await emit('wallet', { walletId: 'w2' });
-        expect(screen.getByText('Alpha')).toBeInTheDocument();
+        expect(shownWalletId(all)).toBe('w1');
 
         await endReview({ approved: false, left: false });
 
-        expect(await screen.findByText('Bravo')).toBeInTheDocument();
+        await waitFor(() => expect(shownWalletId(all)).toBe('w2'));
     });
 
     it('keeps a signing or broadcast result on its wallet until the user leaves it', async () => {
-        const { heading, emit } = await twoWallets();
+        const { heading, emit, all } = await twoWallets();
         reviewOpen = true;
         await endReview({ approved: true, left: false });
         localStorage.setItem('xchain.activeWallet', 'w2');
         await emit('wallet', { walletId: 'w2' });
         await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
         expect(heading.isConnected).toBe(true);
-        expect(screen.getByText('Alpha')).toBeInTheDocument();
+        expect(shownWalletId(all)).toBe('w1');
 
         const history = screen.getAllByRole('button', { name: /^History\b/ })[0];
         await act(async () => { history.click(); });
 
-        expect(await screen.findByText('Bravo')).toBeInTheDocument();
+        await waitFor(() => expect(shownWalletId(all)).toBe('w2'));
     });
 
     it('drops a held switch to a wallet another surface removed before the review ended', async () => {
-        const { state, emit } = await twoWallets();
+        const { state, emit, all } = await twoWallets();
         reviewOpen = true;
         localStorage.setItem('xchain.activeWallet', 'w2');
         await emit('wallet', { walletId: 'w2' });
@@ -358,15 +366,15 @@ describe('an open review survives record changes made in another surface', () =>
         await endReview({ approved: false, left: false });
         await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
 
-        expect(screen.getByText('Alpha')).toBeInTheDocument();
-        expect(screen.queryByText('Bravo')).toBeNull();
+        expect(shownWalletId(all)).toBe('w1');
+        expect(askedBalancesFor(all, 'w2')).toBe(false);
     });
 
     it('switches at once when another surface switches wallet with no review open', async () => {
-        const { emit } = await twoWallets();
+        const { emit, all } = await twoWallets();
         localStorage.setItem('xchain.activeWallet', 'w2');
         await emit('wallet', { walletId: 'w2' });
-        expect(await screen.findByText('Bravo')).toBeInTheDocument();
+        await waitFor(() => expect(shownWalletId(all)).toBe('w2'));
     });
 
     it('reloads the open screen for a network change while a review is open', async () => {
@@ -378,7 +386,7 @@ describe('an open review survives record changes made in another surface', () =>
     });
 
     it('keeps the screen of a send signing from a wallet another surface removes, until the next navigation', async () => {
-        const { state, sent, heading, emit } = await twoWallets();
+        const { state, sent, heading, emit, all } = await twoWallets();
         reviewOpen = true;
         approving = true;
         state.wallets = [{ id: 'w2', name: 'Bravo' }];
@@ -386,7 +394,7 @@ describe('an open review survives record changes made in another surface', () =>
         await emit('wallets', { change: 'removed', walletId: 'w1' });
         await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
         expect(heading.isConnected).toBe(true);
-        expect(screen.getByText('Alpha')).toBeInTheDocument();
+        expect(shownWalletId(all)).toBe('w1');
         expect(count(sent, 'session.status')).toBe(sessionReads);
 
         // The send settles and the person moves on: the session reloads then.
@@ -395,7 +403,7 @@ describe('an open review survives record changes made in another surface', () =>
         const history = screen.getAllByRole('button', { name: /^History\b/ })[0];
         await act(async () => { history.click(); });
         await waitFor(() => expect(count(sent, 'session.status')).toBeGreaterThan(sessionReads));
-        expect(await screen.findByText('Bravo')).toBeInTheDocument();
+        await waitFor(() => expect(shownWalletId(all)).toBe('w2'));
     });
 
     it('closes a review not yet approved when another surface removes its wallet', async () => {

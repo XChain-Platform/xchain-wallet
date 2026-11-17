@@ -27,9 +27,9 @@ export function NetworkFieldSection() {
             kicker="THE way a form says which network the action runs on: a field-shaped button with a list icon that opens the full-screen network picker. Every authoring form uses it instead of a dropdown."
         >
             <Guidance
-                what={<>A field-shaped button showing the current network and a trailing list icon. It opens <code>NetworkPicker</code>, whose full-screen list gives every row its network icon and returns the selection to the form.</>}
+                what={<>A field-shaped button showing the current network and a trailing list icon. It opens <code>NetworkPicker</code>, whose full-screen list draws every row like a token-list row (big network icon, name, a "BTC · Mainnet" line under it, right chevron) and returns the selection to the form.</>}
                 when={<>The top of every action-authoring form (Send, Claim rewards, Unstake, Delegate, Issue, Broadcast…). Forms opened from a specific context (a staking position's Claim, a contract's Stake) still render it, seeded to that network, so the network is visible and retargetable like on any other form.</>}
-                whenNot={<>Pure display of a fixed network inside a review/summary list (that's <code>ChainBadge</code>). Filtering a list by coin family (that's the list toolbar's network filter dropdown).</>}
+                whenNot={<>Pure display of a fixed network inside a review/summary list (that's <code>ChainBadge</code>). Filtering a list by coin family (that's the list's network filter, which opens the same full-screen list).</>}
                 sizing={<><code>md</code> matches standard form controls; <code>lg</code> matches hero fields on focused transaction screens.</>}
                 variants={<>Custom label and <code>md</code> or <code>lg</code> size. A host can pass <code>onOpenPicker</code> when it owns the picker screen.</>}
                 doRule={<>✓ Offer every network the wallet holds addresses on (<code>Object.keys(addressesByChain)</code>) · seed from the launching context · reset dependent state (source address, token) in <code>onChange</code></>}

@@ -245,3 +245,77 @@
     color: var(--xc-text);
     background: var(--xc-bg-muted);
 }
+
+/* The row's forward chevron matches the Back chevron's size (a 32px icon box). The glyph
+   fills only the middle third, so the box gives back its empty sides and the amounts keep their room. */
+.rowChevron {
+    --xc-icon-size: 32px;
+    display: inline-flex;
+    justify-content: center;
+    /* Only the middle third of the box holds the glyph and its stroke; the
+       rest is clipped so the box adds no width and never overhangs the row. */
+    width: calc(var(--xc-icon-size) / 3);
+    overflow: hidden;
+}
+
+.rowChevron svg {
+    flex: 0 0 auto;
+    width: var(--xc-icon-size);
+    height: var(--xc-icon-size);
+}
+
+/* The row whose detail shows beside the list on wide Home (G115): the DEX
+   list's selected-row look (MarketsList.module.css), a faint accent tint
+   and the 3px accent bar on the start edge. */
+.row[data-selected='true'] {
+    background: color-mix(in srgb, var(--xc-accent-primary) 10%, transparent);
+    box-shadow: var(--xc-shadow-nav-indicator);
+}
+
+/* Marketplace's wide picker opts into the side-menu row surface. Wide Home
+   keeps its separately ruled balance-row treatment. */
+.row[data-xc-split-row] {
+    position: relative;
+    width: calc(100% - (2 * var(--xc-space-2)));
+    margin-inline: var(--xc-space-2);
+    border-top-color: transparent;
+    border-radius: 10px;
+    background: transparent;
+    box-shadow: none;
+}
+
+.row[data-xc-split-row] + .row[data-xc-split-row]::before {
+    content: '';
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline: calc(-1 * var(--xc-space-2));
+    border-top: 1px solid var(--xc-border);
+}
+
+.row[data-xc-split-row] > .rowContent:is(:hover, :active) {
+    background: transparent;
+    box-shadow: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .row[data-xc-split-row]:hover {
+        background: color-mix(in srgb, var(--xc-text) 10%, transparent);
+        box-shadow: none;
+    }
+}
+
+.row[data-xc-split-row][data-selected='true'] {
+    background: color-mix(in srgb, var(--xc-accent-primary) 20%, transparent);
+    box-shadow: none;
+    font-weight: inherit;
+}
+
+@media (forced-colors: active) {
+    .row[data-selected='true'] {
+        border-inline-start: 3px solid Highlight;
+    }
+
+    .row[data-xc-split-row][data-selected='true'] {
+        border-inline-start: 0;
+    }
+}

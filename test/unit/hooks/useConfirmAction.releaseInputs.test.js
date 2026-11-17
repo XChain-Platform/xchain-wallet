@@ -95,7 +95,9 @@ describe('useConfirmAction encoder reservation release', () => {
 
         hook.unmount();
 
-        expect(releaseInputs).toHaveBeenCalledOnce();
+        // The compose's release frees the donation claim first, so the encoder
+        // release lands a microtask after unmount rather than inside it.
+        await waitFor(() => expect(releaseInputs).toHaveBeenCalledOnce());
         expect(releaseInputs).toHaveBeenCalledWith(RESERVATION_ID);
     });
 

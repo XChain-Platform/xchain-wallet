@@ -107,14 +107,18 @@ describe('DestroyForm balance freshness', () => {
         const field = await screen.findByLabelText('Type "DESTROY" to confirm');
         const approve = await screen.findByTestId('confirm-approve');
         expect(screen.getByText('Destroy is irreversible.')).toBeInTheDocument();
-        expect(approve).toBeDisabled();
+        // G130: Approve keeps its colour; a tap before the exact word is
+        // typed is answered at the top of the page and signs nothing.
+        expect(approve).toBeEnabled();
 
         for (const value of ['destroy', ' DESTROY', 'DESTROY ', 'Destroy']) {
             fireEvent.change(field, { target: { value } });
-            expect(approve).toBeDisabled();
+            fireEvent.click(approve);
+            expect(screen.getByTestId('confirm-blocked')).toHaveTextContent('Finish the step above Approve, then approve.');
         }
         fireEvent.change(field, { target: { value: 'DESTROY' } });
         expect(approve).toBeEnabled();
+        expect(screen.queryByTestId('confirm-blocked')).toBeNull();
     });
 
     it('bypasses a balance cached under two seconds old and refuses when the token is gone', async () => {

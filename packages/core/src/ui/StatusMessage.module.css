@@ -5,11 +5,21 @@
     flex-wrap: wrap;
     align-items: center;
     gap: var(--xc-space-2);
-    margin: var(--xc-space-2) 0;
+    /* No outer margin: the stack that places a notice spaces it with its own
+       8px gap (--xc-space-2), and Screen's 8px content inset puts a leading
+       notice 8px under the page header. A margin here stacked on those gaps
+       and drew 16px around the notice. test/unit/ui/noticeSpacing.test.jsx
+       pins it. */
+    margin: 0;
     padding: var(--xc-space-2) var(--xc-space-3);
     border-radius: var(--xc-card-radius);
     font-size: var(--xc-text-sm);
     line-height: 1.4;
+}
+
+/* The `flush` prop is kept for its callers; every notice is flush now. */
+.row.flush {
+    margin: 0;
 }
 
 .text {
@@ -20,12 +30,30 @@
     overflow-wrap: anywhere;
 }
 
+/* The tone's icon (circle i, circle !, circle check), centred on the first
+   line of text however many lines follow. */
 .icon {
     flex: 0 0 auto;
     align-self: flex-start;
-    font-size: var(--xc-icon-sm);
-    font-weight: 700;
-    line-height: 1.4;
+    display: inline-flex;
+    align-items: center;
+    height: 1.4em;
+}
+
+.icon svg {
+    width: var(--xc-icon-sm);
+    height: var(--xc-icon-sm);
+}
+
+/* The optional bold title, on its own line above the body. */
+.title {
+    display: block;
+    margin: 0;
+    font-weight: 600;
+}
+
+.title + .body {
+    margin-top: var(--xc-space-1);
 }
 
 .details {
@@ -87,22 +115,16 @@
     border: 1px solid var(--xc-info);
 }
 
-.row.warning {
-    background: var(--xc-warning-bg);
-    color: var(--xc-warning-text);
-    border: 1px solid var(--xc-warning);
-}
-
+/* The Notice Standard's danger tone (2026-11-15, style 2): a warning, an
+   error and a critical caution are one red look, a light red tint with a
+   thin red border, the text in the dark red the tint is paired with. No
+   solid fill and no edge bar. A secondary Button inside keeps the page
+   surface's own tokens, which read on the light tint. */
+.row.warning,
 .row.error {
-    background: var(--xc-danger);
-    color: var(--xc-on-danger);
+    background: var(--xc-danger-bg);
+    color: var(--xc-danger-text);
     border: 1px solid var(--xc-danger);
-    font-weight: 500;
-    /* A secondary Button or link inside the notice reads its text and border
-       from these tokens, which are tuned for a page surface; on the danger
-       fill they take the label colour that fill is paired with. */
-    --xc-accent-text: var(--xc-on-danger);
-    --xc-border-strong: var(--xc-on-danger);
 }
 
 .row.success {
@@ -128,4 +150,38 @@
 .body > * + *,
 .body li + li {
     margin-top: var(--xc-space-1);
+}
+
+/* The dismiss control of a dismissible notice: last in the box, pinned to its
+   top end corner whatever the notice's text length or wrapping. */
+.dismiss {
+    flex: 0 0 auto;
+    align-self: flex-start;
+    order: 99;
+    margin-inline-start: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    /* The 24px tap floor (WCAG 2.2 2.5.8) around an 18px glyph; the negative
+       margins keep the notice's first line and end padding as the glyph set them. */
+    width: var(--xc-tap-min);
+    height: var(--xc-tap-min);
+    margin-block: calc((var(--xc-icon-md) - var(--xc-tap-min)) / 2);
+    margin-inline-end: calc((var(--xc-icon-md) - var(--xc-tap-min)) / 2);
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+}
+
+.dismiss:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+}
+
+.dismiss svg {
+    width: var(--xc-icon-md);
+    height: var(--xc-icon-md);
 }

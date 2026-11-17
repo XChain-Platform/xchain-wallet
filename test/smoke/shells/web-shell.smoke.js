@@ -146,8 +146,8 @@ assert.ok(
 );
 assert.ok(
     /t\('extensionBanner\.useExtension'\)/.test(banner)
-        && /'extensionBanner\.useExtension': 'Use extension wallet'/.test(englishDictionarySource()),
-    'ExtensionBanner offers the "Use extension wallet" accept action',
+        && /'extensionBanner\.useExtension': 'Use Extension Wallet'/.test(englishDictionarySource()),
+    'ExtensionBanner offers the "Use Extension Wallet" accept action',
 );
 
 // Provider detection + the connect/persist handoff live in the hook and

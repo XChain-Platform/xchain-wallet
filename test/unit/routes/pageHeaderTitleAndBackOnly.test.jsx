@@ -15,7 +15,9 @@
 // ListPage actions row (or the form's own action row),
 // the first item of the page content below any notice. When the list is
 // empty and its EmptyState offers the same action, the row leaves it out,
-// so the screen never shows the action twice.
+// so the screen never shows the action twice. List pages have since moved
+// to the approved title bar (G02, G04, G95): the filter icon, then the
+// create plus at the far right, with nothing between the header and the list.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -108,20 +110,28 @@ describe('Contacts', () => {
         deleteContact: vi.fn(),
     });
 
-    it('puts Add contact in the actions row, not the page header', async () => {
+    // G95: the filter icon, then Add contact as a plain plus at the far right;
+    // nothing sits between the header and the list.
+    it('puts the filter, then the Add contact plus, in the title bar', async () => {
         mount(ContactsList, messagingWith([contact]));
         await screen.findByRole('button', { name: 'Alice' });
-        expect(headerActions('Contacts')).toEqual([]);
+        const filter = screen.getByRole('button', { name: 'Filter contacts' });
         const add = screen.getByRole('button', { name: 'Add contact' });
-        expect(actionsRow()).toContainElement(add);
+        expect(headerActions('Contacts')).toEqual([filter, add]);
+        expect(add.textContent.trim()).toBe('');
+        expect(add.title).toBe('Add contact');
+        expect(actionsRow()).toBeNull();
+        expect(screen.queryByRole('searchbox', { name: 'Search contacts' })).toBeNull();
     });
 
-    it('offers only the empty state action when there are no contacts', async () => {
+    it('offers Add contact once, as the title bar plus, on an empty list', async () => {
         mount(ContactsList, messagingWith([]));
         await screen.findByText('No contacts yet');
-        expect(screen.getByRole('button', { name: 'Create first contact' })).toBeTruthy();
-        expect(screen.queryByRole('button', { name: 'Add contact' })).toBeNull();
-        expect(headerActions('Contacts')).toEqual([]);
+        expect(screen.queryByRole('button', { name: 'Create first contact' })).toBeNull();
+        const add = screen.getAllByRole('button', { name: 'Add contact' });
+        expect(add).toHaveLength(1);
+        expect(headerActions('Contacts')).toContain(add[0]);
+        expect(actionsRow()).toBeNull();
     });
 
 });
@@ -132,7 +142,9 @@ describe('My lists', () => {
         getListsForSource: vi.fn().mockResolvedValue({ data: lists }),
     });
 
-    it('keeps Shared lists and Create union list in the actions row and offers Create list once when empty', async () => {
+    // Operator 2026-11-13: the filter, then Create list as the plus; no Shared
+    // lists or Create union list button anywhere on the page.
+    it('keeps the title bar to the filter and the Create list plus on an empty list', async () => {
         mount(MyLists, messaging([]), {
             onOpenList: vi.fn(),
             onCreateList: vi.fn(),
@@ -140,89 +152,186 @@ describe('My lists', () => {
             onCreateUnionList: vi.fn(),
         });
         await screen.findByText('No lists yet');
-        expect(screen.getAllByRole('button', { name: 'Create list' })).toHaveLength(1);
-        expect(actionsRow()).not.toContainElement(screen.getByRole('button', { name: 'Create list' }));
-        expect(actionsRow()).toContainElement(screen.getByRole('button', { name: 'Shared lists' }));
-        expect(actionsRow()).toContainElement(screen.getByRole('button', { name: 'Create union list' }));
-        expect(headerActions('My lists')).toEqual([]);
+        expect(actionsRow()).toBeNull();
+        const filter = screen.getByRole('button', { name: 'Filter lists' });
+        const create = screen.getAllByRole('button', { name: 'Create list' });
+        expect(create).toHaveLength(1);
+        expect(headerActions('My Lists')).toEqual([filter, create[0]]);
+        expect(screen.queryByRole('button', { name: 'Shared Lists' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Create Union List' })).toBeNull();
     });
 
-    it('moves Create list into the actions row once there are lists', async () => {
+    it('keeps the search out of the page once there are lists', async () => {
         mount(MyLists, messaging([{ action_index: 7, type: '2', status: 'valid', source: ADDRESS }]), {
             onOpenList: vi.fn(),
             onCreateList: vi.fn(),
         });
         await screen.findByRole('button', { name: /Open .*7/ });
-        const create = screen.getAllByRole('button', { name: 'Create list' });
-        expect(create).toHaveLength(1);
-        expect(actionsRow()).toContainElement(create[0]);
-        expect(headerActions('My lists')).toEqual([]);
+        const create = screen.getByRole('button', { name: 'Create list' });
+        expect(actionsRow()).toBeNull();
+        expect(headerActions('My Lists')).toEqual([screen.getByRole('button', { name: 'Filter lists' }), create]);
+        expect(screen.queryByRole('searchbox', { name: 'Search lists' })).toBeNull();
     });
 });
 
+// The approved redesign (G02, G04) puts a list page's filter and its create plus in the title
+// bar, and the empty state is text only, so the plus is offered exactly once.
 describe('My dispensers', () => {
-    it('puts Create dispenser in the actions row and offers it once on an empty list', async () => {
+    it('puts the New dispenser plus in the title bar and offers it once on an empty list', async () => {
         const onCreateDispenser = vi.fn();
         mount(DispensersList, {
             getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [{ address: ADDRESS }] }),
             getDispensersForSource: vi.fn().mockResolvedValue([]),
         }, { activeAccountId: 'account-1', onCreateDispenser, onOpenDispenser: vi.fn() });
         await screen.findByText('No dispensers yet');
-        const create = screen.getAllByRole('button', { name: 'Create dispenser' });
+        const create = screen.getAllByRole('button', { name: 'New dispenser' });
         expect(create).toHaveLength(1);
+        expect(screen.queryByRole('button', { name: 'Create dispenser' })).toBeNull();
         expect(actionsRow()).toBeNull();
-        expect(headerActions('My dispensers')).toEqual([]);
+        expect(headerActions('Dispensers')).toContain(create[0]);
         fireEvent.click(create[0]);
         expect(onCreateDispenser).toHaveBeenCalledOnce();
     });
 });
 
+// The operator's Messaging header: the filter icon, then New message as a
+// plain plus at the far right (Bet Markets' order); the search spans the
+// toolbar row alone and the empty inbox is text only.
 describe('Messaging', () => {
-    it('keeps New conversation reachable above the unlock form', async () => {
-        const onCompose = vi.fn();
-        mount(MessagingInbox, {
-            getAddressesByChain: vi.fn().mockResolvedValue({
-                [CHAIN]: [{ id: 'address-1', address: ADDRESS, source: 'hd', role: 'receive' }],
-            }),
-            listContacts: vi.fn().mockResolvedValue([]),
-            signerReady: vi.fn().mockResolvedValue({ ready: false }),
-        }, { activeAccountId: 'account-1', onCompose });
-        await screen.findByRole('button', { name: 'Unlock inbox' });
-        const compose = screen.getByRole('button', { name: 'New conversation' });
-        expect(actionsRow()).toContainElement(compose);
-        expect(headerActions('Messaging')).toEqual([]);
-        fireEvent.click(compose);
-        expect(onCompose).toHaveBeenCalledOnce();
+    const inboxMessaging = (overrides = {}) => ({
+        getAddressesByChain: vi.fn().mockResolvedValue({
+            [CHAIN]: [{ id: 'address-1', address: ADDRESS, source: 'hd', role: 'receive' }],
+        }),
+        listContacts: vi.fn().mockResolvedValue([]),
+        signerReady: vi.fn().mockResolvedValue({ ready: true }),
+        getMessagingInboxSweep: vi.fn().mockResolvedValue({ messages: [], addresses: [], errors: [] }),
+        ...overrides,
     });
 
-    it('offers New message from the empty inbox and no New conversation beside it', async () => {
-        mount(MessagingInbox, {
-            getAddressesByChain: vi.fn().mockResolvedValue({
-                [CHAIN]: [{ id: 'address-1', address: ADDRESS, source: 'hd', role: 'receive' }],
-            }),
-            listContacts: vi.fn().mockResolvedValue([]),
-            signerReady: vi.fn().mockResolvedValue({ ready: true }),
-            getMessagingInboxSweep: vi.fn().mockResolvedValue({ messages: [], addresses: [], errors: [] }),
-        }, { activeAccountId: 'account-1', onCompose: vi.fn() });
+    it('keeps the New message plus in the title bar above the unlock form', async () => {
+        const onCompose = vi.fn();
+        mount(MessagingInbox, inboxMessaging({
+            signerReady: vi.fn().mockResolvedValue({ ready: false }),
+        }), { activeAccountId: 'account-1', onCompose });
+        await screen.findByRole('button', { name: 'Unlock Inbox' });
+        const compose = screen.getByRole('button', { name: 'New message' });
+        expect(actionsRow()).toBeNull();
+        expect(headerActions('Messaging')).toEqual([compose]);
+        fireEvent.click(compose);
+        expect(onCompose).toHaveBeenCalledOnce();
+        expect(onCompose.mock.calls[0]).toEqual([]);
+    });
+
+    it('puts the filter icon, then the plus at the far right, in the title bar of the inbox', async () => {
+        mount(MessagingInbox, inboxMessaging(), { activeAccountId: 'account-1', onCompose: vi.fn() });
         await screen.findByText('No messages yet');
-        expect(screen.getByRole('button', { name: 'New message' })).toBeTruthy();
-        expect(screen.queryByRole('button', { name: 'New conversation' })).toBeNull();
-        expect(headerActions('Messaging')).toEqual([]);
+        const compose = screen.getByRole('button', { name: 'New message' });
+        const filter = screen.getByRole('button', { name: 'Filter conversations' });
+        // Same order as Bet Markets: filter first, the plus rightmost.
+        expect(headerActions('Messaging')).toEqual([filter, compose]);
+        expect(compose.textContent.trim()).toBe('');
+        expect(compose.title).toBe('New message');
+        expect(filter.getAttribute('aria-haspopup')).toBe('dialog');
+        expect(actionsRow()).toBeNull();
+    });
+
+    it('opens the compose route from the plus with no prefill', async () => {
+        const onCompose = vi.fn();
+        mount(MessagingInbox, inboxMessaging(), { activeAccountId: 'account-1', onCompose });
+        await screen.findByText('No messages yet');
+        fireEvent.click(screen.getByRole('button', { name: 'New message' }));
+        expect(onCompose).toHaveBeenCalledOnce();
+        expect(onCompose.mock.calls[0]).toEqual([]);
+    });
+
+    it('opens the network options from the filter icon', async () => {
+        mount(MessagingInbox, inboxMessaging(), { activeAccountId: 'account-1', onCompose: vi.fn() });
+        await screen.findByText('No messages yet');
+        const filter = screen.getByRole('button', { name: 'Filter conversations' });
+        expect(screen.queryByRole('dialog', { name: 'Filter conversations' })).toBeNull();
+        fireEvent.click(filter);
+        expect(filter.getAttribute('aria-expanded')).toBe('true');
+        const panel = screen.getByRole('dialog', { name: 'Filter conversations' });
+        expect(within(panel).getByRole('button', { name: /^Filter by network/ })).toBeTruthy();
+    });
+
+    it('narrows the conversations to the network picked in the filter panel', async () => {
+        const btcPeer = 'tb1qbitcoinpeer0000000000000000000000000';
+        const ltcPeer = 'tltc1qlitecoinpeer00000000000000000000000';
+        mount(MessagingInbox, inboxMessaging({
+            getMessagingInboxSweep: vi.fn().mockResolvedValue({
+                messages: [
+                    { from: btcPeer, to: ADDRESS, text: 'On Bitcoin', txid: 'tx-btc', timestamp: 2, chainId: CHAIN, format: 2, method: 1 },
+                    { from: ltcPeer, to: ADDRESS, text: 'On Litecoin', txid: 'tx-ltc', timestamp: 1, chainId: 'litecoin-testnet', format: 2, method: 1 },
+                ],
+                addresses: [],
+                errors: [],
+            }),
+        }), { activeAccountId: 'account-1', onCompose: vi.fn() });
+        const list = await screen.findByRole('list', { name: 'Conversations' });
+        expect(within(list).getAllByRole('button')).toHaveLength(2);
+        fireEvent.click(screen.getByRole('button', { name: 'Filter conversations' }));
+        const panel = screen.getByRole('dialog', { name: 'Filter conversations' });
+        fireEvent.click(within(panel).getByRole('button', { name: /^Filter by network/ }));
+        // The network filter opens the full-screen network list over the
+        // panel; the pick reaches the filter and the panel stays open.
+        fireEvent.click(within(screen.getByRole('dialog', { name: 'Network' }))
+            .getByRole('button', { name: 'Select Litecoin' }));
+        await waitFor(() => {
+            const rows = within(screen.getByRole('list', { name: 'Conversations' })).getAllByRole('button');
+            expect(rows).toHaveLength(1);
+            expect(rows[0].textContent).toContain('On Litecoin');
+        });
+        expect(screen.getByRole('button', { name: 'Filter conversations' }).getAttribute('data-active')).toBe('true');
+    });
+
+    it('puts the search in the filter panel, narrows the list, and keeps rows in one list card', async () => {
+        mount(MessagingInbox, inboxMessaging({
+            getMessagingInboxSweep: vi.fn().mockResolvedValue({
+                messages: [
+                    { from: 'tb1qalphapeer0000000000000000000000000', to: ADDRESS, text: 'hello alpha', txid: 'tx-a', timestamp: 2, chainId: CHAIN, format: 2, method: 1 },
+                    { from: 'tb1qbetapeer00000000000000000000000000', to: ADDRESS, text: 'hello beta', txid: 'tx-b', timestamp: 1, chainId: CHAIN, format: 2, method: 1 },
+                ],
+                addresses: [],
+                errors: [],
+            }),
+        }), { activeAccountId: 'account-1', onCompose: vi.fn() });
+        const list = await screen.findByRole('list', { name: 'Conversations' });
+        expect(list.className).toMatch(/convList/);
+        expect(within(list).getAllByRole('button')).toHaveLength(2);
+        expect(screen.queryByRole('searchbox', { name: 'Search conversations' })).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Filter conversations' }));
+        const panel = screen.getByRole('dialog', { name: 'Filter conversations' });
+        fireEvent.change(within(panel).getByRole('searchbox', { name: 'Search conversations' }), { target: { value: 'alphapeer' } });
+        await waitFor(() => {
+            expect(within(screen.getByRole('list', { name: 'Conversations' })).getAllByRole('button')).toHaveLength(1);
+        });
+        expect(screen.getByRole('button', { name: 'Filter conversations' }).getAttribute('data-active')).toBe('true');
+    });
+
+    it('leaves the empty inbox as text only with no search on the page', async () => {
+        mount(MessagingInbox, inboxMessaging(), { activeAccountId: 'account-1', onCompose: vi.fn() });
+        await screen.findByText('No messages yet');
+        expect(screen.queryByRole('button', { name: 'New Message' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'New Conversation' })).toBeNull();
+        expect(screen.getAllByRole('button', { name: /New message/i })).toHaveLength(1);
+        expect(screen.queryByRole('searchbox', { name: 'Search conversations' })).toBeNull();
+        expect(screen.queryByRole('button', { name: /^Filter by network/ })).toBeNull();
     });
 });
 
 describe('Addresses', () => {
-    it('keeps the add and import menu in the actions row, not the page header', async () => {
+    it('keeps the add and import menu as the plus in the title bar, with no actions row', async () => {
         mount(AddressList, {
             getAddressesByChain: vi.fn().mockResolvedValue({
                 [CHAIN]: [{ id: 'address-1', address: ADDRESS, source: 'hd', role: 'receive' }],
             }),
         });
         const add = await screen.findByRole('button', { name: 'Add or import address' });
-        expect(actionsRow()).toContainElement(add);
-        expect(headerActions('Addresses')).toEqual([]);
+        expect(actionsRow()).toBeNull();
+        expect(headerActions('Addresses')).toContain(add);
         fireEvent.click(add);
-        expect(screen.getByRole('menuitem', { name: 'Add address' })).toBeTruthy();
+        expect(screen.getByRole('menuitem', { name: 'Add Address' })).toBeTruthy();
     });
 });
 
@@ -231,38 +340,47 @@ describe('Staking', () => {
         getAddressesByChain: vi.fn().mockResolvedValue({}),
     }, { activeAccountId: 'account-1', onNewStake: props.onNewStake, onOpenStake: vi.fn() });
 
-    it('keeps the page header bare on an empty list', async () => {
+    it('keeps the title bar to the filter and the New stake plus on an empty list', async () => {
         const onNewStake = vi.fn();
         staking({ onNewStake });
         await screen.findByText('No staking address');
-        expect(headerActions('Staking')).toEqual([]);
+        const names = headerActions('Staking').map((button) => button.getAttribute('aria-label'));
+        expect(names).toHaveLength(2);
+        expect(names[1]).toBe('New Stake');
+        expect(actionsRow()).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'New Stake' }));
+        expect(onNewStake).toHaveBeenCalledOnce();
     });
 });
 
 describe('My orders and My swaps', () => {
-    it('offers Create an order once on an empty list and keeps the page header bare', async () => {
+    it('offers New order once, as the title bar plus, on an empty list', async () => {
         const onCreateOrder = vi.fn();
         mount(MyOrdersView, {
             getAddressesByChain: vi.fn().mockResolvedValue({}),
             getOrdersForAddress: vi.fn().mockResolvedValue([]),
         }, { onCreateOrder });
         await screen.findByText('No orders yet');
-        expect(screen.getAllByRole('button', { name: /^(New order|Create an order)$/ })).toHaveLength(1);
+        const create = screen.getAllByRole('button', { name: /^(New order|Create an order)$/ });
+        expect(create).toHaveLength(1);
+        expect(create[0].getAttribute('aria-label')).toBe('New order');
         expect(actionsRow()).toBeNull();
-        expect(headerActions('My orders')).toEqual([]);
-        fireEvent.click(screen.getByRole('button', { name: 'Create an order' }));
+        expect(headerActions('My Orders')).toContain(create[0]);
+        fireEvent.click(create[0]);
         expect(onCreateOrder).toHaveBeenCalledOnce();
     });
 
-    it('offers Create a swap once on an empty list and keeps the page header bare', async () => {
+    it('offers New swap once, as the title bar plus, on an empty list', async () => {
         mount(MySwapsView, {
             getAddressesByChain: vi.fn().mockResolvedValue({}),
             getSwapsForAddress: vi.fn().mockResolvedValue([]),
         }, { onCreateSwap: vi.fn() });
         await screen.findByText('No swaps yet');
-        expect(screen.getAllByRole('button', { name: /^(New swap|Create a swap)$/ })).toHaveLength(1);
+        const create = screen.getAllByRole('button', { name: /^(New swap|Create a swap)$/ });
+        expect(create).toHaveLength(1);
+        expect(create[0].getAttribute('aria-label')).toBe('New swap');
         expect(actionsRow()).toBeNull();
-        expect(headerActions('My swaps')).toEqual([]);
+        expect(headerActions('My Swaps')).toContain(create[0]);
     });
 });
 
@@ -275,9 +393,11 @@ describe('My tokens', () => {
                 { chainId: CHAIN, tick: 'DANKEST', description: 'Test token', locked: false },
             ]),
         }, { onIssue, onSelectTick: vi.fn() });
-        const create = await screen.findByRole('button', { name: 'Create token' });
+        const create = await screen.findByRole('button', { name: 'Create Token' });
         expect(actionsRow()).toBeNull();
-        expect(headerActions('My tokens')).toEqual([create]);
+        // The title bar holds the filter first and the Create token plus at the far right.
+        expect(headerActions('My Tokens')).toHaveLength(2);
+        expect(headerActions('My Tokens').at(-1)).toBe(create);
         expect(screen.queryByRole('button', { name: 'Issue new token' })).toBeNull();
         fireEvent.click(create);
         expect(onIssue).toHaveBeenCalledOnce();
@@ -290,20 +410,21 @@ describe('My tokens', () => {
         }, { onIssue: vi.fn(), onSelectTick: vi.fn() });
         await screen.findByText('No owned tokens yet');
         expect(screen.queryByRole('button', { name: 'Issue new token' })).toBeNull();
-        expect(screen.getAllByRole('button', { name: 'Create token' })).toHaveLength(2);
-        expect(headerActions('My tokens')).toHaveLength(1);
+        // The header icon button and the empty-state button share the Title Case name.
+        expect(screen.getAllByRole('button', { name: 'Create Token' })).toHaveLength(2);
+        expect(headerActions('My Tokens')).toHaveLength(2);
     });
 });
 
 describe('Payments due', () => {
-    it('puts Refresh payments in the actions row, not the page header', async () => {
+    it('has no Refresh button and puts the filter icon in the page header', async () => {
         const onBack = vi.fn();
         mount(ObligationsView, { getAutopayStatus: vi.fn().mockResolvedValue(null) }, { onPay: vi.fn(), onBack });
-        const refresh = await screen.findByRole('button', { name: 'Refresh payments' });
-        expect(actionsRow()).toContainElement(refresh);
-        expect(headerActions('Payments due')).toEqual([]);
+        const filter = await screen.findByRole('button', { name: 'Filter payments due' });
+        expect(screen.queryByRole('button', { name: 'Refresh Payments' })).toBeNull();
+        expect(pageHeaderOf('Payments Due')).toContainElement(filter);
         const back = screen.getByRole('button', { name: 'Back to previous screen' });
-        expect(pageHeaderOf('Payments due')).toContainElement(back);
+        expect(pageHeaderOf('Payments Due')).toContainElement(back);
         fireEvent.click(back);
         expect(onBack).toHaveBeenCalledOnce();
     });
@@ -321,9 +442,9 @@ describe('Rename forms', () => {
         const onRenamed = vi.fn();
         mount(RenameWalletForm, messaging, { initialName: 'Primary', onRenamed });
         const input = await screen.findByLabelText('Wallet name');
-        expect(headerActions('Rename wallet')).toEqual([]);
+        expect(headerActions('Edit Wallet')).toEqual([]);
         fireEvent.change(input, { target: { value: 'Spending' } });
-        const save = screen.getByRole('button', { name: 'Rename wallet' });
+        const save = screen.getByRole('button', { name: 'Save Changes' });
         expect(save.closest('form')).toBeTruthy();
         fireEvent.click(save);
         await waitFor(() => expect(onRenamed).toHaveBeenCalled());
@@ -333,9 +454,9 @@ describe('Rename forms', () => {
         const onRenamed = vi.fn();
         mount(RenameAccountForm, messaging, { initialName: 'Primary', onRenamed });
         const input = await screen.findByLabelText('Account name');
-        expect(headerActions('Rename account')).toEqual([]);
+        expect(headerActions('Edit Account')).toEqual([]);
         fireEvent.change(input, { target: { value: 'Spending' } });
-        const save = screen.getByRole('button', { name: 'Rename account' });
+        const save = screen.getByRole('button', { name: 'Save Changes' });
         expect(save.closest('form')).toBeTruthy();
         fireEvent.click(save);
         await waitFor(() => expect(onRenamed).toHaveBeenCalled());

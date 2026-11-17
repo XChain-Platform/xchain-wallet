@@ -6,14 +6,15 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// The swap Cancel and Edit panel's wrap() is a bare Screen. The broadcast
-// result (title, explainer, transaction ID and Done) lays out through a
-// ListPage inside that Screen, the same as the list states and the form
-// step's FormPage, so it never draws straight into the Screen content box.
+// The swap Cancel and Edit form's wrap() is a bare Screen. The broadcast
+// result (title, explainer, transaction ID and Done) lays out through a page
+// template inside that Screen (the FormPage the order forms' result uses, now
+// that both share the Form Standard frame), so it never draws straight into
+// the Screen content box.
 
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act as domAct, cleanup, fireEvent, render, within } from '@testing-library/react';
+import { act as domAct, cleanup, fireEvent, render } from '@testing-library/react';
 
 const { ownerRun } = vi.hoisted(() => ({ ownerRun: vi.fn() }));
 
@@ -28,7 +29,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useOwnerActionLane.js', () => (
 }));
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { MySwapsView } from '../../../packages/core/src/shared/routes/MySwapsView.jsx';
+import { SwapDetail } from '../../../packages/core/src/shared/routes/SwapDetail.jsx';
 import { ListPage } from '../../../packages/core/src/ui/index.js';
 
 const CHAIN = 'dogecoin-testnet';
@@ -67,28 +68,29 @@ async function openCancelResult() {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [HD_ADDRESS] }),
         getSwapsForAddress: () => Promise.resolve({ data: [SWAP_ROW] }),
         getSwapCancelsForAddress: () => Promise.resolve({ data: [] }),
+        getSwapDetail: () => Promise.resolve({ action: 'SWAP', ...SWAP_ROW }),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
     };
     const messaging = new Proxy(target, {
         get(t, prop) { return prop in t ? t[prop] : () => Promise.resolve({}); },
     });
     let utils;
+    // Cancel lives on the swap's details page, which a My Swaps row opens.
     await domAct(async () => {
         utils = render(
             <MessagingProvider shell="web" messaging={messaging}>
-                <MySwapsView walletId="w" onBack={() => {}} />
+                <SwapDetail walletId="w" chainId={CHAIN} actionIndex="812" onBack={() => {}} />
             </MessagingProvider>,
         );
         await flush();
     });
-    const list = utils.getByRole('list', { name: 'Open swaps' });
-    const row = within(list).getByText('#812', { exact: false }).closest('li');
     await domAct(async () => {
-        fireEvent.click(within(row).getByRole('button', { name: 'Cancel' }));
+        // The details page's Cancel swap action row opens the form; its submit is the second.
+        fireEvent.click(utils.getByRole('button', { name: /^Cancel swap/ }));
         await flush();
     });
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('button', { name: 'Cancel swap' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Cancel Swap' }));
         await flush();
     });
     return utils;
@@ -99,16 +101,18 @@ afterEach(() => {
     ownerRun.mockReset();
 });
 
-describe('MySwapsView: the swap action broadcast result renders inside ListPage', () => {
-    it('lays out the cancel broadcast title, transaction ID and Done inside a ListPage within the Screen', async () => {
+describe('MySwapsView: the swap action broadcast result renders inside a page template', () => {
+    it('lays out the cancel broadcast title, transaction ID and Done inside the FormPage within the Screen', async () => {
         ownerRun.mockResolvedValue({ txid: TXID });
         const { container, getByText, getByRole } = await openCancelResult();
 
         expect(ownerRun).toHaveBeenCalledTimes(1);
         const title = getByText('Cancel broadcast');
-        const page = title.closest(`.${CSS.escape(listPageClass())}`);
-        expect(page, 'broadcast title inside ListPage').not.toBeNull();
-        expect(page.parentElement, 'ListPage is not the Screen root').not.toBe(container);
+        // No longer a ListPage: the result shares the order forms' FormPage.
+        expect(title.closest(`.${CSS.escape(listPageClass())}`)).toBeNull();
+        const page = title.closest('form');
+        expect(page, 'broadcast title inside the FormPage').not.toBeNull();
+        expect(page.parentElement, 'the FormPage is not the Screen root').not.toBe(container);
         expect(page.contains(getByText(TXID))).toBe(true);
         expect(page.contains(getByRole('button', { name: 'Done' }))).toBe(true);
     });

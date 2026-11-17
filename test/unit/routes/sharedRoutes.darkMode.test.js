@@ -57,7 +57,8 @@ describe('shared route dark-mode colors', () => {
         const detail = readFileSync('packages/core/src/shared/routes/TokenDetail.jsx', 'utf8');
         const message = readFileSync('packages/core/src/ui/StatusMessage.module.css', 'utf8');
         expect(send).not.toMatch(/^\.warnings\s*\{/m);
-        expect(message).toMatch(/\.row\.warning\s*\{[^}]*border:\s*1px solid var\(--xc-warning\)/s);
+        // Notice Standard (2026-11-15): a warning is the red danger look.
+        expect(message).toMatch(/\.row\.warning,\s*\.row\.error\s*\{[^}]*border:\s*1px solid var\(--xc-danger\)/s);
         // The small test send suggestion is the shared info message, so its
         // border is the info row's own.
         expect(send).not.toMatch(/\.testSendGate\s*\{/);
@@ -66,19 +67,24 @@ describe('shared route dark-mode colors', () => {
         expect(detail).not.toMatch(/This token is an official token/);
         expect(message).toMatch(/\.row\.success\s*\{[^}]*border:\s*1px solid var\(--xc-success/s);
         expect(message).toMatch(/\.row\.success\s*\{[^}]*background:\s*var\(--xc-success-bg/s);
-        for (const border of ['--xc-warning', '--xc-info', '--xc-success']) {
+        for (const border of ['--xc-warning', '--xc-danger', '--xc-info', '--xc-success']) {
             expect(contrast(dark[border], dark['--xc-surface-raised']), border).toBeGreaterThanOrEqual(3);
         }
     });
 
-    // The composer send control is the kit success Button: its focus ring is
-    // drawn outside the accent fill, on the raised footer surface.
+    // The thread composer is one full-width kit Input with no send button
+    // (2026-11-13 redesign; Enter sends). Its focus ring is the Input's
+    // focus-ring halo, drawn on the raised footer surface, and the route CSS
+    // must not strip it.
     it('keeps the composer focus ring above 3:1 against the surface it is drawn on', () => {
         const inbox = readFileSync('packages/core/src/shared/routes/MessagingInbox.jsx', 'utf8');
-        const button = readFileSync('packages/core/src/ui/Button.module.css', 'utf8');
-        expect(inbox).toMatch(/<Button type="submit" variant="success"[^>]*aria-label="Send message"/);
-        expect(routeCss('MessagingInbox')).not.toMatch(/\.composerSend\b/);
-        expect(button).toMatch(/\.btn:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--xc-focus-ring\)[^}]*outline-offset:\s*2px/s);
+        const input = readFileSync('packages/core/src/ui/Input.module.css', 'utf8');
+        const routeStyles = routeCss('MessagingInbox');
+        const composer = inbox.slice(inbox.indexOf('function ThreadComposer'));
+        expect(composer).toMatch(/<Input\b[^>]*className=\{local\.composerInput\}/s);
+        expect(routeStyles).not.toMatch(/\.composerSend\b/);
+        expect(routeStyles).not.toMatch(/\.composerInput:focus(?:-visible)?\s*\{[^}]*box-shadow:\s*none/s);
+        expect(input).toMatch(/\.input:focus\s*\{[^}]*box-shadow:\s*0 0 0 3px var\(--xc-focus-ring\)/s);
         for (const theme of [light, dark]) {
             expect(contrast(theme['--xc-focus-ring'], theme['--xc-surface-raised']))
                 .toBeGreaterThanOrEqual(3);
@@ -90,8 +96,13 @@ describe('shared route dark-mode colors', () => {
         expect(css).not.toMatch(/rgba\(255,\s*255,\s*255/);
         const heroCss = readFileSync('packages/core/src/shared/components/TotalBalanceHero.module.css', 'utf8');
         expect(heroCss).toMatch(/\.eye\s*\{[^}]*var\(--xc-on-accent\) 15%/);
-        for (const selector of ['balanceHeroAmountCode', 'balanceHeroNoteCode', 'balanceHeroHidden']) {
+        // The balance hero's code, note and hidden classes were retired with
+        // the old hero; the card's icon fallback and secondary figures carry
+        // the on-accent token now.
+        for (const selector of ['cardCaptionIconFallback']) {
             expect(css).toMatch(new RegExp(`\\.${selector}\\s*\\{[^}]*color:\\s*var\\(--xc-on-accent\\)`, 's'));
         }
+        expect(css).toMatch(/\.cardSecondary\s*\{[^}]*color:\s*color-mix\(in srgb, var\(--xc-on-accent\) 80%, transparent\)/s);
+        expect(css).not.toMatch(/\.balanceHero/);
     });
 });

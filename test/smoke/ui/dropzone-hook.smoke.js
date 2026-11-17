@@ -56,34 +56,42 @@ assert.ok(/matchesAccept\(file, accept\)/.test(hookSrc),
     'useDropZone enforces the accept allowlist');
 
 // 5. PsbtSignForm wires the hook for binary .psbt drop with an
-//    arrayBuffer read mode + a Browse button.
+//    arrayBuffer read mode + the standard choose-file field, whose dialog
+//    opens on .psbt files while the hook itself takes any file.
 assert.ok(/from '\.\.\/hooks\/useDropZone\.js'/.test(psbtSrc),
     'PsbtSignForm imports useDropZone');
 assert.ok(/readAs:\s*'arrayBuffer'/.test(psbtSrc),
     'PsbtSignForm reads dropped PSBTs as ArrayBuffer');
 assert.ok(/arrayBufferToHex\(/.test(psbtSrc),
     'PsbtSignForm converts the ArrayBuffer to hex before re-using normalizePsbtInput');
-assert.ok(/Browse for \.psbt file/.test(psbtSrc),
-    'PsbtSignForm exposes a Browse-for-file button');
+assert.ok(/<FileField[\s\S]*?accept=\{psbtDialogAccept\(\)\}[\s\S]*?drop=\{drop\}[\s\S]*?chooseLabel="Choose a transaction file"/.test(psbtSrc)
+        && !/useDropZone\(\{[^}]*\baccept:/.test(psbtSrc),
+    'PsbtSignForm opens the file dialog from its choose-file field');
 
-// 6. ContactsSection wires the hook for JSON and CSV drop on the Import row.
-assert.ok(/from '\.\.\/\.\.\/hooks\/useDropZone\.js'/.test(contactsSrc),
-    'ContactsSection imports useDropZone');
-assert.ok(/accept:\s*\['\.json',\s*'\.csv',\s*'application\/json',\s*'text\/csv'\]/.test(contactsSrc),
-    'ContactsSection restricts drop to JSON and CSV files');
+// 6. ContactsSection takes JSON and CSV on the Import row through the shared
+//    file field, which owns its own picker input and drop target.
+assert.ok(/from '\.\.\/FileField\.jsx'/.test(contactsSrc),
+    'ContactsSection imports the shared FileField');
+assert.ok(/CONTACT_IMPORT_ACCEPT = \['application\/json', 'text\/csv', '\.json', '\.csv'\]/.test(contactsSrc),
+    'ContactsSection restricts the file field to JSON and CSV files');
+assert.ok(/isContactsImportFile\(file\)/.test(contactsSrc),
+    'ContactsSection refuses a dropped file that names another type');
 assert.ok(/importFromText\(/.test(contactsSrc),
-    'ContactsSection routes drop content through the same import-from-text path the picker uses');
-assert.ok(/drop one here/.test(contactsSrc),
-    'ContactsSection hint surfaces the drop affordance');
+    'ContactsSection routes a chosen or dropped file through the same import-from-text path');
+assert.ok(/onFile=\{onImportFile\}/.test(contactsSrc),
+    'ContactsSection hands the field one handler for the picker and the drop');
 
 // 7. ImportWallet backup lane wires the hook for .xchain-wallet drop.
 assert.ok(/from '\.\.\/hooks\/useDropZone\.js'/.test(importSrc),
     'ImportWallet imports useDropZone');
 assert.ok(/'\.xchain-wallet'/.test(importSrc),
     'ImportWallet backupDrop accepts the .xchain-wallet extension');
-assert.ok(/setBackupFileName\(file\.name\);[\s\S]{0,200}setBackupContent/.test(importSrc),
-    'ImportWallet backupDrop seeds the existing backupContent / backupFileName state');
-assert.ok(/drop a backup file/i.test(importSrc),
-    'ImportWallet hint surfaces the drop affordance');
+assert.ok(/setBackupContent\(text\);[\s\S]{0,200}setBackupFile\(\{ name: file\.name/.test(importSrc),
+    'ImportWallet backupDrop seeds the backupContent and chosen-file summary state');
+// The drop area and the summary card that replaces it both take a drop.
+assert.ok(/<FileField\s+variant="area"[^>]*drop=\{backupDrop\}/.test(importSrc),
+    'ImportWallet draws the backup drop area as the shared FileField area');
+assert.ok(/<section[\s\S]{0,80}\{\.\.\.backupDrop\.rootProps\}/.test(importSrc),
+    'ImportWallet keeps the summary card a drop target');
 
-console.log('OK: useDropZone + PsbtSignForm / ContactsSection / ImportWallet wiring smoke (24 checks)');
+console.log('OK: useDropZone + PsbtSignForm / ContactsSection / ImportWallet wiring smoke (25 checks)');

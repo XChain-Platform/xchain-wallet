@@ -199,17 +199,9 @@ export const ACTION_ENTRY_DEFS = Object.freeze([
         label: 'Cross-chain order',
         description: 'Place a limit order that gives a token on one chain and gets a token on another. It waits on the network\'s order book and fills automatically, possibly in parts.',
     },
-    {
-        id: 'cross-chain-templates',
-        handler: 'onCrossChainTemplates',
-        label: 'Cross-chain templates',
-        description: 'Pre-baked multi-chain flows: launch token + metadata, bridge token pair, cross-chain airdrop. Pre-fills Action queue.',
-    },
     // The two XBRIDGE surfaces (ISSUE v7 settings, and the move itself).
-    // They shipped as entries appended by each shell after this list, which
-    // is the same triplication this module exists to end: three copies of a
-    // description are three chances to drift. Seated beside the other
-    // cross-chain rows, where a user already looks for "another chain".
+    // Defined once here, not per shell, so the description cannot drift between
+    // copies; seated beside the other cross-chain rows, where users look.
     {
         id: 'bridge-move',
         handler: 'onBridgeMove',
@@ -231,7 +223,7 @@ export const ACTION_ENTRY_DEFS = Object.freeze([
     {
         id: 'multisig-sign',
         handler: 'onMultisigSign',
-        label: 'Multisig signing',
+        label: 'Multisig sessions',
         description: 'Collect approvals for a shared-wallet payment. Add your signature to complete or advance the signing round.',
     },
     {
@@ -285,7 +277,7 @@ export const ACTION_ENTRY_DEFS = Object.freeze([
     {
         id: 'pair-signer',
         handler: 'onPairSigner',
-        label: 'Pair hardware signer',
+        label: 'Pair hardware wallet',
         description: 'Add a Trezor or Ledger to this wallet.',
     },
 ]);
@@ -316,7 +308,7 @@ export const ACTION_GROUPS = Object.freeze([
         label: 'Publishing and multi-chain',
         entryIds: Object.freeze([
             'publish-file', 'link', 'batch', 'cross-chain-swap',
-            'cross-chain-order', 'cross-chain-templates', 'bridge-move',
+            'cross-chain-order', 'bridge-move',
             'bridge-settings',
         ]),
     },

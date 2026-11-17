@@ -29,6 +29,8 @@ import { listTickCoinSupport } from '@xchain-wallet/core/flows/listTickCoinSuppo
 import { listAnyCoinItemsSupport } from '@xchain-wallet/core/flows/listAnyCoinItemsSupport.js';
 import { sdkSupportedAddressTypes } from '@xchain-wallet/core/flows/sdkAddressTypes.js';
 import { supplyHistoryFor } from '@xchain-wallet/core/flows/supplyHistory.js';
+import { walletHistoryBatch, walletNativeHistoryBatch } from '@xchain-wallet/core/flows/walletValueReads.js';
+import { getSignerRecord } from '@xchain-wallet/core/flows/registerSigner.js';
 import { mintedAmountForAddress } from '@xchain-wallet/core/flows/mintedAmount.js';
 import { capRbfToDescriptor } from '@xchain-wallet/core/flows/rbfCap.js';
 import { assertWalletUnlockedForReveal } from '@xchain-wallet/core/flows/revealAccess.js';
@@ -84,7 +86,16 @@ import {
     ownSpendStoreFrom,
     reservationStoreFrom,
 } from './actionSafetySessionStorage.js';
-import { DEFAULT_ACTIVE_CHAIN_IDS } from './walletCreate.js';
+import {
+    DEFAULT_ACTIVE_CHAIN_IDS,
+    hardwareWalletInput,
+    hardwareWalletResult,
+} from './walletCreate.js';
+import {
+    addHardwareWallet,
+    HardwareWalletHasNoSeedError,
+    isHardwareWallet,
+} from '@xchain-wallet/core/flows/hardwareWallet.js';
 // Shared with the PRE-HOST fresh-install restore lane, which never reaches this
 // host: one resolver so the two lanes cannot drift on what they will fetch.
 import { resolveBackupPointerContent } from './backupPointerResolver.js';
@@ -154,6 +165,7 @@ const {
     composeGatedPublishForConfirm,
     getProjectForTick,
     getCoinpayObligationsForAddress,
+    getCoinpayMatchSides,
     getCoinpaysForAddress,
     listAutopayOrders,
     setAutopayEnabled,
@@ -235,6 +247,7 @@ const {
     pollDetail,
     pollResults,
     votesForQuery,
+    voteDelegationsForAddress,
     contractStakeAction,
     broadcastsForAddress,
     linksForAddress,
@@ -458,6 +471,60 @@ async function addressesByChain(req, { vault, chainRegistry }) {
         byChain[chainId].push(a);
     }
     return byChain;
+}
+
+/**
+ * Every wallet's public addresses in one answer, for the My Wallets search.
+ * The count of vault reads is fixed (wallets, accounts, addresses, settings),
+ * never one per wallet. An address belongs to a wallet through its account, or
+ * through the wallet's importedKeys for an imported-WIF record with no account,
+ * and the active-network filter matches `addresses.byChain`. Public address
+ * strings only: no label, key, path or other record field leaves the host.
+ *
+ * @param {unknown} _req
+ * @param {{ vault: import('@xchain-wallet/core').storage.Vault, chainRegistry: import('@xchain-wallet/core').registry.ChainRegistry }} deps
+ * @returns {Promise<Record<string, string[]>>} walletId to its address strings
+ */
+async function addressesByWallet(_req, { vault, chainRegistry }) {
+    const [wallets, accounts, all] = await Promise.all([
+        vault.wallets.list(),
+        vault.accounts.list(),
+        vault.addresses.list(),
+    ]);
+    let activeNetwork = null;
+    try {
+        activeNetwork = getActiveNetwork(await vault.settings.get());
+    } catch {
+        // pass through unfiltered, as addresses.byChain does
+    }
+    /** @type {Map<string, string>} */
+    const walletOfAccount = new Map();
+    for (const account of accounts) walletOfAccount.set(account.id, account.walletId);
+    /** @type {Map<string, string>} */
+    const walletOfImported = new Map();
+    /** @type {Record<string, string[]>} */
+    const out = {};
+    for (const wallet of wallets) {
+        out[wallet.id] = [];
+        const keys = Array.isArray(wallet.importedKeys) ? wallet.importedKeys : [];
+        for (const key of keys) {
+            if (typeof key?.addressId === 'string' && key.addressId.length > 0) {
+                walletOfImported.set(key.addressId, wallet.id);
+            }
+        }
+    }
+    for (const a of all) {
+        const walletId = a.accountId ? walletOfAccount.get(a.accountId) : walletOfImported.get(a.id);
+        if (!walletId || !out[walletId] || typeof a.address !== 'string' || a.address.length === 0) continue;
+        const chainId = chainRegistry.chainIdFor(a.chain, a.network);
+        if (!chainId) continue;
+        if (activeNetwork) {
+            const descriptor = chainRegistry.descriptorFor(chainId);
+            if (!descriptor || descriptor.networkKind !== activeNetwork) continue;
+        }
+        out[walletId].push(a.address);
+    }
+    return out;
 }
 
 /**
@@ -690,7 +757,8 @@ function addressOnRequestChain(address, req, chainRegistry) {
 async function pickSignerFromRequest({ vault, walletId, signerId, signerPool }) {
     if (typeof walletId !== 'string' || walletId.length === 0) return null;
     if (typeof signerId === 'string' && signerId.length > 0) {
-        const record = await vault.signers.find(signerId);
+        // The vault's collections answer `get`; `find` was never one of them.
+        const record = await getSignerRecord(vault, signerId);
         if (!record) {
             throw new Error(`signerId "${signerId}" is not a paired signer.`);
         }
@@ -698,14 +766,10 @@ async function pickSignerFromRequest({ vault, walletId, signerId, signerPool }) 
             throw new Error(`signerId "${signerId}" belongs to a different wallet.`);
         }
         if (record.kind !== 'trezor' && record.kind !== 'ledger') {
-            throw new Error(`signerId "${signerId}" is not a hardware signer.`);
+            throw new Error(`signerId "${signerId}" is not a hardware wallet.`);
         }
-        const transport = signerBridge.getTransport(record.id);
-        if (!transport) {
-            throw new Error(
-                'Hardware signer is not connected. Open the wallet UI, re-pair if needed, and try again.',
-            );
-        }
+        // Throws with code HW_NOT_CONNECTED when the device has no live transport.
+        const transport = signerBridge.requireTransport(record.id);
         const descriptor = { kind: record.kind, address: null, signerRecord: record };
         return buildRemoteSigner(descriptor, transport);
     }
@@ -713,6 +777,60 @@ async function pickSignerFromRequest({ vault, walletId, signerId, signerPool }) 
         return signerPool.get(walletId) || null;
     }
     return null;
+}
+
+/**
+ * The unlocked session's software signer for a wallet and its vault master
+ * key, when the request carries no password and the pool holds that signer;
+ * null otherwise (a typed password always wins). The label-sync routes use
+ * it to open the seed and sign without asking again, as wallet.importWif
+ * does (operator preference 2026-11-14). The key is the signer's own buffer:
+ * the flows copy it and never zero it.
+ *
+ * @param {import('@xchain-wallet/core').signers.SignerPool | undefined} signerPool
+ * @param {unknown} walletId
+ * @param {unknown} password
+ * @returns {{ signer: any, masterKey: Uint8Array } | null}
+ */
+function pooledSoftwareSession(signerPool, walletId, password) {
+    if (typeof password === 'string' && password.length > 0) return null;
+    if (typeof walletId !== 'string' || !walletId) return null;
+    const pooled = signerPool && typeof signerPool.get === 'function' ? signerPool.get(walletId) : null;
+    if (!pooled || pooled.kind !== 'software' || typeof pooled.getMasterKey !== 'function') return null;
+    let masterKey = null;
+    try { masterKey = pooled.getMasterKey(); } catch { return null; }
+    return masterKey instanceof Uint8Array && masterKey.length > 0 ? { signer: pooled, masterKey } : null;
+}
+
+/**
+ * The unlocked session's software signer for an extended public key export,
+ * or null. A typed password always wins (the caller then unlocks with it),
+ * and a device signer is never returned: the export reads only account-level
+ * public keys from the seed the session already holds.
+ *
+ * @param {import('@xchain-wallet/core').signers.SignerPool | undefined} signerPool
+ * @param {string} walletId
+ * @param {unknown} password
+ * @returns {any | null}
+ */
+function publicExportSigner(signerPool, walletId, password) {
+    if (typeof password === 'string' && password.length > 0) return null;
+    const pooled = signerPool && typeof signerPool.get === 'function' ? signerPool.get(walletId) : null;
+    if (!pooled || pooled.kind !== 'software' || typeof pooled.getAccountXpub !== 'function') return null;
+    return pooled;
+}
+
+/**
+ * Refuse the label-sync routes for a hardware wallet with the typed no-seed
+ * error: the on-chain label copy is sealed with a seed-derived key, which a
+ * wallet whose keys live on a device does not have.
+ *
+ * @param {any} vault
+ * @param {unknown} walletId
+ */
+async function refuseHardwareLabelSync(vault, walletId) {
+    if (typeof walletId !== 'string' || !walletId || typeof vault?.wallets?.get !== 'function') return;
+    if (isHardwareWallet(await vault.wallets.get(walletId))) throw new HardwareWalletHasNoSeedError();
 }
 
 /**
@@ -1123,6 +1241,7 @@ function toSafeWallet(w) {
         // encryptedPassphrase.
         passphraseStored: typeof w.encryptedPassphrase === 'string' && w.encryptedPassphrase.length > 0,
         multisigs: Array.isArray(w.multisigs) ? w.multisigs : [],
+        walletMode: schemas.wallet.walletModeOf(w),
     };
 }
 
@@ -1777,7 +1896,7 @@ export function createBackgroundHost(deps) {
     // (sessionMeta PRE_HOST_MESSAGE_TYPES), which the extension and desktop
     // transports divert before the host sees them and web answers in-page,
     // so a copy here could never run.
-    host.register('wallet.add.import', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+    host.register('wallet.add.import', async (req, { vault, chainRegistry, sdkRegistry, signerPool, vaultKeyring }) => {
         // Seed from the vault's active chain set, not the mainnet
         // constant. A wallet added while the app sits on regtest/testnet
         // used to get mainnet-only addresses, which the active-network
@@ -1829,6 +1948,7 @@ export function createBackgroundHost(deps) {
                 }),
             });
         await publishSurfaceState('wallets', { change: 'added', walletId: r.wallet.id });
+        refreshPhraseRecoveryAfterAdd({ vault, vaultKeyring }, req?.password);
         return {
             format: r.format,
             wallet: toSafeWallet(r.wallet),
@@ -1836,6 +1956,18 @@ export function createBackgroundHost(deps) {
             addresses: r.addresses,
             labelSyncToken,
         };
+    });
+
+    // Add a hardware wallet to the open vault: the connect flow's last step
+    // when a wallet already exists (a fresh install takes the pre-host
+    // `wallet.create.hardware`). The keys stay on the device, so there is no
+    // signer to pool and no seed to restore labels from. The signer record's
+    // id in the answer is what the renderer registers the device transport
+    // under. Unlinking reuses `wallet.remove`, which drops the signer rows.
+    host.register('wallet.hardware.add', async (req, { vault, chainRegistry }) => {
+        const r = await addHardwareWallet({ ...hardwareWalletInput(req), vault, chainRegistry });
+        await publishSurfaceState('wallets', { change: 'added', walletId: r.wallet.id });
+        return { wallet: toSafeWallet(r.wallet), ...hardwareWalletResult(r) };
     });
 
     // §3.4: the one-time capture of a legacy wallet's 25th word. A
@@ -1945,7 +2077,12 @@ export function createBackgroundHost(deps) {
             walletId: r.account.walletId,
             accountId: r.account.id,
         });
-        return { account: r.account, addresses: r.addresses };
+        // A hardware wallet's networks left waiting for their Ledger app go
+        // back with the account, so Add account can show each one with the
+        // connect step's line and Try again.
+        return Array.isArray(r.waitingChains) && r.waitingChains.length
+            ? { account: r.account, addresses: r.addresses, waitingChains: [...r.waitingChains] }
+            : { account: r.account, addresses: r.addresses };
     });
 
     host.register('wallet.checkPassword', async (req, { vault, chainRegistry, sdkRegistry }) => {
@@ -1966,8 +2103,18 @@ export function createBackgroundHost(deps) {
     // ("password only at unlock"): and correctly keeps prompting in the
     // rare empty-pool cases (passphrase wallet, or a worker restart that
     // couldn't rehydrate the pool).
-    host.register('wallet.signerReady', async (req, { signerPool }) => {
+    //
+    // A hardware wallet never enters the pool (its keys are on the device),
+    // so it answers `{ ready: false, hardware: true }` without asking the
+    // pool: its forms sign through the device lane, which needs no password,
+    // and `hardware` lets a screen say so instead of prompting.
+    host.register('wallet.signerReady', async (req, { vault, signerPool }) => {
         const walletId = req?.walletId;
+        if (typeof walletId === 'string' && walletId && typeof vault?.wallets?.get === 'function') {
+            let wallet = null;
+            try { wallet = await vault.wallets.get(walletId); } catch { wallet = null; }
+            if (isHardwareWallet(wallet)) return { ready: false, hardware: true };
+        }
         const ready = typeof walletId === 'string'
             && !!signerPool
             && typeof signerPool.has === 'function'
@@ -1975,13 +2122,15 @@ export function createBackgroundHost(deps) {
         return { ready };
     });
 
-    // §48.3 / G149: runtime chain activation. Seeds settings.fees +
-    // ads.perChain for the chainId, then derives the first address on
+    // §48.3 / G149: runtime chain activation. Seeds settings.fees
+    // for the chainId, then derives the first address on
     // that chain for every existing account in the wallet. Idempotent:
     // re-activating a chain that already has fee + address records is
     // a no-op. HW-aware (§17.4 / FOLLOWUP 1): when req.signerId names a
     // paired hardware signer, pickSignerFromRequest builds a RemoteSigner
-    // against the device transport and no password is required.
+    // against the device transport and no password is required. With
+    // req.accountId it fills the chain into that one account only: a
+    // hardware wallet's Add network on its Accounts tab and in Add account.
     host.register('wallet.activateChain', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         const walletId = req?.walletId;
         const signer = await pickSignerFromRequest({
@@ -1993,6 +2142,7 @@ export function createBackgroundHost(deps) {
         return activateChain({
             walletId,
             chainId: req?.chainId,
+            accountId: typeof req?.accountId === 'string' && req.accountId ? req.accountId : undefined,
             password: req?.password,
             bip39Passphrase: req?.bip39Passphrase,
             signer: signer || undefined,
@@ -2060,7 +2210,7 @@ export function createBackgroundHost(deps) {
                 vault, chainRegistry, sdkRegistry, walletId, network, signer: signer || undefined,
             });
             // Switching the active network must also seed per-chain
-            // Settings (fees + ads.perChain) for that network's chains, the
+            // Settings (fees) for that network's chains, the
             // same contract activateChain honours ("consumers key off
             // settings.fees"). ensureNetworkAddresses derives addresses only,
             // so without this a host-driven switch - the extension's ONLY path
@@ -2162,23 +2312,32 @@ export function createBackgroundHost(deps) {
         if (typeof walletId !== 'string' || walletId.length === 0) {
             throw new Error('pairing: walletId is required');
         }
-        // The lane owns the mode flip. Doing it here rather than in the
-        // renderer keeps pairing atomic (a payload always reports the mode
-        // that is actually persisted) and keeps the lane working in shells
-        // that expose no settings shims of their own.
-        if (req?.walletMode === 'watcher' || req?.walletMode === 'signer') {
-            await updateSettings(vault, { walletMode: req.walletMode });
-        }
-        const wallet = await vault.wallets.get(walletId);
+        let wallet = await vault.wallets.get(walletId);
         if (!wallet) {
             throw new Error(`pairing: no wallet with id "${walletId}"`);
         }
-        // A standalone xpub export confirms the password every time. Public
-        // keys cannot spend, but they reveal the account's complete address
-        // history, so an unlocked session alone does not authorize disclosure.
-        const pooled = req?.publicExport === true
-            ? null
+        // Pairing sets this wallet's watcher or signer mode on its record here,
+        // so a payload always reports the mode that is actually persisted.
+        if ((req?.walletMode === 'watcher' || req?.walletMode === 'signer')
+            && wallet.walletMode !== req.walletMode) {
+            wallet = { ...wallet, walletMode: req.walletMode };
+            await vault.wallets.put(wallet);
+        }
+        // A standalone xpub export reads the unlocked session's software
+        // signer with no password re-entry (operator ruling 2026-11-15):
+        // public keys cannot spend, and the wallet is already unlocked. It
+        // never takes a device signer, and a typed password still wins. With
+        // no pooled signer and no password it refuses instead of guessing.
+        const publicExport = req?.publicExport === true;
+        if (publicExport && isHardwareWallet(wallet)) throw new HardwareWalletHasNoSeedError();
+        const pooled = publicExport
+            ? publicExportSigner(signerPool, walletId, req?.password)
             : await sessionSigner(req, vault, signerPool);
+        if (publicExport && !pooled && !(typeof req?.password === 'string' && req.password.length > 0)) {
+            const locked = new Error('Unlock this wallet again to show its extended public keys.');
+            locked.code = 'WALLET_SESSION_LOCKED';
+            throw locked;
+        }
         const signer = pooled
             || await unlockWallet({
                 vault,
@@ -2237,7 +2396,7 @@ export function createBackgroundHost(deps) {
                 return { payload: { keys: publicKeys }, encoded: null };
             }
             const payload = buildPairingPayload({
-                walletMode: settings?.walletMode,
+                walletMode: wallet.walletMode,
                 keys,
                 label: typeof req?.label === 'string' ? req.label : '',
             });
@@ -2256,7 +2415,7 @@ export function createBackgroundHost(deps) {
                 format: wallet.format ?? 'bip39',
             });
             const local = buildPairingPayload({
-                walletMode: settings?.walletMode,
+                walletMode: wallet.walletMode,
                 keys,
                 label: typeof req?.label === 'string' ? req.label : '',
             });
@@ -2444,17 +2603,22 @@ export function createBackgroundHost(deps) {
         return { wallet: toSafeWallet(r.wallet), address: r.address };
     });
 
-    host.register('wallet.prepareLabels', async (req, { vault, chainRegistry }) => {
+    host.register('wallet.prepareLabels', async (req, { vault, chainRegistry, signerPool }) => {
+        await refuseHardwareLabelSync(vault, req?.walletId);
         // Fund the FILE tx from the same address Send would use.
         // Same walletId-only resolution useActionForm/Send use for
         // `addresses.active` (no accountId), so the source lines up with
         // whatever Home/Send show as this wallet's chain balance instead of
         // the highest-index HD address, which is very often unfunded.
         const active = await resolveActiveAddresses({ vault, walletId: req?.walletId, chainRegistry });
+        // Unlocked session: open the seed with the pooled signer's master
+        // key, so the Backup page asks for no password (2026-11-14).
+        const session = pooledSoftwareSession(signerPool, req?.walletId, req?.password);
         return prepareLabelsPublication({
             vault,
             walletId: req?.walletId,
             password: req?.password,
+            masterKey: session?.masterKey,
             bip39Passphrase: req?.bip39Passphrase,
             chainId: req?.chainId,
             chainRegistry,
@@ -2464,11 +2628,18 @@ export function createBackgroundHost(deps) {
         });
     });
 
-    host.register('wallet.publishLabels', async (req, { vault, chainRegistry, sdkRegistry }) => {
+    host.register('wallet.publishLabels', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        await refuseHardwareLabelSync(vault, req?.walletId);
+        // Unlocked session: sign with the pooled signer and open the seed
+        // with its master key, so no password is asked (2026-11-14). The
+        // pool owns the signer, so submitAction leaves it unlocked.
+        const session = pooledSoftwareSession(signerPool, req?.walletId, req?.password);
         const common = {
             vault,
             walletId: req?.walletId,
             password: req?.password,
+            masterKey: session?.masterKey,
+            signer: session?.signer,
             bip39Passphrase: req?.bip39Passphrase,
             chainRegistry,
             sdkRegistry,
@@ -2508,8 +2679,9 @@ export function createBackgroundHost(deps) {
     // §19.5.2 auto-sync state for the Backup panel. Returns the pending
     // batch (edits waiting on a publish) plus the scheduler status, so
     // the shell can raise ONE prompt per unlock window. Read-only: the
-    // publish itself still runs through `wallet.publishLabels` with a
-    // freshly typed password.
+    // publish itself still runs through `wallet.publishLabels`, with the
+    // pooled signer when the session holds one and a typed password
+    // otherwise.
     host.register('wallet.labelSyncStatus', async (_req, { vault }) => {
         if (vault && !labelSyncVault) labelSyncVault = vault;
         return {
@@ -2537,7 +2709,7 @@ export function createBackgroundHost(deps) {
     // bad arguments throw here (unlike `restoreLabelSyncBestEffort`, which
     // swallows everything for the best-effort import path) so the panel can
     // show the user why the check failed.
-    host.register('wallet.restoreLabels', async (req, { vault, sdkRegistry }) => {
+    host.register('wallet.restoreLabels', async (req, { vault, sdkRegistry, signerPool }) => {
         const walletId = req?.walletId;
         const chainId = req?.chainId;
         if (typeof walletId !== 'string' || !walletId) {
@@ -2546,10 +2718,18 @@ export function createBackgroundHost(deps) {
         if (typeof chainId !== 'string' || !chainId) {
             throw new Error('wallet.restoreLabels: chainId is required');
         }
+        await refuseHardwareLabelSync(vault, walletId);
+        // Unlocked session: the pooled signer's master key opens the seed.
+        // It was derived under the wallet record's kdfParams at unlock, which
+        // the flow checks before it uses the key (2026-11-14).
+        const session = pooledSoftwareSession(signerPool, walletId, req?.password);
+        const sessionKdfParams = session ? (await vault.wallets.get(walletId))?.kdfParams : undefined;
         return restoreLabelSyncAfterImport({
             vault,
             walletId,
             password: req?.password,
+            masterKey: session?.masterKey,
+            masterKeyKdfParams: sessionKdfParams,
             bip39Passphrase: req?.bip39Passphrase,
             chainIds: [chainId],
             sdkRegistry,
@@ -2576,27 +2756,42 @@ export function createBackgroundHost(deps) {
     // addresses" copy.
     host.register('wallet.importBackup', async (req, { vault, vaultKeyring, chainRegistry }) => {
         await assertRestoreDevicePassword(req?.devicePassword, vault, vaultKeyring);
-        const r = await importBackupFile({
-            vault,
-            fileContent: req?.fileContent,
-            password: req?.password,
-            // `password` opens the FILE. These two move the
-            // wallet's own seal onto this device, and without them a
-            // restored wallet lands unsignable and says nothing.
-            walletPassword: req?.walletPassword,
-            devicePassword: req?.devicePassword,
-            onConflict: req?.onConflict,
-            mode: req?.mode,
-            chainRegistry,
-        });
-        await publishSurfaceState('wallets', { change: 'added', walletId: r.walletId });
-        return {
-            walletId: r.walletId,
-            writes: r.writes,
-            skipped: r.skipped,
-            rekeyed: r.rekeyed,
-            walletName: r.payload?.wallet?.name,
-        };
+        // The re-seal's key, lent so the recovery record needs no second derivation.
+        let lentKey = null;
+        try {
+            const r = await importBackupFile({
+                onDeviceKey: (key) => {
+                    if (lentKey) lentKey.fill(0);
+                    lentKey = new Uint8Array(key);
+                },
+                vault,
+                fileContent: req?.fileContent,
+                password: req?.password,
+                // `password` opens the FILE. These two move the
+                // wallet's own seal onto this device, and without them a
+                // restored wallet lands unsignable and says nothing.
+                walletPassword: req?.walletPassword,
+                devicePassword: req?.devicePassword,
+                onConflict: req?.onConflict,
+                mode: req?.mode,
+                chainRegistry,
+            });
+            await publishSurfaceState('wallets', { change: 'added', walletId: r.walletId });
+            // Copied synchronously inside, so the finally below may zero ours.
+            refreshPhraseRecoveryAfterAdd({ vault, vaultKeyring }, req?.devicePassword,
+                lentKey && r.walletId ? new Map([[r.walletId, lentKey]]) : undefined);
+            return {
+                walletId: r.walletId,
+                writes: r.writes,
+                skipped: r.skipped,
+                rekeyed: r.rekeyed,
+                walletName: r.payload?.wallet?.name,
+            };
+        } finally {
+            // An import that fails after the re-seal (a conflict, a write)
+            // has already lent the key; it is zeroed on that path too.
+            if (lentKey) lentKey.fill(0);
+        }
     });
 
     // §15.4: QR-from-backup-pointer restore. The renderer hands the
@@ -2621,6 +2816,7 @@ export function createBackgroundHost(deps) {
             resolveBackupContent: resolveBackupPointerContent,
         });
         await publishSurfaceState('wallets', { change: 'added', walletId: r.walletId });
+        refreshPhraseRecoveryAfterAdd({ vault, vaultKeyring }, req?.devicePassword);
         return {
             walletId: r.walletId,
             writes: r.writes,
@@ -2634,7 +2830,7 @@ export function createBackgroundHost(deps) {
     // §35.1: destructively remove a wallet and all its descendants.
     // The host clears the wallet's SignerPool entry too so a removed
     // wallet doesn't linger as an unlocked-key reference.
-    host.register('wallet.remove', async (req, { vault, signerPool }) => {
+    host.register('wallet.remove', async (req, { vault, signerPool, vaultKeyring }) => {
         const walletId = req?.walletId;
         if (typeof walletId !== 'string' || !walletId) {
             throw new Error('wallet.remove: walletId is required');
@@ -2644,6 +2840,8 @@ export function createBackgroundHost(deps) {
             vault.connectedSites.list(),
         ]);
         const result = await removeWallet({ vault, walletId });
+        // A removed wallet's recovery phrase must stop resetting this vault.
+        await refreshPhraseRecoveryAfterRemove({ vault, vaultKeyring }, walletId);
         if (signerPool && typeof signerPool.evict === 'function') {
             try { signerPool.evict(walletId); } catch { /* best-effort */ }
         }
@@ -2653,7 +2851,11 @@ export function createBackgroundHost(deps) {
         // blob and rehydrate into every later boot, and no route can list them
         // again because the banner only ever asks for the active wallet.
         await pruneWalletFromQueue(walletId);
-        await publishSurfaceState('wallets', { change: 'removed', walletId });
+        await publishSurfaceState('wallets', {
+            change: 'removed',
+            walletId,
+            ...(typeof req?.surfaceId === 'string' && req.surfaceId ? { originSurface: req.surfaceId } : {}),
+        });
         const removedAccountIds = new Set(removedAccounts.map((account) => account.id));
         const affectedOrigins = new Set(sitesBefore
             .filter((site) => {
@@ -2744,6 +2946,10 @@ export function createBackgroundHost(deps) {
         await vault.connectedSites.put(site);
         return { ok: true, restored: true };
     });
+
+    // Settings > Connected Sites > Options: the live sign-request throttle in
+    // one read, the limits in force plus each site's used count and wait.
+    host.register('sites.throttleStatus', async () => signThrottle.status());
 
     // §12 / G009: origin blocklist. listBlockedOrigins reads from
     // settings.blockedOrigins; addBlockedOrigin also evicts any
@@ -2968,7 +3174,7 @@ export function createBackgroundHost(deps) {
             signerPool,
         });
         if (!signer) {
-            throw new Error('receive.verifyAddress: a paired hardware signer is required');
+            throw new Error('receive.verifyAddress: a connected hardware wallet is required');
         }
         return verifyReceiveAddress({
             vault,
@@ -3007,6 +3213,11 @@ export function createBackgroundHost(deps) {
         return newestAddress(req, { vault, chainRegistry });
     });
 
+    // Every wallet's public addresses in one read, for the My Wallets search.
+    host.register('addresses.byWallet', async (req, { vault, chainRegistry }) => {
+        return addressesByWallet(req, { vault, chainRegistry });
+    });
+
     // Which of the chain's registry address types the installed SDK can generate,
     // so no picker offers one that generation then refuses. `supported` is null
     // when the SDK cannot be asked yet; the caller then keeps the registry list.
@@ -3030,11 +3241,11 @@ export function createBackgroundHost(deps) {
         if (!rec) throw new Error('addresses.setLabel: address not found');
         const label = schemas.address.normalizeAddressLabel(req?.label, rec);
         await vault.addresses.put({ ...rec, label });
-        // §19.5.2 auto-sync: the label just changed on disk, so the
-        // on-chain copy is stale. The scheduler batches this with every
-        // other rename in the burst.
+        // §19.5.2 auto-sync: the on-chain copy is now stale (the scheduler
+        // batches renames). Never for a hardware wallet: it has no seed key.
         const account = rec.accountId ? await vault.accounts.get(rec.accountId) : null;
-        noteLabelChange({ vault }, account?.walletId ?? null);
+        const walletId = account?.walletId ?? null;
+        if (!(walletId && isHardwareWallet(await vault.wallets.get(walletId)))) noteLabelChange({ vault }, walletId);
         return { ok: true, label };
     });
 
@@ -3342,6 +3553,21 @@ export function createBackgroundHost(deps) {
         return free.length === rows.length ? null : free;
     }
 
+    // The Advanced section's coin and change choices for the routes that
+    // build their own encoder options (vote, bet, message, gated publish).
+    // The change address must be one of this wallet's, as on the generic route.
+    function withCallerSpendChoices(req, encoderOpts, ownAddresses, route) {
+        let next = encoderOpts;
+        if (Array.isArray(req?.utxos) && req.utxos.length > 0) next = { ...next, utxos: req.utxos };
+        if (typeof req?.change === 'string' && req.change) {
+            if (!ownAddresses.includes(req.change)) {
+                throw new Error(`${route}: change address does not belong to this wallet`);
+            }
+            next = { ...next, change: req.change };
+        }
+        return next;
+    }
+
     async function withoutHeldCoins(chainId, address, encoderOpts, sdkRegistry) {
         if (Array.isArray(encoderOpts.utxos)) return encoderOpts;
         const free = await unclaimedUtxos(chainId, address, sdkRegistry);
@@ -3401,6 +3627,7 @@ export function createBackgroundHost(deps) {
             ...(req?.feePerKb !== undefined && { feePerKb: req.feePerKb }),
             ...(req?.rbf !== undefined && { rbf: req.rbf }),
         });
+        encoderOpts = withCallerSpendChoices(req, encoderOpts, ownAddresses, 'action.vote.composeForConfirm');
         encoderOpts = await withoutHeldCoins(chainId, source.address, encoderOpts, sdkRegistry);
         const composed = await composeActionForConfirm({
             vault,
@@ -4175,6 +4402,53 @@ export function createBackgroundHost(deps) {
             recordOwedSettlement(walletId, pendingTxId, 'patch', patch);
         }
     }
+    // §36: the claim on the donation queue a queued entry's bytes hold. The
+    // verdict names it; an entry rebuilt from its PendingTx alone carries no
+    // verdict, and its claim (if any) is the record's id.
+    function adsClaimOf(entry) {
+        const verdict = entry?.adsCommit;
+        if (verdict) return typeof verdict.reservationId === 'string' && verdict.reservationId ? verdict.reservationId : null;
+        return typeof entry?.pendingTxId === 'string' && entry.pendingTxId ? entry.pendingTxId : null;
+    }
+    // Book a queued entry whose bytes just landed: its verdict (the send's
+    // per-transaction amount and, when it carried the donation, its claim),
+    // or only the claim when this landing must not accrue again (an
+    // interrupted claim may already have booked it). A send accrues only on a
+    // mainnet chain. Accounting is non-critical: a settings-write failure must
+    // not turn a landed broadcast into an error for the caller.
+    async function bookLandedAds(vault, chainRegistry, entry, { accrue }) {
+        const verdict = entry?.adsCommit;
+        try {
+            if (verdict && accrue) {
+                const descriptor = chainRegistry?.get?.(verdict.chainId ?? entry.chainId) ?? null;
+                await flows.commitAdsStep({
+                    vault,
+                    donationIncluded: verdict.donationIncluded,
+                    donatedFiat: verdict.donatedFiat ?? null,
+                    currency: verdict.currency ?? null,
+                    mainnet: verdict.mainnet !== false && descriptor?.networkKind === 'mainnet',
+                    reservationId: verdict.reservationId ?? null,
+                });
+            } else {
+                const reservationId = adsClaimOf(entry);
+                if (reservationId) await flows.settleAdsReservation({ vault, reservationId });
+            }
+        } catch (e) {
+            console.warn('broadcast.queue: ADS commit failed', e && e.message ? String(e.message) : String(e));
+        }
+    }
+    // Let a queued entry's claim go: its bytes were refused for good or
+    // discarded, so they never pay the donation.
+    async function releaseQueuedAds(vault, entry) {
+        // Only the named claim is cleared, so the record id is a safe fallback.
+        const reservationId = adsClaimOf(entry) ?? (typeof entry?.pendingTxId === 'string' ? entry.pendingTxId : null);
+        if (!reservationId) return;
+        try {
+            await flows.releaseAdsReservation({ vault, reservationId });
+        } catch (e) {
+            console.warn('broadcast.queue: ADS release failed', e && e.message ? String(e.message) : String(e));
+        }
+    }
     // Retire the original a queued fee-bump replacement evicted, the write tx.replace makes when its own send lands.
     // Best effort: a refused write leaves the original live, which nets its spend but never re-sends it.
     async function settleReplacedOriginal(vault, entry, replacementTxHash) {
@@ -4413,19 +4687,8 @@ export function createBackgroundHost(deps) {
                     // Book the carried verdict exactly as the landed exit does. The booking
                     // runs only after the entry has left the persisted queue, so an entry
                     // that is still queued, an interrupted claim included, never booked.
-                    if (entry.adsCommit) {
-                        try {
-                            await flows.commitAdsStep({
-                                vault,
-                                chainId: entry.adsCommit.chainId || entry.chainId,
-                                donationIncluded: entry.adsCommit.donationIncluded,
-                                donationAmount: entry.adsCommit.donationAmount,
-                                chainRegistry,
-                            });
-                        } catch (e) {
-                            console.warn('broadcast.queue: ADS commit failed', e && e.message ? String(e.message) : String(e));
-                        }
-                    }
+                    // A claim still held is settled with it: it names one payout, once.
+                    await bookLandedAds(vault, chainRegistry, entry, { accrue: true });
                     return { txid: entry.txid ?? null, alreadyOnNetwork: true };
                 }
                 // Release the claim either way, the two transitions core's drain
@@ -4444,6 +4707,8 @@ export function createBackgroundHost(deps) {
                     const cur = q.findIndex((e) => e.id === id);
                     if (cur >= 0) q.splice(cur, 1);
                     await persistQueue();
+                    // Bytes that can never confirm never pay the donation.
+                    await releaseQueuedAds(vault, entry);
                 } else {
                     const retryAttempt = Number.isSafeInteger(entry.retryAttempt) && entry.retryAttempt > 0
                         ? entry.retryAttempt + 1
@@ -4510,22 +4775,10 @@ export function createBackgroundHost(deps) {
             // booked here, after the bytes landed and after the entry left the
             // queue (a retry cannot reach it, so nothing books twice).
             // `donationIncluded` is the verdict submitAction resolved for these
-            // exact bytes; it is carried, never re-derived from today's settings.
-            // Accounting is non-critical: a settings-write failure must not turn a
-            // landed broadcast into an error for the caller.
-            if (entry.adsCommit) {
-                try {
-                    await flows.commitAdsStep({
-                        vault,
-                        chainId: entry.adsCommit.chainId || entry.chainId,
-                        donationIncluded: entry.adsCommit.donationIncluded,
-                        donationAmount: entry.adsCommit.donationAmount,
-                        chainRegistry,
-                    });
-                } catch (e) {
-                    console.warn('broadcast.queue: ADS commit failed', e && e.message ? String(e.message) : String(e));
-                }
-            }
+            // exact bytes; it is carried, never re-derived from today's settings,
+            // and the claim it names on the queue is settled with it. An entry
+            // rebuilt from its PendingTx alone settles the claim that record holds.
+            await bookLandedAds(vault, chainRegistry, entry, { accrue: true });
             return { ...(result && typeof result === 'object' ? result : {}), txid };
         } finally {
             inFlightQueueBroadcasts.delete(claim);
@@ -4569,6 +4822,8 @@ export function createBackgroundHost(deps) {
             if (cur >= 0) q.splice(cur, 1);
             await persistQueue();
             await flushOwedSettlements(vault);
+            // Discarded bytes never pay the donation, so the next send may carry it.
+            if (entry) await releaseQueuedAds(vault, entry);
             return { discarded: idx >= 0 };
         } finally {
             inFlightQueueBroadcasts.delete(claim);
@@ -4836,6 +5091,17 @@ export function createBackgroundHost(deps) {
         return flows.listCoSignerAccounts(vault, req?.walletId);
     });
 
+    // Every agent account's balance in one batch read per chain, keyed by account id.
+    host.register('coSigner.balances', async (req, { vault, sdkRegistry, chainRegistry }) => {
+        return flows.coSignerAccountBalances({ vault, sdkRegistry, chainRegistry, walletId: req?.walletId });
+    });
+
+    // The token numbers of the tickers an agent account's rules name, read when
+    // the owner saves the rules (one read per distinct ticker); signing never asks.
+    host.register('coSigner.resolveTokenIds', async (req, { sdkRegistry, chainRegistry }) => {
+        return flows.resolveCoSignerTokenIds({ sdkRegistry, chainRegistry, chainId: req?.chainId, ticks: req?.ticks });
+    });
+
     host.register('coSigner.get', async (req, { vault }) => {
         return flows.getCoSignerAccount(vault, req?.id);
     });
@@ -4943,12 +5209,7 @@ export function createBackgroundHost(deps) {
         if (descriptor.kind !== 'trezor' && descriptor.kind !== 'ledger') {
             throw new Error('auth.signPsbt.hw: source address is not a hardware wallet');
         }
-        const transport = signerBridge.getTransport(descriptor.signerRecord.id);
-        if (!transport) {
-            throw new Error(
-                'Hardware signer is not connected. Open the wallet UI, re-pair if needed, and try again.',
-            );
-        }
+        const transport = signerBridge.requireTransport(descriptor.signerRecord.id);
         const signer = buildRemoteSigner(descriptor, transport);
         const chainId = hwId(address, deps);
         const sdk = sdkRegistry.get(chainId);
@@ -4970,7 +5231,7 @@ export function createBackgroundHost(deps) {
         // All-or-refuse before the device is engaged.
         if (signingPaths.length !== decomposed.inputs.length) {
             throw new Error(
-                `auth.signPsbt.hw: a hardware signer signs every input or none, so it cannot partially sign this PSBT (${address.address} owns ${signingPaths.length} of ${decomposed.inputs.length} inputs). Use a software wallet key for co-signed PSBTs.`,
+                `auth.signPsbt.hw: a hardware wallet signs every input or none, so it cannot partially sign this PSBT (${address.address} owns ${signingPaths.length} of ${decomposed.inputs.length} inputs). Use a software wallet key for co-signed PSBTs.`,
             );
         }
         return signPsbtFlow({
@@ -4999,12 +5260,8 @@ export function createBackgroundHost(deps) {
             if (descriptor.kind !== 'trezor' && descriptor.kind !== 'ledger') {
                 throw new Error(`${type}: source address is not a hardware wallet`);
             }
-            const transport = signerBridge.getTransport(descriptor.signerRecord.id);
-            if (!transport) {
-                throw new Error(
-                    'Hardware signer is not connected. Open the wallet UI, re-pair if needed, and try again.',
-                );
-            }
+            // Throws with code HW_NOT_CONNECTED when the device has no live transport.
+            const transport = signerBridge.requireTransport(descriptor.signerRecord.id);
             const signer = buildRemoteSigner(descriptor, transport);
             const { password: _password, ...rest } = req;
             // Auto-enqueue on broadcast failure for HW lanes too.
@@ -5219,6 +5476,11 @@ export function createBackgroundHost(deps) {
     host.register('coinpays.obligationsForAddress', async (req, { sdkRegistry }) => {
         return getCoinpayObligationsForAddress({ ...req, sdkRegistry });
     });
+    // Payments due: what each listed payment buys, two list reads per payer
+    // address for the whole list (see coinpayMatchSides.js).
+    host.register('coinpays.matchSides', async (req, { sdkRegistry }) => {
+        return getCoinpayMatchSides({ obligations: req?.obligations, sdkRegistry });
+    });
     host.register('coinpays.forAddress', async (req, { sdkRegistry }) => {
         return getCoinpaysForAddress({ ...req, sdkRegistry });
     });
@@ -5333,14 +5595,19 @@ export function createBackgroundHost(deps) {
             chainId: req?.chainId,
             sourceAddress: source.address,
         });
-        let confirmEncoderOpts = await deviceHardenedEncoderOpts(vault, req, {});
+        let confirmEncoderOpts = await deviceHardenedEncoderOpts(vault, req, {
+            ...(req?.rbf !== undefined && { rbf: req.rbf }),
+        });
+        confirmEncoderOpts = withCallerSpendChoices(
+            req, confirmEncoderOpts, ownAddresses, 'action.gatedPublish.composeForConfirm');
         confirmEncoderOpts = await withoutHeldCoins(req?.chainId, source.address, confirmEncoderOpts, sdkRegistry);
         return composeGatedPublishForConfirm({
             ...req,
             vault,
             chainRegistry,
             sdkRegistry,
-            change,
+            // A change address chosen under Advanced wins over the rotated one.
+            change: confirmEncoderOpts.change ?? change,
             ownAddresses,
             confirmEncoderOpts,
             envelopeSigner: await envelopeSignerOf(vault, req),
@@ -5450,6 +5717,7 @@ export function createBackgroundHost(deps) {
             ...(req?.feePerKb !== undefined && { feePerKb: req.feePerKb }),
             ...(req?.rbf !== undefined && { rbf: req.rbf }),
         });
+        encoderOpts = withCallerSpendChoices(req, encoderOpts, ownAddresses, 'action.message.composeForConfirm');
         encoderOpts = await withoutHeldCoins(broadcastChainId, source.address, encoderOpts, sdkRegistry);
         const composed = await composeActionForConfirm({
             vault,
@@ -5701,6 +5969,11 @@ export function createBackgroundHost(deps) {
         return votesForQuery({ ...req, sdkRegistry });
     });
 
+    // One address's live vote delegations, one read for the My delegations list.
+    host.register('governance.voteDelegations', async (req, { sdkRegistry }) => {
+        return voteDelegationsForAddress({ ...req, sdkRegistry });
+    });
+
     // BET writes. One action name over four formats, so each gets its own route
     // rather than a single route taking a version from the caller: a resolve and
     // a place-bet differ on the wire only by AMOUNT, and the messaging boundary
@@ -5765,6 +6038,7 @@ export function createBackgroundHost(deps) {
             // the PSBT covered by the confirm tamper check.
             ...(req?.payFeeInNativeCoin !== undefined && { payFeeInNativeCoin: req.payFeeInNativeCoin }),
         });
+        encoderOpts = withCallerSpendChoices(req, encoderOpts, ownAddresses, 'action.bet.composeForConfirm');
         encoderOpts = await withoutHeldCoins(chainId, source.address, encoderOpts, sdkRegistry);
         const composed = await composeActionForConfirm({
             vault,
@@ -6266,6 +6540,24 @@ export function createBackgroundHost(deps) {
         return validateActionDryRun({ ...req, sdkRegistry });
     });
 
+    // The chain's published fee schedule (the indexer's /feeschedule: gas
+    // table, gas price, oracle prices), which useFeeSchedule reads so a form
+    // can show a fee before the action is complete enough to quote. Display
+    // only, so a chain without an explorer or a failed read answers null.
+    host.register('sdk.getFeeSchedule', async (req, { sdkRegistry }) => {
+        const chainId = req?.chainId;
+        if (typeof chainId !== 'string' || !chainId) {
+            throw new Error('sdk.getFeeSchedule: chainId is required');
+        }
+        const sdk = sdkRegistry.get(chainId);
+        if (typeof sdk?.getFeeSchedule !== 'function') return null;
+        try {
+            return await sdk.getFeeSchedule();
+        } catch {
+            return null;
+        }
+    });
+
 
     host.register('signer.register', async (req, { vault }) => {
         return registerSigner({ ...req, vault });
@@ -6276,7 +6568,9 @@ export function createBackgroundHost(deps) {
         if (typeof walletId !== 'string' || walletId.length === 0) {
             throw new Error('signer.list: walletId is required');
         }
-        return listSignersForWallet(vault, walletId);
+        // The renderer reopens a Ledger from these records, and checks it
+        // per chain through that chain's app (ledgerIdentity.js).
+        return listSignersForWallet(vault, walletId, { withIdentities: true });
     });
 
     host.register('signer.unregister', async (req, { vault }) => {
@@ -6359,6 +6653,17 @@ export function createBackgroundHost(deps) {
 
     host.register('history.address', async (req, { sdkRegistry }) => {
         return addressHistory({ ...req, sdkRegistry });
+    });
+
+    // Home's value chart: one page of up to 20 addresses' token history
+    // (with each action's per-address balance effects) or native coin history
+    // per call, so the chart's reads follow the address batches and pages,
+    // never one read per address.
+    host.register('history.walletBatch', async (req, { sdkRegistry }) => {
+        return walletHistoryBatch({ ...req, sdkRegistry });
+    });
+    host.register('history.nativeBatch', async (req, { sdkRegistry }) => {
+        return walletNativeHistoryBatch({ ...req, sdkRegistry });
     });
 
     // M2.1: the unconfirmed half of the same read. Kept as its own channel
@@ -6518,6 +6823,47 @@ export function createBackgroundHost(deps) {
             return { resolved: ok };
         });
     }
+
+    // The agent account page shows the co-sign requests waiting on the owner.
+    // It lists them with the same read-only preview the approval window shows,
+    // can refuse one, and sends Approve to that window, where the password and
+    // every signing check stay; nothing here signs.
+    // A shell whose approvals cannot list parked requests answers with none.
+    const broker = /** @type {any} */ (approvals);
+    const canList = Boolean(broker && typeof broker.listPending === 'function');
+    const coSignEntry = (id) => (canList
+        ? broker.listPending('coSign').find((entry) => entry.id === id) || null
+        : null);
+    host.register('coSign.pending', async (req, { vault, sdkRegistry }) => {
+        const accountId = /** @type {any} */ (req)?.accountId;
+        if (typeof accountId !== 'string' || accountId.length === 0) {
+            throw new Error('coSign.pending: accountId is required');
+        }
+        if (!canList) return [];
+        const entries = broker.listPending('coSign')
+            .filter((entry) => entry.payload?.payload?.accountId === accountId);
+        return Promise.all(entries.map(async (entry) => {
+            const base = { id: entry.id, origin: entry.payload?.origin ?? null };
+            try {
+                const preview = await flows.previewCoSignRequest({
+                    vault, sdkRegistry, accountId, request: { psbt: entry.payload.payload.psbtHex },
+                });
+                return { ...base, ...preview };
+            } catch (err) {
+                return { ...base, decodeOk: false, decodeReason: err?.message || 'DECODE_FAILED', policyOk: false };
+            }
+        }));
+    });
+    host.register('coSign.refuse', async (req) => {
+        const id = /** @type {any} */ (req)?.id;
+        if (!coSignEntry(id)) return { resolved: false };
+        return { resolved: await broker.resolve(id, { approved: false }) };
+    });
+    host.register('coSign.focus', async (req) => {
+        const id = /** @type {any} */ (req)?.id;
+        if (!coSignEntry(id) || typeof broker.focus !== 'function') return { focused: false };
+        return { focused: await broker.focus(id) };
+    });
 
     // Every software-signed action that spends coins claims them around its
     // whole route (see withSpendClaim); a send claims inside sendWithHold.
@@ -6763,6 +7109,26 @@ export async function changeWalletPassword(req, deps, operations = {}) {
             } catch (err) {
                 console.error('[xchain] wallet.changePassword: session cache not updated:', err);
             }
+            // The vault key moved, so the recovery-phrase reset record moves with
+            // it, onto a fresh recovery key with every entry re-wrapped: the old
+            // password still opens the old key seal in any older copy of the
+            // record, and that must lead to no current bundle. A failure is
+            // repaired by the next unlock, which cannot open the old key seal
+            // and so mints a fresh recovery key too.
+            if (keyring.metaBackend) {
+                try {
+                    await flows.reconcilePhraseRecoveryInMeta({
+                        metaBackend: keyring.metaBackend,
+                        vault: deps.vault,
+                        vaultKey: newVaultKey,
+                        password: newPassword,
+                        previousVaultKey: oldVaultKey,
+                        rotate: true,
+                    });
+                } catch (err) {
+                    console.warn('[xchain] wallet.changePassword: recovery record not refreshed:', /** @type {any} */ (err)?.name || err);
+                }
+            }
         }
 
         // The pooled signers hold the same seeds, but they were opened from
@@ -6788,6 +7154,89 @@ export async function changeWalletPassword(req, deps, operations = {}) {
         if (oldVaultKey) oldVaultKey.fill(0);
         if (newVaultKey) newVaultKey.fill(0);
     }
+}
+
+/**
+ * Take a removed wallet out of the recovery-phrase reset record (operator
+ * ruling 2026-11-16, security review the same day). First the cheap drop of
+ * its wrap, which fails closed on its own; then a rotation onto a fresh
+ * recovery key with every remaining seed wallet re-wrapped, so the removed
+ * wallet's wrap in any older copy of the record opens no current bundle. The
+ * open vault lends its key and the old bundle supplies the wallet keys, so no
+ * password is needed. Awaited by wallet.remove; a failure is logged and the
+ * dropped wrap still stands. The vault key itself does not move (that needs
+ * the password), so an older copy's own bundle still holds it; see
+ * dropPhraseRecoveryWallet.
+ *
+ * @param {{ vault: any, vaultKeyring?: import('./vaultKeyring.js').VaultKeyring }} deps
+ * @param {string} walletId
+ * @returns {Promise<void>}
+ */
+export async function refreshPhraseRecoveryAfterRemove({ vault, vaultKeyring }, walletId) {
+    const metaBackend = vaultKeyring?.metaBackend;
+    if (!metaBackend) return;
+    try {
+        await flows.dropPhraseRecoveryWalletInMeta(metaBackend, walletId);
+    } catch (err) {
+        console.warn('[xchain] wallet.remove: recovery wrap not dropped:', /** @type {any} */ (err)?.name || err);
+    }
+    if (!vault || typeof vault.exportMasterKeyCopy !== 'function') return;
+    let key = null;
+    try {
+        key = vault.exportMasterKeyCopy();
+        await flows.reconcilePhraseRecoveryInMeta({ metaBackend, vault, vaultKey: key, rotate: true });
+    } catch (err) {
+        console.warn('[xchain] wallet.remove: recovery key not rotated:', /** @type {any} */ (err)?.name || err);
+    } finally {
+        if (key) key.fill(0);
+    }
+}
+
+/**
+ * Bring the recovery-phrase reset record up to date after a wallet is added to
+ * an open vault (operator ruling 2026-11-16), off the reply path. The open
+ * vault lends a copy of its own key (an older handle without that method has
+ * it derived again from the typed password, which must then be the unlock
+ * password). The typed password derives only a wallet key nobody lent, and
+ * each key is checked against the wallet's seal, so a password that is not
+ * this wallet's changes nothing. Any failure leaves the backfill to the next
+ * unlock, as does an add with no typed password (a pooled signer supplied it).
+ *
+ * @param {{ vault: any, vaultKeyring?: import('./vaultKeyring.js').VaultKeyring }} deps
+ * @param {unknown} password
+ * @param {Map<string, Uint8Array>} [knownWalletKeys]   wallet seal keys already in hand; copied here
+ * @returns {Promise<boolean>}
+ */
+export function refreshPhraseRecoveryAfterAdd({ vault, vaultKeyring }, password, knownWalletKeys) {
+    const metaBackend = vaultKeyring?.metaBackend;
+    if (!metaBackend || typeof password !== 'string' || password.length === 0 || !vault) {
+        return Promise.resolve(false);
+    }
+    const known = new Map([...(knownWalletKeys ?? new Map())]
+        .filter(([, k]) => k instanceof Uint8Array && k.length === 32)
+        .map(([id, k]) => [id, new Uint8Array(k)]));
+    return (async () => {
+        let key = null;
+        try {
+            if (typeof vault.exportMasterKeyCopy === 'function') {
+                key = vault.exportMasterKeyCopy();
+            } else {
+                const kdfParams = await vaultKeyring.kdfParams();
+                if (!kdfParams || typeof vault.keyMatches !== 'function') return false;
+                key = await coreCrypto.deriveMasterKeyAsync(password, kdfParams);
+                if (!vault.keyMatches(key)) return false;
+            }
+            return await flows.reconcilePhraseRecoveryInMeta({
+                metaBackend, vault, vaultKey: key, password, knownWalletKeys: known,
+            });
+        } finally {
+            if (key) key.fill(0);
+            for (const k of known.values()) k.fill(0);
+        }
+    })().catch((err) => {
+        console.warn('[xchain] phrase recovery not refreshed after add:', /** @type {any} */ (err)?.name || err);
+        return false;
+    });
 }
 
 function detachedWalletCopy(wallet) {

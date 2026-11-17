@@ -57,11 +57,11 @@ async function expectCompactActions(page, viewport) {
     // Add wallet and Manage wallet do on the Wallets screen: in the screen
     // body, never in a pinned footer.
     const main = page.getByRole('main');
-    await expect(page.getByRole('button', { name: 'Add account', exact: true }),
+    await expect(page.getByRole('button', { name: 'Add Account', exact: true }),
         `${viewport}: Add account renders more than once or not at all`).toHaveCount(1);
-    await expect(page.locator('footer').getByRole('button', { name: 'Add account', exact: true }),
+    await expect(page.locator('footer').getByRole('button', { name: 'Add Account', exact: true }),
         `${viewport}: Accounts actions are pinned in a footer`).toHaveCount(0);
-    const add = main.getByRole('button', { name: 'Add account', exact: true });
+    const add = main.getByRole('button', { name: 'Add Account', exact: true });
     const manage = main.getByRole('button', { name: 'Manage', exact: true });
     await expect(add, `${viewport}: Add account is not in the screen body`).toBeVisible();
     await expect(manage, `${viewport}: Manage is not in the screen body`).toBeVisible();

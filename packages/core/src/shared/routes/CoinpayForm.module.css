@@ -1,64 +1,40 @@
-/* Payments due: one rounded list card, a hairline between rows. */
-.dueList {
-    composes: flush from '../../ui/Card.module.css';
-    list-style: none;
-    margin: 0;
-    margin-block-end: var(--xc-space-3);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-}
+/* Payment section: the facts list itself uses the shared FactRows look; this
+   sheet holds the muted fiat note and the Time left pill. */
 
-.dueList li + li {
-    border-block-start: 1px solid var(--xc-border);
-}
-
-.dueRow {
-    display: block;
-    inline-size: 100%;
-    box-sizing: border-box;
-    text-align: start;
-    padding-block: var(--xc-space-2);
-    padding-inline: var(--xc-space-3);
-    border: 0;
-    border-inline-start: 3px solid transparent;
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    cursor: pointer;
-    overflow-wrap: anywhere;
-}
-
-.dueRow[aria-pressed='true'] {
-    border-inline-start-color: var(--xc-accent-primary);
-    background: var(--xc-surface-selected, var(--xc-surface-hover, transparent));
-    outline: 1px solid var(--xc-accent-primary);
-    outline-offset: -1px;
-}
-
-.dueRow:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: -2px;
-}
-
-.dueTitle {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    font-weight: 600;
-}
-
-.dueAmount {
-    margin-block-start: var(--xc-space-1);
-    font-size: var(--xc-text-sm);
-}
-
-.dueMeta {
-    font-size: var(--xc-text-xs);
+/* The muted fiat note beside a value, digits kept in order on a
+   right-to-left page. */
+.boxFiat {
+    direction: ltr;
+    unicode-bidi: isolate;
     color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    font-weight: 500;
 }
 
-.dueExpired {
+/* An amount with its asset icon beside it, trailing-aligned like the other values. */
+.amountWithIcon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--xc-space-2);
+    max-inline-size: 100%;
+}
+
+/* Time left: an accent pill, red under an hour and once expired. */
+.pill {
+    display: inline-block;
+    padding: calc(var(--xc-space-1) / 2) var(--xc-space-2);
+    border-radius: var(--xc-radius-pill);
+    background: color-mix(in srgb, var(--xc-accent-primary) 14%, transparent);
+    color: var(--xc-accent-primary);
+    font-size: var(--xc-text-sm);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.pillUrgent {
+    background: color-mix(in srgb, var(--xc-danger) 14%, transparent);
     color: var(--xc-danger-fg);
 }
 

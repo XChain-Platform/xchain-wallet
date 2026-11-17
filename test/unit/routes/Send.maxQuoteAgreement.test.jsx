@@ -132,7 +132,7 @@ describe('Send Max quote agreement', () => {
         const quote = vi.fn().mockResolvedValue(quoteFor('99999000'));
         const messaging = mount({ quote });
         await enterDestination();
-        fireEvent.click(screen.getByText('Advanced'));
+        fireEvent.click(screen.getByText('Advanced', { selector: '[data-form-section-title]' }));
         await waitFor(() => expect(screen.getByLabelText('Coin control enabled')).toBeEnabled());
         fireEvent.click(screen.getByLabelText('Coin control enabled'));
         fireEvent.click(screen.getByLabelText(/1 BTC/));
@@ -196,6 +196,8 @@ describe('Send Max quote agreement', () => {
         await useMax();
         await waitFor(() => expect(quote).toHaveBeenCalledTimes(1));
 
+        // The Fees section starts closed: open it to reach the slider.
+        fireEvent.click(screen.getByRole('button', { name: /^Speed and Fees/, expanded: false }));
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
             target: { value: '2' },
         });

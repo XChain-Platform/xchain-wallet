@@ -82,51 +82,56 @@ describe('T through Z route keyboard flows', () => {
         );
 
         const back = screen.getByRole('button', { name: 'Back to home' });
-        const search = screen.getByRole('searchbox', { name: 'Search coins or tokens' });
-        const network = screen.getByRole('button', { name: /All networks/ });
-        const allTab = screen.getByRole('tab', { name: 'All' });
+        const filter = screen.getByRole('button', { name: 'Filter coins and tokens' });
         const bitcoin = await screen.findByRole('button', { name: /^Select Bitcoin\b/ });
         const token = screen.getByRole('button', { name: /^Select Keyboard Token\b/ });
 
-        // Balance rows are one roving tab stop; each row's pin button stays reachable.
-        expect(tabStops(view.container)).toEqual([
-            back, search, network, allTab, bitcoin,
-            screen.getByRole('button', { name: 'Pin BTC' }),
-            screen.getByRole('button', { name: 'Pin KEYS' }),
-        ]);
+        // The search, network and asset kind sit behind the title bar's filter
+        // button. Balance rows are one roving tab stop, and the picker offers
+        // no per-row pin button.
+        expect(screen.queryByRole('searchbox', { name: 'Search coins or tokens' })).toBeNull();
+        expect(screen.queryByRole('button', { name: /^Pin / })).toBeNull();
+        expect(tabStops(view.container)).toEqual([back, filter, bitcoin]);
         expect(token).toHaveAttribute('tabindex', '-1');
-        expect(screen.getByRole('tab', { name: 'Coins' })).toHaveAttribute('tabindex', '-1');
-        expect(screen.getByRole('tab', { name: 'Tokens' })).toHaveAttribute('tabindex', '-1');
 
         pressEnter(back);
         expect(onBack).toHaveBeenCalledOnce();
 
+        pressEnter(filter);
+        const search = screen.getByRole('searchbox', { name: 'Search coins or tokens' });
+        await waitFor(() => expect(document.activeElement).toBe(search));
+        const network = screen.getByRole('button', { name: /Filter by network/ });
+        const kind = screen.getByRole('button', { name: /Coins and tokens/ });
+        expect(tabStops(view.container)).toEqual([back, filter, search, network, kind, bitcoin]);
+
+        // The network filter opens the full-screen network list with focus on
+        // the current row (operator ruling 2026-11-13: never a dropdown).
         network.focus();
         fireEvent.keyDown(network, { key: 'ArrowDown' });
-        const allNetworks = await screen.findByRole('option', { name: /All networks/ });
+        const networkList = await screen.findByRole('dialog', { name: 'Network' });
+        const allNetworks = within(networkList).getByRole('button', { name: 'Select All networks' });
         await waitFor(() => expect(document.activeElement).toBe(allNetworks));
         fireEvent.keyDown(allNetworks, { key: 'Escape' });
-        expect(screen.queryByRole('listbox', { name: 'Networks' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('dialog', { name: 'Network' })).not.toBeInTheDocument();
         expect(document.activeElement).toBe(network);
 
         fireEvent.keyDown(network, { key: 'ArrowDown' });
-        await waitFor(() => expect(document.activeElement).toHaveAttribute('role', 'option'));
+        await waitFor(() => expect(document.activeElement).toHaveAttribute('data-network-option'));
         fireEvent.keyDown(document.activeElement, { key: 'ArrowDown' });
         expect(document.activeElement).toHaveAccessibleName(/Bitcoin/);
-        fireEvent.keyDown(document.activeElement, { key: 'Enter' });
-        expect(screen.queryByRole('listbox', { name: 'Networks' })).not.toBeInTheDocument();
+        // A native button turns Enter into a click.
+        fireEvent.click(document.activeElement);
+        expect(screen.queryByRole('dialog', { name: 'Network' })).not.toBeInTheDocument();
         expect(document.activeElement).toBe(network);
 
-        allTab.focus();
-        fireEvent.keyDown(allTab, { key: 'ArrowRight' });
-        const coinsTab = screen.getByRole('tab', { name: 'Coins' });
-        expect(document.activeElement).toBe(coinsTab);
-        expect(coinsTab).toHaveAttribute('aria-selected', 'true');
-        fireEvent.keyDown(coinsTab, { key: 'ArrowRight' });
-        const tokensTab = screen.getByRole('tab', { name: 'Tokens' });
-        expect(document.activeElement).toBe(tokensTab);
-        expect(tokensTab).toHaveAttribute('aria-selected', 'true');
-        expect(tokensTab).toHaveAttribute('tabindex', '0');
+        // The asset kind choice is a listbox opened from the keyboard; Enter
+        // on Tokens leaves only the token row.
+        kind.focus();
+        fireEvent.keyDown(kind, { key: 'ArrowDown' });
+        const tokensOption = await screen.findByRole('option', { name: /^Tokens/ });
+        tokensOption.focus();
+        fireEvent.keyDown(tokensOption, { key: 'Enter' });
+        await waitFor(() => expect(screen.queryByRole('button', { name: /^Select Bitcoin\b/ })).toBeNull());
 
         pressEnter(screen.getByRole('button', { name: /^Select Keyboard Token\b/ }));
         expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({
@@ -152,11 +157,14 @@ describe('T through Z route keyboard flows', () => {
         const address = screen.getByLabelText('Address');
         const message = screen.getByLabelText('Message');
         const signature = screen.getByLabelText('Signature');
-        const verify = screen.getByRole('button', { name: 'Verify signature' });
+        const verify = screen.getByRole('button', { name: 'Verify Signature' });
 
         const tip = (name) => screen.getByRole('button', { name: `About ${name}` });
+        // The one open section's header is a tab stop, and the Verify action
+        // stays enabled (an empty form is refused on press), so it is one too.
+        const section = screen.getByRole('button', { name: /^Signature/, expanded: true });
         expect(tabStops(view.container)).toEqual([
-            back, tip('Network'), chain, tip('Address'), address, tip('Message'), message, tip('Signature'), signature,
+            back, section, tip('Network'), chain, tip('Address'), address, tip('Message'), message, tip('Signature'), signature, verify,
         ]);
         pressEnter(back);
         expect(onBack).toHaveBeenCalledOnce();
@@ -172,7 +180,7 @@ describe('T through Z route keyboard flows', () => {
         fireEvent.change(message, { target: { value: 'signed with a keyboard' } });
         fireEvent.change(signature, { target: { value: 'c2lnbmF0dXJl' } });
         expect(tabStops(view.container)).toEqual([
-            back, tip('Network'), chain, tip('Address'), address, tip('Message'), message, tip('Signature'), signature, verify,
+            back, section, tip('Network'), chain, tip('Address'), address, tip('Message'), message, tip('Signature'), signature, verify,
         ]);
 
         pressEnter(verify);
@@ -209,34 +217,26 @@ describe('T through Z route keyboard flows', () => {
 
         const back = screen.getByRole('button', { name: 'Back to previous screen' });
         const primary = await screen.findByRole('button', { name: /^Primary/ });
-        const primaryDetails = screen.getByRole('button', { name: 'Wallet details for Primary' });
         const savings = screen.getByRole('button', { name: /^Savings/ });
-        const savingsDetails = screen.getByRole('button', { name: 'Wallet details for Savings' });
-        const add = screen.getByRole('button', { name: 'Add wallet' });
-        const manage = screen.getByRole('button', { name: 'Manage wallet' });
+        const add = screen.getByRole('button', { name: 'Add Wallet' });
 
-        expect(tabStops(view.container)).toEqual([
-            back,
-            primary,
-            primaryDetails,
-            savings,
-            savingsDetails,
-            add,
-            manage,
-        ]);
+        const filter = screen.getByRole('button', { name: 'Filter wallets' });
+
+        // The filter button and the plus sit on the title line, then each wallet
+        // row opens its page (no separate details or Manage buttons).
+        expect(screen.queryByRole('button', { name: 'Manage Wallet' })).toBeNull();
+        expect(filter).toHaveAttribute('aria-expanded', 'false');
+        expect(tabStops(view.container)).toEqual([back, filter, add, primary, savings]);
 
         pressEnter(back);
-        pressEnter(primary);
-        pressEnter(primaryDetails);
-        pressEnter(savingsDetails);
         pressEnter(add);
-        pressEnter(manage);
+        pressEnter(primary);
         pressEnter(savings);
 
         expect(onAddWallet).toHaveBeenCalledOnce();
-        expect(onShowDetails.mock.calls).toEqual([['wallet-1'], ['wallet-2'], ['wallet-1']]);
-        expect(onSwitch).toHaveBeenCalledWith('wallet-2');
-        await waitFor(() => expect(onBack).toHaveBeenCalledTimes(3));
+        expect(onShowDetails.mock.calls).toEqual([['wallet-1'], ['wallet-2']]);
+        expect(onSwitch).not.toHaveBeenCalled();
+        expect(onBack).toHaveBeenCalledOnce();
     });
 
     it('reaches every WalletDetails action and closes its confirmation overlay with Escape', async () => {
@@ -266,10 +266,17 @@ describe('T through Z route keyboard flows', () => {
         );
 
         const back = screen.getByRole('button', { name: 'Back to previous screen' });
-        const migrate = await screen.findByRole('button', { name: 'Upgrade recovery phrase' });
-        const rename = screen.getByRole('button', { name: 'Rename wallet' });
-        const exit = screen.getByRole('button', { name: 'Exit demo & wipe' });
-        expect(tabStops(view.container)).toEqual([back, migrate, rename, exit]);
+        const migrate = await screen.findByRole('button', { name: /^Upgrade recovery phrase/ });
+        const rename = screen.getByRole('button', { name: /^Edit wallet/ });
+        const exit = screen.getByRole('button', { name: /^Exit demo & wipe/ });
+        const detailsTab = screen.getByRole('tab', { name: 'Details' });
+        // The Actions tab is selected and is the tab stop; Details is one arrow away.
+        const actionsTab = screen.getByRole('tab', { name: 'Actions' });
+        expect(detailsTab).toBeTruthy();
+        const stops = tabStops(view.container);
+        expect(stops.filter((el) => el !== actionsTab)).toEqual(expect.arrayContaining([back, migrate, rename, exit]));
+        expect(stops.indexOf(rename)).toBeLessThan(stops.indexOf(migrate));
+        expect(stops.indexOf(migrate)).toBeLessThan(stops.indexOf(exit));
 
         pressEnter(back);
         pressEnter(migrate);
@@ -281,7 +288,7 @@ describe('T through Z route keyboard flows', () => {
         pressEnter(exit);
         const dialog = screen.getByRole('dialog', { name: 'Exit demo and delete its data?' });
         const cancel = within(dialog).getByRole('button', { name: 'Cancel' });
-        const confirm = within(dialog).getByRole('button', { name: 'Exit demo & wipe' });
+        const confirm = within(dialog).getByRole('button', { name: 'Exit Demo & Wipe' });
         expect(tabStops(dialog)).toEqual([cancel, confirm]);
         await waitFor(() => expect(document.activeElement).toBe(cancel));
         confirm.focus();

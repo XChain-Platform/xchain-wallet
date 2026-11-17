@@ -8,6 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { formatWithThousands } from '../shared/utils/amountFormat.js';
+
 const COIN_DECIMALS = 8;
 const COIN_SCALE = 100_000_000n;
 
@@ -34,12 +36,13 @@ export function formatFeesTotal({
     if (payInNative) {
         const nativeUnits = integerUnits(protocolNativeSats);
         if (nativeUnits === null) return null;
-        coinText = `${unitsToDecimal(networkUnits + nativeUnits)} ${ticker}`;
+        coinText = `${formatWithThousands(unitsToDecimal(networkUnits + nativeUnits))} ${ticker}`;
     } else {
         if (!validDecimal(protocolXchain)) return null;
         const protocolText = trimDecimal(String(protocolXchain));
-        coinText = `${unitsToDecimal(networkUnits)} ${ticker}`;
-        if (/[1-9]/.test(protocolText)) coinText += ` + ${protocolText} XCHAIN`;
+        coinText = `${formatWithThousands(unitsToDecimal(networkUnits))} ${ticker}`;
+        // The total is display text, so its amounts group ("12,500 XCHAIN").
+        if (/[1-9]/.test(protocolText)) coinText += ` + ${formatWithThousands(protocolText)} XCHAIN`;
     }
 
     const fiat = typeof fiatText === 'string' ? fiatText.trim() : '';

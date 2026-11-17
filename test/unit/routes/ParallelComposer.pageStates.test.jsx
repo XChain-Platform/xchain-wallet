@@ -8,11 +8,12 @@
 // inside ListPage (or the FormPage form), never straight in the Screen box.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ParallelComposer } from '../../../packages/core/src/shared/routes/ParallelComposer.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { ListPage } from '../../../packages/core/src/ui/ListPage.jsx';
 
 const CHAIN_ID = 'bitcoin-regtest';
@@ -32,9 +33,15 @@ const COMPOSED = {
     expectedOutputs: { addressed: [], encoding: 'OP_RETURN' },
     tamperVerified: true,
 };
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    // Each test publishes its own wallet mode; forget it.
+    resetWalletModes();
+});
 
 function mount({ walletMode = 'full', messagingOverrides = {} } = {}) {
+    // Wallet mode is a property of the wallet record, not of settings.
+    publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode }], activeWalletId: 'wallet-1' });
     const messaging = {
         getAddressesByChain: vi.fn(async () => ({ [CHAIN_ID]: [FROM] })),
         getActiveAddresses: vi.fn(async () => ({ [CHAIN_ID]: FROM })),
@@ -81,8 +88,8 @@ function expectInsideTemplate(element) {
 }
 
 async function runToSign() {
-    fireEvent.click(await screen.findByRole('button', { name: 'Sign and send queue' }));
-    fireEvent.click(await screen.findByRole('checkbox'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign and Send Queue' }));
+    await screen.findByRole('button', { name: 'Sign all' });
     fireEvent.click(screen.getByRole('button', { name: 'Sign all' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Sign' }));
 }
@@ -117,5 +124,25 @@ describe('ParallelComposer page templates', () => {
         await runToSign();
         expectInsideTemplate(await screen.findByText('Unsigned transaction, ready for signing'));
         expectInsideTemplate(screen.getByLabelText('Unsigned transaction code'));
+    });
+
+    it('answers a missing signing source without disabling Sign', async () => {
+        const addresses = { [CHAIN_ID]: [FROM] };
+        const messaging = mount({
+            messagingOverrides: {
+                getAddressesByChain: vi.fn(async () => addresses),
+            },
+        });
+        fireEvent.click(await screen.findByRole('button', { name: 'Sign and Send Queue' }));
+        addresses[CHAIN_ID].splice(0);
+        fireEvent.click(await screen.findByRole('button', { name: 'Sign all' }));
+
+        const sign = await screen.findByRole('button', { name: 'Sign' });
+        expect(sign).not.toBeDisabled();
+        fireEvent.click(sign);
+
+        expect(await within(screen.getByLabelText('Form errors')).findByText('Choose an available From address before signing this action.')).toBeInTheDocument();
+        expect(document.getElementById('parallel-sign-from')).toHaveAttribute('aria-invalid', 'true');
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 });

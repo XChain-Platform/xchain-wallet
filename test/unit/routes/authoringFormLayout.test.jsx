@@ -23,17 +23,27 @@ import { StatusMessage } from '../../../packages/core/src/ui/StatusMessage.jsx';
 afterEach(() => cleanup());
 
 const issueCss = readFileSync('packages/core/src/shared/routes/IssueTokenForm.module.css', 'utf8');
-const wizardCss = readFileSync('packages/core/src/shared/routes/TokenWizard.module.css', 'utf8');
 
 function rule(css, selector) {
     const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     return css.match(new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]+)\\}`))?.[1] || '';
 }
 
+describe('Issue token Divisible toggle spacing', () => {
+    it('leaves exactly 8px (the section padding) under the toggle, by tokens only', () => {
+        const body = rule(issueCss, '.divisibleSwitch.divisibleSwitch');
+        expect(body).toMatch(/margin-block-end:\s*calc\(\(var\(--xc-switch-track-height\) - var\(--xc-switch-hit-size\)\) \/ 2\);/);
+        expect(body).not.toMatch(/\d+px/);
+        const formStandardCss = readFileSync('packages/core/src/shared/components/formStandard/formStandard.module.css', 'utf8');
+        expect(rule(formStandardCss, '.sectionBody')).toMatch(/padding:\s*var\(--xc-space-2\);/);
+        const source = readFileSync('packages/core/src/shared/routes/IssueTokenForm.jsx', 'utf8');
+        expect(source).toMatch(/<Switch\s+className=\{styles\.divisibleSwitch\}[^>]*label=\{t\('issue\.divisible'\)\}/);
+    });
+});
+
 describe('authoring form help text', () => {
     it.each([
         ['IssueTokenForm.module.css', issueCss],
-        ['TokenWizard.module.css', wizardCss],
     ])('%s starts .hint at the start edge instead of centring it', (_name, css) => {
         const hint = rule(css, '.hint');
         expect(hint).toMatch(/text-align:\s*start/);
@@ -66,9 +76,7 @@ describe('shared rows add no margin to the form gap', () => {
     });
 
     it.each([
-        ['IssueTokenForm.module.css', issueCss, ':global([data-form-stack]) > .actions,\n.advancedOptions > .actions', 'margin-top'],
-        ['IssueTokenForm.module.css', issueCss, '.advancedOptions > [data-variant]', 'margin'],
-        ['TokenWizard.module.css', wizardCss, ':global([data-form-stack]) > .actions', 'margin-top'],
+        ['IssueTokenForm.module.css', issueCss, ':global([data-form-stack]) > .actions', 'margin-top'],
     ])('%s zeroes %s inside a form stack', (_name, css, selector, property) => {
         expect(rule(css, selector)).toMatch(new RegExp(`${property}:\\s*0;`));
     });
@@ -77,7 +85,6 @@ describe('shared rows add no margin to the form gap', () => {
     // drops above, so the route modules keep no warning box of their own.
     it.each([
         ['IssueTokenForm.module.css', issueCss],
-        ['TokenWizard.module.css', wizardCss],
     ])('%s draws no warning box of its own', (_name, css) => {
         expect(css).not.toMatch(/(^|\n)\S*\.warnings?\b[^{]*\{/);
     });

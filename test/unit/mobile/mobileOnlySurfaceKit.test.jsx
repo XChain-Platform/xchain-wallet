@@ -80,7 +80,7 @@ describe('mobile-only surfaces use the shared kit', () => {
         });
         render(withMessaging(<Locked />, { unlockWallet: vi.fn() }));
 
-        const biometric = await screen.findByRole('button', { name: 'Use biometrics' });
+        const biometric = await screen.findByRole('button', { name: 'Use Biometrics' });
         expect(biometric).toHaveClass(buttonStyles.btn, buttonStyles.md, buttonStyles.block);
         expect(biometric.closest(`.${screenStyles.screen}`)).toBeTruthy();
     });
@@ -116,7 +116,7 @@ describe('mobile-only surfaces use the shared kit', () => {
         const native = render(<QrScanner onFrame={() => {}} alt="Scan a QR code" />);
 
         expect(screen.getByTestId('qr-scanner-native')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Scan with camera' })).toHaveClass(
+        expect(screen.getByRole('button', { name: 'Scan with Camera' })).toHaveClass(
             buttonStyles.btn,
             buttonStyles.md,
         );
@@ -124,7 +124,7 @@ describe('mobile-only surfaces use the shared kit', () => {
         native.unmount();
         render(<ScanRoute onClassified={() => {}} onBack={() => {}} />);
         expect(screen.getByTestId('scan-route')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Use pasted text' })).toHaveClass(
+        expect(screen.getByRole('button', { name: 'Use Pasted Text' })).toHaveClass(
             buttonStyles.btn,
             buttonStyles.md,
         );
@@ -161,9 +161,10 @@ describe('mobile-only surfaces use the shared kit', () => {
         };
         render(withMessaging(<Receive walletId="wallet-1" accountId="account-1" />, messaging));
 
-        const trigger = await screen.findByRole('button', { name: 'Share QR payment link' });
-        await waitFor(() => expect(trigger).toBeEnabled());
-        expect(trigger).toHaveClass(buttonStyles.btn, buttonStyles.md);
+        const trigger = await screen.findByRole('button', { name: /^Share QR payment link/ });
+        // Share is a kit ActionList row (G101), which waits with aria-disabled.
+        await waitFor(() => expect(trigger).not.toHaveAttribute('aria-disabled'));
+        expect(trigger.closest('ul[role="list"]')).not.toBeNull();
         fireEvent.click(trigger);
         await waitFor(() => expect(share).toHaveBeenCalledOnce());
     });

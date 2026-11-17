@@ -82,7 +82,8 @@ assert.match(
     /import \{ DuressPassphraseRow \}/,
     'SafetySection imports DuressPassphraseRow',
 );
-assert.match(safetySrc, /<DuressPassphraseRow \/>/, 'SafetySection renders the row');
+// The Duress passphrase row page opens straight on its form (`direct`).
+assert.match(safetySrc, /<DuressPassphraseRow direct=\{only === 'duress'\} \/>/, 'SafetySection renders the row');
 
 // --- DuressPassphraseRow logic ----------------------------------------
 
@@ -99,7 +100,7 @@ assert.match(
 // StatusMessage (role="alert" at runtime) above the form card. The storage-write failure records a "Try again" retry; the
 // validation messages leave retryRef null so no misleading button renders.
 assert.match(rowSrc, /<SettingsInlineForm\s+error=\{error\}/, 'errors surface via the shared inline form error (a StatusMessage variant=error, role=alert)');
-assert.match(rowSrc, /label: (?:'Try again'|t\('common\.tryAgain'\)), onAction: retryRef\.current/, 'save-failure error offers a Try again recovery affordance');
+assert.match(rowSrc, /label: (?:'Try Again'|t\('common\.tryAgain'\)), onAction: retryRef\.current/, 'save-failure error offers a Try again recovery affordance');
 assert.match(rowSrc, /retryRef\.current = attemptSet/, 'storage-write failure records the set attempt as the retry action');
 assert.match(rowSrc, /autoComplete="new-password"/, 'inputs hint as new-password to managers');
 

@@ -97,10 +97,17 @@ assert.match(form, /const isMultiSend = extraLegs\.length > 0;/, 'Send tracks ex
 const legsPayloads = form.match(/\.\.\.\(isMultiSend \? \{ legs: sendLegs \} : \{\}\)/g) || [];
 assert.equal(legsPayloads.length, 2,
     'both submit paths (confirm-modal and the legacy review/watcher path) send legs, and only when multi');
-assert.match(form, /t\('send\.recipient\.add'\)/, 'the form offers an add-recipient control');
-assert.match(form, /t\('send\.recipient\.removeLabel'/, 'each added row can be removed');
-assert.match(form, /aria-label=\{t\('send\.recipient\.addressLabel'/,
-    'added rows carry row-qualified accessible names (three identical "To" fields otherwise)');
+// The recipient list lives in the Payment section's Multi and Advanced tabs.
+assert.match(form, /\{ id: 'multi', label: t\('send\.mode\.multi'\)/, 'the Payment section offers a Multi tab');
+assert.match(form, /\{ id: 'advanced', label: t\('send\.advanced'\)/, 'the Payment section offers an Advanced tab');
+assert.match(form, /<MultiRecipientList\b/, 'Multi draws the recipient list');
+assert.match(form, /<AdvancedRecipientText\b/, 'Advanced draws the one-line-per-recipient box');
+assert.match(form, /recipientListFitError\(/, 'the one-transaction limit is checked before review');
+const multiUi = read('packages', 'core', 'src', 'shared', 'components', 'MultiSendRecipients.jsx');
+assert.match(multiUi, /t\('send\.multi\.addRecipient'\)/, 'Multi offers an add-recipient control');
+assert.match(multiUi, /aria-label=\{t\('send\.multi\.removeRow', \{ number \}\)\}/, 'each added row can be removed');
+assert.match(multiUi, /aria-label=\{t\('send\.multi\.editRow', \{ number,/,
+    'each row carries a row-qualified accessible name that opens it for editing');
 assert.match(form, /nativeMultiSendBlock/, 'the form mirrors the native refusal before submit');
 assert.match(form, /gatedMultiSendBlock/, 'the form mirrors the gated refusal before submit');
 assert.match(form, /recipientNovel = sendLegs\.some\(/,
@@ -122,8 +129,8 @@ assert.match(form, /recipientNovel = sendLegs\.some\(/,
 const live = read('test', 'e2e', 'tests', 'send', 'multi-recipient.regtest.spec.js');
 assert.match(live, /from '\.\.\/\.\.\/fixtures\/wallet\.js'/,
     'the live spec onboards through the shared fixture rather than inlining the walk');
-assert.match(live, /\+ Add recipient/, 'the live spec drives the real add-recipient control');
-assert.match(live, /Recipient \$\{n\} address/, 'the live spec fills the added rows');
+assert.match(live, /name: 'Multi'/, 'the live spec drives the real Multi tab');
+assert.match(live, /name: 'Add Recipient'/, 'the live spec drives the real add-recipient control');
 assert.match(live, /toMatch\(\/\^SEND\\\|1\\\|\/\)/,
     'the live spec pins the v1 wire format, not merely that the money arrived');
 assert.match(live, /waitForExactBalance/,

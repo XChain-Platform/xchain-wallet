@@ -61,7 +61,10 @@ vi.mock('@xchain-wallet/core/shared/hooks/useWalletMode.js', () => ({
         isFullMode: true,
         isWatcherMode: false,
         isSignerMode: false,
+        walletModeKnown: true,
     }),
+    useActiveWalletModeSource: () => {},
+    notifyWalletModesChanged: () => {},
 }));
 vi.mock('@xchain-wallet/core/shared/hooks/useMessagingUnread.js', () => ({
     useMessagingUnread: () => boot.messagingUnread,
@@ -135,16 +138,25 @@ vi.mock('@xchain-wallet/core/shared/routes/ContactsList.jsx', () => ({
     ),
 }));
 vi.mock('@xchain-wallet/core/shared/routes/DispensersList.jsx', () => ({
-    DispensersList: ({ onOpenDispenser, onBack }) => (
-        <section>
-            <h1>Dispensers screen</h1>
-            <button type="button" onClick={() => onOpenDispenser('bitcoin-mainnet', '7')}>Open dispenser</button>
-            <button type="button" onClick={onBack}>Back from dispensers</button>
-        </section>
+    DispensersList: ({ onOpenDispenser, onBack, selectedDispenser, renderDispenserPage }) => (
+        renderDispenserPage && selectedDispenser
+            ? renderDispenserPage(selectedDispenser, { measureRef: () => {} })
+            : (
+                <section>
+                    <h1>Dispensers screen</h1>
+                    <button type="button" onClick={() => onOpenDispenser('bitcoin-mainnet', '7')}>Open dispenser</button>
+                    <button type="button" onClick={onBack}>Back from dispensers</button>
+                </section>
+            )
     ),
 }));
 vi.mock('@xchain-wallet/core/shared/routes/DispenserDetail.jsx', () => ({
-    DispenserDetail: () => <h1>Dispenser detail screen</h1>,
+    DispenserDetail: ({ onBack }) => (
+        <section>
+            <h1>Dispenser detail screen</h1>
+            <button type="button" onClick={onBack}>Back from dispenser detail</button>
+        </section>
+    ),
 }));
 vi.mock('@xchain-wallet/core/shared/routes/MarketsList.jsx', () => ({
     MarketsList: (props) => {
@@ -266,7 +278,7 @@ describe('desktop renderer shell', () => {
 
         await importRenderer();
 
-        expect(await screen.findByRole('heading', { name: 'Unlock wallet' })).toBeInTheDocument();
+        expect(await screen.findByRole('form', { name: 'Unlock wallet' })).toBeInTheDocument();
         expect(boot.installErrorCapture).toHaveBeenCalledOnce();
         expect(boot.installFiatRateSource).toHaveBeenCalledOnce();
         expect(boot.setShellCapabilities).toHaveBeenCalledWith({ socksProxy: true });
@@ -329,14 +341,16 @@ describe('desktop renderer shell', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
         expect(await screen.findByRole('heading', { name: 'Settings screen' })).toBeInTheDocument();
 
+        // A menu pick is a root page (G06): the history starts over on
+        // Contacts, so Back from it lands on Home, not on Settings.
         const settingsMenu = boot.commandPaletteProps.menu;
         act(() => { settingsMenu.onSelect('contacts'); });
         expect(await screen.findByRole('heading', { name: 'Contacts screen' })).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Back from contacts' }));
-        expect(await screen.findByRole('heading', { name: 'Settings screen' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Home screen' })).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Lock wallet' }));
-        expect(await screen.findByRole('heading', { name: 'Unlock wallet' })).toBeInTheDocument();
+        expect(await screen.findByRole('form', { name: 'Unlock wallet' })).toBeInTheDocument();
         expect(bridge.sendMessage).toHaveBeenCalledWith({ type: 'wallet.lock', request: undefined });
     });
 
@@ -344,7 +358,7 @@ describe('desktop renderer shell', () => {
         boot.messagingUnread = 3;
         window.xchainWalletBridge = createPreloadBridge();
         render(<App />);
-        await screen.findByRole('heading', { name: 'Unlock wallet' });
+        await screen.findByRole('form', { name: 'Unlock wallet' });
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
         fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
         await screen.findByRole('heading', { name: 'Home screen' });
@@ -360,7 +374,7 @@ describe('desktop renderer shell', () => {
     it('keeps a chosen DEX asset when the Markets row is selected again later', async () => {
         window.xchainWalletBridge = createPreloadBridge();
         render(<App />);
-        await screen.findByRole('heading', { name: 'Unlock wallet' });
+        await screen.findByRole('form', { name: 'Unlock wallet' });
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
         fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
         await screen.findByRole('heading', { name: 'Home screen' });
@@ -380,16 +394,24 @@ describe('desktop renderer shell', () => {
         expect(boot.marketsProps.selectedAsset).toMatchObject({ tick: 'CUSTOM' });
     });
 
-    it('returns Home after choosing Dispensers from a dispenser drilldown', async () => {
+    it('walks Back through a drilldown, and starts over when Dispensers is picked from the menu again', async () => {
         window.xchainWalletBridge = createPreloadBridge();
         render(<App />);
-        await screen.findByRole('heading', { name: 'Unlock wallet' });
+        await screen.findByRole('form', { name: 'Unlock wallet' });
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
         fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
         await screen.findByRole('heading', { name: 'Home screen' });
 
         act(() => { boot.commandPaletteProps.menu.onSelect('dispensers-list'); });
         await screen.findByRole('heading', { name: 'Dispensers screen' });
+        // A row on the list is a push: Back returns to the list.
+        fireEvent.click(screen.getByRole('button', { name: 'Open dispenser' }));
+        await screen.findByRole('heading', { name: 'Dispenser detail screen' });
+        fireEvent.click(screen.getByRole('button', { name: /^Back from dispenser detail/ }));
+        await screen.findByRole('heading', { name: 'Dispensers screen' });
+
+        // Picking Dispensers from the menu over a drilldown is a root (G06):
+        // the history starts over, so Back lands on Home.
         fireEvent.click(screen.getByRole('button', { name: 'Open dispenser' }));
         await screen.findByRole('heading', { name: 'Dispenser detail screen' });
         act(() => { boot.commandPaletteProps.menu.onSelect('dispensers-list'); });
@@ -399,10 +421,10 @@ describe('desktop renderer shell', () => {
         expect(await screen.findByRole('heading', { name: 'Home screen' })).toBeInTheDocument();
     });
 
-    it('preserves the Contacts origin when the active row is selected again', async () => {
+    it('starts over on a menu pick and ignores a repeat pick of the root on screen', async () => {
         window.xchainWalletBridge = createPreloadBridge();
         render(<App />);
-        await screen.findByRole('heading', { name: 'Unlock wallet' });
+        await screen.findByRole('form', { name: 'Unlock wallet' });
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
         fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
         await screen.findByRole('heading', { name: 'Home screen' });
@@ -412,16 +434,17 @@ describe('desktop renderer shell', () => {
         act(() => { boot.commandPaletteProps.menu.onSelect('contacts'); });
         await screen.findByRole('heading', { name: 'Contacts screen' });
         act(() => { boot.commandPaletteProps.menu.onSelect('contacts'); });
+        expect(screen.getByRole('heading', { name: 'Contacts screen' })).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Back from contacts' }));
 
-        expect(await screen.findByRole('heading', { name: 'Settings screen' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Home screen' })).toBeInTheDocument();
     });
 
     it('leaves the unlocked screen at once when auto-lock fires, before main answers', async () => {
         const bridge = createPreloadBridge();
         window.xchainWalletBridge = bridge;
         render(<App />);
-        await screen.findByRole('heading', { name: 'Unlock wallet' });
+        await screen.findByRole('form', { name: 'Unlock wallet' });
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'correct horse' } });
         fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
         await screen.findByRole('heading', { name: 'Home screen' });
@@ -430,7 +453,7 @@ describe('desktop renderer shell', () => {
         bridge.sendMessage.mockImplementation((msg) => (msg.type === 'wallet.lock' ? new Promise(() => {}) : hung(msg)));
         await act(async () => { void boot.autoLockOpts.lock(); });
 
-        expect(screen.getByRole('heading', { name: 'Unlock wallet' })).toBeInTheDocument();
+        expect(screen.getByRole('form', { name: 'Unlock wallet' })).toBeInTheDocument();
         expect(screen.queryByRole('heading', { name: 'Home screen' })).toBeNull();
         expect(bridge.sendMessage).toHaveBeenCalledWith({ type: 'wallet.lock', request: undefined });
     });
@@ -438,7 +461,7 @@ describe('desktop renderer shell', () => {
     it('explains a refused auto-lock arm on the locked screen', async () => {
         window.xchainWalletBridge = createPreloadBridge();
         render(<App />);
-        await screen.findByRole('heading', { name: 'Unlock wallet' });
+        await screen.findByRole('form', { name: 'Unlock wallet' });
 
         act(() => { boot.autoLockOpts.onArmRefused(); });
 
@@ -453,7 +476,7 @@ describe('desktop renderer shell', () => {
         window.xchainWalletBridge = bridge;
 
         render(<App />);
-        await screen.findByRole('heading', { name: 'Unlock wallet' });
+        await screen.findByRole('form', { name: 'Unlock wallet' });
 
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
         fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
@@ -461,7 +484,7 @@ describe('desktop renderer shell', () => {
         // The failure is reported in plain copy; the raw IPC text stays off screen.
         expect(await screen.findByText('Could not unlock the wallet. Close and reopen the app, then try again.')).toBeInTheDocument();
         expect(screen.queryByText('IPC channel unavailable')).toBeNull();
-        expect(screen.getByRole('heading', { name: 'Unlock wallet' })).toBeInTheDocument();
+        expect(screen.getByRole('form', { name: 'Unlock wallet' })).toBeInTheDocument();
         // The failed attempt clears the typed password; typing again re-enables submit.
         expect(screen.getByLabelText('Password')).toBeEnabled();
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });

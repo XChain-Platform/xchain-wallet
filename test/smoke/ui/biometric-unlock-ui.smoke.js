@@ -94,7 +94,7 @@ assert.equal(
 
 assert.match(
     lockedSrc,
-    /\{biometricAvailable \?[\s\S]*Use biometrics[\s\S]*\) : null\}/,
+    /\{biometricAvailable \?[\s\S]*(?:t\('locked\.useBiometrics'\)|Use Biometrics)[\s\S]*\) : null\}/,
     'biometric button renders only when available',
 );
 assert.match(
@@ -106,7 +106,8 @@ assert.match(
 // --- SafetySection includes BiometricRow ------------------------------
 
 assert.match(safetySrc, /import \{ BiometricRow \}/, 'SafetySection imports BiometricRow');
-assert.match(safetySrc, /<BiometricRow \/>/, 'SafetySection renders BiometricRow');
+// The Biometric unlock row page opens straight on its form (`direct`).
+assert.match(safetySrc, /<BiometricRow direct=\{only === 'biometric'\} \/>/, 'SafetySection renders BiometricRow');
 
 // --- BiometricRow logic ------------------------------------------------
 
@@ -137,7 +138,7 @@ assert.match(
 );
 assert.match(
     rowSrc,
-    /Not available/,
+    /if \(!description\.supported\)[\s\S]*?(?:t\('settings\.biometric\.notAvailable'\)|Not available)/,
     'Unsupported state rendered',
 );
 
@@ -175,7 +176,7 @@ assert.match(
 );
 assert.match(
     rowSrc,
-    /label: 'Try again', onAction: retryRef\.current/,
+    /label: (?:'Try Again'|t\('common\.tryAgain'\)), onAction: retryRef\.current/,
     'Enable-form error offers a Try again recovery affordance',
 );
 assert.match(

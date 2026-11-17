@@ -555,8 +555,8 @@ for (const [shell, appPath] of [
         `${shell} BTC-gates onMultisigSign via hasBtcAddress`);
     assert.ok(/<MultisigSigningSession\b[\s\S]*?walletId=\{activeWalletId\}/.test(app),
         `${shell} App.jsx mounts <MultisigSigningSession> with the active walletId`);
-    assert.ok(surfacesEntry(app, 'multisig-sign', 'Multisig signing'),
-        `${shell} ActionsMenu surfaces a "Multisig signing" entry`);
+    assert.ok(surfacesEntry(app, 'multisig-sign', 'Multisig sessions'),
+        `${shell} ActionsMenu surfaces a "Multisig sessions" entry`);
 }
 
 // ─── SDK pin ≥ 1.11.0 (Step 19 needed no bump; later steps may have) ─

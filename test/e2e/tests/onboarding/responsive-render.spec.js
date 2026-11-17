@@ -117,7 +117,7 @@ for (const viewport of VIEWPORTS) {
         );
         await expectReadablePhraseGrid(page, `${viewport.name} phrase`);
         expect(words).toHaveLength(12);
-        await page.getByLabel(/written down|saved my recovery phrase/i).check();
+        await page.getByRole('checkbox', { name: /written down|saved my recovery phrase/i }).check();
         await page.getByRole('button', { name: 'Verify recovery phrase' }).click();
 
         await expectReachableLayout(
@@ -141,7 +141,7 @@ for (const viewport of VIEWPORTS) {
         );
 
         await returnToWelcome(page);
-        await page.getByRole('button', { name: 'From FreeWallet' }).click();
+        await page.getByRole('button', { name: 'Import FreeWallet' }).click();
         await expectReachableLayout(
             page,
             `${viewport.name} FreeWallet import`,

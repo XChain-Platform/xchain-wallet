@@ -25,7 +25,23 @@ const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 const read = (...p) => readFileSync(join(wsRoot, ...p), 'utf8');
 
-const view = read('packages', 'core', 'src', 'shared', 'routes', 'MyOrdersView.jsx');
+// The list, the order's detail page (2026-11-13: rows open it, and it holds
+// Cancel, Edit and auto-pay), the form behind those actions, and the status
+// helpers they share, read as one surface.
+const list = read('packages', 'core', 'src', 'shared', 'routes', 'MyOrdersView.jsx');
+const detail = read('packages', 'core', 'src', 'shared', 'routes', 'OrderDetail.jsx');
+// Edit Order and Cancel Order: the order's own checks (OrderActionPanel) in
+// the shared Form Standard frame (TradeOwnerActionForm), each on its own route.
+const form = read('packages', 'core', 'src', 'shared', 'routes', 'TradeOwnerActionForm.jsx');
+const view = list
+    + detail
+    + read('packages', 'core', 'src', 'shared', 'routes', 'OrderActionPanel.jsx')
+    + form
+    + read('packages', 'core', 'src', 'shared', 'utils', 'orderView.js');
+// One plain list, newest first, with no Open / Closed split; each row opens its detail.
+assert.match(list, /aria-label="Orders"/, 'one order list');
+assert.doesNotMatch(list, /Open orders|Closed orders|SectionHeader/, 'no Open / Closed sections');
+assert.match(list, /onOpenOrder/, 'a row opens the order detail');
 // Cross-pair, multi-chain enumeration.
 assert.match(view, /getAddressesByChain/, 'scans the wallet addresses across chains');
 assert.match(view, /getOrdersForAddress/, 'lists orders by address (cross-pair, native included)');
@@ -35,17 +51,24 @@ assert.match(view, /String\(o\.source\) !== r\.p\.owner\.address/, 'keeps only o
 assert.match(view, /function deriveStatus/, 'status derivation helper');
 assert.match(view, /exp <= nowSec/, 'expiry derived from EXPIRATION vs wall clock');
 // Cancel + edit only for open orders.
-assert.match(view, /type: 'cancel'/, 'offers cancel');
-assert.match(view, /type: 'edit'/, 'offers edit');
-assert.match(view, /status === 'open' \?/, 'cancel/edit gated on open');
-assert.match(view, /'cancelOrder' : 'editOrder'/, 'cancel/edit route through cancelOrder / editOrder');
-assert.match(view, /'cancelOrderHw' : 'editOrderHw'/, 'cancel/edit route through the device lanes');
+assert.match(detail, /openAction\('cancel'\)/, 'offers cancel');
+assert.match(detail, /openAction\('edit'\)/, 'offers edit');
+assert.match(detail, /onEditOrder/, 'Edit opens the edit-order route');
+assert.match(detail, /onCancelOrder/, 'Cancel opens the cancel-order route');
+assert.match(detail, /canAct = status === 'open'/, 'cancel/edit gated on open');
+assert.match(view, /software: \{ cancel: 'cancelOrder', edit: 'editOrder' \}/, 'cancel/edit route through cancelOrder / editOrder');
+assert.match(view, /hardware: \{ cancel: 'cancelOrderHw', edit: 'editOrderHw' \}/, 'cancel/edit route through the device lanes');
 assert.match(view, /<ActionConfirmScreen/, 'cancel/edit sign on the shared confirm page');
 assert.match(view, /VERSION|EXPIRATION|ALLOW_LIST/, 'edit builds v2 params');
+// The Form Standard frame: From (Network), Speed and Fees, one green action.
+assert.match(form, /<FormFrame/, 'the forms use the Form Standard frame');
+assert.match(form, /<FromSection/, 'the forms carry the From section with its Network field');
+assert.match(form, /<FeeSection/, 'the forms carry Speed and Fees');
+assert.match(form, /<FormAction/, 'the forms end on the one green action');
 // PC-16 autopay toggle absorbed.
 assert.match(view, /listAutopayOrders/, 'reads autopay consents');
 assert.match(view, /setAutopayEnabled/, 'per-order autopay toggle');
-assert.match(view, /isNativeGive\(it\.row\)/, 'autopay toggle only on native-coin GIVE rows');
+assert.match(detail, /isNativeGive\(item\.row\)/, 'autopay toggle only on native-coin GIVE orders');
 
 // ---- 3-shell App wiring ----
 // The web shell keeps its DEX routing in `packages/web/src/surfaces/dex.jsx`
@@ -66,6 +89,15 @@ for (const shell of [
     assert.ok(src.includes('MyOrdersView'), `${shell.join('/')} imports MyOrdersView`);
     assert.ok(src.includes("unlockedView === 'my-orders'"), `${shell.join('/')} routes my-orders`);
     assert.ok(surfacesEntry(src, 'my-orders', 'My orders'), `${shell.join('/')} lists a My orders action`);
+    assert.ok(src.includes('OrderDetail'), `${shell.join('/')} imports OrderDetail`);
+    assert.ok(src.includes("unlockedView === 'order-detail'"), `${shell.join('/')} routes order-detail`);
+    assert.ok(src.includes("setUnlockedView('order-detail')"), `${shell.join('/')} opens order-detail from a row`);
+    // Edit Order and Cancel Order are their own routes, opened from Order detail.
+    for (const [route, component] of [['edit-order', 'EditOrderForm'], ['cancel-order', 'CancelOrderForm']]) {
+        assert.ok(src.includes(component), `${shell.join('/')} imports ${component}`);
+        assert.ok(src.includes(`unlockedView === '${route}'`), `${shell.join('/')} routes ${route}`);
+        assert.ok(src.includes(`setUnlockedView('${route}')`), `${shell.join('/')} opens ${route} from Order detail`);
+    }
 }
 
 // ---- Command palette ----

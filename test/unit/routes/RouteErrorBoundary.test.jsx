@@ -120,7 +120,7 @@ describe('RouteErrorBoundary', () => {
 
         expect(screen.queryByText('private render details')).toBeNull();
         expect(screen.queryByText(stackMarker)).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         await waitFor(() => expect(screen.getByRole('heading', { name: 'Recovered route' })).toBeTruthy());
     });
 
@@ -163,7 +163,7 @@ describe('RouteErrorBoundary', () => {
 
         expect(screen.queryByRole('button', { name: 'Go to Home' })).toBeNull();
         failed = false;
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         await waitFor(() => expect(screen.getByRole('heading', { name: 'Wallet Home' })).toBeTruthy());
     });
 
@@ -189,7 +189,7 @@ describe('RouteErrorBoundary', () => {
             </RouteErrorBoundary>,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         expect(onReload).toHaveBeenCalledOnce();
         expect(onRetry).not.toHaveBeenCalled();
     });
@@ -203,7 +203,7 @@ describe('RouteErrorBoundary', () => {
             </RouteErrorBoundary>,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         expect(onRetry).toHaveBeenCalledOnce();
         expect(onReload).not.toHaveBeenCalled();
     });

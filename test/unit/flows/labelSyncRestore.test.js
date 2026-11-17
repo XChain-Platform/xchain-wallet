@@ -36,6 +36,7 @@ import {
 } from '../../../packages/core/src/crypto/labelSync.js';
 import { Vault } from '../../../packages/core/src/storage/Vault.js';
 import { InMemoryBackend } from '../../../packages/core/src/storage/backend.js';
+import { deriveMasterKeyAsync } from '../../../packages/core/src/crypto/kdf.js';
 
 vi.setConfig({ testTimeout: ARGON2ID_TEST_TIMEOUT_MS });
 
@@ -392,6 +393,49 @@ describe('restoreLabelSyncAfterImport', () => {
         expect(r.errors).toEqual([{ chainId: 'bitcoin-mainnet', message: 'explorer did not answer within 0s' }]);
         // Concurrent, so the hung chain cost one budget and nothing more.
         expect(Date.now() - started).toBeLessThan(5_000);
+    });
+
+    // An unlocked session opens the seed with its pooled signer's master key
+    // (operator preference 2026-11-14): no password, same payload found.
+    it('restores with the unlocked session master key and no password', async () => {
+        const vault = await openVault();
+        const { wallet, mnemonic } = await makeWallet(vault);
+        const seed = await seedFor(mnemonic);
+        const { name, ciphertext } = await publishedUnder(seed, bodyWith({
+            contacts: [contact('c-1', 'Alice', 'bc1qalice')],
+        }));
+        seed.fill(0);
+        const masterKey = await deriveMasterKeyAsync(PASSWORD, wallet.kdfParams);
+
+        const r = await restoreLabelSyncAfterImport({
+            vault,
+            walletId: wallet.id,
+            masterKey,
+            masterKeyKdfParams: wallet.kdfParams,
+            chainIds: ['bitcoin-mainnet'],
+            sdkRegistry: registryOf({
+                'bitcoin-mainnet': fakeSdk({ rows: [fileRow('7', name)], raws: { 7: ciphertext } }),
+            }),
+        });
+
+        expect(r.restored).toBe(true);
+        expect(r.contactsAdded).toBe(1);
+        // The key is the pooled signer's own buffer: the flow copies it.
+        expect(masterKey.some((b) => b !== 0)).toBe(true);
+    });
+
+    it('asks for the password when the session key was derived under other kdfParams', async () => {
+        const vault = await openVault();
+        const { wallet } = await makeWallet(vault);
+        const masterKey = await deriveMasterKeyAsync(PASSWORD, wallet.kdfParams);
+        await expect(restoreLabelSyncAfterImport({
+            vault,
+            walletId: wallet.id,
+            masterKey,
+            masterKeyKdfParams: { ...wallet.kdfParams, iterations: wallet.kdfParams.iterations + 1 },
+            chainIds: ['bitcoin-mainnet'],
+            sdkRegistry: registryOf({}),
+        })).rejects.toThrow('password is required');
     });
 
     it('rejects a missing password before touching the vault', async () => {

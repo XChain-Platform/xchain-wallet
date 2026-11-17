@@ -41,7 +41,7 @@ async function submitPassword(value = 'wallet-password') {
     fireEvent.change(screen.getByLabelText('Confirm wallet password'), {
         target: { value },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Export keys' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Export Keys' }));
 }
 
 beforeEach(() => {
@@ -73,7 +73,7 @@ describe('ThisWalletSection password change', () => {
         fill({ confirm: 'different-password' });
 
         expect(screen.getByText('Passwords don\'t match.')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Change password' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Change Password' }));
         expect(messaging.changePassword).not.toHaveBeenCalled();
     });
 
@@ -86,9 +86,9 @@ describe('ThisWalletSection password change', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Change…' }));
         fill();
-        fireEvent.click(screen.getByRole('button', { name: 'Change password' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Change Password' }));
 
-        expect(await screen.findByRole('button', { name: 'Changing password…' })).toBeDisabled();
+        expect(await screen.findByRole('button', { name: 'Changing Password…' })).toBeDisabled();
         expect(screen.getByLabelText('Current wallet password')).toBeDisabled();
         expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
         expect(messaging.changePassword).toHaveBeenCalledWith({
@@ -108,10 +108,10 @@ describe('ThisWalletSection password change', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Change…' }));
         fill({ current: 'wrong-password' });
-        fireEvent.click(screen.getByRole('button', { name: 'Change password' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Change Password' }));
 
         expect(await screen.findByText('Current wallet password is incorrect.')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Change password' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Change Password' })).toBeEnabled();
     });
 
     it('hides password service details behind change failure copy', async () => {
@@ -124,7 +124,7 @@ describe('ThisWalletSection password change', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Change…' }));
         fill();
-        fireEvent.click(screen.getByRole('button', { name: 'Change password' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Change Password' }));
 
         expect(await screen.findByText('Could not change the wallet password.')).toBeInTheDocument();
         expect(screen.queryByText(/changePassword:/)).not.toBeInTheDocument();
@@ -150,14 +150,14 @@ describe('ThisWalletSection extended public key export', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Export…' }));
         expect(screen.getByText(/can't spend funds/i)).toBeInTheDocument();
         expect(screen.getByText(/including future addresses/i)).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Export keys' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Export Keys' }));
         expect(screen.getByText('Enter your wallet password.')).toBeInTheDocument();
         expect(messaging.pairingPayloadRequest).not.toHaveBeenCalled();
 
         fireEvent.change(screen.getByLabelText('Confirm wallet password'), {
             target: { value: 'wallet-password' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Export keys' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Export Keys' }));
 
         expect(await screen.findByText(XPUB)).toBeInTheDocument();
         expect(messaging.pairingPayloadRequest).toHaveBeenCalledWith({
@@ -171,7 +171,7 @@ describe('ThisWalletSection extended public key export', () => {
         expect(screen.queryByText(/p2wpkh|bitcoin-mainnet/)).not.toBeInTheDocument();
         expect(qrToDataURL).toHaveBeenCalledWith(XPUB, expect.any(Object));
 
-        fireEvent.click(screen.getByRole('button', { name: 'Copy extended public key' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Copy Extended Public Key' }));
         await waitFor(() => expect(globalThis.navigator.clipboard.writeText).toHaveBeenCalledWith(XPUB));
     });
 

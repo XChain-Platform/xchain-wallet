@@ -27,7 +27,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { render, act as domAct } from '@testing-library/react';
+import { render, act as domAct, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BetFeedDetail } from '../../../packages/core/src/shared/routes/BetFeedDetail.jsx';
@@ -131,10 +131,12 @@ describe('BetFeedDetail: a failed market load', () => {
 
     it('formats both deadlines with the shared local timestamp and zone', async () => {
         const utils = await openMarket(harness(() => Promise.resolve({ data: [FEED] })));
+        await domAct(async () => { fireEvent.click(utils.getByRole('tab', { name: 'Details' })); await drain(); });
         const shown = utils.container.textContent || '';
 
-        expect(shown).toContain(`Betting closes: ${formatLocalDateTime(FEED.deadline)}`);
-        expect(shown).toContain(`Refunds if unresolved by: ${formatLocalDateTime(FEED.expire_at)}`);
+        // Details rows render the label and its value as two cells, so the text has no colon.
+        expect(shown).toContain(`Betting closes${formatLocalDateTime(FEED.deadline)}`);
+        expect(shown).toContain(`Refunds if unresolved by${formatLocalDateTime(FEED.expire_at)}`);
     });
 
     // The mount effect and `reload` are two separate catches on the same read,

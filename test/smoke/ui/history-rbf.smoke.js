@@ -43,48 +43,53 @@ assert.match(
 
 // --- DetailCard wires the gate ----------------------------------------
 
+// The gate and the run live in useRbfReplace, which the inline card (its
+// Actions tab) and the Action detail page (Speed Up under the status bar, Cancel
+// Transaction in the header menu) both call.
 assert.match(
     histSrc,
-    /const rbfDescriptor = chainRegistry\.get\(entry\.chainId\);\s*const replaceable = isEntryReplaceable\(entry, \{ descriptor: rbfDescriptor \}\);/,
-    'DetailCard checks replaceability against the chain descriptor',
+    /const descriptor = chainRegistry\.get\(entry\?\.chainId\);\s*const replaceable = entry \? isEntryReplaceable\(entry, \{ descriptor \}\) : \{ ok: false \};/,
+    'useRbfReplace checks replaceability against the chain descriptor',
 );
 assert.match(
     histSrc,
-    /if \(walletModeReady && !isWatcherMode && isReplaceCallAvailable\(messaging\) && replaceable\.ok && !entry\.pending\?\.replaced\)/,
-    'RBF menu options require a known signing mode, a shell replacement call, and a replaceable entry',
+    /const available = Boolean\(walletModeReady && !isWatcherMode && isReplaceCallAvailable\(messaging\)\s*&& replaceable\.ok && !entry\?\.pending\?\.replaced\);/,
+    'Speed up and Cancel require a known signing mode, a shell replacement call, and a replaceable entry',
 );
+assert.match(histSrc, /if \(rbf\.available\) \{/, 'the inline card offers them only when the hook does');
 
 // --- RbfActions component shape --------------------------------------
 
-assert.match(histSrc, /async function runRbf\(strategy\)/, 'runRbf handler defined');
+assert.match(histSrc, /async function run\(strategy\)/, 'the hook runs one strategy at a time');
 assert.match(histSrc, /useMessaging\(\)/, 'reads messaging from hook');
 assert.match(
     histSrc,
-    /replaceFromHistoryEntry\(\{ messaging, entry, strategy, walletId, descriptor: rbfDescriptor \}\)/,
+    /replaceFromHistoryEntry\(\{ messaging, entry, strategy, walletId, descriptor \}\)/,
     'flow invocation wires entry + strategy',
 );
 assert.match(histSrc, /Speed up/, 'speed-up button label');
 assert.match(histSrc, /Cancel/, 'cancel button label');
+// They are rows of the card's Actions tab (G101), Cancel in the danger tone.
 assert.match(
     histSrc,
-    /runRbf\('speedup'\)/,
-    'speed-up button runs with speedup strategy',
+    /onClick: \(\) => rbf\.run\('speedup'\)/,
+    'speed-up row runs with speedup strategy',
 );
 assert.match(
     histSrc,
-    /runRbf\('cancel'\)/,
-    'cancel button runs with cancel strategy',
+    /tone: 'danger',[\s\S]{0,240}?onClick: \(\) => rbf\.run\('cancel'\)/,
+    'cancel row runs with cancel strategy in the danger tone',
 );
 
 // --- error + done states -----------------------------------------------
 
 // The flow's error text is written for developers, so every RBF failure the
 // card shows goes through the helper and none reaches the screen raw.
-assert.match(histSrc, /setRbfError\(rbfFailureMessage\(err,/, 'speed-up and cancel failures read in plain words');
-assert.match(histSrc, /setRbfError\(rbfFailureMessage\(undoErr,/, 'undo failures read in plain words');
+assert.match(histSrc, /setError\(rbfFailureMessage\(err,/, 'speed-up and cancel failures read in plain words');
+assert.match(histSrc, /setError\(rbfFailureMessage\(undoErr,/, 'undo failures read in plain words');
 assert.doesNotMatch(
     histSrc,
-    /setRbfError\(\s*(?:err|undoErr)\??\.message/,
+    /set(?:Rbf)?Error\(\s*(?:err|undoErr)\??\.message/,
     'no RBF failure shows the raw error message',
 );
 assert.match(histSrc, /role="alert"/, 'errors carry alert role');

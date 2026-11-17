@@ -5,9 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>XChain Wallet</title>
     <link rel="stylesheet" href="./src/popup/popup.css" />
+    <style>
+        /* Boot screen: the fading logo. Same look as the
+           React Loading screen (core Loading.module.css); keep them in step. */
+        .xc-boot { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .xc-boot img { display: block; width: 152px; height: auto; animation: xc-boot-fade 0.8s ease-out both; }
+        @keyframes xc-boot-fade { from { opacity: 0.1; } to { opacity: 1; } }
+        @media (prefers-reduced-motion: reduce) { .xc-boot img { animation: none; } }
+        .xc-boot .xc-boot-bar { position: relative; overflow: hidden; inline-size: 152px; block-size: 4px; margin-block-start: 16px; border-radius: 4px; background: rgba(128, 128, 128, 0.3); }
+        .xc-boot .xc-boot-bar > span { position: absolute; inset-block: 0; inset-inline-start: 0; inline-size: 40%; border-radius: 4px; background: #0089D0; animation: xc-boot-slide 1.2s ease-in-out infinite; }
+        @keyframes xc-boot-slide { from { inset-inline-start: -40%; } to { inset-inline-start: 100%; } }
+        @media (prefers-reduced-motion: reduce) { .xc-boot .xc-boot-bar > span { animation: none; inline-size: 100%; } }
+    </style>
 </head>
 <body>
-    <div id="xchain-popup-root"></div>
+    <div id="xchain-popup-root"><div class="xc-boot" role="status" aria-label="Opening your wallet"><img alt="" width="152" height="94" src="data:image/png;base64,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" /><div class="xc-boot-bar" role="progressbar" aria-label="Opening your wallet"><span></span></div></div></div>
     <script type="module" src="./src/popup/main.jsx"></script>
 </body>
 </html>

@@ -44,18 +44,27 @@
     --xc-form-gap: var(--xc-space-4);
     --xc-label-gap: var(--xc-space-1);
     --xc-help-gap: var(--xc-space-1);
+    /* Gap between a label's text and the help dot after it. The dot's 24px tap
+       target adds 4px of its own, so 2px here reads as about 6px, one text
+       space (G116). Every label-plus-help wrapper takes its gap from here. */
+    --xc-label-help-gap: 2px;
     --xc-section-gap: var(--xc-space-4);
     --xc-settings-row-gap: var(--xc-space-2);
     --xc-section-header-gap: var(--xc-space-2);
-    --xc-list-row-padding: var(--xc-space-3);
+    --xc-list-row-padding: var(--xc-space-2); /* 8px everywhere */
 
     /* Screen owns page-edge spacing so route content stays geometry-free. */
-    --xc-page-gutter: var(--xc-space-3); /* 12px below 640px; the media queries after this block step it up */
-    --xc-page-top: var(--xc-space-3);
+    --xc-page-gutter: var(--xc-space-2); /* 8px at every width, so the top bar has 8px around its buttons and every row lines up */
+    --xc-page-top: var(--xc-space-2); /* 8px everywhere */
+    /* The XChain logo's own blue and purple, for brand surfaces
+       (the balance card) and brand accents (tabs, action icons). */
+    --xc-brand-blue: #0089D0;
+    --xc-brand-purple: #8A288F;
+    --xc-brand-gradient: linear-gradient(135deg, var(--xc-brand-blue) 0%, #3C5CB4 55%, var(--xc-brand-purple) 100%);
 
     /* Every card (ui/Card.module.css) shares one border, fill, inset and
        radius across content types, and a wide form card one width. */
-    --xc-card-pad: var(--xc-space-4);
+    --xc-card-pad: var(--xc-space-2); /* 8px everywhere */
     --xc-card-radius: var(--xc-radius-md);
     --xc-card-border: 1px solid var(--xc-border);
     --xc-card-bg: var(--xc-surface-raised);
@@ -174,6 +183,30 @@
     --xc-control-font: var(--xc-control-font-md);
     --xc-control-pad-x: var(--xc-control-pad-x-md);
 
+    /* G112: an icon inside a field sits in a square slot at the field's edge,
+     * as far from that side as from the top and bottom, the way the Network
+     * field draws its network icon. Each inset is measured from the field's
+     * outer border edge, so it is (control height - icon box) / 2; a field
+     * that places the icon with padding takes the inset less its border.
+     * The text after a leading icon starts --xc-field-icon-gap after it.
+     *   icon:   a leading picture (network, token, option) at --xc-control-icon-*
+     *   glyph:  a bare 18px glyph (the list or chevron caret, the search glass)
+     *   action: an in-field icon button's --xc-tap-min box, its icon centred
+     * These resolve on :root, so the touch heights below carry into them; a
+     * block that sets its own --xc-control-h-md around a field re-declares
+     * the md insets with the same formula (HomeListFilterMenu.module.css). */
+    --xc-field-border: 1px;
+    --xc-field-icon-gap: var(--xc-space-2);
+    --xc-field-icon-inset-sm: calc((var(--xc-control-h-sm) - var(--xc-control-icon-sm)) / 2);
+    --xc-field-icon-inset-md: calc((var(--xc-control-h-md) - var(--xc-control-icon-md)) / 2);
+    --xc-field-icon-inset-lg: calc((var(--xc-control-h-lg) - var(--xc-control-icon-lg)) / 2);
+    --xc-field-glyph-inset-sm: calc((var(--xc-control-h-sm) - var(--xc-icon-md)) / 2);
+    --xc-field-glyph-inset-md: calc((var(--xc-control-h-md) - var(--xc-icon-md)) / 2);
+    --xc-field-glyph-inset-lg: calc((var(--xc-control-h-lg) - var(--xc-icon-md)) / 2);
+    --xc-field-action-inset-sm: calc((var(--xc-control-h-sm) - var(--xc-tap-min)) / 2);
+    --xc-field-action-inset-md: calc((var(--xc-control-h-md) - var(--xc-tap-min)) / 2);
+    --xc-field-action-inset-lg: calc((var(--xc-control-h-lg) - var(--xc-tap-min)) / 2);
+
     /* Menus use one row measure across popovers, overflow actions, and
      * navigation sheets. Content can wrap and grow beyond this minimum. */
     --xc-menu-item-h: var(--xc-control-h-md);
@@ -204,6 +237,10 @@
     --xc-list-shadow: var(--xc-shadow-md);
     --xc-privacy-filter: blur(12px);
     --xc-privacy-opacity: 1;
+    /* The concealed recovery phrase grid blurs its placeholder words past
+     * reading. Static, so no reduced-motion or low-power block overrides it:
+     * the hidden state must look hidden everywhere. */
+    --xc-secret-placeholder-filter: blur(6px);
 
     /* Brand accent (sampled from branding/images/xchain-color-750.png).
      * Darkened one step from the sampled brand value to clear
@@ -262,7 +299,7 @@
      * (--xc-success-bg over --xc-bg-muted, not pure white), just under
      * 4.5:1, so it is darkened one more step here. */
     --xc-success: #146F34;
-    /* Main action fill: the brighter green the operator picked on 2026-11-10. */
+    /* Main action fill: a brighter green than --xc-success. */
     --xc-success-fill: #16A34A;
     --xc-badge-multisig-classic-bg: #FEF3C7;
     --xc-badge-multisig-classic-fg: #78350F;
@@ -287,6 +324,11 @@
     --xc-control-border-hover: var(--xc-border-strong);
     --xc-control-selected: var(--xc-accent-primary);
     --xc-control-selected-text: var(--xc-on-accent);
+    /* An on/off switch is green when on, the same green as the main action
+     * button, with a white thumb. High-contrast dark swaps in a brighter green
+     * so the track keeps 3:1 against its black page. */
+    --xc-switch-on: var(--xc-success-fill);
+    --xc-switch-on-thumb: #FFFFFF;
     --xc-control-focus-ring: var(--xc-focus-ring);
     --xc-control-disabled-bg: var(--xc-bg-muted);
     --xc-control-disabled-border: var(--xc-border-strong);
@@ -295,6 +337,29 @@
     --xc-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
     --xc-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
     --xc-shadow-modal: 0 16px 40px rgba(0, 0, 0, 0.35);
+    /* Text drawn over a chart on the brand card keeps this soft shadow. */
+    --xc-shadow-text-on-brand: 0 1px 3px rgba(0, 0, 0, 0.35);
+    /* Gain and loss figures on the brand card, which is blue in every theme,
+       so these stay bright on its dark pill instead of following the theme. */
+    --xc-brand-card-gain: #00E676;
+    --xc-brand-card-loss: #FF5A5A;
+    /* A bet market's outcome marks: the coloured square (or round) behind a
+       Yes or No thumb or an outcome's letter, and the faint share fill behind
+       its row. Yes and No keep their meaning colours; any other outcome takes
+       the next of eight hues by its place in the market. Each hue holds a
+       white letter at 4.5:1 or better, so the same fills serve both themes. */
+    --xc-outcome-yes: #16A34A;
+    --xc-outcome-no: #DC2626;
+    --xc-outcome-1: #2563EB;
+    --xc-outcome-2: #7C3AED;
+    --xc-outcome-3: #0E7490;
+    --xc-outcome-4: #B45309;
+    --xc-outcome-5: #BE185D;
+    --xc-outcome-6: #0F766E;
+    --xc-outcome-7: #4338CA;
+    --xc-outcome-8: #4D7C0F;
+    --xc-outcome-unknown: #5F7086;
+    --xc-on-outcome: #FFFFFF;
     /* Semantic aliases keep surface intent readable while sharing recipes. */
     --xc-shadow-header-menu: var(--xc-shadow-md);
     --xc-shadow-toast: var(--xc-shadow-md);
@@ -332,18 +397,19 @@
     --xc-viewport-h: calc(100vh - env(safe-area-inset-top, 0px));
 }
 
-/* The page gutter is tiered by viewport width: 12px below 640px (compact,
- * including the extension popup and side panel), 16px from 640px (rail),
- * 24px from 900px (full). The tier edges match the layout tiers. */
+/* The page gutter is tiered by viewport width at the layout tier edges (640px
+ * rail, 900px full), but every tier uses the same 8px value as compact. */
 @media (min-width: 640px) {
     :root {
-        --xc-page-gutter: var(--xc-space-4);
+        --xc-page-gutter: var(--xc-space-2);
     }
 }
 
+/* The full layout keeps the same 8px gutter as phones, so the top bar has 8px
+   around its buttons on every side and every window's bars are one height. */
 @media (min-width: 900px) {
     :root {
-        --xc-page-gutter: var(--xc-space-6);
+        --xc-page-gutter: var(--xc-space-2);
     }
 }
 
@@ -394,6 +460,22 @@
     height: var(--xc-menu-item-icon);
 }
 
+/* Every menu item is one line; a menu grows to its longest item (width set by
+ * the popup's own style) and only past the viewport cap does a label ellipsize. */
+:root [role="menu"] [role="menuitem"],
+:root [role="menu"] [role="menuitemradio"],
+:root [role="menu"] [role="menuitemcheckbox"] {
+    white-space: nowrap;
+}
+
+:root [role="menu"] [role="menuitem"] > span:not([aria-hidden="true"]),
+:root [role="menu"] [role="menuitemradio"] > span:not([aria-hidden="true"]),
+:root [role="menu"] [role="menuitemcheckbox"] > span:not([aria-hidden="true"]) {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 :root [role="menu"] > [role="menuitem"] + [role="menuitem"],
 :root [role="menu"] > li + li,
 :root [data-xc-menu-list="rows"] > li + li {
@@ -439,7 +521,7 @@
  * property accepts any tokens, so the later declaration always wins the
  * cascade, and an engine without dvh (Chromium below 108) then finds the
  * value invalid at the point of USE and drops the height it was meant to
- * set. Measured on an LG K51's stock WebView 102 (2026-10-12): the shell lost
+ * set. Measured on an LG K51's stock WebView 102: the shell lost
  * its height and the bottom tab bar floated mid-screen under short pages. */
 @supports (height: 100dvh) {
     :root {
@@ -449,7 +531,7 @@
 
 @media (max-width: 480px) {
     :root {
-        --xc-card-pad: var(--xc-space-3);
+        --xc-card-pad: var(--xc-space-2);
     }
 }
 
@@ -595,19 +677,10 @@
     }
 }
 
-:root[data-xc-reduced-motion="reduce"] {
-    --xc-motion-duration-fast: 0.01ms;
-    --xc-motion-duration-standard: 0.01ms;
-    --xc-motion-duration-ambient: 0.01ms;
-    --xc-transition: 0ms;
-    --xc-backdrop-filter: none;
-    --xc-list-shadow: none;
-    --xc-privacy-filter: none;
-    --xc-privacy-opacity: 0;
-}
-
-/* Native shells set this attribute when sustained GPU effects are too costly.
- * It reduces the same paint and motion work without changing user settings. */
+/* Native shells set data-xc-low-power when sustained GPU effects are too
+ * costly. It reduces the same paint and motion work as "Always reduce"
+ * without changing user settings. */
+:root[data-xc-reduced-motion="reduce"],
 :root[data-xc-low-power="true"] {
     --xc-motion-duration-fast: 0.01ms;
     --xc-motion-duration-standard: 0.01ms;
@@ -707,6 +780,7 @@
             --xc-warning: #FCD34D;
             --xc-success: #86EFAC;
             --xc-success-fill: #166534;
+            --xc-switch-on: #4ADE80;
             --xc-accent-primary: #93C5FD;
             --xc-accent-text: #93C5FD;
             --xc-danger-fg: #FCA5A5;
@@ -734,6 +808,7 @@
         --xc-warning: #FCD34D;
         --xc-success: #86EFAC;
         --xc-success-fill: #166534;
+        --xc-switch-on: #4ADE80;
         --xc-accent-primary: #93C5FD;
         --xc-accent-text: #93C5FD;
         --xc-danger-fg: #FCA5A5;
@@ -933,7 +1008,7 @@ body {
 /* A fieldset's UA default is `min-inline-size: min-content`, so it refuses
  * to shrink below its widest child. One long <option> then pushes the whole
  * group, and the form around it, past the screen edge: Create multisig's
- * cosigner card ran 67px off a 411px phone (2026-10-12). Let fieldsets
+ * cosigner card ran 67px off a 411px phone. Let fieldsets
  * shrink like any other block. */
 fieldset {
     min-inline-size: 0;
@@ -1072,9 +1147,11 @@ html.xc-focus-visible-fallback :where(
     outline-offset: -2px !important;
 }
 
-/* Disabled controls retain the contrast of their semantic color pairs.
- * Reduced saturation supplies the visual state without alpha compositing. */
-:where(input, select, textarea, button):disabled {
+/* Disabled fields retain the contrast of their semantic color pairs.
+ * Reduced saturation supplies the visual state without alpha compositing.
+ * Buttons are not in this list: a button never looks disabled (G130,
+ * operator 2026-11-16), so a disabled or busy button keeps its colours. */
+:where(input, select, textarea):disabled {
     opacity: var(--xc-disabled-opacity) !important;
     filter: saturate(var(--xc-disabled-saturation));
 }
@@ -1086,7 +1163,7 @@ html.xc-focus-visible-fallback :where(
 }
 
 @media (forced-colors: active) {
-    :where(input, select, textarea, button):disabled {
+    :where(input, select, textarea):disabled {
         filter: none;
     }
 

@@ -44,7 +44,7 @@ const FORMS = [
     {
         label: 'wallet',
         field: 'Wallet name',
-        submit: 'Rename wallet',
+        submit: 'Save Changes',
         list: () => messaging.listWallets,
         write: () => messaging.renameWallet,
         rename: (name) => { stored.wallet = name; },
@@ -54,7 +54,7 @@ const FORMS = [
     {
         label: 'account',
         field: 'Account name',
-        submit: 'Rename account',
+        submit: 'Save Changes',
         list: () => messaging.listAccounts,
         write: () => messaging.renameAccount,
         rename: (name) => { stored.account = name; },

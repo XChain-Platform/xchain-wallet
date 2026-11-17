@@ -62,7 +62,8 @@ describe('ConnectApproval failure handling', () => {
         expect(screen.getByRole('alert')).toHaveTextContent(
             'This connection request is missing or invalid.',
         );
-        expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Approve' })).not.toBeDisabled();
+        fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
         expect(mocks.resolveApproval).not.toHaveBeenCalled();
     });
 
@@ -78,14 +79,16 @@ describe('ConnectApproval failure handling', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'This connection request has expired.',
         );
-        expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Approve' })).not.toBeDisabled();
         expect(close).not.toHaveBeenCalled();
 
         fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
         expect(mocks.resolveApproval).toHaveBeenCalledOnce();
         expect(mocks.resolveApproval).toHaveBeenCalledWith('connect-failure', {
             approved: true,
-            chains: [chain.id],
+            chains: BUNDLED_DESCRIPTORS
+                .filter((descriptor) => descriptor.coin === chain.coin)
+                .map((descriptor) => descriptor.id),
             accounts: ['account-1'],
             canSignMessage: false,
             canSignAction: {},

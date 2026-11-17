@@ -15,6 +15,7 @@ import {
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
+import { expectDropdownValue, pickOption } from '../../fixtures/pickOption.js';
 import {
     describeOffenders,
     documentOverflow,
@@ -51,7 +52,8 @@ async function settle(page) {
 
 async function enablePseudoRtl(page) {
     await gotoSection(page, 'Settings');
-    await page.getByRole('main').getByRole('button', { name: /^Developer mode/ }).click();
+    await page.getByRole('main').getByRole('button', { name: /^Advanced\b/ }).click();
+    await page.getByRole('main').getByRole('button', { name: /^Developer mode\b/ }).click();
 
     const developerMode = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
     if (!(await developerMode.isChecked())) {
@@ -59,12 +61,18 @@ async function enablePseudoRtl(page) {
         await expect(developerMode).toBeChecked();
     }
 
-    await page.getByRole('button', { name: 'Back to settings' }).click();
-    await page.getByLabel('Language', { exact: true }).selectOption('pseudo-rtl');
+    // Back twice: row page to the Advanced group page, then to the index.
+    const back = page.getByRole('button', { name: 'Back to settings', exact: true }).filter({ visible: true }).first();
+    await back.click();
+    await back.click();
+    // Language is a row on the Appearance group page.
+    await page.getByRole('main').getByRole('button', { name: /^Appearance\b/ }).click();
+    await page.getByRole('main').getByRole('button', { name: /^Language\b/ }).click();
+    await pickOption(page.getByLabel('Language', { exact: true }), 'pseudo-rtl');
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
     // The field's own label is localized too, so in the pseudo locale it reads
     // as the wrapped pseudo string rather than "Language".
-    await expect(page.getByLabel(/^\u200F?⟦Language⟧$/)).toHaveValue('pseudo-rtl');
+    await expectDropdownValue(page.getByLabel(/^\u200F?⟦Language⟧$/), 'pseudo-rtl');
 }
 
 // The pseudo locale wraps every translated string, the navigation and the

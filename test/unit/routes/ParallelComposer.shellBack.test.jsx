@@ -3,6 +3,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+// Back from the Action queue walks the shell's navigation history, so it
+// returns to whichever page opened the queue (Settings, Token Actions, the
+// palette's page) instead of a fixed launcher.
+
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
@@ -20,13 +24,17 @@ function parallelComposeBlock(path) {
 }
 
 describe('ParallelComposer shell back target', () => {
-    it.each(apps)('%s returns to its launcher and clears template prefill', (path) => {
+    it.each(apps)('%s returns to the page that opened the queue', (path) => {
         const block = parallelComposeBlock(path);
+        expect(block).toContain('<ParallelComposer');
+        // formBack drops any form prefill and pops the history.
+        expect(block).toContain('onBack={formBack}');
+        expect(block).not.toMatch(/setUnlockedView\('(settings|actions|home)'\)/);
+    });
 
-        expect(block).toContain('setParallelPrefill(null)');
-        expect(block).toContain("setUnlockedView('cross-chain-templates')");
-        expect(block).toContain('formBack()');
-        expect(block).toContain("setUnlockedView('settings')");
-        expect(block).not.toContain("setUnlockedView('actions')");
+    it.each(apps)('%s opens the queue from Settings as a push, so Back returns to Settings', (path) => {
+        const source = readFileSync(path, 'utf8');
+        expect(source).toContain("onNavigateToActionQueue={() => setUnlockedView('parallel-compose')}");
+        expect(source).toMatch(/const formBack = \(\) => \{[\s\S]*?goBack\(\);\s*\};/);
     });
 });

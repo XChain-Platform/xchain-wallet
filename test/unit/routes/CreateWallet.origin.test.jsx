@@ -37,18 +37,19 @@ async function createThroughQuiz(mode) {
         </MessagingProvider>,
     );
     fireEvent.change(screen.getByLabelText(/^Password/), { target: { value: 'correct-horse-battery' } });
-    fireEvent.change(screen.getByLabelText(/^Confirm/), { target: { value: 'correct-horse-battery' } });
+    fireEvent.change(screen.getByLabelText(/^Confirm(?! passphrase)/), { target: { value: 'correct-horse-battery' } });
     fireEvent.click(screen.getByRole('button', { name: /Next/ }));
 
-    fireEvent.click(await screen.findByRole('checkbox'));
-    fireEvent.click(screen.getByRole('button', { name: /Verify recovery phrase/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Reveal Recovery Phrase' }));
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: /Verify Recovery Phrase/ }));
 
     const words = PHRASE.split(' ');
     for (const input of await screen.findAllByLabelText(/^Word \d+$/)) {
         const n = Number(input.labels[0].textContent.match(/\d+/)[0]);
         fireEvent.change(input, { target: { value: words[n - 1] } });
     }
-    fireEvent.click(screen.getByRole('button', { name: /Create wallet/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Create Wallet/ }));
     return messaging;
 }
 

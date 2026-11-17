@@ -50,6 +50,29 @@ describe('extension Chrome notifications', () => {
         );
     });
 
+    it.each([
+        ['true', { notifications: { desktop: true } }, 1],
+        ['false', { notifications: { desktop: false } }, 0],
+        ['undefined', { notifications: {} }, 1],
+    ])('desktop setting %s controls whether Chrome shows it', async (_label, settings, calls) => {
+        const create = vi.fn(async () => 'id');
+        const chrome = {
+            notifications: { create },
+            runtime: { getURL: vi.fn((p) => p) },
+        };
+        const notify = createChromeNotifier(chrome, { getSettings: async () => settings });
+        await expect(notify({ kind: 'incoming', title: 'Received', body: '1 BTC' })).resolves.toBe(true);
+        expect(create).toHaveBeenCalledTimes(calls);
+    });
+
+    it('shows the notification when settings cannot be read (vault locked)', async () => {
+        const create = vi.fn(async () => 'id');
+        const chrome = { notifications: { create }, runtime: { getURL: vi.fn((p) => p) } };
+        const notify = createChromeNotifier(chrome, { getSettings: async () => { throw new Error('locked'); } });
+        await notify({ kind: 'incoming', title: 'Received', body: '1 BTC' });
+        expect(create).toHaveBeenCalledTimes(1);
+    });
+
     it('reports no visible delivery when Chrome notifications are unavailable', async () => {
         const notify = createChromeNotifier({ runtime: { getURL: vi.fn() } });
 

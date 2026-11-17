@@ -34,7 +34,7 @@
 // getting that wrong silences the next one too.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Button } from '@xchain-wallet/core/ui';
+import { Button, Icon } from '@xchain-wallet/core/ui';
 import { t } from '../../core/src/i18n/index.js';
 import '@xchain-wallet/core/i18n/locales/en/desktopUpdate.js';
 
@@ -246,7 +246,7 @@ export function DesktopUpdateBanner() {
                 </Button>
             ) : null}
             {state === 'ready' || state === 'restart-blocked' ? (
-                <Button type="button" variant="ghost" size="sm" onClick={() => runAction('restart')}>
+                <Button type="button" variant="ghost" size="sm" icon={<Icon.RefreshIcon />} onClick={() => runAction('restart')}>
                     {t('desktopUpdate.restart')}
                 </Button>
             ) : null}

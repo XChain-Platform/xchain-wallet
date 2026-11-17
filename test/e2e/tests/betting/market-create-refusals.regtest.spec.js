@@ -311,21 +311,23 @@ test.describe(`refusing a bad market, and the promise that it cannot be edited (
             const feed = await waitForFeed(oracle, label);
             expect(feed.source, 'the market is owned by the funded oracle address').toBe(oracle);
 
-            // The oracle's own console is where an edit affordance would live if
-            // one existed: it is the surface that offers the two things that DO
-            // exist for a market you created. Reached from the hub's "My
-            // markets", not from the palette - there is no command for it.
+            // The market page's owner Actions tab is where an edit affordance
+            // would live if one existed: it is the surface that offers the two
+            // things that DO exist for a market you created. Reached from the
+            // hub's "My markets" card, then the market's Actions tab.
             await openPaletteCommand(page, 'Betting');
-            await page.getByRole('button', { name: 'My markets', exact: true }).click();
+            await page.getByRole('tab', { name: 'My markets' }).click();
             const console_ = page.getByRole('main');
-            await expect(console_.getByText(label, { exact: false }).first(),
-                'the market this run created is not listed in the oracle console')
+            const card = console_.getByRole('button', { name: label, exact: false }).first();
+            await expect(card, 'the market this run created is not listed in My markets')
                 .toBeVisible({ timeout: 60_000 });
+            await card.click();
+            await console_.getByRole('tab', { name: 'Actions', exact: true }).click();
 
             // Non-vacuous first: the affordances that SHOULD be here are here,
             // which proves we are looking at the right screen before asserting
             // that something else is absent.
-            await expect(console_.getByRole('button', { name: 'Copy to a new market' }).first(),
+            await expect(console_.getByRole('button', { name: /^Copy to a new market/ }).first(),
                 'the console offers no "Copy to a new market", so this is not the surface this '
                 + 'assertion thinks it is')
                 .toBeVisible({ timeout: 30_000 });
@@ -335,20 +337,21 @@ test.describe(`refusing a bad market, and the promise that it cannot be edited (
             // allow-list and block-list references, so "Edit lists" is the only
             // edit-shaped control allowed here, and opening it must offer the two
             // list fields and nothing that touches the label, the outcomes or the
-            // deadline.
+            // deadline. An action list row (G101) is named by its title, then
+            // its one-line description.
             const editLike = console_.getByRole('button', { name: /\b(edit|modify|change the terms|update)\b/i });
             await expect(editLike,
                 'a created market offers an edit control other than "Edit lists", but BET can only '
                 + 'edit list references on the wire: anything else could only ever silently do something else')
                 .toHaveCount(1);
-            await expect(editLike).toHaveAccessibleName('Edit lists');
+            await expect(editLike).toHaveAccessibleName(/^Edit lists/);
             await expect(console_.getByRole('link', { name: /\bedit\b/i })).toHaveCount(0);
 
             await editLike.click();
-            await expect(console_.getByLabel('New allow-list index', { exact: true }),
+            await expect(console_.getByRole('button', { name: /^Allow list:/ }),
                 '"Edit lists" did not open the list editor, so this is not the control it claims to be')
                 .toBeVisible({ timeout: 30_000 });
-            await expect(console_.getByLabel('New block-list index', { exact: true })).toBeVisible();
+            await expect(console_.getByRole('button', { name: /^Block list:/ })).toBeVisible();
             for (const term of ['What is being bet on', /^Outcome \d+$/, 'Betting closes']) {
                 await expect(console_.getByLabel(term),
                     `the list editor offers a "${term}" field, so it can change a market term`)

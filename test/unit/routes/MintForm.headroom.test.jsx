@@ -68,6 +68,7 @@ function mountMint({
     mintedAmount = '0',
     mintedError = null,
     mintedPending = false,
+    mintedRead = null,
     divisibility = 0,
     initialTick = 'S18PROBE',
     chainId = 'bitcoin-mainnet',
@@ -86,7 +87,7 @@ function mountMint({
             divisibility,
             locks: {},
         }),
-        getMintedAmountForAddress: mintedPending
+        getMintedAmountForAddress: mintedRead ? vi.fn(mintedRead) : mintedPending
             ? vi.fn(() => new Promise(() => {}))
             : (mintedError
                 ? vi.fn().mockRejectedValue(mintedError)
@@ -137,6 +138,8 @@ describe('MintForm sizes off mint headroom, not holdings', () => {
     it('renders form-specific help for its network and token fields', async () => {
         mountMint({ initialTick: null });
 
+        // Network sits in the closed standard From section.
+        fireEvent.click(await screen.findByRole('button', { name: /^From / }));
         expect(await screen.findByRole('button', { name: 'About Network' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'About Token' })).toBeInTheDocument();
     });
@@ -152,10 +155,11 @@ describe('MintForm sizes off mint headroom, not holdings', () => {
     it('offers no Max at the cap, so it cannot fill a rejectable amount', async () => {
         mountMint();
         await screen.findByText(/0 S18PROBE available to mint/);
-        const max = screen.queryByRole('button', { name: /max available/i });
-        // Either hidden or inert - what must never happen is a live Max
-        // that drops the whole supply into the field.
-        expect(max === null || max.disabled).toBe(true);
+        // Max stays in the field but inert: a live Max here would drop the
+        // whole supply into the field.
+        const max = screen.getByRole('button', { name: /max available/i });
+        expect(max).toBeDisabled();
+        fireEvent.click(max);
         expect((await amountField()).value).toBe('');
     });
 
@@ -200,8 +204,55 @@ describe('MintForm sizes off mint headroom, not holdings', () => {
         mountMint({ mintAddressMax: '100', mintedAmount: '100', totalSupply: '1000' });
         expect(await screen.findByText('This address has reached its per-address cap.'))
             .toBeInTheDocument();
-        const max = screen.queryByRole('button', { name: /max available/i });
-        expect(max === null || max.disabled).toBe(true);
+        expect(screen.getByRole('button', { name: /max available/i })).toBeDisabled();
+    });
+
+    // All three caps set at once; Max fills exactly the one that binds.
+    it.each([
+        ['MAX_MINT', { totalSupply: '2500', mintMax: '73', mintAddressMax: '400', mintedAmount: '120' }, '73'],
+        ['supply room', { totalSupply: '4958', mintMax: '73', mintAddressMax: '400', mintedAmount: '120' }, '42'],
+        ['address room', { totalSupply: '2500', mintMax: '73', mintAddressMax: '400', mintedAmount: '389' }, '11'],
+    ])('Max fills the smallest of three set caps when %s binds', async (_name, caps, expected) => {
+        mountMint(caps);
+        expect(await screen.findByText(new RegExp(`^${expected} S18PROBE available to mint`)))
+            .toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /max available/i }));
+        await waitFor(async () => expect((await amountField()).value).toBe(expected));
+    });
+
+    it('Max fills an exact divisible remainder when this address room binds', async () => {
+        mountMint({
+            maxSupply: '21.5',
+            totalSupply: '1',
+            mintMax: '0.5',
+            mintAddressMax: '3',
+            mintedAmount: '2.87654321',
+            divisibility: 8,
+        });
+        expect(await screen.findByText(/^0\.12345679 S18PROBE available to mint/)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /max available/i }));
+        await waitFor(async () => expect((await amountField()).value).toBe('0.12345679'));
+    });
+
+    it('holds Max while this address mint history loads, then fills the three-cap minimum', async () => {
+        let finishRead = () => {};
+        mountMint({
+            totalSupply: '1000',
+            mintMax: '500',
+            mintAddressMax: '100',
+            mintedRead: () => new Promise((resolve) => { finishRead = resolve; }),
+        });
+        await screen.findByText(/500 S18PROBE available to mint/);
+        const max = screen.getByRole('button', { name: /max available/i });
+        expect(max).toBeDisabled();
+        fireEvent.click(max);
+        expect((await amountField()).value).toBe('');
+
+        finishRead({ amount: '63' });
+        expect(await screen.findByText(/^37 S18PROBE available to mint/)).toBeInTheDocument();
+        await waitFor(() => expect(screen.getByRole('button', { name: /max available/i })).toBeEnabled());
+        fireEvent.click(screen.getByRole('button', { name: /max available/i }));
+        await waitFor(async () => expect((await amountField()).value).toBe('37'));
     });
 
     it('falls back to the stated address cap when mint history cannot load', async () => {
@@ -227,6 +278,7 @@ describe('MintForm sizes off mint headroom, not holdings', () => {
         expect(await screen.findByText(/500 S18PROBE available to mint/)).toBeInTheDocument();
         expect(screen.getByText(/100 per address in total \(mint history loading\)/))
             .toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /max available/i })).toBeDisabled();
     });
 
     it('says so instead of quoting a number when nothing caps the token', async () => {

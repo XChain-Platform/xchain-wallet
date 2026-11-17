@@ -12,7 +12,6 @@ import {
     dismissIntroCarousel,
     expect,
     gotoSection,
-    openSettings,
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
@@ -80,20 +79,6 @@ async function expectMatchingLineHeights(controls, label) {
     }
 }
 
-async function useWatcherMode(page) {
-    await openSettings(page);
-    await page.getByRole('main').getByRole('button', { name: /^Wallet mode/ }).click();
-    const watcher = page.getByRole('radio', { name: /^Watcher \(watch-only\)/ });
-    await expect(watcher).toBeVisible();
-    await watcher.click();
-    const dialog = page.getByRole('dialog', {
-        name: 'Switch to Watcher (watch-only) mode?',
-    });
-    await dialog.getByRole('button', { name: 'Confirm mode change' }).click();
-    await expect(dialog).toBeHidden();
-    await expect(watcher).toBeChecked();
-}
-
 function reviewValue(review, label) {
     return review.getByText(label, { exact: true })
         .locator('xpath=following-sibling::dd[1]');
@@ -103,8 +88,14 @@ for (const viewport of VIEWPORTS) {
     test(`markets flow fits and preserves order amounts on ${viewport.name}`, async ({ page }) => {
         test.slow();
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
+        // The demo wallet keeps its own Normal mode (mode is fixed per wallet);
+        // the review step below accepts either submit label.
         await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
-        await useWatcherMode(page);
+
+        // At 720px of content width and up the DEX shows the list and the
+        // market side by side under one "Decentralized Exchange" header; below
+        // that a row opens the market as its own page titled for the pair.
+        let marketScreenHeading = 'PEPECASH/BTC';
 
         await test.step('filter the populated markets list', async () => {
             await gotoSection(page, 'DEX');
@@ -126,7 +117,18 @@ for (const viewport of VIEWPORTS) {
                 main.getByLabel('Search markets').or(filters.getByRole('tab')),
                 `${viewport.name} market filters`,
             );
+            const twoPanel = (await main.locator('[data-dex-layout="two-panel"]').count()) > 0;
+            if (twoPanel) {
+                // Side by side: the list stays, a separator splits the panels.
+                await expect(main.getByRole('separator', { name: 'Resize the market list' })).toBeVisible();
+                marketScreenHeading = 'Decentralized Exchange';
+            }
             await market.click();
+            if (twoPanel) {
+                await expect(main.getByRole('region', { name: 'PEPECASH/BTC market', exact: true }))
+                    .toBeVisible();
+                await expect(main.getByRole('list', { name: 'Markets' })).toBeVisible();
+            }
         });
 
         const main = page.getByRole('main');
@@ -138,7 +140,7 @@ for (const viewport of VIEWPORTS) {
             const orderBook = main.getByRole('region', { name: 'Order book', exact: true });
             await expect(orderBook).toBeVisible();
             await expect(orderBook).not.toHaveAttribute('aria-busy', 'true');
-            await expectScreen(page, 'PEPECASH/BTC', `${viewport.name} order book`);
+            await expectScreen(page, marketScreenHeading, `${viewport.name} order book`);
             await expectMatchingLineHeights(
                 panels.getByRole('tab'),
                 `${viewport.name} market panel tabs`,
@@ -148,7 +150,7 @@ for (const viewport of VIEWPORTS) {
             const tradeHistory = main.getByRole('region', { name: 'Trade history', exact: true });
             await expect(tradeHistory).toBeVisible();
             await expect(tradeHistory).not.toHaveAttribute('aria-busy', 'true');
-            await expectScreen(page, 'PEPECASH/BTC', `${viewport.name} trade history`);
+            await expectScreen(page, marketScreenHeading, `${viewport.name} trade history`);
             await expectMatchingLineHeights(
                 panels.getByRole('tab'),
                 `${viewport.name} market panel tabs with history selected`,
@@ -166,7 +168,7 @@ for (const viewport of VIEWPORTS) {
             await order.getByLabel('Price (BTC)').fill(PRICE);
             await order.getByLabel('Size (PEPECASH)').fill(SIZE);
             await expect(order).toContainText(`Give ${SIZE} PEPECASH, get ${TOTAL} BTC`);
-            await expectScreen(page, 'PEPECASH/BTC', `${viewport.name} place order`);
+            await expectScreen(page, marketScreenHeading, `${viewport.name} place order`);
             await expectMatchingLineHeights(
                 order.getByRole('group', { name: 'Order side' }).getByRole('button'),
                 `${viewport.name} order side`,
@@ -205,7 +207,7 @@ for (const viewport of VIEWPORTS) {
                 reviewPosition.formTop,
                 `${viewport.name} review opens below its visible scrollport`,
             ).toBeLessThan(reviewPosition.scrollportBottom);
-            await expectScreen(page, 'PEPECASH/BTC', `${viewport.name} order review`);
+            await expectScreen(page, marketScreenHeading, `${viewport.name} order review`);
             await expectMatchingLineHeights(
                 review.getByRole('button', { name: 'Edit order' })
                     .or(review.getByRole('button', { name: 'Place sell order' })),

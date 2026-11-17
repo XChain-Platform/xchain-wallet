@@ -7,7 +7,9 @@ import {
     expect,
     test,
     createWallet,
+    openFromSection,
 } from '../../fixtures/wallet.js';
+import { pickOption } from '../../fixtures/pickOption.js';
 import {
     describeOffenders,
     documentOverflow,
@@ -158,7 +160,9 @@ async function fillBatch(page) {
     const step = (number) => main.getByRole('region', { name: `Step ${number}`, exact: true });
 
     await expect(main.getByRole('form', { name: 'Batch composer' })).toBeVisible({ timeout: 30_000 });
-    // The Batch composer's Network field opens the full-screen picker.
+    // The Batch composer's Network field sits in the closed From section and
+    // opens the full-screen picker.
+    await openFromSection(main);
     const network = main.getByRole('button', { name: /^Network:/ });
     await expect(network).toBeVisible({ timeout: 30_000 });
     if (!((await network.getAttribute('aria-label')) || '').includes('Bitcoin')) {
@@ -169,7 +173,7 @@ async function fillBatch(page) {
     await expect(network).toHaveAttribute('aria-label', /Bitcoin/);
 
     const first = step(1);
-    await picker(first, 'Action').selectOption('SEND');
+    await pickOption(picker(first, 'Action'), 'SEND');
     await params(first).fill(JSON.stringify({
         VERSION: '0', TICK: 'XCHAIN', AMOUNT: '2', DESTINATION: BATCH_RECIPIENTS[0],
     }));
@@ -177,7 +181,7 @@ async function fillBatch(page) {
     await main.getByRole('button', { name: '+ Add action', exact: true }).click();
     const second = step(2);
     await expect(second).toBeVisible();
-    await picker(second, 'Action').selectOption('SEND');
+    await pickOption(picker(second, 'Action'), 'SEND');
     await params(second).fill(JSON.stringify({
         VERSION: '0', TICK: 'XCHAIN', AMOUNT: '3', DESTINATION: BATCH_RECIPIENTS[1],
     }));

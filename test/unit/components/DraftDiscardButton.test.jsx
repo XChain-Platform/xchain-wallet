@@ -56,9 +56,9 @@ describe('DraftDiscardButton', () => {
         expect(read('packages/core/src/ui/tokens.css')).toMatch(/--xc-tap-min:\s*24px;/);
     });
 
-    it.each(DRAFT_FORMS)('%s renders its Discard through the shared button, never an inline-styled copy', (file) => {
+    it.each(DRAFT_FORMS)('%s no longer builds its draft notice from the legacy inline button', (file) => {
         const src = read(file);
-        expect(src).toMatch(/<DraftDiscardButton onClick=\{dismissDraft\} label=/);
+        expect(src).not.toContain('<DraftDiscardButton');
         expect(src).not.toMatch(/onClick=\{dismissDraft\}[\s\S]{0,200}?style=\{\{/);
     });
 });

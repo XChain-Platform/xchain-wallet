@@ -23,6 +23,10 @@
 // module-scoped Map. Registering here reaches the handler chain.
 
 import * as bgSignerBridge from '../../extension/src/background/signerBridge.js';
+import {
+    sessionSignerFor,
+    sessionSignerForRecord,
+} from '../../core/src/signers/hardwareReconnect.js';
 
 /** @type {Map<string, import('@xchain-wallet/core/signers/Signer.js').Signer>} */
 const liveSigners = new Map();
@@ -30,7 +34,9 @@ const liveSigners = new Map();
 /**
  * Register a live Signer so `action.*.hw` handlers can reach it.
  * Called by `PairSignerForm`'s `onSignerPaired` hook after the
- * SignerRecord is persisted.
+ * SignerRecord is persisted. A Trezor or Ledger is stored inside a
+ * session signer, which reports each sign to the sign page and reopens
+ * the device after a lock.
  *
  * @param {string} signerId
  * @param {import('@xchain-wallet/core/signers/Signer.js').Signer} signer
@@ -49,8 +55,28 @@ export function registerSigner(signerId, signer) {
     if (!signer || requiredMethods.some((method) => typeof signer[method] !== 'function')) {
         throw new Error('signerBridge.registerSigner: signer must implement Signer');
     }
-    liveSigners.set(signerId, signer);
-    bgSignerBridge.setTransport(signerId, makeInProcessTransport(signerId, signer));
+    const existing = liveSigners.get(signerId);
+    const stored = sessionSignerFor(existing, signerId, signer);
+    if (stored === existing && bgSignerBridge.getTransport(signerId)) return;
+    liveSigners.set(signerId, stored);
+    bgSignerBridge.setTransport(signerId, makeInProcessTransport(signerId, stored));
+}
+
+/**
+ * Register a paired Trezor or Ledger from its SignerRecord at unlock, with no
+ * device open yet: the first sign opens it.
+ *
+ * @param {{ id: string, vendor: string, model?: string, deviceIdentifier?: string }} record
+ */
+export function registerHardwareRecord(record) {
+    if (typeof record?.id !== 'string' || record.id.length === 0) {
+        throw new Error('signerBridge.registerHardwareRecord: record id is required');
+    }
+    const existing = liveSigners.get(record.id);
+    const stored = sessionSignerForRecord(existing, record);
+    if (stored === existing && bgSignerBridge.getTransport(record.id)) return;
+    liveSigners.set(record.id, stored);
+    bgSignerBridge.setTransport(record.id, makeInProcessTransport(record.id, stored));
 }
 
 /**

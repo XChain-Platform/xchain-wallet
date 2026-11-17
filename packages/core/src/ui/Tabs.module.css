@@ -1,91 +1,17 @@
-.tabs {
-    box-sizing: border-box;
-    display: flex;
-    align-items: stretch;
-    width: 100%;
-    min-width: 0;
-    min-height: var(--xc-control-h-md);
-    overflow-x: auto;
-    overflow-y: hidden;
-    border-bottom: 1px solid var(--xc-control-border);
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-}
-
-.tabs::-webkit-scrollbar {
-    display: none;
-    width: 0;
-    height: 0;
-}
-
-.tab {
-    appearance: none;
-    box-sizing: border-box;
-    display: inline-flex;
-    /* Tabs keep their natural width but may shrink to their longest word and
-       wrap their labels at spaces, so a short row of tabs fits a 320px phone
-       without a nested scroller; a row that still cannot fit scrolls. */
-    flex: 0 1 auto;
-    align-items: center;
-    justify-content: center;
-    gap: var(--xc-space-2);
-    min-height: var(--xc-control-h-md);
-    padding: 0 var(--xc-space-3);
-    /* Tabs sit on the one line under the row; every tab reserves a
-       transparent 2px bottom edge so the selected underline never shifts the
-       row, and no tab draws a top or side edge. */
-    border: 0;
-    border-bottom: 2px solid transparent;
-    background: transparent;
-    color: var(--xc-text-muted);
-    font: inherit;
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    white-space: normal;
-    text-align: center;
-    cursor: pointer;
-    transition: background var(--xc-transition), color var(--xc-transition), border-color var(--xc-transition);
-}
-
-/* A hovered tab only darkens its label; no tab fills or outlines a box. */
-@media (hover: hover) and (pointer: fine) {
-    .tab:hover:not([aria-selected='true']) {
-        color: var(--xc-text);
-    }
-}
-
-/* A pressed tab changes its text colour only; it draws no box or fill. */
-.tab:active:not([aria-selected='true']) {
-    color: var(--xc-text);
-}
-
-.tab:focus-visible {
-    outline: 2px solid var(--xc-control-focus-ring);
-    outline-offset: -2px;
-}
-
-/* The selected tab is marked only by its underline, never a filled box. */
-.tab[aria-selected='true'] {
-    background: transparent;
-    color: var(--xc-accent-text);
-    border-bottom-color: var(--xc-control-selected);
-}
-
-/* Forced colors paints a transparent border in CanvasText, which would
-   underline every tab. Idle tabs take the canvas colour and the selected tab
-   takes the selection colour, so only the current tab shows an underline. */
-@media (forced-colors: active) {
-    .tab {
-        border-bottom-color: Canvas;
-    }
-
-    .tab[aria-selected='true'] {
-        border-bottom-color: Highlight;
-    }
-}
+/* Tabs draw the one view-toggle look from SegmentedControl.module.css
+   (.segmented and .segment); this sheet holds only what a tab adds: the
+   label wrapper and the optional count badge. */
 
 .label {
-    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.icon {
+    display: inline-flex;
+    flex: 0 0 auto;
 }
 
 .count {
@@ -99,7 +25,9 @@
     letter-spacing: 0.03em;
 }
 
+/* On the selected fill the badge inverts: the fill's text colour behind the
+   fill's own colour. */
 .tab[aria-selected='true'] .count {
-    background: var(--xc-control-selected);
-    color: var(--xc-control-selected-text);
+    background: var(--xc-control-selected-text);
+    color: var(--xc-control-selected);
 }

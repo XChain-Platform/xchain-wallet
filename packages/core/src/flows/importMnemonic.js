@@ -96,6 +96,7 @@ export function detectMnemonicFormat(normalized) {
  * @property {'created' | 'demo' | 'imported-mnemonic' | 'imported-freewallet' | 'imported-xchain-backup'} [origin]  default derived from format
  * @property {import('../crypto/kdf.js').KdfParams} [kdfParams]
  * @property {Uint8Array} [masterKey]                         key already derived from `password` under `kdfParams` (required with it); copied, never zeroed here, the caller zeroes its own
+ * @property {'full' | 'watcher' | 'signer'} [walletMode]    §20: chosen once here; default `full`
  */
 
 /**
@@ -124,6 +125,7 @@ export async function importMnemonic({
     kdfParams,
     masterKey,
     activeNetwork,
+    walletMode,
 }) {
     if (typeof password !== 'string' || password.length === 0) {
         throw new Error('importMnemonic: password is required');
@@ -199,6 +201,7 @@ export async function importMnemonic({
         sdkRegistry,
         activeChainIds,
         activeNetwork: effectiveActiveNetwork,
+        walletMode,
     });
 
     return { format: resolvedFormat, ...persisted };

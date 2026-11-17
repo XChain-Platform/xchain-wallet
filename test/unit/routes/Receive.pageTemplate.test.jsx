@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Receive } from '../../../packages/core/src/shared/routes/Receive.jsx';
+import { resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import listStyles from '../../../packages/core/src/ui/ListPage.module.css';
 import formStyles from '../../../packages/core/src/ui/FormPage.module.css';
 
@@ -26,7 +27,8 @@ const ADDRESS = 'ltc1qyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zuxktx9';
 function messaging(settings, addresses) {
     const methods = {
         getSettings: vi.fn().mockResolvedValue(settings),
-        listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'Wallet' }]),
+        // A wallet's mode lives on its wallet record, read from the wallet list.
+        listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'Wallet', walletMode: settings?.walletMode || 'full' }]),
         listAccounts: vi.fn().mockResolvedValue([{ id: 'account-1', walletId: 'wallet-1', index: 0 }]),
         getAddressesByChain: vi.fn().mockResolvedValue(addresses),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
@@ -58,7 +60,10 @@ const TEMPLATE_ROOTS = [listStyles.page, formStyles.page, formStyles.form]
     .map((name) => `.${name}`)
     .join(', ');
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    resetWalletModes();
+});
 
 describe('Receive: refusal and empty states use the page templates', () => {
     it('draws the signer-mode notice inside a page template', async () => {
@@ -76,6 +81,6 @@ describe('Receive: refusal and empty states use the page templates', () => {
 
         const title = await screen.findByText('No networks available');
         expect(title.closest(TEMPLATE_ROOTS)).not.toBeNull();
-        expect(screen.getByRole('button', { name: 'Open network settings' }).closest(TEMPLATE_ROOTS)).not.toBeNull();
+        expect(screen.getByRole('button', { name: 'Open Network Settings' }).closest(TEMPLATE_ROOTS)).not.toBeNull();
     });
 });

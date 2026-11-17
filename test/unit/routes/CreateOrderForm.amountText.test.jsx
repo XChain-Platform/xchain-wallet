@@ -88,10 +88,11 @@ vi.mock('../../../packages/core/src/shared/hooks/useNativeFee.js', () => ({
 }));
 
 import { CreateOrderForm } from '../../../packages/core/src/shared/routes/CreateOrderForm.jsx';
+import { pickOrderAsset } from '../../helpers/orderAssetPicker.js';
 
 async function renderForm() {
     render(<CreateOrderForm walletId="wallet-1" onBack={vi.fn()} />);
-    await screen.findByDisplayValue('mSourceAddress');
+    await screen.findAllByDisplayValue('mSourceAddress');
 }
 
 function chooseTokenOnGetSide() {
@@ -133,10 +134,10 @@ describe('CreateOrderForm amount text', () => {
         state.messaging.composeForConfirm = vi.fn(async () => ({ actionString: 'ORDER|0', psbtHex: 'cafe' }));
         state.confirm.mockImplementation(async (args) => { await args.compose(); return { txid: 'tx-1' }; });
         await renderForm();
-        fireEvent.change(screen.getByLabelText('Ticker'), { target: { value: 'XCP' } });
-        fireEvent.change(screen.getByLabelText('Amount'), { target: { value: give } });
-        fireEvent.change(screen.getByLabelText('Amount (BTC)'), { target: { value: get } });
-        fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
+        await pickOrderAsset('give', 'XCP');
+        fireEvent.change(await screen.findByLabelText(/^Give amount/), { target: { value: give } });
+        fireEvent.change(screen.getByLabelText(/^Get amount/), { target: { value: get } });
+        fireEvent.click(screen.getByRole('button', { name: 'Place Order' }));
 
         await waitFor(() => expect(state.messaging.composeForConfirm).toHaveBeenCalledTimes(1));
         const { params } = state.messaging.composeForConfirm.mock.calls[0][0].actionData;
@@ -144,18 +145,22 @@ describe('CreateOrderForm amount text', () => {
         expect(params.GET_AMOUNT).toBe(getWire);
     });
 
-    // U61: digits past the token's decimals are a field error, never a
-    // silent cut, and the amount the field keeps is the one that composes.
+    // U61: the card's amount field refuses digits past the token's decimals
+    // as they are typed, so the amount the field keeps is the one that composes.
     it('refuses digits past the token decimals in the field and composes the kept amount', async () => {
         state.messaging.composeForConfirm = vi.fn(async () => ({ actionString: 'ORDER|0', psbtHex: 'cafe' }));
         state.confirm.mockImplementation(async (args) => { await args.compose(); return { txid: 'tx-1' }; });
         await renderForm();
-        fireEvent.change(screen.getByLabelText('Ticker'), { target: { value: 'XCP' } });
-        fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '2.55' } });
-        expect(await screen.findByText('Amount can have at most 1 decimal places.')).toBeTruthy();
-        fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '2.5' } });
-        fireEvent.change(screen.getByLabelText('Amount (BTC)'), { target: { value: '0.1' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
+        await pickOrderAsset('give', 'XCP');
+        const giveField = await screen.findByLabelText(/^Give amount/);
+        // The token's decimals load after the pick, so retry until the refusal holds.
+        await waitFor(() => {
+            fireEvent.change(giveField, { target: { value: '2.5' } });
+            fireEvent.change(giveField, { target: { value: '2.55' } });
+            expect(giveField.value).toBe('2.5');
+        });
+        fireEvent.change(screen.getByLabelText(/^Get amount/), { target: { value: '0.1' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Place Order' }));
 
         await waitFor(() => expect(state.messaging.composeForConfirm).toHaveBeenCalledTimes(1));
         expect(state.messaging.composeForConfirm.mock.calls[0][0].actionData.params.GIVE_AMOUNT).toBe('2.5');

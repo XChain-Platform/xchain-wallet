@@ -33,11 +33,12 @@
 // two BROADCASTs trip none of those constraints, which is exactly why they
 // are the cheapest legal multi-step batch to compose.
 //
-// CHAIN SELECTION goes through the shared Network field in both composers
-// (the Batch source and each Action queue row), which `selectVenueChain`
-// drives and asserts.
+// CHAIN SELECTION: each Parallel queue row has the shared Network field,
+// which `selectVenueChain` drives and asserts; a Batch transaction takes its
+// network with its From address on the own-address picker.
 
 import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { pickOption } from '../../fixtures/pickOption.js';
 import {
     ENCODER_URL,
     REGTEST_ADDRESS_RE,
@@ -50,6 +51,7 @@ import {
     switchToRegtest,
     unlockAfterReload,
     waitForValidAction,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -83,7 +85,7 @@ async function onboardFundedWallet(page, walletName, { utxos = 1 } = {}) {
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
-    const address = await main.getByLabel('From').inputValue();
+    const address = await (await openFromAddress(main)).inputValue();
     expect(address, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`).toMatch(REGTEST_ADDRESS_RE);
 
     for (let i = 0; i < utxos; i += 1) await fundAddress(address, FUNDING);
@@ -99,8 +101,16 @@ async function onboardFundedWallet(page, walletName, { utxos = 1 } = {}) {
 // accessible name is just the span, so match on role plus exact name.
 const picker = (scope, name) => scope.getByRole('combobox', { name, exact: true });
 const paramsBox = (scope) => scope.getByRole('textbox', { name: 'Params (JSON object)', exact: true });
-const batchStep = (scope, number) => scope.getByRole('region', { name: `Step ${number}`, exact: true });
-const parallelRow = (scope, number) => scope.getByRole('region', { name: `Row ${number}`, exact: true });
+const batchStep = (scope, number) => scope.getByRole('region', { name: `Action ${number}`, exact: true });
+// A Batch transaction's Network and From row; it opens the own-address picker.
+const batchFromRow = (scope, number) => scope.getByRole('button', {
+    name: `Change the network and From address of transaction ${number}`, exact: true,
+});
+// Each queue row is a Form Standard section; its header button is named by the
+// title ("Row 2") and the closed summary, and the section itself has no name.
+const parallelRow = (scope, number) => scope.locator('section[data-form-section]').filter({
+    has: scope.page().getByRole('button', { name: new RegExp(`^Row ${number}(?!\\d)`) }),
+});
 
 /** Opens the catch-all Actions page through the wallet menu ("All actions"). */
 async function gotoMoreActions(page) {
@@ -125,9 +135,9 @@ async function gotoBatchComposer(page) {
     const menu = page.getByRole('main');
     await menu.getByRole('button', { name: /^Batch/ }).click();
     const main = page.getByRole('main');
-    // The Batch composer's network is a ChainPicker (a button named "Network: <name>"),
-    // not a select; the Parallel rows below still use a native select.
-    await expect(main.getByRole('button', { name: /^Network:/ }).first(), 'the Batch composer never rendered')
+    // Batch has no From section (layout 1): each transaction carries its own
+    // Network and From row, which opens the own-address picker.
+    await expect(batchFromRow(main, 1), 'the Batch composer never rendered')
         .toBeVisible({ timeout: 30_000 });
     return main;
 }
@@ -240,24 +250,30 @@ test.describe(`Batch and Parallel composers on ${REGTEST_CHAIN_LABEL}`, () => {
 
         await test.step('queue two BROADCASTs and sign them as one batch', async () => {
             const main = await gotoBatchComposer(page);
-            await selectVenueChain(main, 'Network');
-            await expect(main.getByLabel('From', { exact: true }),
-                'the batch composer defaulted to a different address than the one this run funded')
-                .toHaveValue(owner);
+            // Pick the funded address (and with it this run's network) on the
+            // transaction's own From row, through the own-address picker.
+            await batchFromRow(main, 1).click();
+            const fundedRow = page.getByRole('button', { name: `View address ${owner}` });
+            await expect(fundedRow, 'the own-address picker does not list the address this run funded')
+                .toBeVisible({ timeout: 30_000 });
+            await fundedRow.click();
+            await expect(batchFromRow(main, 1).getByLabel(owner, { exact: true }),
+                'the batch transaction does not sign from the address this run funded')
+                .toBeVisible({ timeout: 30_000 });
 
             const firstStep = batchStep(main, 1);
-            await picker(firstStep, 'Action').selectOption('BROADCAST');
+            await pickOption(picker(firstStep, 'Action'), 'BROADCAST');
             await paramsBox(firstStep)
                 .fill(JSON.stringify({ VERSION: '0', MESSAGE: msgOne }));
 
-            await main.getByRole('button', { name: 'Add action', exact: true }).click();
+            await main.getByRole('button', { name: /^Add action/ }).click();
             const secondStep = batchStep(main, 2);
             await expect(secondStep).toBeVisible();
-            await picker(secondStep, 'Action').selectOption('BROADCAST');
+            await pickOption(picker(secondStep, 'Action'), 'BROADCAST');
             await paramsBox(secondStep)
                 .fill(JSON.stringify({ VERSION: '0', MESSAGE: msgTwo }));
 
-            await main.getByRole('button', { name: 'Batch', exact: true }).click();
+            await main.getByRole('button', { name: 'Review 1 Transaction', exact: true }).click();
             await expect(main.getByText('Batch steps (2)'),
                 'the batch composer never built a 2-step COMMAND host-side')
                 .toBeVisible({ timeout: 60_000 });
@@ -265,7 +281,7 @@ test.describe(`Batch and Parallel composers on ${REGTEST_CHAIN_LABEL}`, () => {
             const password = main.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
 
-            await main.getByRole('button', { name: 'Sign batch', exact: true }).click();
+            await main.getByRole('button', { name: 'Sign Batch', exact: true }).click();
             await approveConfirm(page, 'the batch');
 
             await expect(main.getByText('Batch broadcast'), 'the batch never reported broadcast')
@@ -318,23 +334,25 @@ test.describe(`Batch and Parallel composers on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(firstRow.getByLabel('From', { exact: true }),
                 'row 1 defaulted to a different address than the one this run funded')
                 .toHaveValue(owner);
-            await picker(firstRow, 'Action').selectOption('BROADCAST');
+            await pickOption(picker(firstRow, 'Action'), 'BROADCAST');
             await paramsBox(firstRow)
                 .fill(JSON.stringify({ VERSION: '0', MESSAGE: msgOne }));
 
-            await main.getByRole('button', { name: 'Add action', exact: true }).click();
+            await main.getByRole('button', { name: 'Add Action', exact: true }).click();
             const secondRow = parallelRow(main, 2);
             await expect(secondRow).toBeVisible();
             await selectVenueChain(secondRow, 'Network');
             await expect(secondRow.getByLabel('From', { exact: true }),
                 'row 2 defaulted to a different address than the one this run funded')
                 .toHaveValue(owner);
-            await picker(secondRow, 'Action').selectOption('BROADCAST');
+            await pickOption(picker(secondRow, 'Action'), 'BROADCAST');
             await paramsBox(secondRow)
                 .fill(JSON.stringify({ VERSION: '0', MESSAGE: msgTwo }));
 
-            await main.getByRole('button', { name: 'Sign and send queue', exact: true }).click();
-            await main.getByRole('checkbox').check();
+            await main.getByRole('button', { name: 'Sign and Send Queue', exact: true }).click();
+            // Review carries no acknowledgement checkbox; each row's confirm
+            // screen states the no-rollback fact instead.
+            await expect(main.getByRole('checkbox'), 'Review still gates Sign all on a checkbox').toHaveCount(0);
             await main.getByRole('button', { name: 'Sign all', exact: true }).click();
 
             await expect(main.getByText(/^Action 1 of 2\./),

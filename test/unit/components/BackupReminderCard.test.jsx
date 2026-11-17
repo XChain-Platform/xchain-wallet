@@ -74,38 +74,53 @@ describe('BackupReminderCard', () => {
 
         const card = await screen.findByRole('region', { name: 'Back up your wallet' });
         expect(card).toHaveTextContent(/save your recovery phrase or export an encrypted backup/i);
-        expect(screen.getByRole('button', { name: 'Back up now' })).toBeEnabled();
-        expect(screen.getByRole('button', { name: 'Remind me tomorrow' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Back Up Now' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Remind Me Tomorrow' })).toBeEnabled();
     });
 
-    it('uses the shared small control size for both actions', async () => {
+    it('uses the shared small control size for the one action', async () => {
         mount();
 
-        const backup = await screen.findByRole('button', { name: 'Back up now' });
-        const remind = screen.getByRole('button', { name: 'Remind me tomorrow' });
+        const backup = await screen.findByRole('button', { name: 'Back Up Now' });
         expect(backup).toHaveClass(buttonStyles.btn, buttonStyles.sm);
-        expect(remind).toHaveClass(buttonStyles.btn, buttonStyles.sm);
     });
 
-    it.each([360, 844, 1280])('wraps whole action buttons inside the card at %ipx', async (viewportWidth) => {
-        Object.defineProperty(window, 'innerWidth', { configurable: true, value: viewportWidth });
+    it('is an info Notice with one action and the X as the snooze, not a card', async () => {
         mount();
 
-        const backup = await screen.findByRole('button', { name: 'Back up now' });
-        const remind = screen.getByRole('button', { name: 'Remind me tomorrow' });
-        expect(backup.parentElement).toBe(remind.parentElement);
-        expect(cardStyles).toMatch(
-            /\.actions\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*wrap;[^}]*max-width:\s*100%;[^}]*min-width:\s*0;/,
-        );
+        const region = await screen.findByRole('region', { name: 'Back up your wallet' });
+        const notice = region.querySelector('[data-tone]');
+        expect(notice).toHaveAttribute('data-tone', 'info');
+        // Static page content, so not a live region.
+        expect(notice).not.toHaveAttribute('role');
+        expect(notice.querySelectorAll('button:not([data-notice-dismiss])')).toHaveLength(1);
+        const snooze = screen.getByRole('button', { name: 'Remind Me Tomorrow' });
+        expect(snooze).toHaveAttribute('data-notice-dismiss');
+        expect(notice.lastElementChild).toBe(snooze);
+        expect(cardStyles).not.toMatch(/var\(--xc-(warning|danger)/);
+    });
+
+    it('turns firm after seven funded days: a danger Notice with no X', async () => {
+        const { unmount } = mount();
+        await screen.findByRole('region', { name: 'Back up your wallet' });
+        unmount();
+
+        vi.setSystemTime(NOW + 8 * 24 * 60 * 60 * 1000);
+        mount();
+
+        const region = await screen.findByRole('region', { name: 'Back up your wallet' });
+        expect(region.querySelector('[data-tone]')).toHaveAttribute('data-tone', 'danger');
+        expect(screen.getByRole('button', { name: 'Back Up Now' })).toBeEnabled();
+        expect(screen.queryByRole('button', { name: 'Remind Me Tomorrow' })).toBeNull();
     });
 
     it('runs the backup action and snoozes the gentle reminder for 24 hours', async () => {
         const onAction = vi.fn();
         const { unmount } = mount({ onAction });
-        fireEvent.click(await screen.findByRole('button', { name: 'Back up now' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Back Up Now' }));
         expect(onAction).toHaveBeenCalledTimes(1);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Remind me tomorrow' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Remind Me Tomorrow' }));
         await waitFor(() => expect(screen.queryByRole('region')).toBeNull());
 
         unmount();

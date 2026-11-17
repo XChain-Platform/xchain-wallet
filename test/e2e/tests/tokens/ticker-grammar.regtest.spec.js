@@ -78,7 +78,7 @@
 //       --config=playwright.regtest.config.js tests/tokens/ticker-grammar.regtest.spec.js
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, openPaletteCommand, submitTokenWizard, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openIssueSection, openPaletteCommand, submitTokenWizard, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal,
     fundAddress,
@@ -297,29 +297,43 @@ async function reloadToHome(page) {
 }
 
 /**
- * Walks the Create-token wizard to its details stage on the Custom template and
- * returns the `main` scope.
+ * Opens the Issue Token form with no template picked and returns the `main`
+ * scope.
  *
- * Custom because it is the template with a bare `Supply` field and no extra
- * required inputs, so nothing but the ticker can be the reason a submit is
- * refused.
+ * No template, because the bare form has a plain `Max supply` field and no
+ * extra required inputs, so nothing but the ticker can be the reason a submit
+ * is refused.
  *
  * `selectVenueChain` is NOT optional here even though `switchToRegtest` has
  * already run: that only flips the NETWORK, and every form defaults to Bitcoin.
- * A wizard driven without this composes on the wrong chain while the fixture
- * reads this one's explorer.
+ * A form driven without this composes on the wrong chain while the fixture
+ * reads this one's explorer. The network sits in the From section, which starts
+ * closed.
  */
 async function openWizardDetails(page) {
     await reloadToHome(page);
     await openPaletteCommand(page, 'Create a token');
     const main = page.getByRole('main');
-    await main.getByRole('button', { name: /^Custom/ }).click();
+    await openIssueSection(main, 'From');
     await selectVenueChain(main);
-    await main.getByRole('button', { name: 'Next', exact: true }).click();
-    await expect(main.getByLabel('Token name (ticker)'),
-        'the wizard never reached its details stage, so no ticker was ever offered to it')
+    await expect(main.getByLabel('Ticker', { exact: true }),
+        'the Issue Token form never showed its ticker field')
         .toBeVisible({ timeout: 30_000 });
     return main;
+}
+
+/**
+ * Picks the venue chain on the open Issue Token form and returns the address it
+ * signs with. The signer resolves in an effect after the network changes, so it
+ * is polled rather than read once.
+ */
+async function readIssueSource(probe) {
+    await openIssueSection(probe, 'From');
+    await selectVenueChain(probe);
+    await expect.poll(async () => probe.getByLabel('From address').inputValue().catch(() => ''),
+        { timeout: 30_000, message: 'the Issue Token form names no signing address' })
+        .toMatch(REGTEST_ADDRESS_RE);
+    return probe.getByLabel('From address').inputValue();
 }
 
 /**
@@ -360,12 +374,12 @@ async function confirmOrSkipOnRateLimit(page, what = 'this action', timeoutMs = 
 
 async function submitWizardName(page, tick) {
     const main = await openWizardDetails(page);
-    const field = main.getByLabel('Token name (ticker)');
+    const field = main.getByLabel('Ticker', { exact: true });
     await field.fill(tick);
     const held = await field.inputValue();
-    await main.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
+    await main.getByLabel('Max supply', { exact: true }).fill(String(SUPPLY));
     const grammar = page.getByRole('alert')
-        .filter({ hasText: /Token name (?:cannot|can only use|is required)/ });
+        .filter({ hasText: /Ticker (?:cannot|can only use|is required)/ });
     await submitTokenWizard(page);
     const confirm = page.getByTestId('confirm-modal');
     // Raced rather than waited on in sequence: a refused submit never composes
@@ -429,14 +443,11 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
             await createWallet(page, { password: PASSWORD, name: 'Ticker Grammar Wallet' });
             await switchToRegtest(page, PASSWORD);
 
-            // Read off the DIRECT Issue form, which is the surface with a
-            // "From" field; the wizard auto-picks its signer and shows it only
-            // on the subtoken template's chain step.
+            // Read off the Issue Token form's From section.
             await openPaletteCommand(page, 'Issue token');
             const probe = page.getByRole('main');
-            await expect(probe.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(probe);
-            source = await probe.getByLabel('From').inputValue();
+            await expect(probe.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
+            source = await readIssueSource(probe);
             expect(source, `the wallet has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
 
@@ -516,11 +527,13 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
                 'the venue will not price the tick this step issues').toBe('valid');
 
             const main = await openWizardDetails(page);
-            await main.getByLabel('Token name (ticker)').fill(ISSUED_TICK);
-            await main.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
+            await main.getByLabel('Ticker', { exact: true }).fill(ISSUED_TICK);
+            await main.getByLabel('Max supply', { exact: true }).fill(String(SUPPLY));
             // The coin lane: FUNDING carries this leg's protocol fee, and the
             // wallet holds no XCHAIN, so the Bitcoin default (XCHAIN) would be
             // refused for insufficient funds before the ticker is ever tested.
+            // The fee switch sits in the Fees section, closed until opened.
+            await openIssueSection(main, 'Speed and Fees');
             await payProtocolFeeInCoin(main);
             await submitTokenWizard(page);
 
@@ -710,9 +723,10 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
             await reloadToHome(page);
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(main.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
+            await openIssueSection(main, 'From');
             await selectVenueChain(main);
-            const field = main.getByLabel('Ticker');
+            const field = main.getByLabel('Ticker', { exact: true });
             await field.fill(tick.toLowerCase());
             expect(await field.inputValue(),
                 'the direct form still uppercases what is typed, so the two surfaces have drifted '
@@ -720,8 +734,8 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBe(tick.toLowerCase());
 
             await field.fill(tick);
-            await main.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
-            await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+            await main.getByLabel('Max supply', { exact: true }).fill(String(SUPPLY));
+            await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
 
             await expect(page.getByTestId('confirm-modal'),
                 'the direct Issue form refused a symbol-bearing ticker, so the two authoring '
@@ -733,11 +747,12 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
             await reloadToHome(page);
             await openPaletteCommand(page, 'Issue token');
             const second = page.getByRole('main');
-            await expect(second.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(second.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
+            await openIssueSection(second, 'From');
             await selectVenueChain(second);
-            await second.getByLabel('Ticker').fill(CARET_TICK);
-            await second.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
-            await second.getByRole('button', { name: 'Issue token', exact: true }).click();
+            await second.getByLabel('Ticker', { exact: true }).fill(CARET_TICK);
+            await second.getByLabel('Max supply', { exact: true }).fill(String(SUPPLY));
+            await second.getByRole('button', { name: 'Issue Token', exact: true }).click();
 
             const alert = page.getByRole('alert').filter({ hasText: /Ticker cannot contain \^/ });
             await expect(alert,
@@ -753,6 +768,8 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
             // measured reason the second test in this file cannot run on this
             // venue, taken off the screen rather than argued from source.
             const main = await openWizardDetails(page);
+            // The fee lane sits in the Fees section, closed until opened.
+            await openIssueSection(main, 'Speed and Fees');
             const xchainSwitch = main.getByRole('switch', { name: /instead of XCHAIN/ });
 
             if (NATIVE_FEE_MANDATORY) {
@@ -834,9 +851,8 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Issue token');
             const probe = page.getByRole('main');
-            await expect(probe.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(probe);
-            source = await probe.getByLabel('From').inputValue();
+            await expect(probe.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
+            source = await readIssueSource(probe);
             expect(source).toMatch(REGTEST_ADDRESS_RE);
 
             await fundAddress(source, FUNDING);
@@ -875,9 +891,11 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
             // Left OFF, which is the default (`useNativeFee` seeds optIn false
             // and Bitcoin is the one chain where `mandatory` does not override
             // it), so this is the lane an ordinary Bitcoin user composes in.
+            // The switch sits in the Fees section, closed until opened.
+            await openIssueSection(main, 'Speed and Fees');
             await expect(main.getByRole('switch', { name: /instead of XCHAIN/ })).not.toBeChecked();
-            await main.getByLabel('Token name (ticker)').fill(TICK);
-            await main.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
+            await main.getByLabel('Ticker', { exact: true }).fill(TICK);
+            await main.getByLabel('Max supply', { exact: true }).fill(String(SUPPLY));
             await submitTokenWizard(page);
 
             await confirmOrSkipOnRateLimit(page, 'this action', 90_000);

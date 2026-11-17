@@ -99,7 +99,7 @@ async function openConnectedSites(page) {
     const row = page.getByRole('main').getByRole('button', { name: /^Connected sites/ }).first();
     await expect(row).toBeVisible({ timeout: 30_000 });
     await row.click();
-    await expect(page.getByLabel('Origin or wildcard to block')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('radio', { name: 'Allowed' })).toBeVisible({ timeout: 30_000 });
 }
 
 test.describe('Injected-provider approvals and connected sites', () => {
@@ -147,7 +147,10 @@ test.describe('Injected-provider approvals and connected sites', () => {
 
         await openConnectedSites(page);
         const main = page.getByRole('main');
-        await expect(main.getByText(DAPP_NAME, { exact: true })).toBeVisible();
+        // The Allowed list row opens the site detail, which carries the origin and Disconnect.
+        const siteRow = main.getByRole('button', { name: new RegExp(DAPP_NAME) });
+        await expect(siteRow).toBeVisible();
+        await siteRow.click();
         await expect(main.getByText(DAPP_ORIGIN, { exact: true })).toBeVisible();
 
         await main.getByRole('button', { name: 'Disconnect', exact: true }).click();

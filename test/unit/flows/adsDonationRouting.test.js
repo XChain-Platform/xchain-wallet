@@ -8,21 +8,23 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// ADS donation routing over the shipped descriptors: the per-chain
-// donationAddressRole setting picks DONATE1, DONATE2 or EXPLORER (DONATE1
-// when unset), the picked address is the one the donation output pays, and
-// a testnet or regtest chain can never resolve to a mainnet address.
+// Automatic donation routing over the shipped descriptors: the one wallet-wide
+// recipient (Protocol, Community, Explorer) picks the registry's DONATE1,
+// DONATE2 or EXPLORER address on the network of the send that carries it. Only
+// mainnet sends pay: a testnet or regtest send carries no donation at all.
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { bitcoinDescriptors } from '../../../packages/core/src/registry/descriptors/bitcoin.js';
 import { dogecoinDescriptors } from '../../../packages/core/src/registry/descriptors/dogecoin.js';
 import { litecoinDescriptors } from '../../../packages/core/src/registry/descriptors/litecoin.js';
-import {
-    applyAdsPlanToEncoderOpts,
-    resolveAdsPlanForNextTx,
-} from '../../../packages/core/src/flows/ads.js';
+import { ADS_RECIPIENT_ROLE, resolveAdsPayout } from '../../../packages/core/src/flows/ads.js';
 import { ADS_DONATION_ADDRESS_ROLES } from '../../../packages/core/src/registry/validate.js';
-import { deflateSettings, inflateSettings } from '../../../packages/core/src/schemas/settings.js';
+import {
+    ADS_RECIPIENTS,
+    createDefaultSettings,
+    deflateSettings,
+    inflateSettings,
+} from '../../../packages/core/src/schemas/settings.js';
 
 const COINS = [
     ['bitcoin', bitcoinDescriptors],
@@ -30,28 +32,20 @@ const COINS = [
     ['dogecoin', dogecoinDescriptors],
 ];
 
-// Accumulator already at the trigger, so the next transaction carries the donation.
-const settingsFor = (descriptor, donationAddressRole) => ({
-    ads: {
-        enabled: true,
-        perChain: {
-            [descriptor.id]: {
-                perTxAmountSats: null,
-                triggerAmountSats: null,
-                accumulatedSats: descriptor.adsDefaults.triggerAmountSats,
-                lifetimeDonatedSats: 0,
-                lifetimeTxCount: 25,
-                ...(donationAddressRole ? { donationAddressRole } : {}),
-            },
-        },
-    },
+const settingsFor = (recipient) => {
+    const s = createDefaultSettings();
+    return { ...s, ads: { ...s.ads, queued: '25', sendAt: '25', ...(recipient ? { recipient } : {}) } };
+};
+const registryOf = (descriptor) => ({ get: (id) => (id === descriptor.id ? descriptor : undefined) });
+const rateLoader = vi.fn(async () => ({ rate: 1, stale: false }));
+
+describe('each recipient maps to one registry role', () => {
+    it('covers the three roles exactly', () => {
+        expect(ADS_RECIPIENTS.map((r) => ADS_RECIPIENT_ROLE[r]).sort()).toEqual([...ADS_DONATION_ADDRESS_ROLES].sort());
+    });
 });
 
-const registryOf = (descriptor) => ({
-    get: (chainId) => (chainId === descriptor.id ? descriptor : undefined),
-});
-
-describe.each(COINS)('%s ADS donation routing', (_coin, descriptors) => {
+describe.each(COINS)('%s donation routing', (_coin, descriptors) => {
     const mainnet = descriptors.find((d) => d.networkKind === 'mainnet');
     const mainnetAddresses = Object.values(mainnet.adsDonationAddresses);
 
@@ -61,56 +55,54 @@ describe.each(COINS)('%s ADS donation routing', (_coin, descriptors) => {
         expect(new Set(all).size).toBe(all.length);
     });
 
-    it.each(descriptors.map((d) => [d.id, d]))('%s defaults to its own DONATE1', (_id, descriptor) => {
-        const plan = resolveAdsPlanForNextTx(settingsFor(descriptor), descriptor.id, registryOf(descriptor));
-        expect(plan).toMatchObject({
-            canSubmit: true,
-            reason: 'ok',
-            donationAddress: descriptor.adsDonationAddresses.DONATE1,
+    it(`${mainnet.id} defaults to its own DONATE1 (Protocol)`, async () => {
+        const plan = await resolveAdsPayout({
+            settings: settingsFor(), chainId: mainnet.id, chainRegistry: registryOf(mainnet), rateLoader,
         });
+        expect(plan).toMatchObject({ canSubmit: true, reason: 'ok', donationAddress: mainnet.adsDonationAddresses.DONATE1 });
     });
 
+    it.each(ADS_RECIPIENTS.map((recipient) => [mainnet.id, recipient]))('%s pays the %s address', async (_id, recipient) => {
+        const plan = await resolveAdsPayout({
+            settings: settingsFor(recipient), chainId: mainnet.id, chainRegistry: registryOf(mainnet), rateLoader,
+        });
+        expect(plan.donationAddress).toBe(mainnet.adsDonationAddresses[ADS_RECIPIENT_ROLE[recipient]]);
+    });
+
+    // Only mainnet counts: test-network coins never pay the queue mainnet
+    // sends built, whichever network the wallet is switched to.
     const nonMainnet = descriptors.filter((d) => d.networkKind !== 'mainnet');
-    const cases = nonMainnet.flatMap((d) => ADS_DONATION_ADDRESS_ROLES.map((role) => [d.id, role, d]));
+    const cases = nonMainnet.flatMap((d) => ADS_RECIPIENTS.map((recipient) => [d.id, recipient, d]));
 
-    it.each(cases)('%s pays the chosen %s address and never a mainnet one', (_id, role, descriptor) => {
-        const existingOutput = { address: 'recipient', value: 1 };
-        const result = applyAdsPlanToEncoderOpts(
-            settingsFor(descriptor, role),
-            descriptor.id,
-            registryOf(descriptor),
-            { customOutputs: [existingOutput] },
-        );
-        expect(result.adsPlan.canSubmit).toBe(true);
-        expect(result.encoderOpts.customOutputs).toEqual([
-            existingOutput,
-            {
-                address: descriptor.adsDonationAddresses[role],
-                value: descriptor.adsDefaults.triggerAmountSats,
-            },
-        ]);
-        expect(mainnetAddresses).not.toContain(result.adsPlan.donationAddress);
+    it.each(cases)('%s never pays a %s donation', async (_id, recipient, descriptor) => {
+        for (const activeNetwork of ['mainnet', descriptor.networkKind]) {
+            const plan = await resolveAdsPayout({
+                settings: { ...settingsFor(recipient), activeNetwork },
+                chainId: descriptor.id, chainRegistry: registryOf(descriptor), rateLoader,
+            });
+            expect(plan).toMatchObject({ canSubmit: false, reason: 'test-network', donationAddress: null, donationAmount: 0 });
+        }
     });
 
-    it('refuses to submit for an unknown role instead of falling back to another address', () => {
-        const descriptor = nonMainnet[0];
-        const plan = resolveAdsPlanForNextTx(
-            settingsFor(descriptor, 'DONATE9'),
-            descriptor.id,
-            registryOf(descriptor),
-        );
-        expect(plan.canSubmit).toBe(false);
-        expect(plan.donationAddress).toBeNull();
+    it(`${mainnet.id} pays nothing while the wallet is on a test network`, async () => {
+        for (const activeNetwork of ['testnet', 'regtest']) {
+            const plan = await resolveAdsPayout({
+                settings: { ...settingsFor(), activeNetwork }, chainId: mainnet.id, chainRegistry: registryOf(mainnet), rateLoader,
+            });
+            expect(plan).toMatchObject({ canSubmit: false, reason: 'test-network' });
+            expect(mainnetAddresses).not.toContain(plan.donationAddress);
+        }
     });
 });
 
-describe('donationAddressRole setting persistence', () => {
-    it('survives a deflate and inflate round trip', () => {
-        const descriptor = litecoinDescriptors.find((d) => d.networkKind === 'testnet');
-        const full = inflateSettings(settingsFor(descriptor, 'DONATE2'));
-        const restored = inflateSettings(deflateSettings(full));
-        expect(restored.ads.perChain[descriptor.id].donationAddressRole).toBe('DONATE2');
-        const plan = resolveAdsPlanForNextTx(restored, descriptor.id, registryOf(descriptor));
+describe('the recipient setting persists', () => {
+    it('survives a deflate and inflate round trip', async () => {
+        const descriptor = litecoinDescriptors.find((d) => d.networkKind === 'mainnet');
+        const restored = inflateSettings(deflateSettings(settingsFor('community')));
+        expect(restored.ads.recipient).toBe('community');
+        const plan = await resolveAdsPayout({
+            settings: restored, chainId: descriptor.id, chainRegistry: registryOf(descriptor), rateLoader,
+        });
         expect(plan.donationAddress).toBe(descriptor.adsDonationAddresses.DONATE2);
     });
 });

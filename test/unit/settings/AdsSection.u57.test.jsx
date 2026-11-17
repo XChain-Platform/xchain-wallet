@@ -1,24 +1,17 @@
 // Copyright © 2025-2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// U57 and U33 on Settings > Automatic donation system: each per-chain field
-// carries a tip written for it, and each chain card keeps a block inset so
-// its last line never sits on the row divider under it.
+// U57 and G08 on Settings > Automatic Donations: each changeable row carries
+// a tip written for it, the rows are the shared SettingsInlineRow in labelled
+// group cards, and the header card has no progress bar.
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { seedSettingsForChains } from '../../../packages/core/src/flows/seedSettings.js';
-import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 
-const settings = seedSettingsForChains(
-    { ...createDefaultSettings(), activeNetwork: 'mainnet' },
-    defaultRegistry(),
-    ['bitcoin-mainnet'],
-);
-settings.ads = { ...settings.ads, enabled: true };
+const settings = createDefaultSettings();
 
 vi.mock('../../../packages/core/src/shared/hooks/useSettings.js', () => ({
     useSettings: () => ({ settings, loading: false, error: null, update: vi.fn() }),
@@ -30,31 +23,34 @@ const { AdsSection } = await import(
 
 afterEach(() => cleanup());
 
-function chainCard() {
-    return screen.getByRole('heading', { level: 2, name: 'Bitcoin' }).parentElement;
-}
-
-describe('Ads per-chain field tips (U57)', () => {
+describe('Automatic Donations row tips (U57)', () => {
     it.each([
-        [/^Set aside per outgoing transaction/, /set aside from each outgoing transaction/],
-        [/^Send donation when pending reaches/, /sent as one donation with your next transaction/],
-        [/^Donate to/, /published donation address on this network receives/],
-        [/^Donation address/, /read from the network registry/],
-    ])('explains %s from its label tip', (label, help) => {
+        ['ads-per-transaction', /every mainnet transaction this wallet sends, on any blockchain\. Testnet and regtest sends add nothing/],
+        ['ads-send-at', /if that address can also cover it and its fee/],
+        ['ads-donate-to', /The review screen names the donation before you approve/],
+    ])('explains %s from its tip', (id, help) => {
         render(<AdsSection />);
-        const card = chainCard();
-        const labelNode = within(card).getAllByText(label)[0];
-        const row = labelNode.closest('div');
-        const tip = within(row).getByRole('button');
-        fireEvent.click(tip);
-        expect(within(card).getByText(help)).toBeTruthy();
+        const rowNode = document.querySelector(`[data-settings-row-id="${id}"]`);
+        fireEvent.click(within(rowNode).getAllByRole('button').find((b) => !b.getAttribute('aria-haspopup')
+            && b.getAttribute('role') !== 'combobox'));
+        expect(screen.getByText(help)).toBeTruthy();
     });
 });
 
-describe('Ads chain card inset (U33)', () => {
-    it('keeps a block inset on the first and last child, outside the card rule', () => {
+describe('Automatic Donations layout (G08)', () => {
+    it('renders every row through the shared inline row inside labelled cards', () => {
+        render(<AdsSection />);
+        expect(screen.getByRole('list', { name: 'Donation' }).querySelectorAll('[data-settings-inline]')).toHaveLength(3);
+        expect(screen.getByRole('list', { name: 'Totals' }).querySelectorAll('[data-settings-inline="static"]')).toHaveLength(2);
+    });
+
+    it('uses the heart in the Notice Standard instead of a custom header card', () => {
+        render(<AdsSection />);
+        const hero = screen.getByTestId('ads-hero');
+        expect(hero).toHaveAttribute('data-tone', 'info');
+        expect(hero.querySelector('.lucide-heart')).not.toBeNull();
         const css = readFileSync(join(process.cwd(), 'packages/core/src/shared/components/settings/AdsSection.module.css'), 'utf8');
-        expect(css).toMatch(/\.chain > :first-child\s*\{\s*margin-block-start:\s*var\(--xc-space-3\);/);
-        expect(css).toMatch(/\.chain > :last-child\s*\{\s*margin-block-end:\s*var\(--xc-space-3\);/);
+        expect(css).not.toMatch(/\.hero\s*\{/);
+        expect(css).toMatch(/\.heroNotice > span:first-child svg\s*\{[^}]*width:\s*var\(--xc-space-8\);/s);
     });
 });

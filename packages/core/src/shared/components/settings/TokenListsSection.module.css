@@ -1,0 +1,37 @@
+.list {
+    composes: flush from '../../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.list > li {
+    min-width: 0;
+}
+
+.list > li + li {
+    border-block-start: 1px solid var(--xc-border);
+}
+
+.actionIcon {
+    display: inline-flex;
+    width: var(--xc-icon-lg);
+    height: var(--xc-icon-lg);
+    align-items: center;
+    justify-content: center;
+    color: var(--xc-accent-text);
+}
+
+.subtitle {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+}
+
+.watching {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+}

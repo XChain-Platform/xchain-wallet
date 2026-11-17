@@ -30,9 +30,12 @@ describe('FormSection trailing slot', () => {
 });
 
 describe('OracleForm help affordance', () => {
-    it('passes its InfoTip to the section heading instead of floating above it', () => {
+    it('hands each explanation to a field help prop instead of a tip floating above a section', () => {
         const source = readFileSync('packages/core/src/shared/routes/OracleForm.jsx', 'utf8');
-        expect(source).toMatch(/title="Prices"\s+trailing=\{<InfoTip/);
-        expect(source.match(/<InfoTip/g)).toHaveLength(1);
+        expect(source).toMatch(/title="Price"/);
+        expect(source).toMatch(/title="Published Prices"/);
+        expect(source).toMatch(/help="The price published for one token in the selected currency, with up to 8 decimal places\."/);
+        expect(source).not.toMatch(/trailing=\{<InfoTip/);
+        expect(source.match(/<InfoTip/g)).toBeNull();
     });
 });

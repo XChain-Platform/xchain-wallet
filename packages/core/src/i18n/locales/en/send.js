@@ -15,13 +15,11 @@
 import { addEnglish } from '../../store.js';
 
 const messages = {
-    'send.demo.blocked': "Demo wallets can't move funds. Create a real wallet to send.",
-    'send.demo.createRealWallet': 'Create a real wallet',
+    'send.demo.createRealWallet': 'Create a Real Wallet',
     'send.empty.title': 'Nothing to send yet',
     'send.max.coinsHeld':
         "Every coin at this address is held by another send from this wallet that hasn't gone out yet, so Max can't create a payment.",
     'send.empty.body': 'Receive coins or tokens on this network before creating a payment.',
-    'send.review': 'Review and send',
     'send.backToEdit': 'Edit payment',
     'send.memoForbiddenChars': "A memo can't include a vertical bar (|) or semicolon (;).",
     'send.passwordHint': 'Enter your wallet password to sign this transaction.',
@@ -29,12 +27,11 @@ const messages = {
     'send.testGate.title': 'First payment to this address. Send a small test first?',
     'send.testGate.body':
         'You are sending {amount} {ticker} to a new recipient. A small test payment helps you confirm the address before sending the full amount.',
-    'send.testGate.sendSmall': 'Send a small test first',
-    'send.testGate.continue': 'Continue with the full amount',
+    'send.testGate.sendSmall': 'Send a Small Test First',
+    'send.testGate.continue': 'Continue with the Full Amount',
     'send.signerMode':
-        "This wallet is in signer mode. It can sign transactions from a watch-only wallet, but it can't send them to the network. To send from this device, change the mode under Settings, Wallet mode.",
+        "This wallet is the signer for another phone. It signs transactions built on that phone, but it can't send them to the network. Its wallet mode is shown on Wallet Details and was chosen when the wallet was set up.",
     'send.networkFeeValue': 'Network fee: {amount} {ticker}',
-    'send.totalValue': 'Total: {amount} {ticker}',
     'send.totalTokenCostValue': 'Total token cost: {amount}',
     'send.queued.body':
         "Your transaction is signed but couldn't reach the network. It's waiting in the queued-transactions banner and only goes out when you broadcast it from there. The wallet reminds you when the network is back. Don't send this payment again.",
@@ -45,53 +42,63 @@ const messages = {
     'send.success.failedBody': 'The transaction failed.',
     'send.contacts.refreshFailed': "Couldn't refresh contacts. Saved addresses may be out of date.",
     'send.success.viewOnExplorer': 'View in block explorer',
-    'send.success.sendAnother': 'Send another',
+    'send.success.sendAnother': 'Send Another',
     'send.fields.amount': 'Amount',
     'send.fields.to': 'To',
+    // A closed section's summary naming where it goes; the address is drawn
+    // as a fitting AddressText at {address} (G99).
+    'send.summary.toAddress': 'to {address}',
+    'send.summary.toAddressStart': 'To {address}',
     'send.fields.chain': 'Network',
     'send.fields.from': 'From',
     'send.fields.token': 'Token',
+    'send.asset': 'Asset',
+    'send.selectAsset': 'Select an asset',
+    'send.section.payment': 'Payment',
     'send.reviewLabel': 'Review payment',
-    'send.review.createUnsigned': 'Create transaction for signing',
+    'send.review.createUnsigned': 'Create Transaction for Signing',
     'send.review.sign': 'Sign',
-    'send.review.submitAction': '{label}',
-    'send.advanced.label': 'Advanced send choices',
     'send.advanced.none': 'None',
     'send.advanced.feeBumping': 'Fee bumping',
     'send.advanced.allowed': 'Allowed',
-    'send.advanced.notAllowed': 'Not allowed',
     'send.advanced.coinControl': 'Coin control',
     'send.advanced.coinControlEnabled': 'Coin control enabled',
+    'send.advanced.coinControlHelp': 'On lets you pick which coins at this address pay for this transaction; off lets the wallet choose.',
     'send.advanced.coinControlReady': 'Choose exactly which coins fund this transaction.',
     'send.advanced.coinControlUnavailable': "Coin control is unavailable while spendable inputs can't be loaded.",
     'send.advanced.loadingInputs': 'Loading spendable inputs…',
     'send.advanced.inputs': 'Inputs',
+    'send.advanced.inputsHelp': 'Tick the coins that pay for this transaction. Only the ticked coins are spent.',
     'send.advanced.noInputsTitle': 'No spendable inputs',
     'send.advanced.noInputs': 'Inputs this wallet can spend appear here.',
     'send.advanced.changeAddress': 'Change address',
     'send.advanced.automaticChange': 'Automatic: {address}',
-    'send.advanced.changeHint': 'Any leftover native coin returns here.',
     'send.advanced.availableCount': '{count} available',
-    'send.advanced.selectAll': 'Select all',
-    'send.advanced.rowsCapped': 'Showing {shown} of {count} inputs. Select all includes every input.',
+    'send.advanced.selectAll': 'Select All',
+    'send.advanced.rowsCapped': 'Showing {shown} of {count} inputs. Select All includes every input.',
     'send.advanced.dust': 'Dust',
     'send.advanced.dustTitle': 'Below the {sats} sat dust threshold',
     'send.advanced.summaryLabel': 'Coin control summary',
     'send.advanced.selectedTotal': 'Selected total',
     'send.advanced.approxChange': 'Approx. change',
-    'send.review.multiTokenPreview':
-        'This payment includes more than one token. The balance preview shows one token at a time, but every recipient and amount appears under Details.',
-    'send.review.details': 'Details ({count})',
+    'send.advanced.changeHelp': 'Where any leftover native coin from this transaction returns. Automatic sends it back to the paying address, or to a fresh one when change rotation is on.',
+    'send.advanced.freshChange': 'a fresh address',
+    'send.advanced.changeAddressTitle': 'Change Address',
+    'send.advanced.coinsRequired': 'Choose at least one coin under Advanced, or turn coin control off.',
+    'send.advanced.summaryDefault': 'Default',
+    'send.advanced.summaryRbfOn': 'Fee bumping on',
+    'send.advanced.summaryRbfOff': 'Fee bumping off',
+    'send.advanced.summaryCoin': '1 coin',
+    'send.advanced.summaryCoins': '{count} coins',
+    'send.advanced.summaryChange': 'custom change',
     'send.device.trezor': 'Trezor',
     'send.device.ledger': 'Ledger',
     'send.watcherHardware':
-        "This address is paired with {device}, but a watch-only wallet can't sign. Pair the same {device} with your signer wallet to sign the transaction.",
-    'send.useMax': 'Use max',
-    'send.fromAddress': 'From address',
+        "This address belongs to {device}, but another phone signs for this wallet. Connect the same {device} on the phone that signs to sign the transaction.",
+    'send.useMax': 'Use Max',
+    'send.fromAddress': 'From Address',
     'send.draft.restore': 'Restore',
     'send.draft.unfinished': 'Your unfinished payment was saved as a draft. Restore it to continue. Nothing was sent.',
-    'send.draft.discardLabel': 'Discard saved draft',
-    'send.draft.discard': 'Discard',
     'send.source.choose': 'Choose source address',
     'send.source.hint': 'Only what this address holds can be sent.',
     'send.source.multisigTitle': 'Multisig {threshold} of {count}',
@@ -103,6 +110,7 @@ const messages = {
     'send.offline.bodyNoCache': 'Sending needs a network connection.',
     'send.offline.body': 'Sending needs a network connection. Your cached balance remains available.',
     'send.offline.title': 'Sending needs a network connection',
+    'send.max.nothingToSend': 'Nothing is available to send from this address.',
     'send.destination.placeholder': 'Enter an address or name…',
     'send.destination.help':
         'The address or contact that receives this payment. Check the address carefully; a sent payment is final.',
@@ -110,9 +118,9 @@ const messages = {
         'How much of the selected asset to send. Max fills the most this From address can send after the network fee.',
     'send.paste.checkLabel': 'Check pasted recipient',
     'send.paste.checkHint': 'Compare the first and last 6 characters.',
-    'send.saveRecipient.open': 'Save recipient',
+    'send.saveRecipient.open': 'Save Recipient',
     'send.saveRecipient.nameHelp': 'The name used for this recipient in your contacts.',
-    'send.saveRecipient.save': 'Save contact',
+    'send.saveRecipient.save': 'Save Contact',
     'send.saveRecipient.saving': 'Saving…',
     'send.saveRecipient.saved': 'Recipient saved to contacts.',
     'send.token.hint': "Choose the coin or token to send. The network's own coin is selected by default.",
@@ -123,27 +131,11 @@ const messages = {
         'This address holds {balance} {tick} now, less than the {amount} {tick} this destroy burns. Nothing was signed. Review the amount and try again.',
     'send.destroy.balanceUnread':
         "Couldn't read this address's {tick} balance, so nothing was signed. Check your connection and try again.",
-    'send.dividend.retryHolders': 'Retry holder list',
+    'send.dividend.retryHolders': 'Retry Holder List',
     'send.dividend.holdersIncomplete':
         'The holder list is incomplete. Retry before paying this dividend.',
     'send.dividend.holdersChanged':
         'The holder list changed. Review the updated payout, then try again.',
-    'send.recipient.heading': 'Recipient {number}',
-    'send.recipient.removeLabel': 'Remove recipient {number}',
-    'send.recipient.addressLabel': 'Recipient {number} address',
-    'send.recipient.tokenLabel': 'Recipient {number} token',
-    'send.recipient.tokenHelp':
-        'The token this recipient receives. Pick any token you hold on the chosen network.',
-    'send.recipient.amountLabel': 'Recipient {number} amount',
-    'send.recipient.selectToken': 'Select token for recipient {number}',
-    'send.recipient.differentToken': 'Different token per recipient',
-    'send.recipient.differentTokenOff': 'Off: every recipient gets {token}.',
-    'send.recipient.tokenAbove': 'the token above',
-    'send.recipient.total':
-        'Total: {total} across {count, plural, one {# recipient} other {# recipients}}, in one transaction and one network fee.',
-    'send.recipient.add': '+ Add recipient',
-    'send.recipient.maximum':
-        '{count, plural, one {You can include up to # recipient in one payment.} other {You can include up to # recipients in one payment.}} Create another payment for any additional recipients.',
     'send.gated.ready':
         'This token includes protected content. Its unlock key will be attached securely so the recipient can open the content. You can send it only to an address that has already made a transaction.',
     'send.gated.partial':
@@ -155,12 +147,10 @@ const messages = {
     'send.gated.passwordLabel': 'Wallet password',
     'send.gated.passwordHint':
         'Scans messages sent to your addresses for the unlock key and stores it in this wallet.',
-    'send.gated.recover': 'Recover keys',
+    'send.gated.recover': 'Recover Keys',
     'send.networkFee': 'Network fee',
     'send.advanced': 'Advanced',
     'send.memo': 'Memo',
-    'send.memo.help':
-        'The memo is stored with this token send on chain and is readable by anyone, up to 250 characters.',
     'send.paymentRequestMessage': 'Payment request message:',
     'send.rbf.label': 'Allow a higher network fee later',
     'send.rbf.helpLabel': 'Learn about changing the network fee',
@@ -175,9 +165,39 @@ const messages = {
     // own pending record), but the network has not necessarily reported it
     // yet, so the hint sets that expectation instead of letting a still-
     // "awaiting network" row read as broken.
-    'send.success.viewInHistory': 'View in history',
+    'send.success.viewInHistory': 'View in History',
     'send.success.viewInHistoryHint':
         'The transaction already appears in History. Its network status may take up to a minute to update.',
+    'send.sweep.missingKeysNotice':
+        "Unlock keys for {ticks} aren't in the vault, so their gated content may never open in the new wallet.",
+    // The Payment section's Single, Multi and Advanced tabs (Advanced reads
+    // send.advanced). 'Recipients' names the Multi list, the Advanced box and
+    // the review's recipients card alike.
+    'send.mode.label': 'Send to',
+    'send.mode.single': 'Single',
+    'send.mode.multi': 'Multi',
+    'send.multi.listLabel': 'Recipients',
+    'send.multi.newRecipient': 'New recipient',
+    'send.multi.editRecipient': 'Edit recipient {number}',
+    'send.multi.toHelp':
+        'The address that receives this amount. It must be an address on the network this payment is sent on.',
+    'send.multi.tokenHelp': 'The token this recipient receives. Each recipient can get a different token.',
+    'send.multi.amountHelp': 'How much of the token this recipient receives.',
+    'send.multi.add': 'Add',
+    'send.multi.save': 'Update',
+    'send.multi.editRow': 'Edit recipient {number}: {amount} to {address}',
+    'send.multi.removeRow': 'Remove Recipient {number}',
+    'send.multi.addRecipient': 'Add Recipient',
+    'send.multi.limit':
+        'One transaction carries at most {count, plural, one {# recipient} other {# recipients}}. Send to anyone else in another payment.',
+    'send.multi.total':
+        'Total: {total} to {count, plural, one {# recipient} other {# recipients}}, in one transaction with one network fee.',
+    'send.multiText.help':
+        'One recipient per line: {format}. Recipients can get different tokens and amounts, up to {count} in one transaction.',
+    'send.multiText.fileLabel': 'Upload CSV (up to 2 MB)',
+    'send.multiText.fileHelp':
+        'A .csv or .txt file with one recipient per line: {format}. A header row is fine. A valid file fills the box above, where you can still edit it.',
+    'send.multiText.fileInput': 'Choose a CSV file of recipients',
 };
 
 addEnglish(messages);

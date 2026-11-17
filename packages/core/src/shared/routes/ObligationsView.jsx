@@ -8,9 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-    AddressText, Button, ChainBadge, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, StatusMessage,
+    ChainBadge, EmptyState, ListPage, ListRow, PageHeader, Screen, Skeleton, StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -19,11 +19,13 @@ import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
 import {
     classifyObligation,
-    countdownText,
     baseUnitsToCoinText,
     obligationBaseUnits,
 } from '../../market/obligationStatus.js';
-import { coinpayExpiryText } from '../../market/coinpayExpiry.js';
+import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
+import { FillRing } from '../components/FillRing.jsx';
+import { PairIcons } from '../components/PairIcons.jsx';
+import { formatDecimalAmount, trimAmountTail } from '../utils/amountFormat.js';
 import styles from './ObligationsView.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -34,19 +36,24 @@ const PROTOCOL_COIN_TICKER = {
     dogecoin: 'DOGE',
 };
 
+// The default COINPAY window (order_match.js COINPAY_EXPIRATION), used for
+// the ring's share only when the match time is not known.
+const DEFAULT_WINDOW_SECONDS = 2 * 3600;
+
+// Under this many seconds left the ring turns red.
+const URGENT_SECONDS = 30 * 60;
+
 /**
- * §41.4 / PC-15: the COINPAY obligations center. One queue across
- * every chain + address of the wallet listing each pending
- * native-coin payment a matched order is waiting on: payee, amount,
- * live countdown, and a one-tap "Pay now" into CoinpayForm prefilled.
+ * §41.4 / PC-15: Payments due, a quick glance at what is due right now
+ * (operator 2026-11-13, a simplified wallet-payments-due layout 1). One list
+ * card with one row per payment whose window is open: a ring showing how much
+ * of the window is left with the time under it, what the payment buys
+ * ("Buying 600 XCHAIN") and what it pays ("Pay 0.0024 BTC"). A tap opens the
+ * payment's detail (CoinpayForm), where it is approved.
  *
- * State model per row (obligationStatus.js):
- *   - open / at-risk: payable; at-risk (<30min) is flagged act-now.
- *   - expired: the wall-clock deadline passed but the row is still
- *     `pending_coinpay` (expiry only *settles* at the next block past
- *     the deadline). Paying in that gap risks confirming after
- *     expiry, which burns the coin with no token settlement, so
- *     expired rows lose "Pay now" and say what happens instead.
+ * Paid payments leave the scan (it keeps pending_coinpay rows only), and a
+ * payment whose window closed drops off the list: paying it now risks a
+ * confirmation after expiry, which sends the coin without the tokens.
  *
  * This surface is PC-16 auto-pay's visibility/fallback layer: it
  * never signs anything itself; every payment goes through
@@ -93,7 +100,9 @@ function ScopedObligationsView({ walletId, activeAccountId, onPay, onBack }) {
     // Offline the scan holds and the screen says so once; it runs again when
     // the connection returns.
     const { offline, recheck } = useNetworkOffline({ walletId });
-    const { obligations, scanning, error: scanError, refresh } = useCoinpayObligations(
+    // The hook scans on mount, on every poll and when the window becomes
+    // visible again, so the page has no manual refresh control.
+    const { obligations, scanning, error: scanError } = useCoinpayObligations(
         walletId,
         activeAccountId,
         { pollMs: 30_000, offline },
@@ -119,36 +128,48 @@ function ScopedObligationsView({ walletId, activeAccountId, onPay, onBack }) {
         return () => clearInterval(t);
     }, [obligations]);
 
-    const classified = obligations.map((o) => ({
-        ...o,
-        ...classifyObligation(o.expiration, nowSec),
-    }));
-    const payable = classified.filter((o) => o.state !== 'expired');
-    const expired = classified.filter((o) => o.state === 'expired');
+    // Only payments whose window is open are listed; an expired one falls off.
+    const due = obligations
+        .map((o) => ({ ...o, ...classifyObligation(o.expiration, nowSec) }))
+        .filter((o) => o.state !== 'expired');
+
+    const sides = useMatchSides(messaging, obligations);
+
+    // Search matches what is bought or paid: the token, the amount, the coin.
+    const [query, setQuery] = useState('');
+    const needle = query.trim().toLowerCase();
+    const visible = needle === '' ? due : due.filter((o) => rowSearchText(o, sides).includes(needle));
 
     const header = (
         <PageHeader
             onBack={onBack}
-            title="Payments due"
+            title="Payments Due"
+            trailing={showOffline ? null : (
+                <ListFilterMenu
+                    query={query}
+                    onQueryChange={setQuery}
+                    searchPlaceholder="Search"
+                    searchLabel="Search payments due"
+                    label="Filter payments due"
+                />
+            )}
         />
     );
 
     return (
         <Screen variant={variant} header={header}>
-            {/* The page header holds only the title and Back, so Refresh sits in
-                the content's actions row, below the notices. */}
             <ListPage
                 notices={(
                     <>
                         {autopayArmed ? (
                             <p className={styles.hint}>
-                                Auto-pay is armed for {autopayStatus.armed} order{autopayStatus.armed === 1 ? '' : 's'}:
+                                Auto pay is armed for {autopayStatus.armed} order{autopayStatus.armed === 1 ? '' : 's'}:
                                 confirmed matches are paid automatically while the wallet stays unlocked.
                             </p>
                         ) : null}
                         {autopayDisarmed ? (
                             <StatusMessage variant="error" className={styles.hint}>
-                                Auto-pay is disarmed: this wallet has auto-pay orders but cannot sign
+                                Auto pay is disarmed: this wallet has auto pay orders but cannot sign
                                 right now. Unlock the wallet with your password to re-arm it, or pay
                                 matches manually from this queue.
                             </StatusMessage>
@@ -157,11 +178,6 @@ function ScopedObligationsView({ walletId, activeAccountId, onPay, onBack }) {
                             <StatusMessage variant="error" className={styles.hint}>{scanError}</StatusMessage>
                         ) : null}
                     </>
-                )}
-                actions={showOffline ? null : (
-                    <Button variant="secondary" icon={<Icon.RefreshIcon />} onClick={refresh} disabled={scanning || offline}>
-                        Refresh payments
-                    </Button>
                 )}
             >
                 {showOffline ? (
@@ -172,43 +188,23 @@ function ScopedObligationsView({ walletId, activeAccountId, onPay, onBack }) {
                     <p className={styles.hint}>Scanning for payments due…</p>
                 ) : null}
 
-                {!showOffline && !scanning && !scanError && classified.length === 0 ? (
-                    <EmptyState
-                        icon={<Icon.ClockIcon />}
-                        title="All caught up"
-                        body="Matched-order payments appear here until they are settled."
-                    />
+                {!showOffline && !scanError && due.length === 0 && !(scanning && obligations.length === 0) ? (
+                    <EmptyState title="No payments due" body="Matched orders that need a coin payment appear here." />
                 ) : null}
 
-                {payable.length > 0 ? (
+                {!showOffline && due.length > 0 && visible.length === 0 ? (
+                    <EmptyState title="No matching payments" body="Matching payments appear here after you change the search." />
+                ) : null}
+
+                {visible.length > 0 ? (
                     /* Safari needs an explicit list role because this class removes list styling. */
-                    <ul className={styles.list} role="list" aria-label="Pending payments">
-                        {payable.map((o) => (
-                            <ObligationRow key={rowKey(o)} row={o} onPay={onPay} />
+                    <ul className={styles.list} role="list" aria-label="Payments due">
+                        {visible.map((o) => (
+                            <li key={rowKey(o)} className={styles.item}>
+                                <DueRow row={o} side={sides.sideFor(o)} onPay={onPay} />
+                            </li>
                         ))}
                     </ul>
-                ) : null}
-
-                {expired.length > 0 ? (
-                    <>
-                        <SectionHeader
-                            title="Expired, awaiting settlement"
-                            description={(
-                                <>
-                                    These payment windows have closed. Do not pay them:
-                                    a payment confirming after the deadline sends your
-                                    coin without receiving the tokens. The match
-                                    settles back to the seller at the next block.
-                                </>
-                            )}
-                        />
-                        {/* Safari needs an explicit list role because this class removes list styling. */}
-                        <ul className={styles.list} role="list" aria-label="Expired payments">
-                            {expired.map((o) => (
-                                <ObligationRow key={rowKey(o)} row={o} onPay={onPay} />
-                            ))}
-                        </ul>
-                    </>
                 ) : null}
             </ListPage>
         </Screen>
@@ -219,70 +215,188 @@ function rowKey(o) {
     return `${o.chainId}-${o.orderMatchActionIndex}`;
 }
 
-function ObligationRow({ row, onPay }) {
+function amountLabelFor(row) {
     const descriptor = chainRegistry.get(row.chainId);
     const ticker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
     // The explorer serves this as a decimal coin figure, never base units:
     // "0.5" is half a coin and "10" is ten coins (see obligationBaseUnits).
     const coinText = baseUnitsToCoinText(obligationBaseUnits(row.coinAmount));
-    const amountLabel = coinText != null
+    return coinText != null
         ? `${coinText} ${ticker || 'coins'}`
         : `${String(row.coinAmount ?? '?')} base units`;
-    const countdown = countdownText(row.secondsLeft);
-    const absolute = coinpayExpiryText(row.expiration);
+}
 
-    const stateChip = row.state === 'expired'
-        ? <span className={`${styles.chip} ${styles.chipExpired}`}>Expired</span>
-        : row.state === 'at-risk'
-            ? (
-                <span className={`${styles.chip} ${styles.chipAtRisk}`}>
-                    {countdown ? `${countdown} left` : 'Expiring'}
-                </span>
-            )
-            : countdown
-                ? <span className={`${styles.chip} ${styles.chipOpen}`}>{countdown} left</span>
-                : <span className={`${styles.chip} ${styles.chipOpen}`}>No deadline reported</span>;
+function coinTickerFor(chainId) {
+    const descriptor = chainRegistry.get(chainId);
+    return descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] || '' : '';
+}
 
+function sideKey(chainId, orderMatchActionIndex) {
+    return `${chainId}:${orderMatchActionIndex}`;
+}
+
+/**
+ * What each payment buys, read once for the whole list.
+ *
+ * One messaging call answers every row (two explorer list reads per payer
+ * address behind it, see coinpayMatchSides.js), and it runs again only when
+ * the set of payments changes: the countdown re-renders every second and the
+ * scan hands a new array every poll, so the read is keyed on the payments'
+ * identities, not on the array.
+ *
+ * `sideFor(row)` answers the side, `null` when the read finished without one,
+ * or `undefined` while it is still loading.
+ */
+function useMatchSides(messaging, obligations) {
+    const requests = obligations.map((o) => ({
+        chainId: o.chainId,
+        address: o.address,
+        orderMatchActionIndex: String(o.orderMatchActionIndex),
+        coinAmount: o.coinAmount,
+        coinTicker: coinTickerFor(o.chainId),
+    }));
+    const readKey = requests
+        .map((r) => `${r.chainId}:${r.address}:${r.orderMatchActionIndex}:${String(r.coinAmount ?? '')}`)
+        .sort()
+        .join('|');
+    const latest = useRef(requests);
+    latest.current = requests;
+    const [state, setState] = useState(
+        /** @type {{ key: string, done: boolean, failed: boolean, sides: Record<string, any> }} */
+        ({ key: '', done: false, failed: false, sides: {} }),
+    );
+    // A failed read is tried again on the scan's next poll (a new rows array),
+    // not on every countdown tick.
+    const [attempt, setAttempt] = useState(0);
+    const failedNow = state.failed && state.key === readKey;
+    useEffect(() => {
+        if (failedNow) setAttempt((a) => a + 1);
+        // Only a new scan result re-arms the read.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [obligations]);
+    useEffect(() => {
+        if (readKey === '') return undefined;
+        if (typeof messaging?.getCoinpayMatchSides !== 'function') {
+            setState((s) => ({ key: readKey, done: true, failed: false, sides: s.sides }));
+            return undefined;
+        }
+        let cancelled = false;
+        Promise.resolve()
+            .then(() => messaging.getCoinpayMatchSides({ obligations: latest.current }))
+            .then((answer) => {
+                if (cancelled) return;
+                const found = answer && typeof answer === 'object' ? answer : {};
+                setState((s) => ({ key: readKey, done: true, failed: false, sides: { ...s.sides, ...found } }));
+            }, () => {
+                if (!cancelled) setState((s) => ({ key: readKey, done: true, failed: true, sides: s.sides }));
+            });
+        return () => { cancelled = true; };
+    }, [readKey, messaging, attempt]);
+
+    const settled = state.done && state.key === readKey;
+    return {
+        sideFor(row) {
+            const side = state.sides[sideKey(row.chainId, row.orderMatchActionIndex)];
+            if (side && typeof side === 'object') return side;
+            return settled ? null : undefined;
+        },
+    };
+}
+
+function boughtText(side) {
+    const amount = formatDecimalAmount(trimAmountTail(String(side.amount))) || String(side.amount);
+    return `${amount} ${side.tick}`;
+}
+
+function rowSearchText(row, sides) {
+    const side = sides.sideFor(row);
+    return [
+        side ? boughtText(side) : '',
+        row.coinAmount,
+        amountLabelFor(row),
+    ].map((v) => String(v ?? '')).join(' ').toLowerCase();
+}
+
+/**
+ * Short time left for the ring's caption: "1h 5m", "24m", "40s".
+ *
+ * @param {number | null} secondsLeft
+ * @returns {string | null}
+ */
+export function shortTimeLeft(secondsLeft) {
+    if (typeof secondsLeft !== 'number' || !Number.isFinite(secondsLeft) || secondsLeft <= 0) return null;
+    const s = Math.floor(secondsLeft);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
+    if (m > 0) return `${m}m`;
+    return `${s}s`;
+}
+
+/** The share of the payment window still left, 0 to 100, or null with no deadline. */
+function windowLeftPercent(row, side) {
+    if (typeof row.secondsLeft !== 'number') return null;
+    const expiration = Number(row.expiration);
+    const matchedAt = side && typeof side.matchedAt === 'number' ? side.matchedAt : null;
+    const total = matchedAt !== null && expiration > matchedAt ? expiration - matchedAt : DEFAULT_WINDOW_SECONDS;
+    return Math.min(100, Math.max(0, (row.secondsLeft / total) * 100));
+}
+
+function DueRing({ row, side }) {
+    const time = shortTimeLeft(row.secondsLeft);
+    // Green while there is plenty of time, red under 30 minutes (operator 2026-11-14).
+    const urgent = typeof row.secondsLeft === 'number' && row.secondsLeft < URGENT_SECONDS;
     return (
-        <li className={styles.row}>
-            <div className={styles.rowMain}>
-                <div className={styles.rowHead}>
-                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : null}
-                    <span className={styles.rowTitle}>
-                        Matched order #{row.orderMatchActionIndex}
-                    </span>
-                    {stateChip}
-                </div>
-                <div className={styles.rowDetail}>
-                    Pay <strong>{amountLabel}</strong> to{' '}
-                    <AddressText address={row.payeeAddress} />
-                </div>
-                <div className={styles.rowMeta}>
-                    From <AddressText address={row.address} />
-                    {absolute ? <> · deadline {absolute}</> : null}
-                </div>
-                {row.state === 'at-risk' ? (
-                    <div className={styles.atRiskNote} role="status">
-                        Act now: payments need time to confirm before the
-                        deadline. A payment confirming late loses the coin.
-                    </div>
-                ) : null}
-            </div>
-            <div className={styles.rowActions}>
-                {row.state !== 'expired' ? (
-                    <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={() => onPay({
-                            chainId: row.chainId,
-                            address: row.address,
-                            orderMatchActionIndex: row.orderMatchActionIndex,
-                        })}
-                    >
-                        Pay now
-                    </Button>
-                ) : null}
-            </div>
-        </li>
+        <FillRing
+            percent={windowLeftPercent(row, side)}
+            tone={urgent ? 'danger' : 'success'}
+            mark="clock"
+            status={urgent ? 'at-risk' : 'open'}
+            caption={time}
+            label={time ? `${time} left to pay` : 'No deadline reported'}
+        />
+    );
+}
+
+function DueRow({ row, side, onPay }) {
+    const descriptor = chainRegistry.get(row.chainId);
+    const coinTick = coinTickerFor(row.chainId);
+    const pay = `Pay ${amountLabelFor(row)}`;
+    const time = shortTimeLeft(row.secondsLeft);
+    let title;
+    if (side) {
+        title = `Buying ${boughtText(side)}`;
+    } else if (side === null) {
+        title = 'Buying tokens';
+    } else {
+        // Still reading what this payment buys: say so, never a guess.
+        title = (
+            <span className={styles.titleLoading} data-loading="bought-side">
+                Buying
+                <Skeleton shape="text" width="5em" className={styles.titleSkeleton} />
+            </span>
+        );
+    }
+    let leading = null;
+    if (side) leading = <PairIcons chainId={row.chainId} first={side.tick} second={coinTick} />;
+    else if (descriptor) leading = <ChainBadge descriptor={descriptor} size="sm" showName={false} />;
+    const named = [typeof title === 'string' ? title : 'Buying', pay, time ? `${time} left` : null]
+        .filter(Boolean).join(', ');
+    return (
+        <ListRow
+            type="button"
+            onClick={() => onPay({
+                chainId: row.chainId,
+                address: row.address,
+                orderMatchActionIndex: row.orderMatchActionIndex,
+            })}
+            aria-label={named}
+            chevron
+            leading={leading}
+            title={title}
+            subtitle={<span className={styles.rowDetail}>{pay}</span>}
+            trailing={<DueRing row={row} side={side} />}
+            trailingClassName={styles.ringSlot}
+        />
     );
 }

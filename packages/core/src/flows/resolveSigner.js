@@ -27,6 +27,7 @@
 // and testable. Callers supply their own transport factory.
 
 import { RemoteSigner } from '../signers/RemoteSigner.js';
+import { getSignerRecord } from './registerSigner.js';
 
 /**
  * @typedef {Object} SoftwareSignerDescriptor
@@ -89,7 +90,7 @@ export async function resolveSigner({ vault, address }) {
                 { addressId: address.id, source },
             );
         }
-        const signerRecord = await vault.signers.find(address.signerId);
+        const signerRecord = await getSignerRecord(vault, address.signerId);
         if (!signerRecord) {
             throw new SignerResolutionError(
                 `resolveSigner: no SignerRecord for id "${address.signerId}"`,

@@ -17,6 +17,7 @@ describe('notifications public surface', () => {
             'SOUND_NONE',
             'SOUND_PALETTE',
             'SOUND_PREVIEW_EVENT',
+            'createLockedAutopay',
             'describeWindow',
             'familyForKind',
             'getActiveAddresses',

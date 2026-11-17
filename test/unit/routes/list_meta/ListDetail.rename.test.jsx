@@ -3,8 +3,12 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+// Renaming a list now happens in the one List form that Edit opens (walk
+// 2026-11-13, Layout 1), so the detail page has no Rename tile and no longer
+// reads the LIST metadata formats to decide whether to show one.
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ListDetail } from '../../../../packages/core/src/shared/routes/ListDetail.jsx';
 
@@ -17,31 +21,20 @@ const baseDetail = {
     list: [],
 };
 
-function deferred() {
-    let resolve;
-    let reject;
-    const promise = new Promise((resolvePromise, rejectPromise) => {
-        resolve = resolvePromise;
-        reject = rejectPromise;
-    });
-    return { promise, resolve, reject };
-}
-
-function renderList({ getActionFormats, onRename } = {}) {
+function renderList({ onRename, onEdit } = {}) {
     const messaging = {
         getListByActionIndex: vi.fn().mockResolvedValue(baseDetail),
-        getActionFormats: getActionFormats || vi.fn().mockResolvedValue({}),
+        getActionFormats: vi.fn().mockResolvedValue({ 4: {}, 5: {} }),
     };
-    const onShare = vi.fn();
-    const onTransfer = vi.fn();
     const props = {
         chainId: CHAIN_ID,
         actionIndex: ACTION_INDEX,
         onBack: () => {},
         onFork: () => {},
-        onShare,
-        onTransfer,
+        onShare: vi.fn(),
+        onTransfer: vi.fn(),
         ...(onRename ? { onRename } : {}),
+        ...(onEdit ? { onEdit } : {}),
     };
 
     render(
@@ -49,7 +42,7 @@ function renderList({ getActionFormats, onRename } = {}) {
             <ListDetail {...props} />
         </MessagingProvider>,
     );
-    return { messaging, onShare, onTransfer };
+    return { messaging };
 }
 
 afterEach(() => {
@@ -57,61 +50,23 @@ afterEach(() => {
     vi.clearAllMocks();
 });
 
-describe('ListDetail rename action', () => {
-    it('shows rename for LIST 4 and 5 support and passes the list reference', async () => {
+describe('ListDetail rename goes through Edit', () => {
+    it('shows no Rename tile even when the shell passes onRename and the formats exist', async () => {
         const onRename = vi.fn();
-        const { messaging } = renderList({
-            getActionFormats: vi.fn().mockResolvedValue({ 4: {}, 5: {} }),
-            onRename,
-        });
+        const { messaging } = renderList({ onRename });
 
-        expect(await screen.findByRole('button', { name: 'Share list' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Transfer list' })).toBeTruthy();
-        fireEvent.click(await screen.findByRole('button', { name: 'Rename list' }));
-
-        expect(onRename).toHaveBeenCalledTimes(1);
-        expect(onRename).toHaveBeenCalledWith({ chainId: CHAIN_ID, actionIndex: ACTION_INDEX });
-        expect(messaging.getActionFormats).toHaveBeenCalledTimes(1);
-        expect(messaging.getActionFormats).toHaveBeenCalledWith({ chainId: CHAIN_ID, action: 'LIST' });
+        expect(await screen.findByRole('button', { name: /^Share\b/ })).toBeTruthy();
+        expect(screen.getByRole('button', { name: /^Transfer\b/ })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: /Rename/ })).toBeNull();
+        expect(messaging.getActionFormats).not.toHaveBeenCalled();
+        expect(onRename).not.toHaveBeenCalled();
     });
 
-    it.each([
-        ['neither metadata format', { 0: {}, 1: {} }],
-        ['only LIST 4', { 4: {} }],
-        ['only LIST 5', { 5: {} }],
-    ])('hides rename with %s', async (_label, formats) => {
-        const formatsRead = deferred();
-        const getActionFormats = vi.fn(() => formatsRead.promise);
-        renderList({
-            getActionFormats,
-            onRename: vi.fn(),
-        });
+    it('sends Edit to the edit handler with the list reference', async () => {
+        const onEdit = vi.fn();
+        renderList({ onEdit });
 
-        await screen.findByRole('button', { name: 'Share list' });
-        await waitFor(() => expect(getActionFormats).toHaveBeenCalledTimes(1));
-        await act(async () => formatsRead.resolve(formats));
-        expect(screen.queryByRole('button', { name: 'Rename list' })).toBeNull();
-    });
-
-    it('hides rename when the format read rejects', async () => {
-        const formatsRead = deferred();
-        const getActionFormats = vi.fn(() => formatsRead.promise);
-        renderList({ getActionFormats, onRename: vi.fn() });
-
-        await screen.findByRole('button', { name: 'Share list' });
-        await waitFor(() => expect(getActionFormats).toHaveBeenCalledTimes(1));
-        await act(async () => formatsRead.reject(new Error('offline')));
-        expect(screen.queryByRole('button', { name: 'Rename list' })).toBeNull();
-    });
-
-    it('hides rename when the callback is absent', async () => {
-        const formatsRead = deferred();
-        const getActionFormats = vi.fn(() => formatsRead.promise);
-        renderList({ getActionFormats });
-
-        await screen.findByRole('button', { name: 'Share list' });
-        await waitFor(() => expect(getActionFormats).toHaveBeenCalledTimes(1));
-        await act(async () => formatsRead.resolve({ 4: {}, 5: {} }));
-        expect(screen.queryByRole('button', { name: 'Rename list' })).toBeNull();
+        fireEvent.click(await screen.findByRole('button', { name: /^Edit(?! look)\b/ }));
+        expect(onEdit).toHaveBeenCalledWith(expect.objectContaining({ chainId: CHAIN_ID, actionIndex: ACTION_INDEX }));
     });
 });

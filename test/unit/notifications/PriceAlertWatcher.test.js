@@ -79,6 +79,31 @@ describe('PriceAlertWatcher', () => {
         expect(markTriggered).toHaveBeenCalledWith('a1', expect.any(String));
     });
 
+    it('skips a paused alert: no price lookup, no notification, nothing marked', async () => {
+        const { watcher, getNativePrices, notify, markTriggered } = makeWatcher({
+            alerts: [armedAlert({ status: 'paused' })],
+            price: 99000,
+        });
+        await watcher.pollOnce();
+        expect(getNativePrices).not.toHaveBeenCalled();
+        expect(notify).not.toHaveBeenCalled();
+        expect(markTriggered).not.toHaveBeenCalled();
+    });
+
+    it('checks only the armed alerts when a paused one shares its coin', async () => {
+        const { watcher, getNativePrices, notify } = makeWatcher({
+            alerts: [
+                armedAlert({ id: 'paused', status: 'paused', targetFiat: 1000 }),
+                armedAlert({ id: 'live', targetFiat: 70000 }),
+            ],
+            price: 71000,
+        });
+        await watcher.pollOnce();
+        expect(getNativePrices).toHaveBeenCalledTimes(1);
+        expect(notify).toHaveBeenCalledTimes(1);
+        expect(notify.mock.calls[0][0].data).toEqual(expect.objectContaining({ alertId: 'live' }));
+    });
+
     it('fires a "below" alert when price <= target', async () => {
         const { watcher, notify } = makeWatcher({
             alerts: [armedAlert({ direction: 'below', targetFiat: 60000 })],

@@ -1,0 +1,164 @@
+/* The dispenser's blue card. The card itself is Home's (HomeTabs .heroStack,
+   PortfolioChart's chart-behind); only the dispenser's own figures live here. */
+
+.heroStack {
+    /* The bar band's height, shared by the band and the room the text leaves
+       for it. */
+    --dispenser-bars-h: 84px;
+    /* The range chips' row, as HomeTabs reserves it under the balance card. */
+    --dispenser-chips-h: calc(var(--xc-space-6) + var(--xc-space-1) + var(--xc-space-2));
+}
+
+.hero {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    padding: var(--xc-card-pad);
+    color: var(--xc-on-accent);
+    min-width: 0;
+}
+
+/* The figures stop above the bar band, whatever height the headline wraps to
+   (beats HomeTabs' chips-only bottom padding). */
+.heroStack .hero.hero.hero {
+    padding-bottom: calc(var(--dispenser-chips-h) + var(--dispenser-bars-h) + var(--xc-space-2));
+}
+
+.top {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.token {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.tokenName {
+    font-size: var(--xc-text-lg);
+    font-weight: 800;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.statusChip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    flex: 0 1 auto;
+    min-width: 0;
+    padding: 2px var(--xc-space-2);
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.3);
+    color: var(--xc-on-accent);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+.dot {
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.dotOpen { background: var(--xc-brand-card-gain); }
+.dotClosing { background: #FFC94D; }
+.dotDone { background: rgba(255, 255, 255, 0.7); }
+
+.share.share {
+    margin-inline-start: auto;
+    flex: 0 0 auto;
+}
+
+.headline {
+    margin: var(--xc-space-1) 0 0;
+    font-size: var(--xc-text-xl);
+    font-weight: 800;
+    line-height: 1.2;
+    color: var(--xc-on-accent);
+    overflow-wrap: anywhere;
+    direction: ltr;
+    unicode-bidi: isolate;
+    text-shadow: 0 1px 2px rgba(15, 23, 42, 0.35);
+}
+
+/* One line split to both edges: a fact at the start, its partner at the end. */
+.split {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0 var(--xc-space-3);
+    margin: 0;
+    /* A paragraph's reading-width cap would stop the end fact mid-card. */
+    max-width: none;
+    font-size: var(--xc-text-xs);
+    color: rgba(255, 255, 255, 0.9);
+    text-shadow: 0 1px 2px rgba(15, 23, 42, 0.45);
+    min-width: 0;
+}
+
+.split > span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.strong {
+    font-weight: 700;
+    color: var(--xc-on-accent);
+}
+
+.gauge {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    margin-top: var(--xc-space-2);
+}
+
+.track {
+    position: relative;
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.25);
+    overflow: hidden;
+}
+
+.fill {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
+    border-radius: inherit;
+    background: var(--xc-on-accent);
+}
+
+.chartCaption {
+    margin-top: var(--xc-space-2);
+    font-weight: 600;
+}
+
+/* A fixed band just above the chips, edge to edge, behind nothing but the
+   card's own gradient. */
+.chartSvg {
+    position: absolute;
+    inset-inline: 0;
+    bottom: calc(var(--dispenser-chips-h) - var(--xc-space-1));
+    display: block;
+    width: 100%;
+    height: var(--dispenser-bars-h);
+    overflow: visible;
+}
+
+@media not all and (min-width: 400px) {
+    .headline {
+        font-size: var(--xc-text-lg);
+    }
+}

@@ -101,9 +101,9 @@ function mountWith({ Form, props = {}, overrides = {} }) {
     return messaging;
 }
 
-/** The read-only "From" field's rendered value once the form has loaded. */
+/** The read-only From address field's rendered value once the form has loaded (it sits in the closed From section; the controller form labels it "From"). */
 async function fromValue() {
-    const field = await screen.findByLabelText('From');
+    const field = await screen.findByLabelText(/^From( address)?$/);
     await waitFor(() => expect(field.value).toBeTruthy());
     return field.value;
 }
@@ -351,7 +351,7 @@ describe('bespoke forms source default', () => {
         });
         const price = await screen.findByLabelText(/^Price/);
         fireEvent.change(price, { target: { value: '1' } });
-        fireEvent.click(await screen.findByRole('button', { name: 'List name for sale' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'List Ownership for Sale' }));
         await waitFor(() => expect(composeForConfirm).toHaveBeenCalled());
         return composeForConfirm.mock.calls[0][0].from.address;
     }
@@ -383,6 +383,8 @@ describe('bespoke forms source default', () => {
                 getDispenses: vi.fn().mockResolvedValue({ data: [] }),
             },
         });
+        // Actions opens first; the buyer's source sits on the Buy page its first row opens.
+        fireEvent.click(await screen.findByTestId('dispenser-buy-row'));
         const field = await screen.findByRole('textbox', { name: 'Pay from' });
         await waitFor(() => expect(field.value).toBe(ADDR_ACTIVE.address));
         expect(field).toHaveAttribute('readonly');

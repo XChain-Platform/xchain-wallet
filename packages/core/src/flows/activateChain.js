@@ -11,7 +11,7 @@
 // activateChain: §48.3 / G149. Adds an additional chain to an existing
 // wallet at runtime. Two operations, both idempotent:
 //
-//   1. Seed `settings.fees[chainId]` and `settings.ads.perChain[chainId]`
+//   1. Seed `settings.fees[chainId]`
 //      via the existing `seedSettingsForChains` helper. After this the
 //      chain shows up in `bridge.getActiveChains` and in surfaces that
 //      key off `settings.fees`.
@@ -21,8 +21,10 @@
 //      `_persistHdWallet` / `createAccount`. Skipped for accounts that
 //      already have an address on this chain (re-running is a no-op).
 //
-// Today's caller is the Settings → Developer Mode "Regtest networks"
-// affordance. A developer activating bitcoin-regtest / dogecoin-regtest
+// Callers: Settings → Developer options → Test Networks (Add Network, and a
+// custom network's page), and a hardware wallet's Accounts tab and Add
+// account, whose Add network fills one network into one existing account
+// (`accountId`) through the app open on the device. A developer activating bitcoin-regtest / dogecoin-regtest
 // / litecoin-regtest at runtime can drive the local regtest
 // stack from a wallet that was created against mainnets. Nothing in the
 // flow restricts the chainId to regtest descriptors; when the
@@ -43,11 +45,15 @@ import { unlockWalletRecord, WalletNotFoundError } from './unlockWallet.js';
 import { seedSettingsForChains } from './seedSettings.js';
 import { serializeSettingsWrites } from './settings.js';
 import { defaultAddressTypeForFormat } from './_defaultAddressType.js';
+import { hardwareNetworkSupport, hardwareWalletRecord, isHardwareWallet } from './hardwareWallet.js';
+import { recordLedgerIdentities } from './registerSigner.js';
+import { isWrongAppError } from '../signers/hardwareSession.js';
 
 /**
  * @typedef {Object} ActivateChainOpts
  * @property {string} walletId
  * @property {string} chainId
+ * @property {string} [accountId]                                  only this account of the wallet (a hardware wallet's Add network fills the network into one existing account); every account when absent
  * @property {string} [password]                                   required when no pre-unlocked signer is supplied
  * @property {string} [bip39Passphrase]
  * @property {import('../signers/Signer.js').Signer} [signer]      pre-unlocked signer: software from the pool, or a connected RemoteSigner for hardware (required for HW-only wallets, which have no seed to unlock)
@@ -62,6 +68,7 @@ import { defaultAddressTypeForFormat } from './_defaultAddressType.js';
  * @property {Array<{ accountId: string, address: import('../schemas/address.js').Address }>} addresses   newly persisted addresses (skipped accounts are absent)
  * @property {number} skippedAccounts                              count of accounts that already had an address on chainId
  * @property {Array<{ accountId: string, name: string }>} skippedAccountDetails   accounts that already had an address on chainId
+ * @property {'no-device' | 'unsupported-network' | 'wrong-app'} [hardwareSkipped]   set only for a hardware wallet whose address step was skipped: no device signer was supplied, the device cannot sign this chain, or (a Ledger) another app is open than the chain needs, so the network waits for that app and Try again
  */
 
 /**
@@ -71,6 +78,7 @@ import { defaultAddressTypeForFormat } from './_defaultAddressType.js';
 export async function activateChain({
     walletId,
     chainId,
+    accountId,
     password,
     bip39Passphrase = '',
     signer: providedSigner,
@@ -87,7 +95,10 @@ export async function activateChain({
     if (!chainRegistry?.has(chainId)) {
         throw new Error(`activateChain: unknown chain "${chainId}"`);
     }
-    if (!providedSigner && (typeof password !== 'string' || password.length === 0)) {
+    // A hardware wallet needs no password: it either has its device signer
+    // here or skips the address step (no seed to fall back on).
+    if (!providedSigner && (typeof password !== 'string' || password.length === 0)
+        && !(await hardwareWalletRecord(vault, walletId))) {
         throw new Error('activateChain: either `signer` or `password` is required');
     }
     if (!vault) throw new Error('activateChain: vault is required');
@@ -95,6 +106,12 @@ export async function activateChain({
 
     const wallet = await vault.wallets.get(walletId);
     if (!wallet) throw new WalletNotFoundError(walletId);
+
+    const walletAccounts = await vault.accounts.findBy('walletId', walletId);
+    const scoped = typeof accountId === 'string' && accountId.length > 0;
+    if (scoped && !walletAccounts.some((a) => a.id === accountId)) {
+        throw new Error(`activateChain: account "${accountId}" does not belong to wallet "${walletId}"`);
+    }
 
     // Seed settings first. Even if the address-derivation step fails
     // (signer rejected, etc.) the user still ends up with the chain
@@ -109,9 +126,28 @@ export async function activateChain({
         if (seeded !== settings) await vault.settings.put(seeded);
     });
 
-    const accounts = await vault.accounts.findBy('walletId', walletId);
+    // The account keeps its own number: the address derives at its index.
+    const accounts = scoped ? walletAccounts.filter((a) => a.id === accountId) : walletAccounts;
     if (accounts.length === 0) {
         return { chainId, addresses: [], skippedAccounts: 0, skippedAccountDetails: [] };
+    }
+
+    // A hardware wallet derives only through its device, and only on a chain
+    // the device signs. Without a device signer, or on a chain it cannot
+    // sign, the chain is still activated (settings above) and the address
+    // step is skipped, with the reason in `hardwareSkipped`.
+    if (isHardwareWallet(wallet)) {
+        let reason = null;
+        if (!providedSigner || providedSigner.kind === 'software') {
+            reason = 'no-device';
+        } else if (!hardwareNetworkSupport(providedSigner.kind, chainId).supported) {
+            reason = 'unsupported-network';
+        }
+        if (reason) {
+            return {
+                chainId, addresses: [], skippedAccounts: 0, skippedAccountDetails: [], hardwareSkipped: reason,
+            };
+        }
     }
 
     const signer = providedSigner
@@ -132,6 +168,11 @@ export async function activateChain({
     const descriptor = chainRegistry.get(chainId);
     const addressType = defaultAddressTypeForFormat(descriptor, wallet?.format);
     const allAddresses = await vault.addresses.list();
+    // A Ledger answers only the coin of the app that is open. Another app is
+    // a wait for that app (the connect step's line and Try again), never a
+    // failure, so it comes back as `hardwareSkipped: 'wrong-app'`.
+    const perAppDevice = isHardwareWallet(wallet) && signer.kind === 'ledger';
+    let waitingForApp = false;
 
     try {
         const addressSource = addressSourceForSignerKind(signer.kind);
@@ -148,14 +189,21 @@ export async function activateChain({
                 skippedAccountDetails.push({ accountId: account.id, name: account.name || '' });
                 continue;
             }
-            const [derived] = await signer.getAddresses({
-                chainId,
-                accountIndex: account.index,
-                change: 0,
-                startIndex: 0,
-                count: 1,
-                addressType,
-            });
+            let derived;
+            try {
+                [derived] = await signer.getAddresses({
+                    chainId,
+                    accountIndex: account.index,
+                    change: 0,
+                    startIndex: 0,
+                    count: 1,
+                    addressType,
+                });
+            } catch (error) {
+                if (!perAppDevice || !isWrongAppError(error)) throw error;
+                waitingForApp = true;
+                break;
+            }
             const record = createAddress({
                 accountId: account.id,
                 chain: descriptor.coin,
@@ -171,11 +219,22 @@ export async function activateChain({
             await vault.addresses.put(record);
             created.push({ accountId: account.id, address: record });
         }
+        // The first read of this network on a Ledger records its identity,
+        // which every later read and sign on it is checked against.
+        if (perAppDevice && created.length) {
+            await recordLedgerIdentities(vault, signer.id, created.map(({ address }) => ({
+                chainId,
+                accountIndex: accounts.find((a) => a.id === address.accountId)?.index,
+                derivationPath: address.derivationPath,
+                publicKey: address.publicKey,
+            })));
+        }
         return {
             chainId,
             addresses: created,
             skippedAccounts: skipped,
             skippedAccountDetails,
+            ...(waitingForApp ? { hardwareSkipped: 'wrong-app' } : {}),
         };
     } finally {
         if (ownsSigner && typeof signer.lock === 'function') signer.lock();

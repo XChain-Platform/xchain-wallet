@@ -13,7 +13,7 @@
 
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import {
     synthesizeDemoBalances,
 } from '../../packages/core/src/flows/demoFixtures.js';
@@ -81,7 +81,10 @@ describe('demo wallet amount regression', () => {
 
         fireEvent.click(row);
         const detail = await screen.findByRole('region', { name: 'Transaction details' });
-        expect(detail).toHaveTextContent('demo-bitcoin-regtest-outgoing-1');
+        // The card opens on its Actions tab (G102); Details names the transaction.
+        fireEvent.click(within(detail).getByRole('tab', { name: 'Details' }));
+        expect(within(detail).getByRole('tabpanel', { name: 'Details' })
+            .querySelector('[title="demo-bitcoin-regtest-outgoing-1"]')).toBeTruthy();
         expect(detail).not.toHaveTextContent('-5,000,000 BTC');
         expect(detail).not.toHaveTextContent('+10,000,000,000 BTC');
     });

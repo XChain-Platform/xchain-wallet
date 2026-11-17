@@ -58,8 +58,10 @@ describe('core CSS module media breakpoints', () => {
         expect(modules.get('shared/routes/IssueTokenForm.module.css'))
             .toContain('@media not all and (min-width: 400px)');
         expect(modules.get('shared/routes/ManageToken.module.css')).not.toContain('@media');
+        // The shared details rows are label-left value-right at every width,
+        // so IssueTokenForm no longer switches them at 834px.
         expect(modules.get('shared/routes/IssueTokenForm.module.css'))
-            .toContain('@media (min-width: 834px)');
+            .not.toContain('@media (min-width: 834px)');
     });
 
     it('keeps 600px on the wide side of the form rule', () => {
@@ -67,7 +69,7 @@ describe('core CSS module media breakpoints', () => {
         const locked = modules.get('shared/routes/Locked.module.css');
 
         expect(formPage).toContain('@media (min-width: 600px)');
-        expect(locked).toContain('@media (min-width: 600px)');
+        expect(locked).not.toContain('@media (min-width: 600px)');
         // The short-viewport rule keys on landscape height, not on width.
         expect(locked).toContain('@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2)');
     });

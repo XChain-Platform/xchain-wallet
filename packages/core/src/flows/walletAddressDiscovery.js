@@ -42,6 +42,7 @@ import {
 } from './balances.js';
 import { branchOf } from './changeAddress.js';
 import { indexSpaceSharedAcrossTypes } from './_addressIndexSpace.js';
+import { hardwareWalletRecord, isHardwareWallet } from './hardwareWallet.js';
 import {
     scanBranch,
     scanSharedBranch,
@@ -224,6 +225,9 @@ export async function discoverWalletAddresses({
         throw new Error('discoverWalletAddresses: walletId is required');
     }
     if (!signer || typeof signer.getAddresses !== 'function') {
+        // A hardware wallet never has a pooled signer; it is skipped below
+        // anyway, so answer "nothing found" instead of asking for one.
+        if (await hardwareWalletRecord(vault, walletId)) return { found: 0, chains: [] };
         throw new Error('discoverWalletAddresses: an unlocked signer is required');
     }
     if (!chainRegistry) throw new Error('discoverWalletAddresses: chainRegistry is required');
@@ -319,7 +323,11 @@ export async function discoverWalletAddresses({
 // Build the scan scopes, or return null for wallets that must not be scanned.
 async function discoveryPlan({ vault, walletId, chainRegistry, activeNetwork }) {
     const wallet = await vault.wallets.get(walletId);
-    if (!wallet || wallet.origin === 'demo' || wallet.format === 'wif-only') return null;
+    // A hardware wallet is skipped: its accounts were chosen on the device at
+    // connect time, and a gap-limit scan would wake the device for every
+    // derivation.
+    if (!wallet || wallet.origin === 'demo' || wallet.format === 'wif-only'
+        || isHardwareWallet(wallet)) return null;
     const sharedIndexSpace = indexSpaceSharedAcrossTypes(wallet.format);
     const accounts = await vault.accounts.findBy('walletId', walletId);
     const accountById = new Map(accounts.map((a) => [a.id, a]));

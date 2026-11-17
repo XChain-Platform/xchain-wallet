@@ -52,7 +52,8 @@ describe('Settings subpage row gap', () => {
         expect(surface).toMatch(/--xc-settings-row-divider:\s*var\(--xc-border\)/);
 
         const route = readFileSync(join(SETTINGS_DIR, 'routes/Settings.jsx'), 'utf8');
-        expect(route).toMatch(/className=\{settingsStyles\.settingsSurface\}/);
+        // A form page adds the form frame class beside it (G126).
+        expect(route).toMatch(/className=\{[^}]*settingsStyles\.settingsSurface/);
         // No group keeps its own cards inside the Settings card (U16).
         expect(route).not.toMatch(/preserveNestedCards/);
     });
@@ -227,9 +228,9 @@ describe('Settings field rows', () => {
 describe('About rows', () => {
     it('keeps a wrapped About value at the row end', () => {
         const src = readFileSync(join(SETTINGS_DIR, 'components/settings/AboutSection.jsx'), 'utf8');
-        const rowEnd = src.match(/const ROW_END = \{([^}]*)\}/)[1];
-        expect(rowEnd).toMatch(/marginInlineStart: 'auto'/);
-        expect(rowEnd).toMatch(/justifyContent: 'flex-end'/);
-        expect(src).toMatch(/<div style=\{ROW_END\}>\{children\}<\/div>/);
+        const css = readFileSync(join(SETTINGS_DIR, 'components/settings/AboutSection.module.css'), 'utf8');
+        // A fact is a list row whose value sits in its trailing slot, end-aligned.
+        expect(src).toMatch(/<ListRow title=\{label\} trailing=\{<span className=\{styles\.value\}>/);
+        expect(css.match(/\.value \{([^}]*)\}/)[1]).toMatch(/text-align: end/);
     });
 });

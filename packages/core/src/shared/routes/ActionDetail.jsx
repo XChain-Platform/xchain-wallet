@@ -9,23 +9,21 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { EmptyState, ListPage, Screen, PageHeader, StatusMessage, VerifiedBadge } from '@xchain-wallet/core/ui';
+import { EmptyState, ListPage, Screen, PageHeader } from '@xchain-wallet/core/ui';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/actionDetail.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useWalletSource } from '../hooks/useDemoGuard.jsx';
-import { DetailCard, detailTransferDirection } from './History.jsx';
+import { detailTransferDirection } from './HistoryDetailCard.jsx';
+import { ActionDetailView } from './ActionDetailView.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import { titleCase } from '../utils/titleCase.js';
 import { normalizeHistoryRow } from '../utils/historyRow.js';
 import { useActionProofVerification } from '../hooks/useProofVerification.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { useHideReachabilityNotice } from '../components/hideReachabilityNotice.js';
-import { userFacingMessage } from '../utils/userFacingMessage.js';
-import styles from './History.module.css';
-
-const OFFLINE_ACTION_REASON = 'This action needs a network connection.';
 
 /**
  * @param {object} props
@@ -34,8 +32,12 @@ const OFFLINE_ACTION_REASON = 'This action needs a network connection.';
  * @param {number} [props.chainTip]           latest known block on the entry's chain (drives confirmation count)
  * @param {number} [props.indexerWatermark]   latest indexed block on the entry's chain (drives the Indexed stage)
  * @param {() => void} props.onBack
+ * @param {(chainId: string, actionIndex: string) => void} [props.onOpenDispenser]  opens the
+ *   dispenser a DISPENSER action created (the page's View Dispenser button)
+ * @param {(pendingTxId: string) => Promise<void>} [props.onDismissFailed]
+ * @param {boolean} [props.embedded] drawn in wide Home's detail panel (G115), with no header of its own
  */
-export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWatermark, onBack }) {
+export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWatermark, onBack, onOpenDispenser, onDismissFailed: onDismissFailedProp, embedded = false }) {
     const { shell } = useMessaging();
     const source = useWalletSource(walletId);
     const { messaging } = source;
@@ -98,51 +100,13 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
         return () => { cancelled = true; clearInterval(id); };
     }, [pendingTxHash, confirmed, entryProp, messaging, browserOnline, source.live]);
 
-    // Local peer cache: fetched once on mount when the entry is one
-    // side of a cross-chain LINK pair. DetailCard handles loading +
-    // error rendering off the same shape History uses for its inline
-    // expansion.
-    const [peerCache, setPeerCache] = useState({});
-
     // M2.3: an entry with no block has not been indexed, so every part of
     // this page keyed to a block is not merely empty but meaningless -
-    // there is no action index to name in the title, no checkpoint to
-    // verify against, and no LINK peer to fetch. Each is suppressed
-    // deliberately below. They used to no-op by accident, which held only
-    // for as long as nobody changed the conditions they leaned on.
+    // there is no action index to name in the title and no checkpoint to
+    // verify against. Each is suppressed deliberately below. The linked
+    // LINK peer is no longer fetched at all: it showed only in the Raw Data
+    // view, which the page dropped (operator ruling 2026-11-13).
     const isPending = !(Number(entry?.blockIndex) > 0);
-
-    useEffect(() => {
-        if (isPending) return undefined;
-        if (!entry?.link?.peerChainId || !entry?.link?.peerActionIndex) return undefined;
-        const peerChainId = entry.link.peerChainId;
-        const peerActionIndex = String(entry.link.peerActionIndex);
-        const pKey = `${peerChainId}:${peerActionIndex}`;
-        if (!browserOnline) {
-            setPeerCache({
-                [pKey]: { loading: false, action: null, error: OFFLINE_ACTION_REASON },
-            });
-            return undefined;
-        }
-        let cancelled = false;
-        setPeerCache({ [pKey]: { loading: true, action: null, error: null } });
-        messaging.getActionByIndex({ chainId: peerChainId, actionIndex: peerActionIndex })
-            .then((action) => {
-                if (cancelled) return;
-                setPeerCache({ [pKey]: { loading: false, action, error: null } });
-            })
-            .catch((err) => {
-                if (cancelled) return;
-                setPeerCache({
-                    [pKey]: {
-                        loading: false,
-                        action: null,
-                        error: userFacingMessage(err, 'Could not load the linked action. Try again.'),
-                    },
-                });
-            });
-        return () => { cancelled = true; };
-    }, [entry, messaging, isPending, browserOnline]);
 
     // PC-50: the same SPV verdict the History list badges, on the detail view
     // the item names. Only a confirmed action with a numeric index is
@@ -183,7 +147,7 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
 
     const rawActionIndex = String(entry.actionIndex ?? '').trim();
     const actionIndexLabel = /^\d+$/.test(rawActionIndex)
-        ? BigInt(rawActionIndex).toLocaleString('en-US')
+        ? BigInt(rawActionIndex).toString()
         : '';
     // A transfer is named by its direction, as its History row is: the
     // protocol calls both sides SEND, and an incoming one titled "Send"
@@ -192,55 +156,42 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
     const titleAction = direction === 'in' ? actionDisplayLabel('RECEIVE')
         : direction === 'out' || direction === 'self' ? actionDisplayLabel('SEND')
         : actionDisplayLabel(entry.action);
-    const header = (
-        <PageHeader
+    // A pending action has no index, and the fallback here rendered it as
+    // "#0", an index that belongs to a real action on every chain.
+    const title = isPending || !actionIndexLabel
+        ? titleCase(titleAction)
+        : `${titleCase(titleAction)} #${actionIndexLabel}`;
+
+    // The page body (hero, status bar and the Actions | Details toggle) is
+    // ActionDetailView; this route keeps the data paths: the pending refresh
+    // and the SPV verdict.
+    return (
+        <ActionDetailView
+            entry={entry}
+            walletId={walletId}
+            variant={variant}
+            title={title}
             onBack={onBack}
             backLabel={t('actionDetail.back')}
-            title={isPending || !actionIndexLabel
-                // A pending action has no index, and the fallback here
-                // rendered it as "#0", an index that belongs to a real
-                // action on every chain.
-                ? titleAction
-                : `${titleAction} #${actionIndexLabel}`}
+            networkAvailable={browserOnline}
+            verdict={verdict}
+            chainTip={chainTip ?? entry.detailContext?.chainTip}
+            indexerWatermark={indexerWatermark ?? entry.detailContext?.indexerWatermark}
+            onOpenDispenser={onOpenDispenser}
+            embedded={embedded}
+            onDismissFailed={onDismissFailedProp || (typeof messaging?.dismissFailedPendingTx === 'function'
+                ? async (pendingTxId) => {
+                    // The record is gone once this resolves, so the page has
+                    // nothing left to show: back to the list, which re-reads
+                    // on focus.
+                    try {
+                        await messaging.dismissFailedPendingTx({ pendingTxId });
+                    } catch {
+                        return;
+                    }
+                    if (typeof onBack === 'function') onBack();
+                }
+                : undefined)}
         />
-    );
-
-    return (
-        <Screen variant={variant} header={header}>
-            <ListPage className={styles.body}>
-                {!browserOnline ? (
-                    <StatusMessage variant="warning" id="history-offline-action-reason">
-                        {t('actionDetail.offline')}
-                    </StatusMessage>
-                ) : null}
-                {verdict ? (
-                    <div className={styles.detailVerify}>
-                        <VerifiedBadge status={verdict.status} reason={verdict.reason} size="sm" />
-                    </div>
-                ) : null}
-                <DetailCard
-                    entry={entry}
-                    peerCache={peerCache}
-                    chainTip={chainTip ?? entry.detailContext?.chainTip}
-                    indexerWatermark={indexerWatermark ?? entry.detailContext?.indexerWatermark}
-                    walletAddresses={entry.detailContext?.walletAddresses}
-                    walletId={walletId}
-                    networkAvailable={browserOnline}
-                    onDismissFailed={typeof messaging?.dismissFailedPendingTx === 'function'
-                        ? async (pendingTxId) => {
-                            // The record is gone once this resolves, so the
-                            // page has nothing left to show: back to the list,
-                            // which re-reads on focus.
-                            try {
-                                await messaging.dismissFailedPendingTx({ pendingTxId });
-                            } catch {
-                                return;
-                            }
-                            if (typeof onBack === 'function') onBack();
-                        }
-                        : undefined}
-                />
-            </ListPage>
-        </Screen>
     );
 }

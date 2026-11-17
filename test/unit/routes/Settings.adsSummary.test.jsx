@@ -23,52 +23,44 @@ const messaging = {
     listConnectedSites: () => Promise.resolve([]),
 };
 
-function configure(activeNetwork, donations, enabled = true) {
+function configure(activeNetwork, perTransaction, extra = {}) {
     settings = seedSettingsForChains(createDefaultSettings(), registry, chainIds);
     settings.activeNetwork = activeNetwork;
-    settings.ads.enabled = enabled;
-    for (const [chainId, lifetimeDonatedSats] of Object.entries(donations)) {
-        settings.ads.perChain[chainId].lifetimeDonatedSats = lifetimeDonatedSats;
-    }
+    settings.ads = { ...settings.ads, perTransaction, ...extra };
 }
 
 function summaryText() {
     const { container } = render(
         <MessagingProvider shell="web" messaging={messaging}>
-            <Settings onBack={() => {}} />
+            <Settings onBack={() => {}} initialSubpageId="g-network" />
         </MessagingProvider>,
     );
-    return container.textContent;
+    return container.querySelector('[data-settings-row-id="ads"]')?.textContent ?? '';
 }
 
 afterEach(cleanup);
 
+// The Automatic Donations row reads the wallet-wide fiat queue: the amount
+// added per transaction, or Off. It never shows a coin-unit total, raw sats,
+// or another network's donations.
 describe('Settings donation summary', () => {
-    it('shows active mainnet donations in each coin unit', () => {
-        configure('mainnet', {
-            'bitcoin-mainnet': 25000,
-            'dogecoin-mainnet': 125000000,
-            'bitcoin-testnet': 999999,
-        });
+    it('shows the per-transaction amount in the display currency', () => {
+        configure('mainnet', '0.05', { donated: '12.5', donationCount: 3 });
         const text = summaryText();
-        expect(text).toContain('On · 0.00025 BTC, 1.25 DOGE donated');
-        expect(text).not.toContain('125,000,000');
+        expect(text).toContain('$0.05 per transaction');
         expect(text).not.toContain('sats donated');
-        expect(text).not.toContain('0.00999999');
+        expect(text).not.toContain('12.5');
     });
 
-    it('shows zero when only another network has donated', () => {
-        configure('mainnet', { 'bitcoin-testnet': 999999 });
-        expect(summaryText()).toContain('On · 0 donated');
+    it('shows the same line while testnet is active', () => {
+        configure('testnet', '0.10');
+        expect(summaryText()).toContain('$0.10 per transaction');
     });
 
-    it('shows a testnet donation while testnet is active', () => {
-        configure('testnet', { 'bitcoin-testnet': 500000 });
-        expect(summaryText()).toContain('On · 0.005 BTC donated');
-    });
-
-    it('shows off when donations are disabled', () => {
-        configure('mainnet', { 'bitcoin-mainnet': 25000 }, false);
-        expect(summaryText()).toContain('Off');
+    it('shows off when the per-transaction amount is none', () => {
+        configure('mainnet', '0', { queued: '5' });
+        const text = summaryText();
+        expect(text).toContain('Off');
+        expect(text).not.toContain('per transaction');
     });
 });

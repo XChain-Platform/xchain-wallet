@@ -189,6 +189,15 @@ describe('settings schema: autoSignLocalhostMs is v2-tolerant + option-bounded',
         }
     });
 
+    it('offers off, 5 minutes, 10 minutes and 1 hour, capped at 1 hour, and keeps every earlier stored value valid', () => {
+        expect([...AUTO_SIGN_LOCALHOST_OPTIONS]).toEqual([0, 5 * 60 * 1000, 10 * 60 * 1000, 60 * 60 * 1000]);
+        expect(Math.max(...AUTO_SIGN_LOCALHOST_OPTIONS)).toBe(AUTO_SIGN_LOCALHOST_1H);
+        const base = createDefaultSettings();
+        for (const ms of [0, 5 * 60 * 1000, 60 * 60 * 1000]) {
+            expect(validateSettings({ ...base, autoSignLocalhostMs: ms }).ok).toBe(true);
+        }
+    });
+
     it('rejects a value outside the allowed set', () => {
         const base = createDefaultSettings();
         const res = validateSettings({ ...base, autoSignLocalhostMs: 7 * 60 * 1000 });

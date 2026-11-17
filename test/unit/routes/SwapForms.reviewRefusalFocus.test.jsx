@@ -55,7 +55,8 @@ describe.each([
             </MessagingProvider>,
         );
         const review = await screen.findByRole('button', {
-            name: _name === 'SwapForm' ? 'Create swap' : 'Create cross-chain swap',
+            // Form Standard action labels are Title Case verbs.
+            name: _name === 'SwapForm' ? 'Create Swap' : 'Create Cross-Chain Swap',
         });
         review.focus();
         await waitFor(() => expect(review).toBeEnabled());

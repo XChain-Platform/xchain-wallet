@@ -27,7 +27,10 @@ const POLICY_REASON_TEXT = Object.freeze({
         "this account has spending limits, and the amount this transaction moves can't be measured against them",
     POLICY_AMOUNT_INVALID: 'the amount in the request is not a valid amount',
     POLICY_UNRESOLVED_TICK:
-        "the token is named by a number that this account's limits can't match to a token name",
+        "the token is named by a number that this account's saved rules don't list; if it is one of the tokens in the rules, save the account's rules again to record its number",
+    POLICY_TOKEN_NOT_ALLOWED: "the token is not on this account's list of allowed tokens",
+    POLICY_TOKEN_UNCHECKABLE:
+        "this account only allows listed tokens, and this transaction moves tokens it doesn't name",
     POLICY_TICK_CASE_COLLISION:
         "this account's limits name the same token more than once in different capitalization, so it is unclear which limit applies",
 });

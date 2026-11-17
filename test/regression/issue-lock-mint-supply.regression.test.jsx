@@ -89,7 +89,7 @@ describe('regression/issue-lock-mint-supply', () => {
             fireEvent.click(screen.getByRole('switch', { name: 'Minting' }));
             fireEvent.click(screen.getByRole('switch', { name: 'Mint supply' }));
         }
-        fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled());
         return composedParams(messaging);
     }

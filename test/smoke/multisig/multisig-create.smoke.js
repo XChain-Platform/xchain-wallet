@@ -224,12 +224,28 @@ assert.ok(/Bitcoin-only/.test(route),
     'MultisigCreate states the BTC-only constraint');
 assert.ok(/export function clampThreshold\b/.test(route),
     'MultisigCreate exports its threshold clamp');
-assert.ok(/<Select[\s\S]*?id="multisig-type"[\s\S]*?<option/.test(route),
+assert.ok(/<Select[\s\S]*?id="multisig-type"[\s\S]*?<Select\.Option/.test(route),
     'MultisigCreate offers its schemes through the Type dropdown');
+assert.ok(/<IconSelect[\s\S]*?label="Signatures required"[\s\S]*?options=\{thresholdOptions\}/.test(route),
+    'MultisigCreate picks signatures required from an IconSelect of "N of M" options');
+assert.ok(/<FormSection[\s\S]*?id=\{`cosigner-\$\{row\.id\}`\}/.test(route),
+    'MultisigCreate shows each cosigner as a collapsible Form Standard section');
+assert.doesNotMatch(route, /Increase signatures required|cosigners-card/,
+    'MultisigCreate has no stepper and no cosigner card');
 assert.doesNotMatch(route, /How multisig setup works/,
     'MultisigCreate omits the old setup disclosure');
-assert.ok(/Create multisig/.test(route),
-    'MultisigCreate names the primary action Create multisig');
+assert.ok(/Create Multisig/.test(route),
+    'MultisigCreate names the primary action Create Multisig');
+assert.ok(/aria-label="Share Wallet as Cosigner"/.test(route),
+    'MultisigCreate opens the dedicated share page from its header');
+assert.doesNotMatch(route, /Joining someone else's multisig|<MultisigCosignerShare/,
+    'MultisigCreate has no embedded cosigner-share disclosure');
+
+const shareRoute = readFileSync(join(sharedRoutes, 'MultisigCosignerShare.jsx'), 'utf8');
+assert.ok(/<FormPage[\s\S]*?onSubmit=\{handleShare\}/.test(shareRoute),
+    'MultisigCosignerShare submits the standalone share form');
+assert.ok(/variant="success"[\s\S]*?<Icon\.ShareIcon/.test(shareRoute),
+    'MultisigCosignerShare uses the green Share action with an icon');
 
 // --- App.jsx wiring (all three shells) ---
 
@@ -247,6 +263,10 @@ for (const [shell, appPath] of [
         `${shell} ActionsMenu BTC-gates onMultisigCreate via hasBtcAddress`);
     assert.ok(/<MultisigCreate\b[\s\S]*?walletId=\{activeWalletId\}/.test(app),
         `${shell} App.jsx mounts <MultisigCreate> with the active walletId`);
+    assert.ok(app.includes("'multisig-share'"),
+        `${shell} tracks the dedicated multisig share route`);
+    assert.ok(/<MultisigCosignerShare\b[\s\S]*?walletId=\{activeWalletId\}/.test(app),
+        `${shell} mounts the dedicated multisig share page`);
     assert.ok(surfacesEntry(app, 'multisig-create', 'Create multisig'),
         `${shell} ActionsMenu surfaces the "Create multisig" entry`);
 }

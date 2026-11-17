@@ -38,10 +38,11 @@ assert.ok(/case 'watch-only':\s*return\s*\{\s*kind:\s*'watch-only'/.test(vpk),
 
 // Hardware branch must short-circuit BEFORE the warning / reveal
 // render-stage branches. Use the render-branch headers
-// (`if (stage === 'warning')`, `// stage === 'revealed'`). Those only appear
-// once, in render order; a hook that reads the stage earlier is not one.
+// (`if (stage === 'warning' ...)`, `// stage === 'revealed'`). Those only
+// appear once, in render order; a hook that reads the stage earlier is not
+// one. The warning branch also covers the submitting stage.
 const hwBranch = /sourceInfo\.kind === 'hardware'/.exec(vpk);
-const warningStage = /if \(stage === 'warning'\)/.exec(vpk);
+const warningStage = /if \(stage === 'warning'(?: \|\| stage === 'submitting')?\)/.exec(vpk);
 const revealStage = /\/\/ stage === 'revealed'/.exec(vpk);
 assert.ok(hwBranch, 'ViewPrivateKey gates HW addresses with sourceInfo.kind === "hardware"');
 assert.ok(warningStage, 'ViewPrivateKey has a warning render-branch');

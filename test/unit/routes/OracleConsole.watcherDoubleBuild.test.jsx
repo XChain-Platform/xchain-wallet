@@ -11,10 +11,21 @@
 // in flight build one, and a Signer-mode wallet that signs the result pays one
 // network fee.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, act as domAct, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
+
+vi.mock('../../../packages/core/src/shared/components/ListPickerScreen.jsx', () => ({
+    ListPickerScreen: ({ title, onSelect }) => (
+        <button type="button" onClick={() => onSelect({ actionIndex: '81', name: 'Pickers' })}>
+            Pick {title}
+        </button>
+    ),
+}));
+
+afterEach(() => { resetWalletModes(); });
 import { OracleConsole } from '../../../packages/core/src/shared/routes/OracleConsole.jsx';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -47,12 +58,15 @@ function feed(status) {
 }
 
 function harness(status) {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode: 'watcher' }], activeWalletId: 'w' });
     const calls = [];
     const pending = [];
     const target = {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [HD_ADDRESS] }),
         getActiveAddresses: () => Promise.resolve({}),
-        getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+        getSettings: () => Promise.resolve({}),
+        listWallets: () => Promise.resolve([{ id: 'w', name: 'W', walletMode: 'watcher' }]),
         signerReady: () => Promise.resolve({ ready: false }),
         getSignerStatus: () => Promise.resolve({ status: 'locked' }),
         betFeeds: ({ chainId }) => Promise.resolve({ data: chainId === CHAIN ? [feed(status)] : [] }),
@@ -95,11 +109,16 @@ async function mount(messaging) {
 
 describe('OracleConsole watcher build under repeat taps', () => {
     it.each([
-        ['Resolve', 'resolveMarketParams', 'closed', (utils) => fireEvent.click(utils.getByRole('button', { name: 'Yes' }))],
-        ['Cancel and refund', 'cancelMarketParams', 'closed', null],
-        ['Edit lists', 'editFeedListsParams', 'open', (utils) => fireEvent.change(
-            utils.getByLabelText('New allow-list index'), { target: { value: '0' } },
-        )],
+        // Action list rows (G101) read title then description, so each is
+        // found by its title at the start of its name.
+        [/^Resolve/, 'resolveMarketParams', 'closed', (utils) => fireEvent.click(utils.getByRole('button', { name: 'Yes' }))],
+        [/^Cancel and refund/, 'cancelMarketParams', 'closed', null],
+        // The list editor's fields are pickers (G114): open the Allow list one,
+        // then choose a list in the picker (mocked above).
+        [/^Edit lists/, 'editFeedListsParams', 'open', (utils) => {
+            fireEvent.click(utils.getByRole('button', { name: 'Allow list: None set' }));
+            return () => fireEvent.click(utils.getByRole('button', { name: 'Pick Choose Allow-List' }));
+        }],
     ])('%s builds one unsigned transaction for two taps in flight', async (action, builder, status, prepare) => {
         const { messaging, calls, release } = harness(status);
         const utils = await mount(messaging);
@@ -107,15 +126,19 @@ describe('OracleConsole watcher build under repeat taps', () => {
             fireEvent.click(utils.getByRole('button', { name: action }));
             await drain();
         });
-        if (prepare) await domAct(async () => { prepare(utils); await drain(); });
-        const build = utils.getByRole('button', { name: 'Create unsigned transaction' });
+        if (prepare) {
+            let next;
+            await domAct(async () => { next = prepare(utils); await drain(); });
+            if (typeof next === 'function') await domAct(async () => { next(); await drain(); });
+        }
+        const build = utils.getByRole('button', { name: 'Create Unsigned Transaction' });
         await domAct(async () => {
             fireEvent.click(build);
             fireEvent.click(build);
             await drain();
         });
         await domAct(async () => {
-            const again = utils.queryByRole('button', { name: 'Create unsigned transaction' });
+            const again = utils.queryByRole('button', { name: 'Create Unsigned Transaction' });
             if (again) fireEvent.click(again);
             await drain();
         });

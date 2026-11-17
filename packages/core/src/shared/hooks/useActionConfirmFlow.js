@@ -29,6 +29,7 @@ import {
     resolvePreflightPrivacy,
 } from '../../schemas/settings.js';
 import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
+import { withAdvancedOptions } from '../components/formStandard/advancedOptions.js';
 
 /**
  * True for the calm "user pressed Reject" exit, which every form
@@ -123,13 +124,15 @@ export function useActionConfirmFlow({ messaging, walletId, slice = 'actionForms
             requoteNativeFee: ({ actionString, source }) => messaging.requoteNativeFee({
                 chainId, actionString, source,
             }),
-            compose: compose || (() => messaging.composeForConfirm({
+            // The submitting form's Advanced choices (fee bumping, chosen
+            // coins, change address) join here, so no form adds them itself.
+            compose: compose || (() => messaging.composeForConfirm(withAdvancedOptions({
                 walletId,
                 chainId,
                 from,
                 actionData,
                 ...(encoderOpts && Object.keys(encoderOpts).length > 0 ? { encoderOpts } : {}),
-            })),
+            }))),
             preflight: (o) => messaging.preflight({ chainId, ...o }),
             // §4.7: the host-shared reservation ledger, passed for
             // EVERY migrated form. What to reserve is derived from the compose

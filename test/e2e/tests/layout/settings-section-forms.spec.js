@@ -97,7 +97,9 @@ for (const size of SIZES) {
             await openSettings(page);
             const back = page.getByRole('button', { name: 'Back to settings' }).filter({ visible: true }).first();
             if (await back.count()) await back.click();
-            await page.getByRole('main').getByRole('button', { name: /^Automatic donation/ }).first().click();
+            // Donations is a row on Network and Fees (2026-11-13).
+            await page.getByRole('main').getByRole('button', { name: /^Network and Fees\b/ }).first().click();
+            await page.getByRole('main').getByRole('button', { name: /^Automatic Donations\b/ }).first().click();
             await expect(page.getByRole('main').getByRole('heading').nth(1)).toBeVisible();
 
             // Every network carries the same default amounts, so one sentence covers them all.
@@ -113,12 +115,17 @@ for (const size of SIZES) {
         test('Network & endpoints fields are bordered, labelled and one height', async ({ page }) => {
             await createWallet(page);
             await openSettings(page);
-            await page.getByRole('button', { name: /^Developer mode/ }).click();
+            await page.getByRole('button', { name: /^Advanced\b/ }).click();
+            await page.getByRole('button', { name: /^Developer mode\b/ }).click();
             const toggle = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
             await toggle.click();
             await expect(toggle).toBeChecked();
-            await page.getByRole('button', { name: 'Back to settings' }).click();
-            await page.getByRole('button', { name: /^Network & endpoints/ }).click();
+            // Back twice: row page to the Advanced group page, then to the index.
+            const backToSettings = page.getByRole('button', { name: 'Back to settings', exact: true }).filter({ visible: true }).first();
+            await backToSettings.click();
+            await backToSettings.click();
+            await page.getByRole('button', { name: /^Network and Fees\b/ }).click();
+            await page.getByRole('button', { name: /^Network endpoints\b/ }).click();
             await expect(page.getByLabel('Explorer URL').first()).toBeVisible();
 
             await expectBorderedLabelledFields(page.getByRole('main'), `${size.name} Network & endpoints`);
@@ -128,7 +135,8 @@ for (const size of SIZES) {
         test('Keyboard is offered where there is a keyboard and its rows fit', async ({ page }) => {
             await createWallet(page);
             await openSettings(page);
-            const row = page.getByRole('button', { name: /^Keyboard/ });
+            await page.getByRole('button', { name: /^Advanced\b/ }).click();
+            const row = page.getByRole('button', { name: /^Keyboard shortcuts\b/ });
             if (size.width < 480) {
                 await expect(row).toHaveCount(0);
                 return;

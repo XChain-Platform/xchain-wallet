@@ -93,8 +93,8 @@ assert.ok(
 
 const home = readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8');
 assert.ok(
-    /onSend/.test(home) && /onClick=\{onSend\}/.test(home),
-    'shared Home.jsx activates Send button via onSend',
+    !/onSend/.test(home) && !/onClick=\{onSend\}/.test(home),
+    'shared Home.jsx has no Send quick action; Send is reached from the navigation',
 );
 
 const msg = readFileSync(join(webPkg, 'src', 'messaging.js'), 'utf8');

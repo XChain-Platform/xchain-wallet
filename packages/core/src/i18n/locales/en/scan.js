@@ -19,7 +19,7 @@ const messages = {
     'scan.routing': 'Scanned, routing…',
     'scan.pasteLabel': 'Or paste it here',
     'scan.pastePlaceholder': 'xchain:… / bitcoin:… / address / transaction code',
-    'scan.classifyPaste': 'Use pasted text',
+    'scan.classifyPaste': 'Use Pasted Text',
     'scan.error.pasteEmpty': 'Paste something first.',
     'scan.error.unknownXchainIntent':
         "This XChain link isn't supported. Check the link and try again.",
@@ -34,9 +34,9 @@ const messages = {
     'scan.error.transactionHex':
         'This is a signed transaction. Open Broadcast transaction and scan or paste it there.',
     'scan.error.backupPointer':
-        'This is an encrypted-backup code. Open Import wallet, choose Encrypted backup, and scan it there.',
+        'This is an encrypted-backup code. Save the backup file it points to, then open Import wallet, choose Backup, and pick that file.',
     'scan.error.pairingCode':
-        'This is a wallet pairing code. Open Pair an offline signer and scan it there.',
+        'This is a wallet pairing code. Open Settings, Advanced, Use another phone as a signer, and scan it there.',
     'scan.error.unknown':
         "This QR code contains text the wallet doesn't know how to use. Scan a supported payment or transaction code, or paste it below instead.",
 };

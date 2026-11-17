@@ -59,7 +59,7 @@ describe('shared scroll areas', () => {
         const css = source(SCREEN);
 
         expect(css).toMatch(/\.scrollArea\s*\{[^}]*scrollbar-gutter:\s*stable/s);
-        expect(css).toMatch(/\.scrollArea::-webkit-scrollbar\s*\{[^}]*width:\s*10px[^}]*height:\s*10px/s);
+        expect(css).toMatch(/\.scrollArea::-webkit-scrollbar\s*\{[^}]*width:\s*6px[^}]*height:\s*6px/s);
         expect(css).toMatch(/\.scrollArea::-webkit-scrollbar-thumb\s*\{[^}]*background:\s*var\(--xc-border-strong\)/s);
         expect(css).toMatch(/\.screen\s*\{[^}]*overflow:\s*hidden/s);
     });

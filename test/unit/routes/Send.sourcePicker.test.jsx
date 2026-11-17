@@ -48,8 +48,25 @@ vi.mock('../../../packages/core/src/shared/components/OwnAddressPickerScreen.jsx
     ),
 }));
 
+// The Asset field opens the token picker page; a stub with one button for the
+// token under test keeps these cases about the funding address.
+vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
+    TokenPicker: ({ title, onSelect, onBack }) => React.createElement(
+        'div',
+        null,
+        React.createElement('h1', null, title),
+        React.createElement(
+            'button',
+            { type: 'button', onClick: () => onSelect({ chainId: CHAIN, tick: TOKEN }) },
+            `Pick ${TOKEN}`,
+        ),
+        React.createElement('button', { type: 'button', onClick: onBack }, 'Back'),
+    ),
+}));
+
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 
 const CHAIN = 'litecoin-mainnet';
 // The ACTIVE address (Send's default source) and the NEWEST one, where the token
@@ -78,8 +95,11 @@ function balancesFor(address, { issuerHasToken = true } = {}) {
         : { native, tokens: [] };
 }
 
-function mount(balanceOptions, props = {}) {
+function mount(balanceOptions, props = {}, { publishFirst = true, extra = {} } = {}) {
+    // The shell publishes the wallet's mode before any form opens.
+    if (publishFirst) publishWalletModes({ wallets: [{ id: 'w', walletMode: 'full' }], activeWalletId: 'w' });
     const base = {
+        ...extra,
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: 'addr-1', address: ACTIVE } }),
         getAddressBalances: vi.fn(async (_chainId, address) => balancesFor(address, balanceOptions)),
@@ -113,15 +133,21 @@ function mount(balanceOptions, props = {}) {
     return messaging;
 }
 
-const fromField = () => screen.getByLabelText(/^From$/);
-const pickerButton = () => screen.getByRole('button', { name: 'Choose source address' });
+const fromField = () => screen.getByLabelText(/^From address$/);
+// The address picker icon sits in the closed From section: open it first.
+const pickerButton = () => {
+    const header = screen.queryByRole('button', { name: /^From/, expanded: false });
+    if (header) fireEvent.click(header);
+    return screen.getByRole('button', { name: 'Choose source address' });
+};
 const sendButton = () => screen.getByRole('button', { name: /^Send$/ });
 
 async function selectToken() {
-    fireEvent.change(await screen.findByLabelText(/^Token$/), { target: { value: TOKEN } });
+    fireEvent.click(await screen.findByRole('button', { name: /^Asset/ }));
+    fireEvent.click(await screen.findByRole('button', { name: `Pick ${TOKEN}` }));
 }
 
-afterEach(() => { cleanup(); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); resetWalletModes(); vi.clearAllMocks(); });
 
 describe('Send: the funding address is shown and changeable', () => {
     it('loads source addresses for the active account', async () => {
@@ -139,11 +165,38 @@ describe('Send: the funding address is shown and changeable', () => {
         await waitFor(() => expect(fromField().value).toBe(ACTIVE));
     });
 
+    it('[REGRESSION] keeps the active-address default when the wallet mode lands after the active map', async () => {
+        // The wallet list never answers, so the mode is unknown until the
+        // shell publishes it, well after the active-address map has loaded.
+        const messaging = mount(undefined, {}, {
+            publishFirst: false,
+            extra: { listWallets: vi.fn(() => new Promise(() => {})) },
+        });
+        await waitFor(() => expect(messaging.getActiveAddresses).toHaveBeenCalledWith('w', undefined));
+        await act(async () => { await Promise.resolve(); });
+        expect(messaging.getAddressesByChain).not.toHaveBeenCalled();
+
+        act(() => { publishWalletModes({ wallets: [{ id: 'w', walletMode: 'full' }], activeWalletId: 'w' }); });
+        await waitFor(() => expect(fromField().value).toBe(ACTIVE));
+        expect(messaging.getActiveAddresses).toHaveBeenCalledTimes(1);
+    });
+
+    it('[REGRESSION] keeps a prefilled recipient and chain when the wallet mode lands late', async () => {
+        mount(undefined, { prefill: { chainId: CHAIN, address: DESTINATION } }, {
+            publishFirst: false,
+            extra: { listWallets: vi.fn(() => new Promise(() => {})) },
+        });
+        await act(async () => { await Promise.resolve(); });
+        act(() => { publishWalletModes({ wallets: [{ id: 'w', walletMode: 'full' }], activeWalletId: 'w' }); });
+        await waitFor(() => expect(fromField().value).toBe(ACTIVE));
+        expect(screen.getByLabelText(/^To$/).value).toBe(DESTINATION);
+    });
+
     it('routes to the shared picker under the same label the other forms use', async () => {
         mount();
         await waitFor(() => expect(fromField().value).toBe(ACTIVE));
         fireEvent.click(pickerButton());
-        expect(await screen.findByText('From address')).toBeInTheDocument();
+        expect(await screen.findByText('From Address')).toBeInTheDocument();
         // Seeded to the form's chain, so the relevant addresses show first.
         expect(screen.getByTestId('picker-chain').textContent).toBe(CHAIN);
     });

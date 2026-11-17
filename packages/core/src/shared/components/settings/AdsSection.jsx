@@ -8,284 +8,344 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// AdsSection: §35.1 + §36 Automatic Donation System panel.
-//
-// Master ON/OFF + per-chain config (per-tx amount, trigger threshold,
-// donation address shown for verification, lifetime stats). Backed by
-// `settings.ads.{enabled, perChain[chainId]}` (schema v1).
-//
-// Donation addresses come from each chain descriptor's
-// `adsDonationAddresses`: three per chain and network, carried from the
-// platform coin registry. The user picks one per chain, stored as
-// `ads.perChain[chainId].donationAddressRole` (DONATE1 by default), and the
-// panel shows the chosen address read-only. A role whose address is absent
-// or still the `PLACEHOLDER_REPLACE_BEFORE_MAINNET` sentinel cannot be
-// picked, and the panel says so rather than showing the sentinel.
+// AdsSection: Settings > Automatic donations (§36, operator ruling
+// 2026-11-14, layout 4 under layout 1's header). One wallet-wide queue in
+// fiat (settings.ads): the header states the per-transaction amount and the
+// rule in one line; the Donation group changes Per transaction, Send at and
+// Donate to in place on SettingsInlineRow rows (None turns donations off, so
+// there is no switch, and Custom opens an amount field in place); the Totals
+// group shows what is queued and what has been donated.
 
-import { useId } from 'react';
-import { EmptyState, InfoTip, Input, Select } from '@xchain-wallet/core/ui';
+import { useEffect, useId, useState } from 'react';
+import { Icon, Input, Notice, Select } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
+import { formatFiatAmount } from '../../utils/fiatAmountFormat.js';
 import {
-    ADS_DEFAULT_DONATION_ADDRESS_ROLE,
-    ADS_DONATION_ADDRESS_ROLES,
-    donationAddressForDescriptor,
-    isDonationAddressConfigured,
-} from '../../../registry/validate.js';
-import { resolveAdsChainConfig } from '../../../schemas/settings.js';
-import { defaultRegistry } from '../../../registry/index.js';
+    ADS_PER_TRANSACTION_MAX,
+    ADS_PER_TRANSACTION_OPTIONS,
+    ADS_RECIPIENTS,
+    ADS_DEFAULT_SEND_AT,
+    ADS_SEND_AT_MAX,
+    ADS_SEND_AT_MIN,
+    ADS_SEND_AT_OPTIONS,
+    isAdsPerTransaction,
+    isAdsSendAt,
+} from '../../../schemas/settings.js';
+import { adsSettingsOf } from '../../../flows/ads.js';
+import { compareDecimalStrings } from '../../utils/amountFormat.js';
+import { donationRecipientLabel } from '../../utils/adsDonationLine.js';
 import { t } from '../../../i18n/index.js';
 import '../../../i18n/locales/en/settings.js';
-import { STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
-import { adsChainIdsForUser } from './adsChains.js';
+import '../../../i18n/locales/en/send.js';
+import '../../../i18n/locales/en/ui.js';
+import { InlineRowFrame, SettingsInlineRow } from './SettingsInlineRow.jsx';
+import { SettingsLoadError, STACK, Status } from './_settingsPrimitives.jsx';
+import groupListStyles from '../../routes/CoSignerAccountList.module.css';
 import styles from './AdsSection.module.css';
 
-const chainRegistry = defaultRegistry();
-
-// What the picker calls each stored role. The registry names the third
-// destination EXPLORER; users know it as DONATE3.
-const DONATION_ROLE_LABEL_KEYS = {
-    DONATE1: 'settings.ads.roleDonate1',
-    DONATE2: 'settings.ads.roleDonate2',
-    EXPLORER: 'settings.ads.roleDonate3',
+const CUSTOM = 'custom';
+const GROUP_ICON_CSS = '[data-settings-group-icon] svg { width: var(--xc-icon-xl); height: var(--xc-icon-xl); }';
+const RECIPIENT_ICONS = {
+    protocol: Icon.LandmarkIcon,
+    community: Icon.UsersIcon,
+    explorer: Icon.SearchIcon,
 };
 
-// The stored role when it is one the donation flow honours, else the default.
-function selectedDonationRole(chainState) {
-    const stored = chainState?.donationAddressRole;
-    return ADS_DONATION_ADDRESS_ROLES.includes(stored) ? stored : ADS_DEFAULT_DONATION_ADDRESS_ROLE;
+// The recipient's name, the same words the confirm screen's donation line uses.
+const adsRecipientLabel = (recipient) => donationRecipientLabel(recipient) || donationRecipientLabel('protocol');
+// "None" and "Custom" read as everywhere else in the wallet.
+const noneLabel = () => t('send.advanced.none');
+const customLabel = () => t('ui.feeSelector.custom');
+
+// The currency the page shows and writes: the queue's own, except while
+// nothing is queued or donated, when it follows the display currency (the
+// engine adopts it on the next send for the same reason).
+function pageCurrency(settings) {
+    const ads = adsSettingsOf(settings);
+    const empty = compareDecimalStrings(ads.queued, '0') === 0 && compareDecimalStrings(ads.donated, '0') === 0;
+    return empty && settings?.fiatCurrency ? settings.fiatCurrency : ads.currency;
+}
+
+/** An amount in the page's currency, always two decimals ("$5.00"). */
+function money(value, currency) {
+    return formatFiatAmount(value, currency);
+}
+
+// A preset choice as the dropdown lists it: whole amounts without cents
+// ("$5"), the rest as money ("$0.05").
+function presetLabel(value, currency) {
+    if (/^\d+$/.test(value)) {
+        try {
+            return new Intl.NumberFormat(undefined, {
+                style: 'currency',
+                currency,
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0,
+            }).format(Number(value));
+        } catch {
+            return money(value, currency);
+        }
+    }
+    return money(value, currency);
 }
 
 /**
- * The per-chain donation destination: a role picker and the chosen address,
- * read-only. Roles with no configured address are listed but cannot be chosen.
+ * The typed amount in the stored form ("05." -> "5", ".5" -> "0.5",
+ * "0.10" -> "0.1"), or null when it is not a plain amount.
  */
-function DonationAddressField({ chainId, descriptor, displayName, role, disabled, onPick }) {
-    const configured = isDonationAddressConfigured(descriptor, role);
-    return (
-        <>
-            <Select
-                label={t('settings.ads.donationRecipient')}
-                help={t('settings.help.ads.donateTo')}
-                aria-label={t('settings.ads.donationRecipientFor', { displayName })}
-                value={role}
-                disabled={disabled}
-                onChange={(event) => onPick(chainId, event.target.value)}
-            >
-                {ADS_DONATION_ADDRESS_ROLES.map((option) => (
-                    <option
-                        key={option}
-                        value={option}
-                        disabled={!isDonationAddressConfigured(descriptor, option)}
-                    >
-                        {t(DONATION_ROLE_LABEL_KEYS[option])}
-                    </option>
-                ))}
-            </Select>
+export function normalizeAdsAmount(raw) {
+    const text = String(raw ?? '').trim();
+    const match = /^(\d*)(?:\.(\d*))?$/.exec(text);
+    if (!match || (match[1] === '' && !match[2])) return null;
+    const whole = (match[1] || '0').replace(/^0+(?=\d)/, '');
+    const frac = (match[2] || '').replace(/0+$/, '');
+    return frac ? `${whole}.${frac}` : whole;
+}
 
-            {configured ? (
-                <Input
-                    label={t('settings.ads.donationAddress')}
-                    help={t('settings.help.ads.donationAddress')}
-                    readOnly
-                    autoComplete="off"
-                    value={donationAddressForDescriptor(descriptor, role)}
-                    className={styles.address}
-                    aria-label={t('settings.ads.donationAddress2', { displayName })}
+/** The patch that saves one donation field, carrying the currency it is in. */
+function adsPatch(settings, fields) {
+    return { ads: { ...fields, currency: pageCurrency(settings) } };
+}
+
+/**
+ * Per transaction and Send at: a preset dropdown on the row, and a Custom
+ * choice that opens an amount field in place under it.
+ */
+function AmountRow({ row, leading, settings, update }) {
+    const { field, presets, isValid, errorText, presetText } = row.amount;
+    const ads = adsSettingsOf(settings);
+    const currency = pageCurrency(settings);
+    const stored = ads[field];
+    const storedIsPreset = presets.includes(stored);
+    const [customOpen, setCustomOpen] = useState(!storedIsPreset);
+    const [draft, setDraft] = useState(storedIsPreset ? '' : stored);
+    const [error, setError] = useState(/** @type {string | null} */ (null));
+    const fieldId = useId();
+    useEffect(() => {
+        // A value saved elsewhere (another window) closes or refills the field.
+        if (!presets.includes(stored)) {
+            setCustomOpen(true);
+            setDraft(stored);
+        }
+    }, [stored, presets]);
+
+    const save = async (value) => {
+        setError(null);
+        try {
+            await update(adsPatch(settings, { [field]: value }));
+            return true;
+        } catch (err) {
+            setError(t('settings.ads.saveFailed'));
+            // eslint-disable-next-line no-console
+            console.error(`settings ads.${field} update failed:`, err);
+            return false;
+        }
+    };
+    const commitDraft = async () => {
+        const value = normalizeAdsAmount(draft);
+        if (value === null || !isValid(value)) {
+            setError(errorText);
+            return;
+        }
+        if (value === stored) { setError(null); return; }
+        await save(value);
+    };
+
+    const options = [
+        ...presets.map((value) => ({ value, label: presetText(value, currency), icon: <Icon.DollarIcon /> })),
+        { value: CUSTOM, label: customLabel(), icon: <Icon.PencilIcon /> },
+    ];
+    const selected = customOpen ? CUSTOM : stored;
+    return (
+        <InlineRowFrame
+            leading={leading}
+            title={row.title}
+            help={row.help}
+            line={row.line}
+            kind="select"
+            after={customOpen || error ? (
+                <div className={styles.custom}>
+                    {customOpen ? (
+                        <Input
+                            id={fieldId}
+                            label={t('settings.ads.customAmount', { currency })}
+                            help={row.help}
+                            type="text"
+                            inputMode="decimal"
+                            enterKeyHint="done"
+                            autoComplete="off"
+                            value={draft}
+                            error={error || undefined}
+                            onChange={(e) => { setDraft(e.target.value); if (error) setError(null); }}
+                            onBlur={commitDraft}
+                            onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                            data-testid={`ads-custom-${field}`}
+                        />
+                    ) : null}
+                    {!customOpen && error ? <span role="alert">{error}</span> : null}
+                </div>
+            ) : null}
+        >
+            <div className={styles.select}>
+                <Select
+                    value={selected}
+                    options={options}
+                    aria-label={row.title}
+                    data-testid={`ads-select-${field}`}
+                    onChange={(event) => {
+                        const next = event.target.value;
+                        if (next === CUSTOM) {
+                            setCustomOpen(true);
+                            setDraft(stored);
+                            return;
+                        }
+                        setCustomOpen(false);
+                        setDraft('');
+                        save(next);
+                    }}
                 />
-            ) : (
-                <Input
-                    label={t('settings.ads.donationAddress')}
-                    help={t('settings.help.ads.donationAddress')}
-                    readOnly
-                    autoComplete="off"
-                    value={t('settings.ads.notAvailableYet')}
-                    className={`${styles.address} ${styles.unavailable}`}
-                    aria-description={t('settings.ads.donationAddressArrivesLater', { displayName })}
-                />
-            )}
-        </>
+            </div>
+        </InlineRowFrame>
     );
 }
 
-/**
- * One whole-number sats field. Blank drops the override and follows the
- * release default again (§36.6); anything that is not a whole number snaps
- * back to the current value.
- */
-function AmountField({ label, help, ariaLabel, current, disabled, onCommit, hint, tip, describedBy }) {
-    const ownHintId = useId();
-    const hintId = hint ? ownHintId : describedBy;
+function leadingIcon(RowIcon) {
     return (
-        <div>
-            <Input
-                label={label}
-                help={help}
-                type="text"
-                inputMode="numeric"
-                enterKeyHint="done"
-                autoComplete="off"
-                defaultValue={current}
-                onBlur={(e) => {
-                    const raw = e.target.value.trim();
-                    if (raw === '') {
-                        e.target.value = String(current);
-                        onCommit(null);
-                        return;
-                    }
-                    if (!/^\d+$/.test(raw)) {
-                        e.target.value = String(current);
-                        return;
-                    }
-                    onCommit(Math.max(0, Math.floor(Number(raw) || 0)));
-                }}
-                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                aria-label={ariaLabel}
-                aria-describedby={hintId}
-                disabled={disabled}
-            />
-            {hint ? (
-                <div className={styles.hintRow}>
-                    <span id={hintId}>{hint}</span>
-                    {tip}
-                </div>
-            ) : null}
+        <span
+            className={groupListStyles.rowIcon}
+            aria-hidden="true"
+            data-settings-group-icon=""
+            style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}
+        >
+            <RowIcon />
+        </span>
+    );
+}
+
+/** One labelled group card of inline rows, as on every Settings group page. */
+function AdsGroup({ label, rows, settings, update }) {
+    return (
+        <div className={styles.group}>
+            <div className={styles.groupLabel}>{label}</div>
+            {/* Safari needs an explicit list role because this class removes list styling. */}
+            <ul
+                className={groupListStyles.list}
+                role="list"
+                aria-label={label}
+                style={{ border: '1px solid var(--xc-border)', borderRadius: 'var(--xc-radius-md)', background: 'var(--xc-surface)', overflow: 'visible' }}
+            >
+                {rows.map((r) => (
+                    <li key={r.id} data-settings-row-id={r.id}>
+                        <SettingsInlineRow row={r} leading={leadingIcon(r.icon)} settings={settings} update={update} />
+                    </li>
+                ))}
+            </ul>
         </div>
     );
 }
 
 export function AdsSection() {
     const { settings, loading, error, update } = useSettings();
-    const sharedHintId = useId();
     if (loading) return <Status text={t('common.loading')} />;
     if (error) return <SettingsLoadError error={error} />;
     if (!settings) return <Status text={t('common.settingsUnavailable')} tone="error" />;
 
-    const chainIds = adsChainIdsForUser(settings, chainRegistry);
+    const ads = adsSettingsOf(settings);
+    const currency = pageCurrency(settings);
+    const on = compareDecimalStrings(ads.perTransaction, '0') === 1;
+    const recipient = adsRecipientLabel(ads.recipient);
 
-    // Every network reads the same default, so the threshold sentence is said once
-    // above the cards. A network with its own amounts keeps its own sentence.
-    const thresholdSentence = (chainId) => {
-        const resolved = resolveAdsChainConfig(settings.ads.perChain[chainId], chainRegistry.get(chainId));
-        return resolved.perTxAmountSats > 0
-            ? t('settings.ads.transactionsToThreshold', { count: Math.ceil(resolved.triggerAmountSats / resolved.perTxAmountSats) })
-            : t('settings.ads.noPendingAmountIsAdded');
-    };
-    const thresholdTip = (
-        <InfoTip
-            aria={t('settings.ads.triggerThresholdHelpLabel')}
-            label={t('settings.ads.aSatIsTheSmallest')}
-        />
-    );
-    const sentences = chainIds.map(thresholdSentence);
-    const sharedSentence = chainIds.length > 1 && sentences.every((x) => x === sentences[0]) ? sentences[0] : null;
-
-    const onToggleEnabled = async (next) => {
-        try { await update({ ads: { enabled: next } }); } catch (err) {
-            // eslint-disable-next-line no-console
-            console.error('ads.enabled update failed:', err);
-        }
-    };
-    const onChainPatch = async (chainId, patch) => {
-        try {
-            await update({ ads: { perChain: { [chainId]: patch } } });
-        } catch (err) {
-            // eslint-disable-next-line no-console
-            console.error(`ads.perChain.${chainId} update failed:`, err);
-        }
-    };
+    const donationRows = [
+        {
+            id: 'ads-per-transaction',
+            title: t('settings.ads.perTransaction'),
+            line: t('settings.ads.perTransactionLine'),
+            help: t('settings.help.ads.perTransaction'),
+            icon: Icon.CoinsIcon,
+            amount: {
+                field: 'perTransaction',
+                presets: ADS_PER_TRANSACTION_OPTIONS,
+                isValid: isAdsPerTransaction,
+                errorText: t('settings.ads.customPerTransactionError', { max: money(ADS_PER_TRANSACTION_MAX, currency) }),
+                presetText: (value, cur) => (value === '0' ? noneLabel() : presetLabel(value, cur)),
+            },
+            control: { kind: 'custom', Component: AmountRow },
+        },
+        {
+            id: 'ads-send-at',
+            title: t('settings.ads.sendAt'),
+            line: t('settings.ads.sendAtLine'),
+            help: t('settings.help.ads.sendAt', { sendAt: money(ADS_DEFAULT_SEND_AT, currency) }),
+            icon: Icon.TargetIcon,
+            amount: {
+                field: 'sendAt',
+                presets: ADS_SEND_AT_OPTIONS,
+                isValid: isAdsSendAt,
+                errorText: t('settings.ads.customSendAtError', {
+                    min: money(ADS_SEND_AT_MIN, currency),
+                    max: money(ADS_SEND_AT_MAX, currency),
+                }),
+                presetText: presetLabel,
+            },
+            control: { kind: 'custom', Component: AmountRow },
+        },
+        {
+            id: 'ads-donate-to',
+            title: t('settings.ads.donateTo'),
+            line: t('settings.ads.donateToLine'),
+            help: t('settings.help.ads.donateTo'),
+            icon: Icon.LandmarkIcon,
+            control: {
+                kind: 'select',
+                value: (st) => adsSettingsOf(st).recipient,
+                options: () => ADS_RECIPIENTS.map((value) => {
+                    const RecipientIcon = RECIPIENT_ICONS[value];
+                    return { value, label: adsRecipientLabel(value), icon: <RecipientIcon /> };
+                }),
+                patch: (value, st) => adsPatch(st, { recipient: value }),
+            },
+        },
+    ];
+    const totalRows = [
+        {
+            id: 'ads-queued',
+            title: t('settings.ads.queued'),
+            line: t('settings.ads.queuedLine', { sendAt: money(ads.sendAt, currency) }),
+            icon: Icon.InboxIcon,
+            control: { kind: 'static', value: (st) => money(adsSettingsOf(st).queued, pageCurrency(st)) },
+        },
+        {
+            id: 'ads-donated',
+            title: t('settings.ads.donatedSoFar'),
+            line: t('settings.ads.donationCount', { count: ads.donationCount }),
+            icon: Icon.HeartIcon,
+            control: { kind: 'static', value: (st) => money(adsSettingsOf(st).donated, pageCurrency(st)) },
+        },
+    ];
 
     return (
-        <div style={STACK}>
-            {/* The page title already names the subject, so the switch reads as
-                an action; screen readers hear the subject too. */}
-            <ToggleRow
-                label={t('settings.toggle.turnOn')}
-                accessibleLabel={t('settings.ads.switchAccessibleLabel')}
-                hint={t('settings.ads.itSetsAsideASmall')}
-                checked={Boolean(settings.ads.enabled)}
-                onChange={onToggleEnabled}
-            />
-
-            {sharedSentence ? (
-                <div className={styles.hintRow} style={{ padding: '0 var(--xc-space-3)' }}>
-                    <span id={sharedHintId}>{sharedSentence}</span>
-                    {thresholdTip}
-                </div>
-            ) : null}
-
-            {chainIds.length === 0 ? (
-                <EmptyState title={t('settings.ads.noChainsSetUpFor')} titleAs="p" body={t('settings.ads.noChainsSetUpForBody')} />
-            ) : null}
-
-            {chainIds.map((chainId) => {
-                const chainState = settings.ads.perChain[chainId];
-                const descriptor = chainRegistry.get(chainId);
-                // §36.6: stored null = follow the release default; show the
-                // resolved amount and label it, so the user can tell a value
-                // that tracks releases from one they pinned themselves.
-                const resolved = resolveAdsChainConfig(chainState, descriptor);
-                const perTxIsDefault = chainState.perTxAmountSats == null;
-                const triggerIsDefault = chainState.triggerAmountSats == null;
-                const displayName = descriptor?.displayName || chainId;
-                return (
-                    <div key={chainId} className={styles.chain} data-settings-row="">
-                        {/* Donations opens as its own page under the h1 title, so each chain is the next level down. */}
-                        <h2 className={styles.chainName}>{displayName}</h2>
-
-                        <AmountField
-                            label={`${t('settings.ads.setAsidePerOutgoingTransaction')}${perTxIsDefault ? t('settings.ads.default') : t('settings.ads.custom')}`}
-                            help={t('settings.help.ads.perTransaction')}
-                            ariaLabel={t('settings.ads.perTransactionAmount', { displayName })}
-                            current={resolved.perTxAmountSats}
-                            disabled={!settings.ads.enabled}
-                            onCommit={(value) => onChainPatch(chainId, { perTxAmountSats: value })}
-                        />
-
-                        <AmountField
-                            label={`${t('settings.ads.sendDonationWhenPendingReaches')}${triggerIsDefault ? t('settings.ads.default') : t('settings.ads.custom')}`}
-                            help={t('settings.help.ads.threshold')}
-                            ariaLabel={t('settings.ads.triggerThreshold', { displayName })}
-                            current={resolved.triggerAmountSats}
-                            disabled={!settings.ads.enabled}
-                            onCommit={(value) => onChainPatch(chainId, { triggerAmountSats: value })}
-                            hint={sharedSentence ? undefined : thresholdSentence(chainId)}
-                            describedBy={sharedSentence ? sharedHintId : undefined}
-                            tip={sharedSentence ? undefined : thresholdTip}
-                        />
-
-                        <DonationAddressField
-                            chainId={chainId}
-                            descriptor={descriptor}
-                            displayName={displayName}
-                            role={selectedDonationRole(chainState)}
-                            disabled={!settings.ads.enabled}
-                            onPick={(id, role) => onChainPatch(id, { donationAddressRole: role })}
-                        />
-
-                        <div className={styles.stat}>
-                            <span className={styles.statLabel}>{t('settings.ads.pendingDonation')}</span>
-                            <span className={styles.statValue}>
-                                {t('settings.ads.satsAmount', { amount: chainState.accumulatedSats })}
-                            </span>
-                        </div>
-
-                        <div className={styles.stat}>
-                            <span className={styles.statLabel}>{t('settings.ads.lifetimeDonations')}</span>
-                            <span className={styles.statValue}>
-                                {t('settings.ads.lifetimeSummary', {
-                                    sats: chainState.lifetimeDonatedSats,
-                                    txs: t('settings.ads.txCount', { count: chainState.lifetimeTxCount }),
-                                })}
-                            </span>
-                        </div>
-                        {chainState.lifetimeDonatedSats > 0 ? (
-                            <div className={styles.thanks}>
-                                {t('settings.ads.thanksDonated', { sats: chainState.lifetimeDonatedSats })}
-                            </div>
-                        ) : null}
-                    </div>
-                );
-            })}
+        <div style={STACK} data-testid="ads-page">
+            <style>{GROUP_ICON_CSS}</style>
+            <Notice
+                tone="info"
+                role="note"
+                icon={<Icon.HeartIcon />}
+                className={styles.heroNotice}
+                title={on
+                    ? t('settings.page.adsPerTransaction', { amount: money(ads.perTransaction, currency) })
+                    : t('settings.ads.offTitle')}
+                testId="ads-hero"
+            >
+                {on
+                    ? t('settings.ads.summaryLine', {
+                        perTransaction: money(ads.perTransaction, currency),
+                        sendAt: money(ads.sendAt, currency),
+                        recipient,
+                    })
+                    : t('settings.ads.offLine')}
+            </Notice>
+            <AdsGroup label={t('settings.ads.groupDonation')} rows={donationRows} settings={settings} update={update} />
+            <AdsGroup label={t('settings.ads.groupTotals')} rows={totalRows} settings={settings} update={update} />
         </div>
     );
 }

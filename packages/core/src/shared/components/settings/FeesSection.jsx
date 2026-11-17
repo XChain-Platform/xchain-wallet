@@ -23,7 +23,7 @@
 //   - RBF-by-default toggle.
 
 import { useState } from 'react';
-import { Input, Select } from '@xchain-wallet/core/ui';
+import { Icon, Input, Select, Switch } from '@xchain-wallet/core/ui';
 import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
 import { EmptyState } from '@xchain-wallet/core/ui';
 import { resolveFeeConfig } from '../../../schemas/settings.js';
@@ -40,12 +40,10 @@ import {
     normalizeLocalizedDecimal,
 } from '../../utils/amountFormat.js';
 import {
-    STACK,
-    SettingsFieldRow,
     SettingsLoadError,
     Status,
-    ToggleRow,
 } from './_settingsPrimitives.jsx';
+import { NetworkRowList } from './NetworkRowsPage.jsx';
 import { t } from '../../../i18n/index.js';
 import '../../../i18n/locales/en/settings.js';
 
@@ -58,25 +56,28 @@ const STRATEGIES = /** @type {const} */ ([
     { value: 'custom', label: 'Custom' },
 ]);
 
-const CHAIN_BLOCK = {
+// One network's fee page: plain fields 8px apart (G80), no card and no
+// divider lines between them.
+const FEE_PAGE = {
     display: 'flex',
     flexDirection: 'column',
-    gap: 'var(--xc-space-1)',
-    padding: 'var(--xc-settings-row-pad, var(--xc-card-pad))',
-    background: 'var(--xc-settings-row-bg, var(--xc-card-bg))',
-    border: 'var(--xc-settings-row-border, var(--xc-card-border))',
-    borderRadius: 'var(--xc-settings-row-radius, var(--xc-card-radius))',
-    boxShadow: 'inset 0 -1px var(--xc-settings-row-divider, transparent)',
+    gap: 'var(--xc-space-2)',
+    minWidth: 0,
 };
-const CHAIN_HEADER = {
-    fontWeight: 600,
-    color: 'var(--xc-text)',
-    fontSize: 'var(--xc-text-sm)',
+const STRATEGY_SUMMARY = {
+    low: () => t('settings.fees.summary.low'),
+    normal: () => t('settings.fees.summary.normal'),
+    fast: () => t('settings.fees.summary.fast'),
+    custom: () => t('settings.fees.summary.custom'),
 };
-export function FeesSection() {
-    const { settings, loading, error, update } = useSettings({ reportsOwnError: true });
-    const [rateErrors, setRateErrors] = useState(/** @type {Record<string, string>} */ ({}));
-    const [saveErrors, setSaveErrors] = useState(/** @type {Record<string, string>} */ ({}));
+
+// A network's fee page id carries the chain id after the prefix.
+export const FEES_NETWORK_PAGE_PREFIX = 'fees-network:';
+
+// Fees is a list of the active networks; a row opens that network's own page
+// with the strategy picker, custom rate and fee-bump toggle (G117).
+export function FeesSection({ onOpen }) {
+    const { settings, loading, error } = useSettings({ reportsOwnError: true });
 
     if (loading) return <Status text={t('common.loading')} />;
     if (error) return <SettingsLoadError error={error} />;
@@ -99,6 +100,40 @@ export function FeesSection() {
         );
     }
 
+    const rows = chainIds.map((chainId) => {
+        const descriptor = chainRegistry.get(chainId);
+        const fees = resolveFeeConfig(settings.fees[chainId], descriptor);
+        const summary = STRATEGY_SUMMARY[fees.strategy] || STRATEGY_SUMMARY.normal;
+        return {
+            id: chainId,
+            descriptor: descriptor || { id: chainId, displayName: chainId },
+            name: descriptor?.displayName || chainId,
+            summary: summary(),
+        };
+    });
+    return (
+        // No "Active networks" heading over the rows (operator walk
+        // 2026-11-15); the list keeps that name for assistive tech.
+        <NetworkRowList
+            listLabel={t('settings.fees.networksGroup')}
+            rows={rows}
+            onOpen={(chainId) => onOpen?.(`${FEES_NETWORK_PAGE_PREFIX}${chainId}`)}
+        />
+    );
+}
+
+// One network's fee controls: strategy picker, custom rate when the strategy
+// is custom, and the fee-bump toggle.
+export function FeesNetworkPage({ chainId }) {
+    const { settings, loading, error, update } = useSettings({ reportsOwnError: true });
+    const [rateErrors, setRateErrors] = useState(/** @type {Record<string, string>} */ ({}));
+    const [saveErrors, setSaveErrors] = useState(/** @type {Record<string, string>} */ ({}));
+
+    if (loading) return <Status text={t('common.loading')} />;
+    if (error) return <SettingsLoadError error={error} />;
+    if (!settings) return <Status text={t('common.settingsUnavailable')} tone="error" />;
+    if (!settings.fees?.[chainId]) return <Status text={t('settings.fees.noChainFeeProfilesYet')} />;
+
     const onPatch = async (chainId, patch, rollback) => {
         setSaveErrors((current) => {
             const next = { ...current };
@@ -118,9 +153,6 @@ export function FeesSection() {
         }
     };
 
-    return (
-        <div style={STACK}>
-            {chainIds.map((chainId) => {
                 // §35.10: stored null = follow the release default; render
                 // the resolved preference. Writes may carry concrete
                 // values - updateSettings normalizes a value equal to the
@@ -132,37 +164,54 @@ export function FeesSection() {
                 const unit = resolveFeeUnit(descriptor);
                 const seedRate = defaultCustomSettingsRate(unit);
                 const rateBounds = estimateNativeSendFeeTiers({ chainId, chainRegistry });
-                const headingId = `fee-settings-${chainId}`;
-                const rateErrorId = `fee-rate-${chainId}-error`;
+                const rbfSupported = Boolean(descriptor?.feeStrategy?.rbfSupported);
+                // The page title names the coin, so the page holds no card and no
+                // second coin label (operator walk 2026-11-15): the fee-bump switch
+                // first, then the Fee strategy field, then the custom rate when
+                // Custom is chosen. Explanations live in each field's '?' tip (U57).
                 return (
-                    <div key={chainId} style={CHAIN_BLOCK} role="group" aria-labelledby={headingId}>
-                        <div id={headingId} style={CHAIN_HEADER}>{displayName}</div>
+                    <div key={chainId} style={FEE_PAGE} role="group" aria-label={displayName} data-fee-page={chainId}>
+                        <Switch
+                            label={t('settings.fees.allowFeeBumpReplaceBy')}
+                            help={rbfSupported
+                                ? t('settings.help.fees.rbf')
+                                : `${t('settings.help.fees.rbf')} ${t('settings.fees.feeBumpingIsNotSupported')}`}
+                            aria-label={t('settings.fees.allowFeeBumpReplaceBy2', { displayName })}
+                            checked={Boolean(fees.rbfByDefault)}
+                            onChange={(e) => onPatch(chainId, {
+                                rbfByDefault: e.target.checked,
+                            })}
+                            disabled={!descriptor?.feeStrategy?.rbfSupported}
+                            data-testid="fee-bump-switch"
+                        />
 
-                        <SettingsFieldRow
+                        <Select
                             label={t('settings.fees.feeStrategy')}
-                            embedded
+                            help={t('settings.help.fees.strategy')}
+                            value={fees.strategy}
+                            onChange={(e) => onPatch(chainId, {
+                                strategy: e.target.value,
+                                customSatsPerKb: e.target.value === 'custom' ? (fees.customSatsPerKb ?? seedRate) : null,
+                            })}
+                            aria-label={t('settings.fees.feeStrategy2', { displayName })}
+                            data-testid="fee-strategy-select"
                         >
-                            <Select
-                                value={fees.strategy}
-                                onChange={(e) => onPatch(chainId, {
-                                    strategy: e.target.value,
-                                    customSatsPerKb: e.target.value === 'custom' ? (fees.customSatsPerKb ?? seedRate) : null,
-                                })}
-                                aria-label={t('settings.fees.feeStrategy2', { displayName })}
-                            >
-                                {STRATEGIES.map((s) => (
-                                    <option key={s.value} value={s.value}>{s.label}</option>
-                                ))}
-                            </Select>
-                        </SettingsFieldRow>
+                            {STRATEGIES.map((s) => (
+                                <Select.Option
+                                    key={s.value}
+                                    value={s.value}
+                                    icon={s.value === 'low' ? <Icon.ClockIcon /> : s.value === 'fast' ? <Icon.ZapIcon /> : s.value === 'custom' ? <Icon.PencilIcon /> : <Icon.CoinsIcon />}
+                                >
+                                    {s.label}
+                                </Select.Option>
+                            ))}
+                        </Select>
 
                         {fees.strategy === 'custom' ? (
-                            <SettingsFieldRow
-                                label={t('settings.fees.customFeeRate')}
-                                hint={t('settings.fees.enterTheRateIn', { unit })}
-                                embedded
-                            >
                                 <Input
+                                    label={t('settings.fees.customFeeRate')}
+                                    help={`${t('settings.help.fees.customRate')} ${t('settings.fees.enterTheRateIn', { unit })}`}
+                                    error={rateErrors[chainId] || undefined}
                                     id={`fee-rate-${chainId}`}
                                     type="text"
                                     inputMode="decimal"
@@ -236,32 +285,31 @@ export function FeesSection() {
                                     }}
                                     onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                                     aria-label={t('settings.fees.customFeeRate2', { displayName })}
-                                    aria-invalid={rateErrors[chainId] ? 'true' : undefined}
-                                    aria-errormessage={rateErrors[chainId] ? rateErrorId : undefined}
-                                    aria-describedby={rateErrors[chainId] ? rateErrorId : undefined}
-                                    style={{ width: 120, textAlign: 'right' }}
+                                    data-testid="fee-custom-rate"
                                 />
-                            </SettingsFieldRow>
                         ) : null}
-                        {rateErrors[chainId] ? <Status id={rateErrorId} text={rateErrors[chainId]} tone="error" /> : null}
                         {saveErrors[chainId] ? <Status text={saveErrors[chainId]} tone="error" /> : null}
-
-                        <ToggleRow
-                            label={t('settings.fees.allowFeeBumpReplaceBy')}
-                            accessibleLabel={t('settings.fees.allowFeeBumpReplaceBy2', { displayName })}
-                            hint={descriptor?.feeStrategy?.rbfSupported
-                                ? t('settings.fees.keepThisOnSoYou')
-                                : t('settings.fees.feeBumpingIsNotSupported')}
-                            checked={Boolean(fees.rbfByDefault)}
-                            onChange={(v) => onPatch(chainId, {
-                                rbfByDefault: v,
-                            })}
-                            disabled={!descriptor?.feeStrategy?.rbfSupported}
-                            embedded
-                        />
                     </div>
                 );
-            })}
-        </div>
-    );
+}
+
+/**
+ * The Settings page for a network's fee controls, or null when `pageId` is
+ * not one. Settings resolves ids it does not list itself here.
+ *
+ * @param {string | null} pageId
+ */
+export function feesNetworkSectionFor(pageId) {
+    if (typeof pageId !== 'string' || !pageId.startsWith(FEES_NETWORK_PAGE_PREFIX)) return null;
+    const chainId = pageId.slice(FEES_NETWORK_PAGE_PREFIX.length);
+    const d = chainRegistry.get(chainId);
+    return {
+        id: pageId,
+        kind: 'internal-drill',
+        title: d?.displayName || chainId,
+        // G126: cardless below 600px, one form card from 600px.
+        formFrame: true,
+        Component: FeesNetworkPage,
+        props: { chainId },
+    };
 }

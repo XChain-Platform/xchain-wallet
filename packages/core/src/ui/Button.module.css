@@ -67,21 +67,35 @@
     display: block;
 }
 
+.edgePinnedIcon {
+    display: grid;
+    grid-template-columns: var(--xc-icon-size) minmax(0, 1fr) var(--xc-icon-size);
+    gap: 0;
+}
+
+.edgePinnedIcon .label {
+    grid-column: 2;
+    justify-self: center;
+}
+
+.edgeIconSlot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--xc-icon-size);
+    min-width: 0;
+}
+
 .btn:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: 2px;
 }
 
-.btn:disabled {
-    opacity: var(--xc-disabled-opacity);
-    cursor: not-allowed;
-}
-
-.btn:disabled:not(.link):not(.success) {
-    background: var(--xc-control-disabled-bg);
-    border-color: var(--xc-control-disabled-border);
-    color: var(--xc-control-disabled-text);
-}
+/* G130 (operator 2026-11-16): a button never looks disabled. A disabled or
+   busy button keeps its variant's colours, full opacity and pointer; only its
+   press and hover feedback stop. An action that cannot go ahead yet stays
+   enabled and answers the tap with the form's error notice (G129). The guard
+   is test/unit/ui/buttonNeverDisabledLook.test.js. */
 
 .btn:active:not(:disabled) {
     background: var(--xc-button-hover-bg);
@@ -217,18 +231,12 @@
     border-color: var(--xc-on-danger);
 }
 
-/* The main forward action stays fully green while disabled: it opts out of the
-   shared reduced saturation on disabled controls (tokens.css) and differs from
-   the enabled button only in its not-allowed cursor and its disabled state. */
+/* Main forward actions use the success fill in every state (U63, G130). */
 .success {
     --xc-button-hover-bg: var(--xc-success-fill);
     --xc-button-hover-border: var(--xc-success-fill);
     background: var(--xc-success-fill);
     color: var(--xc-on-success);
-}
-
-.success:disabled {
-    filter: none;
 }
 
 @media (hover: hover) and (pointer: fine) {

@@ -27,6 +27,8 @@ function makeContext(overrides = {}) {
         activeMarket: { chainId: 'bitcoin-mainnet', tick1: 'BTC', tick2: 'XCP' },
         setActiveMarket: vi.fn(),
         setUnlockedView: vi.fn(),
+        goBack: vi.fn(),
+        landView: vi.fn(),
         setDispenserRef: vi.fn(),
         formBack: vi.fn(),
         ...overrides,
@@ -52,12 +54,16 @@ describe('DEX route branches', () => {
         markets.props.onBack();
 
         expect(ctx.setActiveMarket).toHaveBeenCalledWith({ chainId: 'litecoin-mainnet', tick1: 'LTC', tick2: 'XCP' });
-        expect(ctx.setUnlockedView.mock.calls.map(([view]) => view)).toEqual(['markets-picker', 'market', 'home']);
+        expect(ctx.setUnlockedView.mock.calls.map(([view]) => view)).toEqual(['markets-picker', 'market']);
+        expect(ctx.goBack).toHaveBeenCalledTimes(1);
 
         const picker = renderDexRoute('markets-picker', ctx);
         expect(picker.props.accountId).toBeUndefined();
         picker.props.onSelect({ chainId: 'dogecoin-mainnet', tick: 'DOGE', displayName: 'Dogecoin', kind: 'native' });
+        // A pick unwinds to the Markets page that opened the picker.
+        expect(ctx.landView).toHaveBeenCalledWith('markets');
         picker.props.onBack();
+        expect(ctx.goBack).toHaveBeenCalledTimes(2);
         expect(ctx.setMarketsAsset).toHaveBeenCalledWith({
             chainId: 'dogecoin-mainnet',
             tick: 'DOGE',
@@ -81,7 +87,8 @@ describe('DEX route branches', () => {
             tick2: 'BTC',
         });
         expect(ctx.setActiveMarket).toHaveBeenNthCalledWith(2, null);
-        expect(ctx.setUnlockedView).toHaveBeenCalledWith('markets');
+        expect(ctx.goBack).toHaveBeenCalledTimes(1);
+        expect(ctx.setUnlockedView).not.toHaveBeenCalled();
     });
 
     it('wires form, order, and swap routes', () => {
@@ -98,12 +105,11 @@ describe('DEX route branches', () => {
         renderDexRoute('my-swaps', ctx).props.onCreateSwap();
 
         expect(ctx.formBack).toHaveBeenCalledTimes(4);
+        expect(ctx.goBack).toHaveBeenCalledTimes(2);
         expect(ctx.setUnlockedView.mock.calls.map(([view]) => view)).toEqual([
             'my-orders',
             'my-orders',
-            'home',
             'create-order',
-            'home',
             'swap',
         ]);
     });
@@ -117,8 +123,8 @@ describe('DEX route branches', () => {
         expect(ctx.setDispenserRef).toHaveBeenCalledWith({
             chainId: 'dogecoin-mainnet',
             actionIndex: '900000.1',
-            origin: 'explorer',
         });
-        expect(ctx.setUnlockedView.mock.calls.map(([view]) => view)).toEqual(['dispenser-detail', 'home']);
+        expect(ctx.setUnlockedView.mock.calls.map(([view]) => view)).toEqual(['dispenser-detail']);
+        expect(ctx.goBack).toHaveBeenCalledTimes(1);
     });
 });

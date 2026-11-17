@@ -46,7 +46,9 @@ import {
     clickManageTokenAction,
     createWallet,
     expect,
+    openIssueSection,
     openPaletteCommand,
+    pickIssuePreset,
     submitTokenWizard,
     test,
 } from '../../fixtures/wallet.js';
@@ -267,6 +269,42 @@ async function openTokenAdmin(page, item, tick = TICK) {
 }
 
 /**
+ * Picks the venue chain on the open Issue Token form and returns the address it
+ * signs with. The network and the signer sit in the From section, closed until
+ * opened, and the signer resolves in an effect after the network changes, so it
+ * is polled rather than read once.
+ */
+async function readIssueSource(probe) {
+    await openIssueSection(probe, 'From');
+    await selectVenueChain(probe);
+    await expect.poll(async () => probe.getByLabel('From address').inputValue().catch(() => ''),
+        { timeout: 30_000, message: 'the Issue Token form names no signing address' })
+        .toMatch(REGTEST_ADDRESS_RE);
+    return probe.getByLabel('From address').inputValue();
+}
+
+/**
+ * Fills the Limited edition preset on the open Issue Token form: the name, the
+ * edition size, the per-transaction cap and the artwork URL, and leaves the
+ * form ready to submit. The preset caps each address at one copy and the form
+ * refuses a per-address cap below the per-transaction one, so the per-address
+ * cap is raised to the whole edition.
+ */
+async function fillEdition(main, tick) {
+    await pickIssuePreset(main, /^Limited edition/);
+    await openIssueSection(main, 'From');
+    await selectVenueChain(main);
+    await expect(main.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
+    await main.getByLabel('Ticker', { exact: true }).fill(tick);
+    await main.getByLabel('Max supply', { exact: true }).fill(String(EDITION_SIZE));
+    await openIssueSection(main, 'Public minting');
+    await main.getByLabel('Max per transaction', { exact: true }).fill(String(EDITION_PER_TX));
+    await main.getByLabel('Max per address', { exact: true }).fill(String(EDITION_SIZE));
+    await openIssueSection(main, 'Description');
+    await main.getByLabel('Image URL').fill(EDITION_IMAGE_URL);
+}
+
+/**
  * Onboards, funds the only address, and creates the Custom token with its
  * description LOCKED in the same genesis params. Returns that address.
  */
@@ -276,9 +314,8 @@ async function onboardAndCreateLocked(page) {
 
     await openPaletteCommand(page, 'Issue token');
     const probe = page.getByRole('main');
-    await expect(probe.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(probe);
-    const source = await probe.getByLabel('From').inputValue();
+    await expect(probe.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
+    const source = await readIssueSource(probe);
     expect(source, `the wallet has no ${REGTEST_CHAIN_LABEL} address to sign with`)
         .toMatch(REGTEST_ADDRESS_RE);
 
@@ -290,24 +327,24 @@ async function onboardAndCreateLocked(page) {
 
     await openPaletteCommand(page, 'Create a token');
     const main = page.getByRole('main');
-    await main.getByRole('button', { name: /^Custom/ }).click();
+    // No template: the Custom token is the form with nothing picked.
+    await openIssueSection(main, 'From');
     await selectVenueChain(main);
-    await main.getByRole('button', { name: 'Next', exact: true }).click();
 
-    await expect(main.getByLabel('Token name (ticker)')).toBeVisible({ timeout: 30_000 });
-    await main.getByLabel('Token name (ticker)').fill(TICK);
-    await main.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
-    await main.getByLabel('Description', { exact: true }).fill(DESCRIPTION);
-    await main.getByLabel('Max mint per transaction', { exact: true }).fill(String(MAX_MINT));
+    await expect(main.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
+    await main.getByLabel('Ticker', { exact: true }).fill(TICK);
+    await main.getByLabel('Max supply', { exact: true }).fill(String(SUPPLY));
+    await openIssueSection(main, 'Description');
+    await main.getByLabel('Token description', { exact: true }).fill(DESCRIPTION);
+    await openIssueSection(main, 'Public minting');
+    await main.getByLabel('Max per transaction', { exact: true }).fill(String(MAX_MINT));
 
-    // The PC-06 disclosure. Deliberately NOT the "Lock this token" shortcut on
-    // the same form: that sets LOCK_MAX_SUPPLY and LOCK_MINT together, and this
-    // test needs exactly one flag set so the other fields stay editable and can
-    // act as the control.
-    await main.getByRole('button', { name: /Advanced/ }).click();
-    const descriptionLock = main.getByRole('checkbox', { name: 'Description' });
+    // The Locks section. Each lock is its own switch, so exactly one flag is set
+    // here and the other fields stay editable and can act as the control.
+    await openIssueSection(main, 'Locks');
+    const descriptionLock = main.getByRole('switch', { name: 'Description', exact: true });
     await expect(descriptionLock,
-        'the advanced disclosure has no Description lock, so the lock matrix is not on this form')
+        'the Locks section has no Description lock, so the lock matrix is not on this form')
         .toBeVisible({ timeout: 15_000 });
     await descriptionLock.check();
 
@@ -408,9 +445,8 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Issue token');
             const probe = page.getByRole('main');
-            await expect(probe.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(probe);
-            source = await probe.getByLabel('From').inputValue();
+            await expect(probe.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
+            source = await readIssueSource(probe);
             expect(source).toMatch(REGTEST_ADDRESS_RE);
 
             await fundAddress(source, FUNDING);
@@ -421,14 +457,7 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Create a token');
             const main = page.getByRole('main');
-            await main.getByRole('button', { name: /^Limited edition/ }).click();
-            await selectVenueChain(main);
-            await main.getByRole('button', { name: 'Next', exact: true }).click();
-            await expect(main.getByLabel('Token name (ticker)')).toBeVisible({ timeout: 30_000 });
-            await main.getByLabel('Token name (ticker)').fill(MINTABLE_TICK);
-            await main.getByLabel('Edition size').fill(String(EDITION_SIZE));
-            await main.getByLabel('Copies per mint').fill(String(EDITION_PER_TX));
-            await main.getByLabel('Image URL').fill(EDITION_IMAGE_URL);
+            await fillEdition(main, MINTABLE_TICK);
             await submitTokenWizard(page);
             await expectConfirmScreen(page);
             const issued = await waitForIndexedAction(await approveAndGetTxid(page));
@@ -551,9 +580,8 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Issue token');
             const probe = page.getByRole('main');
-            await expect(probe.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(probe);
-            source = await probe.getByLabel('From').inputValue();
+            await expect(probe.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
+            source = await readIssueSource(probe);
             expect(source).toMatch(REGTEST_ADDRESS_RE);
 
             await fundAddress(source, FUNDING);
@@ -564,14 +592,7 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Create a token');
             const main = page.getByRole('main');
-            await main.getByRole('button', { name: /^Limited edition/ }).click();
-            await selectVenueChain(main);
-            await main.getByRole('button', { name: 'Next', exact: true }).click();
-            await expect(main.getByLabel('Token name (ticker)')).toBeVisible({ timeout: 30_000 });
-            await main.getByLabel('Token name (ticker)').fill(LOCKMINT_TICK);
-            await main.getByLabel('Edition size').fill(String(EDITION_SIZE));
-            await main.getByLabel('Copies per mint').fill(String(EDITION_PER_TX));
-            await main.getByLabel('Image URL').fill(EDITION_IMAGE_URL);
+            await fillEdition(main, LOCKMINT_TICK);
             await submitTokenWizard(page);
             await expectConfirmScreen(page);
             expect(String((await waitForIndexedAction(await approveAndGetTxid(page))).status))

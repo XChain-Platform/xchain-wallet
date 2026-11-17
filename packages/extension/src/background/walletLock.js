@@ -281,7 +281,9 @@ export function createLockBackstop(deps) {
             cleanupPending = false;
             deps.clearAutoLockState().catch(() => { /* best-effort */ });
         }
-        deps.tearDownHost();
+        // Returned so the lock reply waits for the teardown, which may first
+        // hand armed auto pay to its locked session (PC-16 Phase B).
+        return deps.tearDownHost();
     }
 
     // A session is legitimately live again, so any secret a previous failed

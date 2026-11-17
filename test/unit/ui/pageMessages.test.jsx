@@ -139,9 +139,19 @@ async function componentFor(route) {
     return module[route.component];
 }
 
+// Two Notices since the 2026-11-15 Notice Standard are part of the page, not
+// a message about the route's data state, so they are not counted, as they
+// were not while they were a warning card's line or a card:
+//   - a static caution (Notice role="note": the private key and recovery
+//     phrase warnings), which is on the page from the first paint whatever
+//     the reads answer;
+//   - Home's backup reminder, a standing prompt about the wallet.
+const PAGE_CONTENT_NOTICES = '[role="note"], section[aria-label="Back up your wallet"]';
+
 function visibleMessages(container) {
     const nodes = [...container.querySelectorAll('[data-variant], [data-empty-state]')]
-        .filter((el) => !el.closest('[role="dialog"], [hidden], [aria-hidden="true"]'));
+        .filter((el) => !el.closest('[role="dialog"], [hidden], [aria-hidden="true"]'))
+        .filter((el) => !el.closest(PAGE_CONTENT_NOTICES));
     return nodes
         .filter((el) => !nodes.some((other) => other !== el && other.contains(el)))
         .map((el) => el.textContent.replace(/\s+/g, ' ').trim().slice(0, 90));

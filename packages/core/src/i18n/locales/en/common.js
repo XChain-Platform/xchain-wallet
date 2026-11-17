@@ -15,14 +15,13 @@ import { addEnglish } from '../../store.js';
 const messages = {
     // --- common ---------------------------------------------------
     'common.back': 'Back',
-    'common.backToHome': 'Back to home',
     'common.exitHint': 'Press Back again to exit.',
     'common.cancel': 'Cancel',
     'common.clear': 'Clear',
     'common.copy': 'Copy',
-    'common.copyTransactionId': 'Copy transaction ID',
-    'common.tryAgain': 'Try again',
-    'common.openNetworkSettings': 'Open network settings',
+    'common.copyTransactionId': 'Copy Transaction ID',
+    'common.tryAgain': 'Try Again',
+    'common.openNetworkSettings': 'Open Network Settings',
     'common.done': 'Done',
     'common.loading': 'Loading…',
     'common.checking': 'Checking…',
@@ -33,44 +32,21 @@ const messages = {
     'common.hidePassphrase': 'Hide passphrase',
     'common.confirm': 'Confirm',
     'common.typedConfirmationHint': 'Type {word} exactly in capitals with no spaces.',
-    'common.typedConfirmationAdvancedHint': "This can't be undone. Type {word} exactly in capitals with no spaces.",
-    'common.typedConfirmationCallbackHint':
-        "This recalls every unit of the token from all holders and pays them the amount above. It can't be undone. Type RECALL exactly in capitals with no spaces.",
-    'common.typedConfirmationCallbackReviewHint':
-        'Recalls all supply and pays holders. Irreversible. Type RECALL exactly in capitals with no spaces.',
-    'common.typedConfirmationDestroyHint':
-        "This burns the amount above and can't be undone. Type DESTROY exactly in capitals with no spaces.",
-    'common.typedConfirmationDestroyReviewHint':
-        'Destroying tokens is irreversible. Type DESTROY exactly in capitals with no spaces.',
-    'common.typedConfirmationListShareHint':
-        "Sharing is permanent and can't be undone. Type SHARE exactly in capitals with no spaces.",
-    'common.typedConfirmationListTransferHint':
-        'List ownership changes permanently when this transaction confirms. Type TRANSFER exactly in capitals with no spaces.',
-    'common.typedConfirmationListTransferReviewHint':
-        'Ownership transfer is permanent. Type TRANSFER exactly in capitals with no spaces.',
+    // A typed DESTROY, SWEEP or LOCK uses the plain hint above: what the
+    // action does is said once, in the confirm screen's warnings card
+    // (i18n/locales/en/actionWarnings.js).
     'common.typedConfirmationOracleHint':
         "This changes your published price by {deviationPct} and can't be undone for 24 hours. Type PUBLISH exactly in capitals with no spaces.",
-    'common.typedConfirmationSleepHint':
-        "This pauses XChain actions from your address and can't be undone before the wake block. Type LOCK exactly in capitals with no spaces.",
-    'common.typedConfirmationSweepHint':
-        'Everything in the selected categories moves to the destination, including anything the preview did not list. Type SWEEP exactly in capitals with no spaces.',
-    'common.typedConfirmationSweepReviewHint':
-        'Everything in the selected categories moves, including anything not listed in the preview. Type SWEEP exactly in capitals with no spaces.',
-    'common.typedConfirmationLockBelowHint':
-        'Locking is permanent. Every flag checked below can never be unlocked. Type LOCK exactly in capitals with no spaces.',
-    'common.typedConfirmationLockAboveHint':
-        'Locking is permanent. Every flag checked above can never be unlocked. Type LOCK exactly in capitals with no spaces.',
     'common.settingsUnavailable': 'Settings unavailable.',
     'common.vaultConflict': 'This wallet changed in another window. Nothing was lost. Reload to see the latest, then try again.',
-    'common.edit': 'Edit',
-    'common.estimateUnavailable': 'Estimate unavailable',
     'common.networkFeeUnavailable': 'Network fee estimate unavailable.',
     'common.notAvailable': 'Not available',
-    'common.preview': 'Preview',
     'common.watcherBuildsUnsigned':
-        'Watcher mode: this prepares the transaction for your offline signer. Sign it there, then bring the signed transaction to a wallet that can broadcast it.',
+        'Another phone signs for this wallet: this prepares the transaction for it. Sign it there, then bring the signed transaction to a wallet that can broadcast it.',
     'common.contactName': 'Contact name',
     'common.allNetworks': 'All networks',
+    'common.dispensers.selectMarket': 'Select Market',
+    'common.dispensers.backToDispensers': 'Back to dispensers',
 };
 
 addEnglish(messages);

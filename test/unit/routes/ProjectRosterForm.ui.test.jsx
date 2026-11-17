@@ -26,6 +26,18 @@ vi.mock('../../../packages/core/src/shared/components/OwnAddressPickerScreen.jsx
     ),
 }));
 
+// Tokens join the list only through the token picker; this stand-in picks
+// whatever ticker is typed into it, on the chain the form locked it to.
+vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
+    TokenPicker: ({ title, chainIdFilter, onSelect, onBack }) => (
+        <section aria-label={title}>
+            <input aria-label="Token to pick" id="pick-tick" />
+            <button type="button" onClick={() => onSelect({ chainId: chainIdFilter, tick: document.getElementById('pick-tick').value })}>Pick token</button>
+            <button type="button" onClick={onBack}>Close token picker</button>
+        </section>
+    ),
+}));
+
 const CHAIN = 'dogecoin-testnet';
 const OWNER = {
     id: 'address-1',
@@ -89,10 +101,13 @@ afterEach(() => {
 describe('ProjectRosterForm roster controls', () => {
     it('opens with Network then From and keeps form-specific help on field labels', async () => {
         const { container } = mount();
-        await screen.findByText('No list published yet. This will be the first.');
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Add Token' })).toBeEnabled());
 
+        // Network and From live in the standard From section, closed
+        // on load; the address field is labelled "From address".
+        fireEvent.click(screen.getByRole('button', { name: /^From/, expanded: false }));
         const network = screen.getByRole('button', { name: /^Network:/ });
-        const from = screen.getByLabelText('From', { selector: 'input' });
+        const from = screen.getByLabelText('From address', { selector: 'input' });
         expect(network.compareDocumentPosition(from) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         await waitFor(() => expect(from).toHaveValue(OWNER.address));
 
@@ -101,42 +116,56 @@ describe('ProjectRosterForm roster controls', () => {
             .join(' ');
         expect(paragraphs).not.toContain('show an "Official" badge in explorers and wallets');
 
-        expectHelp('From', 'Only the current owner of PROJ can publish its official-token list.');
+        expectHelp('From address', 'Only the current owner of PROJ can publish its official-token list.');
         expectHelp(
-            'Tokens (one per line)',
-            'Tokens on PROJ\'s official-token list show an "Official" badge in explorers and wallets. Publishing a new list replaces the old one. Enter one token name per line.',
+            'Tokens',
+            'Tokens on PROJ\'s list show an "Official" badge in explorers and wallets. Put one token per line, or add one from the token picker.',
         );
-        expectHelp('Memo', 'An optional note stored with the link that makes this roster official.');
+        // Tokens are typed one per line, like the List create page.
+        expect(screen.getByRole('textbox', { name: /^Tokens/ })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Add Token' }).querySelector('svg[data-xc-icon]')).not.toBeNull();
+        // Memo is its own optional section, closed on load.
+        // It holds only the memo, so the field has no label row or tip (ruling).
+        fireEvent.click(screen.getByRole('button', { name: /^Memo/, expanded: false }));
+        expect(screen.queryByRole('button', { name: 'About Memo' })).toBeNull();
+        expect(screen.getByRole('textbox', { name: 'Memo' })).toBeInTheDocument();
 
-        expect(screen.getByText('Optional')).toBeTruthy();
-        expect(screen.getByText('0 / 250')).toBeTruthy();
-        const save = screen.getByRole('button', { name: 'Save roster' });
+        // A network without list metadata leaves out the List Details section.
+        expect(screen.queryByLabelText(/List name/)).toBeNull();
+        expect(screen.queryByRole('button', { name: /^List Details/ })).toBeNull();
+        expect(screen.getByText(/doesn't take a list name or description yet/)).toBeTruthy();
+        // No list yet, so the main action creates it and links it.
+        const save = screen.getByRole('button', { name: 'Create and Link' });
         expect(save.className).toMatch(/success/);
         expect(save.querySelector('svg[data-xc-icon]')).not.toBeNull();
     });
 
     it('opens the From picker on the form network and accepts its chain change', async () => {
         mount();
-        const from = await screen.findByLabelText('From', { selector: 'input' });
+        const from = await screen.findByLabelText('From address', { selector: 'input' });
         await waitFor(() => expect(from).toHaveValue(OWNER.address));
 
+        // Open the standard From section to reach the picker icon.
+        fireEvent.click(screen.getByRole('button', { name: /^From/, expanded: false }));
         fireEvent.click(screen.getByRole('button', { name: 'Choose source address' }));
         expect(screen.getByRole('region', { name: 'From address picker' })).toBeTruthy();
         expect(screen.getByTestId('picker-chain')).toHaveTextContent(CHAIN);
 
         fireEvent.click(screen.getByRole('button', { name: 'Pick another network address' }));
         expect(await screen.findByRole('button', { name: /Network: Litecoin/i })).toBeTruthy();
-        expect(screen.getByLabelText('From', { selector: 'input' })).toHaveValue(OTHER.address);
+        expect(screen.getByLabelText('From address', { selector: 'input' })).toHaveValue(OTHER.address);
         expect(screen.getByRole('alert')).toHaveTextContent('This wallet does not own PROJ');
     });
 
     it('renders reviewed tokens as icon rows in one card', async () => {
         mount();
-        await screen.findByText('No list published yet. This will be the first.');
-        fireEvent.change(screen.getByLabelText('Tokens (one per line)'), {
-            target: { value: 'FIRST\nSECOND' },
-        });
-        fireEvent.click(screen.getByRole('button', { name: 'Save roster' }));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Add Token' })).toBeEnabled());
+        for (const tick of ['FIRST', 'SECOND']) {
+            fireEvent.click(screen.getByRole('button', { name: 'Add Token' }));
+            fireEvent.change(screen.getByLabelText('Token to pick'), { target: { value: tick } });
+            fireEvent.click(screen.getByRole('button', { name: 'Pick token' }));
+        }
+        fireEvent.click(screen.getByRole('button', { name: 'Create and Link' })); // A first list is created, then linked.
 
         const roster = await screen.findByRole('list', { name: 'Tokens' });
         const rows = screen.getAllByRole('listitem');
@@ -148,9 +177,9 @@ describe('ProjectRosterForm roster controls', () => {
         expect(screen.getByRole('img', { name: /SECOND on Dogecoin/i })).toBeTruthy();
         expect(roster.className).toMatch(/rosterList/);
 
-        const publish = screen.getByRole('button', { name: 'Publish list' });
+        const publish = screen.getByRole('button', { name: 'Publish List' });
         expect(publish.className).toMatch(/success/);
         expect(publish.querySelector('svg[data-xc-icon]')).not.toBeNull();
-        expect(screen.getByRole('button', { name: 'Back to edit' }).querySelector('svg[data-xc-icon]')).not.toBeNull();
+        expect(screen.getByRole('button', { name: 'Back to Edit' }).querySelector('svg[data-xc-icon]')).not.toBeNull();
     });
 });

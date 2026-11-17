@@ -33,29 +33,9 @@
     font-weight: 600;
 }
 
-.compactSelect {
-    width: auto;
-    min-height: var(--xc-tap-min);
-    cursor: pointer;
-}
-
-.compactSelect:disabled {
-    cursor: not-allowed;
-}
-
 .descriptor {
     direction: ltr;
     unicode-bidi: isolate;
     font-family: var(--xc-font-mono, monospace);
     font-size: var(--xc-text-xs);
-}
-
-.startAction {
-    align-self: flex-start;
-}
-
-@media (max-width: 480px) {
-    .toolAction {
-        margin-block: var(--xc-space-1);
-    }
 }

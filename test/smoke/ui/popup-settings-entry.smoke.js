@@ -82,8 +82,9 @@ for (const [name, src] of [['HomeTabs', homeTabs], ['Home', home]]) {
         `${name} threads onOpenSettings through to the hero`,
     );
 }
+// The gear is a control on Home, so it pushes Settings and Back returns Home.
 assert.ok(
-    /onOpenSettings=\{\(\) => openSettingsSection\(null\)\}/.test(popupApp),
+    /onOpenSettings=\{\(\) => openSettingsSection\(null, setUnlockedView\)\}/.test(popupApp),
     'the popup supplies the gear handler',
 );
 // Web and desktop DO pass onOpenSettings - to `<LeftNav>` and

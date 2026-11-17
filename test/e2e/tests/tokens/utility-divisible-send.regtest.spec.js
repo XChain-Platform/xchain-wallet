@@ -66,7 +66,7 @@
 //       --config=playwright.regtest.config.js tests/tokens/utility-divisible-send.regtest.spec.js
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, gotoSection, mainButton, openPaletteCommand, submitTokenWizard, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, gotoSection, mainButton, openIssueSection, openPaletteCommand, pickIssuePreset, submitTokenWizard, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
@@ -274,9 +274,14 @@ test.describe(`utility token divisibility on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Issue token');
             const probe = page.getByRole('main');
-            await expect(probe.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(probe.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
+            // The network and the signer sit in the From section, closed until opened.
+            await openIssueSection(probe, 'From');
             await selectVenueChain(probe);
-            owner = await probe.getByLabel('From').inputValue();
+            await expect.poll(async () => probe.getByLabel('From address').inputValue().catch(() => ''),
+                { timeout: 30_000, message: 'the Issue Token form names no signing address' })
+                .toMatch(REGTEST_ADDRESS_RE);
+            owner = await probe.getByLabel('From address').inputValue();
             expect(owner, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
 
@@ -293,19 +298,23 @@ test.describe(`utility token divisibility on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Create a token');
             const main = page.getByRole('main');
-            await main.getByRole('button', { name: /^Utility/ }).click();
+            await pickIssuePreset(main, /^Utility/);
+            // The network and the signer sit in the From section, closed until opened.
+            await openIssueSection(main, 'From');
             await selectVenueChain(main);
-            await expect.poll(async () => main.getByLabel('Fee paid by').inputValue().catch(() => ''),
-                { timeout: 30_000, message: 'the wizard names no signing address' })
+            await expect.poll(async () => main.getByLabel('From address').inputValue().catch(() => ''),
+                { timeout: 30_000, message: 'the Issue Token form names no signing address' })
                 .toMatch(REGTEST_ADDRESS_RE);
-            await main.getByRole('button', { name: 'Next', exact: true }).click();
 
-            await expect(main.getByLabel('Token name (ticker)')).toBeVisible({ timeout: 30_000 });
-            await main.getByLabel('Token name (ticker)').fill(TICK);
-            await main.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
-            // The two fields only this template and Custom expose.
-            await main.getByLabel('Divisible (8 decimal places)').check();
-            await main.getByLabel('Max mint per transaction', { exact: true }).fill(String(MAX_MINT));
+            await expect(main.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
+            await main.getByLabel('Ticker', { exact: true }).fill(TICK);
+            await main.getByLabel('Max supply', { exact: true }).fill(String(SUPPLY));
+            // The Utility preset turns Divisible on; checking it here keeps the
+            // spec stating the DECIMALS it expects rather than trusting the preset.
+            await main.getByRole('switch', { name: /^Divisible/ }).check();
+            // The per-transaction cap sits in the Public minting section.
+            await openIssueSection(main, 'Public minting');
+            await main.getByLabel('Max per transaction', { exact: true }).fill(String(MAX_MINT));
             await submitTokenWizard(page);
 
             await expectConfirmScreen(page);

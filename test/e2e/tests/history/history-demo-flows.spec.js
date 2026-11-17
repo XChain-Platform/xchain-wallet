@@ -136,9 +136,11 @@ for (const viewport of VIEWPORTS) {
         await expectTimelineCount(page, 27);
         await expectNoHorizontalOverflow(page, `${viewport.name} grouped History list`);
 
-        const exportButton = page.getByRole('button', { name: 'Export…' });
-        await expect(exportButton).toBeEnabled();
-        await exportButton.click();
+        // Export lives in the header's ⋯ menu, beside Refresh.
+        await page.getByRole('button', { name: 'More actions' }).click();
+        const exportItem = page.getByRole('menu').getByRole('menuitem', { name: 'Export…' });
+        await expect(exportItem).toBeEnabled();
+        await exportItem.click();
         const exportDialog = page.getByRole('dialog', { name: 'Export history' });
         await expect(exportDialog).toBeVisible();
         await expect(exportDialog.getByText('33 history items will be exported.')).toBeVisible();
@@ -149,12 +151,12 @@ for (const viewport of VIEWPORTS) {
 
         const outgoing = historyRow(page, 'bitcoin-mainnet', 100002);
         await outgoing.locator('button').first().click();
-        await expect(page.getByRole('heading', { name: 'Send #100,002' })).toBeVisible();
-        // The detail opens on its Status tab; the amount lives under Details.
-        await page.getByRole('tablist', { name: 'Transaction detail tabs' })
+        await expect(page.getByRole('heading', { name: 'Send #100002' })).toBeVisible();
+        // The detail opens on its Actions tab (G102); the amount lives under Details.
+        await page.getByRole('tablist', { name: 'Action View' })
             .getByRole('tab', { name: 'Details', exact: true }).click();
-        const amountCell = page.getByRole('rowheader', { name: 'Amount' }).first()
-            .locator('xpath=following-sibling::td');
+        const amountCell = page.locator('dt').filter({ hasText: /^Amount$/ }).first()
+            .locator('xpath=following-sibling::dd[1]');
         await expect(amountCell).toContainText('-0.05');
         await expectNoHorizontalOverflow(page, `${viewport.name} transaction detail`);
 

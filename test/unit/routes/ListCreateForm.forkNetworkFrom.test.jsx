@@ -1,0 +1,156 @@
+// Copyright (c) 2025-2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC - https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of XChain Platform. Licensed under the GNU Affero
+// General Public License v3.0 or later; see LICENSE.md. A commercial
+// license (without AGPL source-disclosure terms) is available -
+// contact legal@dankest.llc.
+
+import React from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+
+import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
+import { ListForkRoute as ListForkForm } from '../../helpers/listFormRoutes.jsx';
+
+const pickerProps = vi.hoisted(() => ({ last: null }));
+
+vi.mock('../../../packages/core/src/shared/components/OwnAddressPickerScreen.jsx', () => ({
+    OwnAddressPickerScreen: (props) => {
+        pickerProps.last = props;
+        return (
+            <div data-testid="own-address-picker">
+                <h1>{props.title}</h1>
+                <button type="button" onClick={() => props.onPick({ id: 'doge-1' })}>pick other</button>
+                <button type="button" onClick={() => props.onPick({ id: 'doge-0' })}>pick owner</button>
+            </div>
+        );
+    },
+}));
+
+const CHAIN = 'dogecoin-mainnet';
+const OWNER = { id: 'doge-0', address: 'DOwnerOwnerOwnerOwnerOwnerOwner01', publicKey: '02aa', derivationPath: "m/44'/3'/0'/0/0", source: 'hd', signerId: 's1' };
+const OTHER = { id: 'doge-1', address: 'DOtherOtherOtherOtherOtherOther002', publicKey: '02bb', derivationPath: "m/44'/3'/0'/0/1", source: 'hd', signerId: 's1' };
+const MEMBERS = ['KEEP', 'REMOVE'];
+
+function mountFork({ type = '1', items = MEMBERS } = {}) {
+    const row = {
+        action_index: 2700, type, source: OWNER.address, list: items,
+        state: { edit_resolution_active: true, current_list: items, owner: OWNER.address },
+    };
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode: 'watcher' }], activeWalletId: 'wallet-1' });
+    const target = {
+        getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [OWNER, OTHER] }),
+        getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: OTHER.id } }),
+        getSettings: vi.fn().mockResolvedValue({ activeNetwork: 'mainnet' }),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'W', walletMode: 'watcher' }]),
+        signerReady: vi.fn().mockResolvedValue({ ready: false }),
+        getSignerStatus: vi.fn().mockResolvedValue({ status: 'locked' }),
+        getListByActionIndex: vi.fn().mockResolvedValue(row),
+    };
+    const messaging = new Proxy(target, {
+        get(obj, prop) { return prop in obj ? obj[prop] : vi.fn().mockResolvedValue(null); },
+    });
+    return render(
+        <MessagingProvider shell="web" messaging={messaging}>
+            <ListForkForm
+                walletId="wallet-1"
+                listRef={{ chainId: CHAIN, actionIndex: '2700', type, items, editResolutionActive: true, source: OWNER.address, parentIndex: null }}
+                onBack={() => {}}
+                onDone={() => {}}
+            />
+        </MessagingProvider>,
+    );
+}
+
+afterEach(() => {
+    cleanup();
+    resetWalletModes();
+    pickerProps.last = null;
+});
+
+describe('ListForkForm network, from and field help', () => {
+    it('opens with Network then From, From on the owner, and no Signed from line', async () => {
+        const { container } = mountFork();
+        const from = await screen.findByLabelText('From');
+        await waitFor(() => expect(from).toHaveValue(OWNER.address));
+        const network = screen.getByText('Network', { selector: 'label, span, div' });
+        expect(network.compareDocumentPosition(from) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        const form = container.querySelector('form');
+        const fields = [...form.querySelectorAll('input, textarea, button')].map((el) => el.getAttribute('aria-label') || el.id || el.name || el.textContent);
+        expect(fields.length).toBeGreaterThan(0);
+        expect(screen.queryByText(/Signed from/)).toBeNull();
+        expect(screen.queryByText(/uncheck to remove/i)).toBeNull();
+        expect(screen.queryByText(/one per line/i, { selector: 'label, span' })).toBeNull();
+    });
+
+    it('opens the own-address picker locked to the list chain and signs from the picked owner', async () => {
+        mountFork();
+        const from = await screen.findByLabelText('From');
+        await waitFor(() => expect(from).toHaveValue(OWNER.address));
+        // From is a closed standard section; open it to reach its picker.
+        fireEvent.click(screen.getByRole('button', { name: /^From\b/, expanded: false }));
+        fireEvent.click(screen.getByRole('button', { name: 'Choose source address' }));
+        expect(await screen.findByTestId('own-address-picker')).toBeTruthy();
+        expect(pickerProps.last.title).toBe('From Address');
+        expect(pickerProps.last.chainId).toBe(CHAIN);
+        expect(pickerProps.last.lockNetwork).toBe(true);
+        fireEvent.click(screen.getByText('pick owner'));
+        await waitFor(() => expect(screen.getByLabelText('From')).toHaveValue(OWNER.address));
+        expect(screen.queryByText(/which is not an address in this wallet/)).toBeNull();
+    });
+
+    it('shows the existing ownership blocker when another address is picked and refuses to publish', async () => {
+        mountFork();
+        await waitFor(() => expect(screen.getByLabelText('From')).toHaveValue(OWNER.address));
+        // From is a closed standard section; open it to reach its picker.
+        fireEvent.click(screen.getByRole('button', { name: /^From\b/, expanded: false }));
+        fireEvent.click(screen.getByRole('button', { name: 'Choose source address' }));
+        fireEvent.click(await screen.findByText('pick other'));
+        await waitFor(() => expect(screen.getByLabelText('From')).toHaveValue(OTHER.address));
+        // G99: the notice wraps, so the owner is named in full.
+        expect(await screen.findByText(`List #2700 is owned by ${OWNER.address}, which is not an address in this wallet. This wallet cannot edit it.`)).toBeTruthy();
+        fireEvent.change(screen.getByLabelText('Tokens'), { target: { value: 'ADD' } });
+        fireEvent.click(screen.getByRole('button', { name: /^Publish fork$/i }));
+        expect(screen.getByText(/which is not an address in this wallet/)).toBeTruthy();
+        expect(screen.queryByText('Review List Edit')).toBeNull();
+    });
+
+    it('gives the add and remove fields a help tip, and the lone memo none', async () => {
+        mountFork({ type: '2', items: ['DOwnerOwnerOwnerOwnerOwnerOwner01'] });
+        await screen.findByLabelText('Addresses');
+        expect(screen.getByRole('button', { name: 'About Addresses' })).toBeTruthy();
+        expect(screen.queryByLabelText('Add addresses')).toBeNull();
+        expect(screen.queryByLabelText('Remove addresses')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'About current members' })).toBeNull();
+        expect(screen.getByText(/Enter one address per line\. This/)).toBeTruthy();
+        expect(screen.getByText(/permanent public on-chain data/)).toBeTruthy();
+        fireEvent.click(screen.getByRole('radio', { name: 'Remove' }));
+        expect(screen.getByText(/Each must already be on list/)).toBeTruthy();
+        // A memo alone in its Memo section has no label row and no tip (ruling).
+        expect(screen.queryByRole('button', { name: 'About Memo', hidden: true })).toBeNull();
+        expect(screen.queryByText(/same as creating a new list/, { selector: 'p' })).toBeNull();
+    });
+
+    it('draws no current members section: the form holds the changes only', async () => {
+        mountFork();
+        await screen.findByLabelText('Tokens');
+        expect(screen.queryByText(/Forking/)).toBeNull();
+        expect(screen.queryByTestId('fork-current-members')).toBeNull();
+        expect(screen.queryByText('Current members')).toBeNull();
+        for (const name of MEMBERS) expect(screen.queryByRole('checkbox', { name })).toBeNull();
+    });
+
+    it('names the main action Publish Fork, in green, with an icon', async () => {
+        mountFork();
+        const button = await screen.findByRole('button', { name: /^Publish fork$/i });
+        expect(button.type).toBe('submit');
+        expect(button.querySelector('svg')).toBeTruthy();
+        expect(button.className).toMatch(/success/);
+        expect(screen.queryByRole('button', { name: 'Review' })).toBeNull();
+    });
+});

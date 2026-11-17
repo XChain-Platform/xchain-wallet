@@ -849,7 +849,7 @@ export function synthesizeDemoContractStakes(chainId) {
 // Deploy-time staking metadata for the demo contracts above, shaped like
 // the row `contracts.byActionIndex` returns. Without this, the demo
 // StakeDetail hero can't show cooldown/slash destination and
-// ContractStakeForm's stakeable gate (cooldown_blocks set at DEPLOY)
+// the Staking form's contract stakeable gate (cooldown_blocks set at DEPLOY)
 // rejects the very contracts the demo says you hold positions in. The
 // slash destination matches the slash-event fixture so the #2048 story
 // stays coherent.
@@ -1193,6 +1193,27 @@ const DEMO_DISPENSERS = /** @type {Record<string, any[]>} */ ({
     ],
 });
 
+const DEMO_MARKET_DISPENSERS = /** @type {Record<string, any[]>} */ ({
+    'bitcoin-mainnet': [
+        {
+            action_index: '4202001', tx_hash: 'demo-market-disp-btc-1', block_index: 962101,
+            status: 'open', give_tick: 'PEPECASH', give_coin: '', give_amount: '500',
+            get_tick: 'XCP', get_coin: '', get_amount: '5',
+            source: 'bc1qdemomarketselleralpha000000000000000001',
+            address: 'bc1qdemomarketdispenseralpha00000000000001',
+            escrow_remaining: '12500', dispense_count: 4,
+        },
+        {
+            action_index: '4202002', tx_hash: 'demo-market-disp-btc-2', block_index: 962099,
+            status: 'open', give_tick: 'RAREPEPE', give_coin: '', give_amount: '1',
+            get_tick: 'PEPECASH', get_coin: '', get_amount: '2500',
+            source: 'bc1qdemomarketsellerbravo00000000000000002',
+            address: 'bc1qdemomarketdispenserbravo0000000000002',
+            escrow_remaining: '18', dispense_count: 2,
+        },
+    ],
+});
+
 /**
  * Fabricated fill events per dispenser action_index, for the detail page's
  * "Recent dispenses" list. Buyer addresses are vanity fakes.
@@ -1225,6 +1246,27 @@ const DEMO_DISPENSES = /** @type {Record<string, any[]>} */ ({
 export function synthesizeDemoDispensers(chainId, sourceAddress) {
     if (typeof sourceAddress !== 'string' || !sourceAddress) return [];
     return demoDispenserRows(chainId).map((r) => ({ ...r, source: sourceAddress }));
+}
+
+/**
+ * Marketplace dispensers across all sellers for one selected token. The same
+ * bulk fixture contains both directions so Buy and Sell filter one response.
+ * An empty token returns the full chain fixture for detail lookup.
+ *
+ * @param {string} chainId
+ * @param {string} [token]
+ * @returns {any[]}
+ */
+export function synthesizeDemoMarketDispensers(chainId, token = '') {
+    const rows = DEMO_MARKET_DISPENSERS[chainId]
+        || DEMO_MARKET_DISPENSERS[String(chainId).replace(/-(regtest|testnet)$/, '-mainnet')]
+        || [];
+    const selected = String(token || '').toUpperCase();
+    return rows
+        .filter((row) => !selected
+            || String(row.give_tick || row.give_coin || '').toUpperCase() === selected
+            || String(row.get_tick || row.get_coin || '').toUpperCase() === selected)
+        .map((row) => ({ ...row }));
 }
 
 /**
@@ -1423,6 +1465,131 @@ export function synthesizeDemoSwaps(chainId, sourceAddress, opts = {}) {
     }));
 }
 
+// Cosigner keys for the demo signing sessions: valid-shaped compressed
+// public keys hashed from each name, so no one holds the private keys.
+// "You" stands for the demo wallet's own cosigner key.
+const DEMO_COSIGNERS = {
+    you: { name: 'You (this wallet)', pubkey: '028aaf1887c041271b46b9f547a84a1e6dc6db2a285ae3924455710016c6231938' },
+    erin: { name: DEMO_CONTACTS[0].name, pubkey: '0321b018bd0e958f8a235ef569c68a9cc2e685d0f6355a009d8fa7781c1927ea31' },
+    marcus: { name: DEMO_CONTACTS[1].name, pubkey: '0390fced50ca3a3e5b75e987ed484483a50dc9106ed6a174a2a256ae92e42dc920' },
+    priya: { name: DEMO_CONTACTS[2].name, pubkey: '02fc217f0996828c2006440133dc9e4b5f90821a25c6dff0142f17632f7cd8c95b' },
+    diego: { name: DEMO_CONTACTS[3].name, pubkey: '0242515cdf95588a5122e3665b6b5cb465c0a33d23cdab00c09600e28c16c217fd' },
+    yuki: { name: DEMO_CONTACTS[4].name, pubkey: '02d170dbdcf6c6ec02c1f12bfc909e390c28c95099a2cf26b1fc9de02644482a8a' },
+};
+
+// Fixed hex blocks the sessions are built from (sighashes, txids, DER
+// signatures). They only have to be well formed: a demo session is never
+// finalized, exported or broadcast.
+const DEMO_SESSION_HEX = {
+    msg1: 'ecc15c3b49f62f640dc5f4d5ff8c1f2b623997abd7475ae7d83b9344b809ad9d',
+    msg2: '71ed4e6e8d9af2d284cbd140ab4acea6282251d4a1d75fa7045c75a4f1dabef3',
+    msg3: '3e7d5557ce3dd4d23bbccccf928c77fe118ad027093dca40906e1bf00c436e73',
+    msg4: 'b4c1b264b96e5b1f73612e70c4e4b2904cb48977e0ce9bbc108a37cb72bbbc3c',
+    tx3: '749999b4ed44b9294c7a9a7b2fcd77abf916c1812a4d05f53945abe67908bf97',
+    tx4: '34961311320abfdf4fc8263a149e1c2d1c6bce8aa2021e6d44870b05c7e5e056',
+    sig1: '304402208c4bba9e7c828a1bbd6fb23f09d445de192ac2e9fc0e580f8b236f5d6c7eb5c60220b2c21dbb68957cc0d5ed859319dd922e4b68ac4485519463f6ae8ce6e134c17c',
+    sig2: '30440220b604257892f6c012bf913cef1edd2d3a489850457173b549795f4551eb6b45e902209bc6e4fa5d522384082d1e5c1605de5475e40b01fd77c07b6669219edf7e82d5',
+    sig3: '30440220b266db9649984b4dd680ab7dd39fb64f2ce4ec3f154bfb588bc44eacb84e39a00220d5faee0062014a6c28aa4d626c62f78487c02d2a58cd35b4a6945fa481cf8460',
+    sig4: '30440220e64cc85c8ee32b61c4c3076eae1fdf058dfb786ca25fb66e4f5ceb2e404921cd022033f7772814ee8933a86eb3d9c498a57d8d04fc4417077a5eb148b2d12bbde766',
+    sig5: '30440220763cf3a267dda123334838bc50d8c5e80f70e8c550c009235b71bcd55cacfb05022052e631e20c1632dca5439643fa36aa1712574eb71471d231e4e5bcc569bc93eb',
+};
+
+/**
+ * Sample multisig signing sessions for a demo wallet's Multisig Signing
+ * Sessions page, one per state the list groups by:
+ *
+ *   1. Waiting on your signature: a 3-of-3 spend both other cosigners
+ *      have signed; this wallet's key is the only one left.
+ *   2. Waiting on others: a 2-of-3 spend this wallet signed (1 of 2).
+ *   3. Ready to broadcast: a 2-of-3 Classic spend, signed and finalized.
+ *   4. Broadcast: a 2-of-2 Taproot spend on Bitcoin testnet, sent.
+ *
+ * Records carry the vault's MultisigSigningSession shape plus
+ * `cosignerNames` (cosigner key to display name), so the session page names
+ * each signer, and `localPubkeys` (this wallet's key). They are served by demoMessaging and never written to a vault.
+ *
+ * @param {string} walletId
+ * @param {{ now?: number }} [opts]
+ * @returns {Array<Record<string, any>>}
+ */
+export function synthesizeDemoMultisigSessions(walletId, opts = {}) {
+    const now = typeof opts.now === 'number' ? opts.now : Date.now();
+    const at = (minutesAgo) => new Date(now - minutesAgo * 60_000).toISOString();
+    const { you, erin, marcus, priya, diego, yuki } = DEMO_COSIGNERS;
+    const H = DEMO_SESSION_HEX;
+    const sig = (who, hex, minutesAgo) => ({ pubkey: who.pubkey, sig: hex, contributedAt: at(minutesAgo) });
+    const names = (...who) => Object.fromEntries(who.map((c) => [c.pubkey, c.name]));
+    const base = (id, chainId, scheme, threshold, cosigners, msgHash, actionSummary) => ({
+        schemaVersion: 1,
+        id,
+        walletId: String(walletId || ''),
+        chainId,
+        scheme,
+        threshold,
+        cosignerPubkeys: cosigners.map((c) => c.pubkey),
+        cosignerNames: names(...cosigners),
+        // This wallet's own key, so the list can tell a session waiting on
+        // your signature (Ready) from one waiting on others (Waiting).
+        localPubkeys: [you.pubkey],
+        msgHash,
+        psbtHex: '',
+        actionSummary,
+        nonces: [],
+        aggNonce: null,
+        partialSigs: [],
+        aggregatedSchnorrSig: null,
+        signatures: [],
+        status: 'collecting-sigs',
+        finalizedTxHex: null,
+        txid: null,
+    });
+    return [
+        {
+            ...base('demo-multisig-your-signature', 'bitcoin-mainnet', 'p2wsh-multisig', 3,
+                [you, erin, marcus], H.msg1, `Send 1.2 BTC to ${priya.name}`),
+            signatures: [sig(erin, H.sig1, 95), sig(marcus, H.sig2, 40)],
+            createdAt: at(120),
+            updatedAt: at(40),
+        },
+        {
+            ...base('demo-multisig-waiting-others', 'bitcoin-mainnet', 'p2wsh-multisig', 2,
+                [you, priya, yuki], H.msg2, `Send 0.35 BTC to ${erin.name}`),
+            signatures: [sig(you, H.sig3, 300)],
+            createdAt: at(310),
+            updatedAt: at(300),
+        },
+        {
+            ...base('demo-multisig-ready', 'bitcoin-mainnet', 'p2sh-multisig', 2,
+                [you, marcus, erin], H.msg3, `Send 0.08 BTC to ${diego.name}`),
+            signatures: [sig(you, H.sig4, 1_500), sig(marcus, H.sig5, 1_380)],
+            status: 'finalized',
+            finalizedTxHex: `0200000001${H.tx4}0000000000ffffffff0100127a000000000017a914${H.msg3.slice(0, 40)}8700000000`,
+            txid: H.tx3,
+            createdAt: at(1_560),
+            updatedAt: at(1_370),
+        },
+        {
+            ...base('demo-multisig-sent', 'bitcoin-testnet', 'taproot-musig2', 2,
+                [you, yuki], H.msg4, `Send 0.015 TBTC to ${yuki.name}`),
+            nonces: [
+                { pubkey: you.pubkey, publicNonce: `${H.msg1}${H.msg2}02a1`, contributedAt: at(4_400) },
+                { pubkey: yuki.pubkey, publicNonce: `${H.msg2}${H.msg3}03b2`, contributedAt: at(4_380) },
+            ],
+            aggNonce: `${H.msg3}${H.msg4}02c3`,
+            partialSigs: [
+                sig(you, H.msg1, 4_360),
+                sig(yuki, H.msg2, 4_340),
+            ],
+            aggregatedSchnorrSig: `${H.msg3}${H.msg4}`,
+            status: 'broadcast',
+            finalizedTxHex: `02000000000101${H.tx3}0000000000ffffffff01983a000000000000225120${H.msg4}0140${H.msg3}${H.msg4}00000000`,
+            txid: H.tx4,
+            createdAt: at(4_420),
+            updatedAt: at(4_320),
+        },
+    ];
+}
+
 /**
  * The messaging module a demo wallet's views read through. Each read a view
  * makes for a wallet's addresses answers from the fixtures above, in the
@@ -1437,6 +1604,8 @@ export function synthesizeDemoSwaps(chainId, sourceAddress, opts = {}) {
 export function demoMessaging(messaging) {
     const rows = (data) => Promise.resolve({ data });
     const none = () => rows([]);
+    // The session records name the wallet the list was read for.
+    let sessionsWalletId = '';
     return {
         ...messaging,
         getWalletBalances: async (walletId, ...rest) => synthesizeDemoBalances(
@@ -1448,10 +1617,17 @@ export function demoMessaging(messaging) {
             prices: synthesizeDemoNativePrices(Array.isArray(chainIds) ? chainIds : []),
         }),
         getAddressHistory: ({ chainId, address } = {}) => rows(synthesizeDemoHistory(chainId, address)),
+        // The value chart's batch reads: the demo line is synthesized, so
+        // these answer empty and a demo address never reaches an explorer.
+        getWalletHistoryBatch: async ({ addresses } = {}) => ({
+            amount_unit: 'base', addresses: Array.isArray(addresses) ? addresses : [], next_cursor: null, actions: [],
+        }),
+        getNativeHistoryBatch: async () => ({ transactions: [], cursor: null, history_from_height: 0 }),
         getLinksForAddress: () => rows(synthesizeDemoLinks()),
         getAddressMempool: none,
         getPendingTxsForAddress: none,
         getDispensersForSource: ({ chainId, address } = {}) => rows(synthesizeDemoDispensers(chainId, address)),
+        getDispensersForToken: ({ chainId, token, tick } = {}) => rows(synthesizeDemoMarketDispensers(chainId, token || tick)),
         getOrdersForAddress: ({ chainId, address } = {}) => rows(synthesizeDemoOrders(chainId, address)),
         getSwapsForAddress: ({ chainId, address } = {}) => rows(synthesizeDemoSwaps(chainId, address)),
         getDispenserLifecycle: none,
@@ -1465,5 +1641,18 @@ export function demoMessaging(messaging) {
         getRewardClaimsForAddress: none,
         getContractStakesForAddress: ({ chainId } = {}) => rows(synthesizeDemoContractStakes(chainId).stakes),
         getContractUnstakesForAddress: ({ chainId } = {}) => rows(synthesizeDemoContractStakes(chainId).unstakes),
+        // Signing sessions are vault reads, answered as the host answers
+        // them: a bare array, and one record by id.
+        listMultisigSigningSessions: ({ walletId } = {}) => {
+            sessionsWalletId = String(walletId || '');
+            return Promise.resolve(synthesizeDemoMultisigSessions(sessionsWalletId));
+        },
+        getMultisigSigningSession: ({ sessionId } = {}) => {
+            const found = synthesizeDemoMultisigSessions(sessionsWalletId).find((s) => s.id === sessionId);
+            if (found) return Promise.resolve(found);
+            return typeof messaging?.getMultisigSigningSession === 'function'
+                ? messaging.getMultisigSigningSession({ sessionId })
+                : Promise.resolve(null);
+        },
     };
 }

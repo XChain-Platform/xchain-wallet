@@ -119,12 +119,12 @@ describe('ComposeMessage with a signed-but-queued result', () => {
     it('ends a queued key request on the queued panel with no second request', async () => {
         const utils = await openForm(null);
         await act(async () => {
-            fireEvent.click(utils.getByRole('button', { name: /Request encrypted session/i }));
+            fireEvent.click(utils.getByRole('button', { name: 'Request Encrypted Session (Publish Your Key)' }));
             await drain();
         });
         expect(flow.run).toHaveBeenCalledTimes(1);
         expect(utils.queryByText(/Key request sent/)).toBeNull();
         expect(utils.getByText('Signed. Not broadcast yet.')).toBeTruthy();
-        expect(utils.queryByRole('button', { name: /Request encrypted session/i })).toBeNull();
+        expect(utils.queryByRole('button', { name: 'Request Encrypted Session (Publish Your Key)' })).toBeNull();
     });
 });

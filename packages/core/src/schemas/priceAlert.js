@@ -37,7 +37,10 @@ import { randomUUID } from '../util/uuid.js';
 export const CURRENT_VERSION = 1;
 
 export const PRICE_ALERT_DIRECTIONS = /** @type {const} */ (['above', 'below']);
-export const PRICE_ALERT_STATUSES = /** @type {const} */ (['armed', 'triggered']);
+// `paused` (2026-11-14) is an alert the user switched off without deleting it:
+// the watcher only reads `armed` alerts, so a paused one is never checked and
+// never fires until it is resumed.
+export const PRICE_ALERT_STATUSES = /** @type {const} */ (['armed', 'triggered', 'paused']);
 
 /**
  * @typedef {Object} PriceAlert
@@ -49,7 +52,7 @@ export const PRICE_ALERT_STATUSES = /** @type {const} */ (['armed', 'triggered']
  * @property {'above' | 'below'} direction
  * @property {number} targetFiat            threshold price in fiatCurrency
  * @property {string} fiatCurrency          e.g. 'usd'
- * @property {'armed' | 'triggered'} status
+ * @property {'armed' | 'triggered' | 'paused'} status
  * @property {string} createdAt
  * @property {string | null} triggeredAt    ISO timestamp the alert fired, or null while armed
  */

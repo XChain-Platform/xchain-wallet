@@ -31,7 +31,9 @@
 //
 // Runs on Litecoin (XC_REGTEST_COIN=RLTC) for the reasons §3.5 records.
 
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import {
+    addWalletFromPhrase, createWallet, expect, openPaletteCommand, switchToWallet, test,
+} from '../../fixtures/wallet.js';
 import {
     expectConfirmModal,
     EXPLORER_URL,
@@ -140,13 +142,13 @@ async function fillPasswordIfPresent(scope) {
 async function useAddress(page, address) {
     await openPaletteCommand(page, 'Addresses');
     await page.getByRole('button', { name: `View address ${address}` }).click();
-    await page.getByRole('group', { name: 'Address actions' })
-        .getByRole('button', { name: 'Use' }).click();
+    await page.getByRole('list', { name: 'Actions', exact: true })
+        .getByRole('button', { name: 'Set active' }).click();
     // Use awaits the active-address write and only then returns to Home, and
     // any route change closes the wallet menu. A palette opened before
     // that late navigation is unmounted under the next step, so leaving the
     // detail screen is what marks the switch as done.
-    await expect(page.getByRole('group', { name: 'Address actions' }),
+    await expect(page.getByRole('list', { name: 'Actions', exact: true }),
         'Use never completed, so the active-address write is still in flight')
         .toBeHidden({ timeout: 30_000 });
 }
@@ -179,34 +181,23 @@ async function generateVenueAddress(page) {
     return generated[0];
 }
 
-/**
- * Puts the wallet into `mode` and waits for the write to land.
- *
- * The radio is fully controlled by PERSISTED settings, so it does not flip
- * until the vault write resolves - the same reason `switchToRegtest` clicks the
- * developer-mode switch rather than calling `check()`.
- */
-async function setWalletMode(page, mode) {
-    const label = mode === 'watcher' ? /^Watcher/ : /^Normal/;
-    await openPaletteCommand(page, 'Settings');
-    await page.getByRole('main').getByRole('button', { name: /^Wallet mode/ }).click();
-    const radio = page.getByRole('radio', { name: label });
-    await expect(radio).toBeVisible({ timeout: 30_000 });
-    await radio.click();
-    // A mode change is held behind a confirmation until it is accepted.
-    await page.getByRole('dialog').getByRole('button', { name: 'Confirm mode change' }).click();
-    await expect(radio, `the wallet did not switch to ${mode} mode`).toBeChecked({ timeout: 30_000 });
-}
-
 async function openMarket(page, feedIndex) {
     await gotoBettingHub(page);
-    const row = page.getByRole('main').getByRole('button', { name: new RegExp(`^#${feedIndex}\\s`) });
+    const row = page.getByRole('main').locator(`[data-market-index="${feedIndex}"]`);
     await expect(row, `market #${feedIndex} is not in the browse list`).toBeVisible({ timeout: 30_000 });
     await row.click();
     const main = page.getByRole('main');
     await expect(main.getByRole('heading', { name: new RegExp(RUN_TAG) }).or(main.getByText(RUN_TAG)).first(),
         'the market detail page did not open').toBeVisible({ timeout: 30_000 });
     return main;
+}
+
+// The Bet tab holds the outcome buttons; tapping one opens the Place Bet step
+// with that outcome, whose action signs or builds the unsigned transaction.
+async function openPlaceBet(main) {
+    await main.getByRole('tab', { name: 'Bet', exact: true }).click();
+    await main.getByRole('list', { name: 'Outcome to back' })
+        .getByRole('button', { name: /^Bet on Yes,/ }).click();
 }
 
 test.describe('BET in watcher mode', () => {
@@ -217,9 +208,10 @@ test.describe('BET in watcher mode', () => {
         let oracle;
         let watcher;
         let feedIndex;
+        let phrase;
 
         await test.step('onboard, fund, and hold XCHAIN', async () => {
-            await createWallet(page, { password: PASSWORD, name: 'Watcher Wallet' });
+            phrase = await createWallet(page, { password: PASSWORD, name: 'Watcher Wallet' });
             await switchToRegtest(page, PASSWORD);
 
             oracle = await signingAddress(page);
@@ -277,30 +269,41 @@ test.describe('BET in watcher mode', () => {
             await useAddress(page, watcher);
 
             const main = await openMarket(page, feedIndex);
-            await expect(main.getByRole('heading', { name: 'Place a bet' }),
+            await openPlaceBet(main);
+            await expect(main.getByRole('form', { name: 'Place Bet' }),
                 'the control half failed: a non-oracle address is not offered a bet in FULL mode, so '
                 + 'the watcher assertions below would prove nothing')
                 .toBeVisible({ timeout: 30_000 });
-            await expect(main.getByRole('button', { name: 'Place bet', exact: true }),
+            await expect(main.getByRole('button', { name: 'Place Bet', exact: true }),
                 'the control half failed: full mode does not offer the signing review')
                 .toBeVisible({ timeout: 30_000 });
         });
 
         await test.step('watcher mode offers an unsigned build instead of a signed bet', async () => {
-            await setWalletMode(page, 'watcher');
+            // A wallet's mode is fixed at setup, so the watcher half is the
+            // same recovery phrase added again as a watch-only wallet: same
+            // addresses, same market, only the mode differs.
+            await addWalletFromPhrase(page, phrase, {
+                password: PASSWORD, name: 'Mirror Copy', walletMode: 'watcher',
+            });
+            const mirrored = await generateVenueAddress(page);
+            expect(mirrored, 'the watch-only copy does not derive the same second address')
+                .toBe(watcher);
+            await useAddress(page, watcher);
 
             const main = await openMarket(page, feedIndex);
-            await expect(main.getByRole('heading', { name: 'Place a bet' }),
+            await openPlaceBet(main);
+            await expect(main.getByRole('form', { name: 'Place Bet' }),
                 'a watcher-mode wallet lost the place-bet form instead of getting an unsigned build')
                 .toBeVisible({ timeout: 30_000 });
 
             // The wallet cannot sign here, so the action must say it only builds
             // a transaction for a separate signer, and must not ask for a password
             // it has no use for.
-            await expect(main.getByRole('button', { name: 'Create unsigned transaction' }),
+            await expect(main.getByRole('button', { name: 'Create Unsigned Transaction' }),
                 'a watcher-mode wallet is not offered the unsigned build')
                 .toBeVisible({ timeout: 30_000 });
-            await expect(main.getByRole('button', { name: 'Place bet', exact: true }),
+            await expect(main.getByRole('button', { name: 'Place Bet', exact: true }),
                 'a watcher-mode wallet is still offered a signing review it cannot complete')
                 .toBeHidden({ timeout: 30_000 });
             await expect(main.getByLabel('Password', { exact: true }),
@@ -311,19 +314,21 @@ test.describe('BET in watcher mode', () => {
         await test.step('and the oracle side builds unsigned too', async () => {
             await openPaletteCommand(page, 'My markets');
             const main = page.getByRole('main');
-            await expect(main.getByRole('button', { name: new RegExp(`^#${feedIndex}\\b`) })
-                .or(main.getByText(new RegExp(RUN_TAG))).first(),
-                'the oracle console did not list the market this run created')
+            const card = main.locator(`[data-market-index="${feedIndex}"]`);
+            await expect(card, 'My markets did not list the market this run created')
                 .toBeVisible({ timeout: 30_000 });
 
+            // The oracle's actions live on the market page's owner Actions tab.
             // Resolve is not legal yet (the deadline has not passed), so Cancel
             // is the action under test: it is still offered, and its form builds
             // an unsigned transaction rather than a signing review.
+            await card.click();
+            await main.getByRole('tab', { name: 'Actions', exact: true }).click();
             await main.getByRole('button', { name: /^Cancel and refund/ }).first().click();
-            await expect(main.getByRole('button', { name: 'Create unsigned transaction' }),
+            await expect(main.getByRole('button', { name: 'Create Unsigned Transaction' }),
                 'the oracle console does not offer an unsigned build to a wallet that cannot sign')
                 .toBeVisible({ timeout: 30_000 });
-            await expect(main.getByRole('button', { name: 'Cancel market', exact: true }),
+            await expect(main.getByRole('button', { name: 'Cancel Market', exact: true }),
                 'the oracle console still offers a signing review to a wallet that cannot sign')
                 .toBeHidden({ timeout: 30_000 });
             await expect(main.getByLabel('Password', { exact: true }),
@@ -331,17 +336,19 @@ test.describe('BET in watcher mode', () => {
                 .toHaveCount(0);
         });
 
-        await test.step('back to full mode, and the bet is offered again', async () => {
+        await test.step('back on the normal wallet, and the bet is offered again', async () => {
             // Closes the pair: the difference is watcher mode, not the market.
-            await setWalletMode(page, 'full');
+            await switchToWallet(page, 'Watcher Wallet', { timeoutMs: 60_000 });
+            await useAddress(page, watcher);
             const main = await openMarket(page, feedIndex);
-            await expect(main.getByRole('heading', { name: 'Place a bet' }),
+            await openPlaceBet(main);
+            await expect(main.getByRole('form', { name: 'Place Bet' }),
                 'leaving watcher mode did not restore the place-bet form')
                 .toBeVisible({ timeout: 30_000 });
-            await expect(main.getByRole('button', { name: 'Place bet', exact: true }),
+            await expect(main.getByRole('button', { name: 'Place Bet', exact: true }),
                 'leaving watcher mode did not restore the signing review')
                 .toBeVisible({ timeout: 30_000 });
-            await expect(main.getByRole('button', { name: 'Create unsigned transaction' }),
+            await expect(main.getByRole('button', { name: 'Create Unsigned Transaction' }),
                 'full mode still offers the unsigned build')
                 .toBeHidden({ timeout: 30_000 });
         });

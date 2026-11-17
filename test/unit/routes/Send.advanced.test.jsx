@@ -11,6 +11,18 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
 import { MAX_MEMO_LENGTH } from '../../../packages/core/src/shared/utils/memoLimit.js';
 
+// The Asset field opens the token picker page; a stub with one button for the
+// token under test keeps these cases about the advanced choices.
+vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
+    TokenPicker: ({ title, onSelect, onBack }) => (
+        <section aria-label={title}>
+            <h2>{title}</h2>
+            <button type="button" onClick={() => onSelect({ chainId: 'bitcoin-mainnet', tick: 'PEPE' })}>Pick PEPE</button>
+            <button type="button" onClick={onBack}>Back</button>
+        </section>
+    ),
+}));
+
 const CHAIN = 'bitcoin-mainnet';
 const FROM = 'bc1qsendersendersendersendersendersendersa';
 const CHANGE = 'bc1qzyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3w7nf4f';
@@ -74,19 +86,28 @@ function mount() {
 
 async function fillSend() {
     fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: TO } });
-    fireEvent.change(screen.getByLabelText(/^Token$/), { target: { value: 'PEPE' } });
-    fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '1' } });
-    fireEvent.click(screen.getByText('Advanced'));
+    fireEvent.click(await screen.findByRole('button', { name: /^Asset/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Pick PEPE' }));
+    fireEvent.change(await screen.findByLabelText(/^Amount \(/), { target: { value: '1' } });
+    fireEvent.click(screen.getByText('Advanced', { selector: '[data-form-section-title]' }));
 }
 
 afterEach(() => cleanup());
 
 describe('Send advanced choices', () => {
+    it('uses the one shared Advanced section, directly above Speed and Fees', async () => {
+        mount();
+        await screen.findByLabelText(/^To$/);
+        const ids = [...document.querySelectorAll('[data-form-section]')].map((n) => n.getAttribute('data-form-section'));
+        expect(ids.filter((id) => id === 'advanced')).toHaveLength(1);
+        expect(ids.slice(-2)).toEqual(['advanced', 'fee']);
+    });
+
     it('summarizes bulk-selected inputs, marks dust, and clears the selection', async () => {
         mount();
         fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: TO } });
         fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '0.001' } });
-        fireEvent.click(screen.getByText('Advanced'));
+        fireEvent.click(screen.getByText('Advanced', { selector: '[data-form-section-title]' }));
         await waitFor(() => expect(screen.getByRole('switch', { name: 'Coin control enabled' })).not.toBeDisabled());
         fireEvent.click(screen.getByRole('switch', { name: 'Coin control enabled' }));
 
@@ -94,7 +115,7 @@ describe('Send advanced choices', () => {
             'title',
             'Below the 546 sat dust threshold',
         );
-        fireEvent.click(screen.getByRole('button', { name: 'Select all' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Select All' }));
         expect(screen.getByText('0.003005 BTC')).toBeInTheDocument();
         expect(screen.getByText('0.00199 BTC')).toBeInTheDocument();
         expect(screen.getAllByRole('checkbox', { checked: true })).toHaveLength(3);
@@ -150,10 +171,12 @@ describe('Send advanced choices', () => {
             utxos: [UTXOS[0]],
         });
 
-        const review = await screen.findByLabelText('Advanced send choices');
+        // Every advanced choice is a row of the confirm page's facts card (G127).
+        const review = await screen.findByTestId('confirm-facts');
         expect(within(review).getByText('invoice 7')).toBeInTheDocument();
         expect(within(review).getByText('Allowed')).toBeInTheDocument();
         expect(within(review).getByText('1 selected input')).toBeInTheDocument();
-        expect(within(review).getByText(CHANGE)).toBeInTheDocument();
+        // The change address is cut in the middle; its title carries all of it.
+        expect(review.querySelector(`dd[title="${CHANGE}"]`)).not.toBeNull();
     });
 });

@@ -11,6 +11,16 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { GatedPublishForm } from '../../../packages/core/src/shared/routes/GatedPublishForm.jsx';
 import { ProjectRosterForm } from '../../../packages/core/src/shared/routes/ProjectRosterForm.jsx';
 
+// The roster's token picker, reduced to picking the ticker typed into it.
+vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
+    TokenPicker: ({ title, chainIdFilter, onSelect }) => (
+        <section aria-label={title}>
+            <input aria-label="Token to pick" id="pick-tick" />
+            <button type="button" onClick={() => onSelect({ chainId: chainIdFilter, tick: document.getElementById('pick-tick').value })}>Pick token</button>
+        </section>
+    ),
+}));
+
 const CHAIN_ID = 'dogecoin-mainnet';
 const FROM = {
     id: 'address-1',
@@ -66,7 +76,7 @@ function mount(Component, props, messaging = messagingWith()) {
 
 async function rejectConfirmation() {
     fireEvent.change(await screen.findByLabelText('Password'), { target: { value: 'secret' } });
-    const submit = screen.getByRole('button', { name: /Publish list/ });
+    const submit = screen.getByRole('button', { name: /Publish List/ });
     fireEvent.click(submit);
     fireEvent.click(await screen.findByRole('button', { name: 'Reject' }));
     await waitFor(() => expect(screen.getByLabelText('Password')).toHaveValue(''));
@@ -80,17 +90,19 @@ describe('confirmation password cleanup', () => {
         const file = new File(['content'], 'gated.txt', { type: 'text/plain' });
         fireEvent.change(await screen.findByLabelText('File to publish'), { target: { files: [file] } });
         await screen.findByText(/gated\.txt/);
-        fireEvent.click(screen.getByRole('checkbox', {
-            name: /I understand the encrypted file is published on-chain forever/,
-        }));
-        // Publish opens the confirm screen directly: its Reject and Approve are
-        // the only sign step, so the password is typed there.
-        fireEvent.click(screen.getByRole('button', { name: 'Publish file' }));
+        // No acknowledgement gate: Publish opens the confirm screen directly,
+        // which states the permanence fact. Its Reject and Approve are the
+        // only sign step, so the password is typed there.
+        expect(screen.queryByRole('checkbox')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Publish File' }));
         fireEvent.change(await screen.findByLabelText('Password'), { target: { value: 'secret' } });
-        expect(screen.queryByRole('button', { name: /Sign and publish|Sign on/ })).toBeNull();
+        expect(screen.getByTestId('confirm-summary-notice')).toHaveTextContent(
+            'The encrypted file stays on the blockchain for good, and only GATE holders can unlock it.',
+        );
+        expect(screen.queryByRole('button', { name: /Sign and Publish|Sign on/ })).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Publish file' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Publish File' }));
         expect(await screen.findByLabelText('Password')).toHaveValue('');
     });
 
@@ -98,10 +110,12 @@ describe('confirmation password cleanup', () => {
         mount(ProjectRosterForm, {
             walletId: 'wallet-1', chainId: CHAIN_ID, tick: 'PROJ', issuerAddress: FROM.address, onBack() {},
         });
-        fireEvent.change(await screen.findByLabelText('Tokens (one per line)'), {
-            target: { value: 'MEMBER' },
-        });
-        fireEvent.click(screen.getByRole('button', { name: 'Save roster' }));
+        // Tokens join the roster through the token picker.
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Add Token' })).toBeEnabled());
+        fireEvent.click(screen.getByRole('button', { name: 'Add Token' }));
+        fireEvent.change(screen.getByLabelText('Token to pick'), { target: { value: 'MEMBER' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Pick token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create and Link' }));
 
         await rejectConfirmation();
     });
@@ -112,7 +126,7 @@ describe('primary action validation', () => {
         mount(GatedPublishForm, {
             walletId: 'wallet-1', chainId: CHAIN_ID, tick: 'GATE', issuerAddress: FROM.address, onBack() {},
         });
-        const action = await screen.findByRole('button', { name: 'Publish file' });
+        const action = await screen.findByRole('button', { name: 'Publish File' });
 
         expect(action).toBeEnabled();
         fireEvent.click(action);
@@ -124,12 +138,14 @@ describe('primary action validation', () => {
         mount(ProjectRosterForm, {
             walletId: 'wallet-1', chainId: CHAIN_ID, tick: 'PROJ', issuerAddress: FROM.address, onBack() {},
         });
-        await screen.findByLabelText('Tokens (one per line)');
-        const action = screen.getByRole('button', { name: 'Save roster' });
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Add Token' })).toBeEnabled());
+        const action = screen.getByRole('button', { name: 'Create and Link' });
 
         expect(action).toBeEnabled();
         fireEvent.click(action);
 
-        expect(await screen.findByText('Add at least one token to the list.')).toBeTruthy();
+        // G120: the notice at the top names the problem and the token box
+        // carries the same line under it.
+        expect(await screen.findAllByText('Add at least one token to the list.')).toHaveLength(2);
     });
 });

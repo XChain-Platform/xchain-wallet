@@ -41,7 +41,7 @@ const all = rules(css);
 const selects = (rule, name) => rule.selector.split(',').map((s) => s.trim()).includes(name);
 
 describe('Welcome stack', () => {
-    it('stacks the logo above the title and tagline in one centred column', () => {
+    it('stacks the logo above the tagline in one centred column', () => {
         const base = all.filter((rule) => rule.media.length === 0 && selects(rule, '.welcomeHeader'));
         expect(base).toHaveLength(1);
         const body = base[0].body;
@@ -69,15 +69,49 @@ describe('Welcome stack', () => {
         expect(logoPopup.body).toMatch(/width:\s*140px;/);
     });
 
-    it('draws the logo, then the title, then the tagline', () => {
+    it('has no app header or page header: the body shows the logo and tagline', () => {
         const block = source.slice(source.indexOf('data-onboarding-welcome-header=""'));
-        const logo = block.indexOf('<img');
-        const copy = block.indexOf('className={styles.welcomeCopy}');
-        const title = block.indexOf('className={styles.welcomeTitle}');
-        const tagline = block.indexOf('className={styles.welcomeTagline}');
-        expect(logo).toBeGreaterThan(-1);
-        expect(copy).toBeGreaterThan(logo);
-        expect(title).toBeGreaterThan(copy);
-        expect(tagline).toBeGreaterThan(title);
+        const welcome = block.slice(0, block.indexOf('status='));
+        expect(source).toMatch(/<Screen\s+variant=\{variant\}\s+header=\{header\}\s+bodyClassName=\{header \? undefined : styles\.wideCentre\}\s*>\s*<FormPage\s+label=\{t\('onboarding\.walletSetup'\)\}\s+className=\{header \? undefined : styles\.welcomeForm\}/);
+        expect(source).not.toMatch(/<BootFrame>\{null\}<\/BootFrame>/);
+        expect(source).not.toMatch(/firstRunFrame\(branding\.PRODUCT_NAME\)/);
+        expect(welcome.indexOf('styles.welcomeLogo')).toBeGreaterThan(-1);
+        expect(welcome).not.toContain('styles.welcomeTitle');
+        expect(welcome).toMatch(/<h1 className="sr-only">\{branding\.PRODUCT_NAME\}<\/h1>/);
+        expect(welcome.indexOf('styles.welcomeTagline')).toBeGreaterThan(welcome.indexOf('<h1 className="sr-only">'));
+        expect(welcome).toContain("t('onboarding.welcomeTagline')");
+    });
+
+    it('centres the uncarded narrow welcome group', () => {
+        const form = all.find((rule) => rule.media.length === 0 && selects(rule, 'form.welcomeForm'));
+        expect(form.body).toMatch(/justify-content:\s*center;/);
+        expect(form.body).toMatch(/min-height:\s*100%;/);
+        expect(form.body).toMatch(/margin:\s*0 auto;/);
+        const logo = all.find((rule) => rule.media.length === 0 && selects(rule, '.welcomeLogo'));
+        expect(logo.body).toMatch(/width:\s*140px;/);
+        const header = all.find((rule) => rule.media.length === 0 && selects(rule, '.welcomeHeader'));
+        expect(header.body).toMatch(/gap:\s*var\(--xc-space-2\);/);
+    });
+
+    it('centres welcome and carousel content from 600px without stretching either card', () => {
+        const isWide = (rule) => rule.media.some((m) => /min-width:\s*600px/.test(m));
+        const centre = all.find((rule) => isWide(rule)
+            && selects(rule, '.wideCentre.wideCentre.wideCentre'));
+        const centredChild = all.find((rule) => isWide(rule)
+            && selects(rule, '.wideCentre.wideCentre.wideCentre > *'));
+        expect(centre.body).toMatch(/display:\s*flex;/);
+        expect(centre.body).toMatch(/flex-direction:\s*column;/);
+        expect(centredChild.body).toMatch(/margin-block:\s*auto;/);
+
+        const welcome = all.find((rule) => isWide(rule) && selects(rule, 'form.welcomeForm'));
+        expect(welcome.body).toMatch(/min-height:\s*auto;/);
+        expect(welcome.body).not.toMatch(/(?:^|;)\s*height:|(?:^|;)\s*flex(?:-grow)?:/);
+
+        const carousel = all.find((rule) => isWide(rule) && selects(rule, 'div.carouselForm'));
+        const carouselStack = all.find((rule) => isWide(rule)
+            && selects(rule, 'div.carouselForm > [data-form-stack]'));
+        expect(carousel.body).toMatch(/height:\s*auto;/);
+        expect(carouselStack.body).toMatch(/flex:\s*0 1 auto;/);
+        expect(source).toMatch(/header=\{null\} bodyClassName=\{styles\.wideCentre\}>\s*<FormPage[\s\S]*?className=\{styles\.carouselForm\}/);
     });
 });

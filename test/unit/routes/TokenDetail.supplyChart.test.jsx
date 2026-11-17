@@ -54,8 +54,9 @@ function renderDetail({ history, quantity = '100', onBuy = vi.fn(), withHistory 
 }
 
 function revealSupplyHistory() {
-    fireEvent.click(screen.getByRole('button', { name: 'More info' }));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Supply over time' }));
+    // Supply over time is a row at the foot of the Details tab.
+    fireEvent.click(screen.getByRole('tab', { name: /Details/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Supply over time' }));
 }
 
 describe('TokenDetail supply chart', () => {
@@ -159,25 +160,30 @@ describe('TokenDetail supply chart', () => {
             </MessagingProvider>,
         );
         await waitFor(() => expect(getNativePricesRequest).toHaveBeenCalled());
-        expect(screen.getByText('No market data available for this network.')).toBeTruthy();
+        // The market figures are rows of the Details tab.
+        fireEvent.click(screen.getByRole('tab', { name: /Details/ }));
+        expect(await screen.findByText('No market data for this network')).toBeTruthy();
     });
 });
 
 describe('TokenDetail Exchange action', () => {
     it('opens trading regardless of whether the current balance is zero', () => {
         const { onBuy } = renderDetail({ history: [] });
-        fireEvent.click(screen.getByRole('button', { name: 'Exchange' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Exchange\b/ }));
         expect(onBuy).toHaveBeenCalledTimes(1);
 
         cleanup();
         const zero = renderDetail({ history: [], quantity: '0' });
-        fireEvent.click(screen.getByRole('button', { name: 'Exchange' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Exchange\b/ }));
         expect(zero.onBuy).toHaveBeenCalledTimes(1);
         expect(screen.queryByRole('button', { name: 'Sell on DEX' })).toBeNull();
     });
 
-    it('is disabled when the shell has no trading surface', () => {
+    // A shell with no trading surface gets no Exchange row at all (absent,
+    // not greyed), as the store builds drop the DEX rows.
+    it('is absent when the shell has no trading surface', () => {
         renderDetail({ history: [], onBuy: null });
-        expect(screen.getByRole('button', { name: 'Exchange' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /^Send\b/ })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^Exchange\b/ })).toBeNull();
     });
 });

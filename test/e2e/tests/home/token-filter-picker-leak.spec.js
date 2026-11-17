@@ -13,6 +13,7 @@
 // toolbar that is not on the page and no way to drop the filter.
 
 import { createWallet, expect, gotoSection, test } from '../../fixtures/wallet.js';
+import { showHomeBalances } from '../../fixtures/homeBalances.js';
 
 test('a search typed in the Send picker does not filter the Home Tokens tab', async ({ page }) => {
     await createWallet(page);
@@ -25,7 +26,7 @@ test('a search typed in the Send picker does not filter the Home Tokens tab', as
 
     await gotoSection(page, 'Home');
     const main = page.getByRole('main');
-    await main.getByRole('tab', { name: 'Tokens' }).click();
+    await showHomeBalances(main, 'tokens');
     await expect(main.getByText('No matching tokens')).toHaveCount(0);
     await expect(main.getByLabel(/^Open .* details/i).first()).toBeVisible();
 });
@@ -37,7 +38,7 @@ test('a Home token filter that matches nothing clears from the empty state', asy
     const filterButton = main.getByRole('button', { name: 'Filter and sort' });
     const search = main.getByRole('dialog', { name: 'Filter and sort' })
         .getByRole('searchbox', { name: 'Search tokens by name' });
-    await main.getByRole('tab', { name: 'Tokens' }).click();
+    await showHomeBalances(main, 'tokens');
     await filterButton.click();
     await search.fill('ZZNOSUCHTICK');
     await page.keyboard.press('Escape');

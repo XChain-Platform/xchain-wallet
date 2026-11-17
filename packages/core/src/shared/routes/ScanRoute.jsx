@@ -71,6 +71,8 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
     const [paste, setPaste] = useState('');
     const [status, setStatus] = useState(/** @type {string | null} */ (null));
     const [stopped, setStopped] = useState(false);
+    const [pasteError, setPasteError] = useState(/** @type {string | null} */ (null));
+    const pasteRef = useRef(/** @type {HTMLTextAreaElement | null} */ (null));
     const claimedRef = useRef(false);
 
     const classify = useCallback((raw) => {
@@ -256,10 +258,13 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
 
     const handleFrame = useCallback((text) => { classify(text); }, [classify]);
 
+    // The action stays enabled (G22): pressed with nothing pasted, the field
+    // itself turns red with its message and takes the cursor.
     const handlePaste = useCallback(() => {
         const text = paste.trim();
         if (!text) {
-            setStatus(t('scan.error.pasteEmpty'));
+            setPasteError(t('scan.error.pasteEmpty'));
+            pasteRef.current?.focus();
             return;
         }
         classify(text);
@@ -294,7 +299,7 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
                         type="submit"
                         variant="success"
                         icon={<Icon.CheckIcon />}
-                        disabled={!paste.trim() || stopped}
+                        disabled={stopped}
                     >
                         {t('scan.classifyPaste')}
                     </Button>
@@ -307,10 +312,15 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
                     <FieldNote variant="success">{t('scan.routing')}</FieldNote>
                 )}
                 <Textarea
+                    ref={pasteRef}
                     label={t('scan.pasteLabel')}
                     help={PASTE_HELP}
                     value={paste}
-                    onChange={(e) => setPaste(e.target.value)}
+                    error={pasteError || undefined}
+                    onChange={(e) => {
+                        setPaste(e.target.value);
+                        if (pasteError && e.target.value.trim()) setPasteError(null);
+                    }}
                     placeholder={t('scan.pastePlaceholder')}
                     rows={4}
                     spellCheck={false}

@@ -32,6 +32,7 @@ import { EmptyState } from '../../../packages/core/src/ui/EmptyState.jsx';
 import { SectionHeader } from '../../../packages/core/src/ui/SectionHeader.jsx';
 import * as ui from '../../../packages/core/src/ui/index.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { MintForm } from '../../../packages/core/src/shared/routes/MintForm.jsx';
 import { CreatePollForm } from '../../../packages/core/src/shared/routes/CreatePollForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
@@ -139,6 +140,7 @@ function baseLayer(text) {
 
 afterEach(() => {
     vi.unstubAllGlobals();
+    resetWalletModes();
 });
 
 describe('page templates: exported from @xchain-wallet/core/ui', () => {
@@ -150,7 +152,10 @@ describe('page templates: exported from @xchain-wallet/core/ui', () => {
 });
 
 describe('<FormErrorSummary>', () => {
-    it('takes focus and links every error to its field', () => {
+    // Notice Standard (2026-11-15): the summary lists the problems in plain
+    // text (no links) and marks every field it names invalid, which draws
+    // the field's red border.
+    it('takes focus, lists every error in plain text and marks each field', () => {
         render(
             <form>
                 <label htmlFor="ticker">Ticker</label>
@@ -166,12 +171,12 @@ describe('<FormErrorSummary>', () => {
 
         const summary = screen.getByRole('alert', { name: 'Form errors' });
         expect(document.activeElement).toBe(summary);
-        expect(within(summary).getByText('Fix these 2 fields:')).toBeInTheDocument();
-        const links = within(summary).getAllByRole('link');
-        expect(links.map((link) => link.getAttribute('href'))).toEqual(['#ticker', '#amount']);
-
-        fireEvent.click(links[1]);
-        expect(document.activeElement).toBe(screen.getByLabelText('Amount'));
+        expect(within(summary).getByText('Fix 2 things to continue')).toBeInTheDocument();
+        expect(within(summary).queryByRole('link')).toBeNull();
+        expect(within(summary).getAllByRole('listitem').map((item) => item.getAttribute('data-error-for')))
+            .toEqual(['ticker', 'amount']);
+        expect(screen.getByLabelText('Ticker')).toHaveAttribute('aria-invalid', 'true');
+        expect(screen.getByLabelText('Amount')).toHaveAttribute('aria-invalid', 'true');
     });
 
     it('names the field once when the message already opens with its label', () => {
@@ -184,8 +189,8 @@ describe('<FormErrorSummary>', () => {
             ]} focusKey={1} />,
         );
 
-        const links = within(screen.getByRole('alert', { name: 'Form errors' })).getAllByRole('link');
-        expect(links.map((link) => link.textContent)).toEqual([
+        const lines = within(screen.getByRole('alert', { name: 'Form errors' })).getAllByRole('listitem');
+        expect(lines.map((line) => line.textContent)).toEqual([
             'Password must be at least 8 characters.',
             'Word 5 does not match your written copy.',
             'Word 1: Word 12 is missing.',
@@ -232,7 +237,7 @@ describe('<FormErrorSummary>', () => {
 
         const summary = screen.getByRole('alert', { name: 'Form errors' });
         expect(within(summary).getByText("Couldn't send. Something went wrong. Try again.")).toBeInTheDocument();
-        expect(within(summary).queryByText(/Fix (?:this|these).*field/)).not.toBeInTheDocument();
+        expect(within(summary).queryByText(/Fix \d+ things? to continue/)).not.toBeInTheDocument();
         expect(within(summary).queryByRole('link')).not.toBeInTheDocument();
     });
 });
@@ -257,15 +262,13 @@ describe('<FormPage>', () => {
             </FormPage>,
         );
         const form = container.querySelector('form');
-        // The notice leads the page just above the form (its card, when wide).
-        const page = [...form.parentElement.children];
-        expect(page).toHaveLength(2);
-        expect(page[0]).toHaveTextContent('Problem');
-        expect(page[1]).toBe(form);
+        // The notice is the form's first item, so from 600px the one form card
+        // wraps it with the fields (operator 2026-11-16).
         const kids = [...form.children];
+        expect(kids).toHaveLength(3);
+        expect(kids[0]).toHaveTextContent('Problem');
         expect(kids.at(-1)).toContainElement(screen.getByRole('button', { name: 'Go' }));
         expect(kids.at(-2)).toContainElement(screen.getByLabelText('Amount'));
-        expect(form).not.toHaveTextContent('Problem');
     });
 
     it('keeps the same form and the focused field when a notice comes and goes', () => {
@@ -289,7 +292,7 @@ describe('<FormPage>', () => {
         expect(document.activeElement).toBe(amount);
     });
 
-    it('lets an error summary above the form take focus and lead to its field', () => {
+    it('lets an error summary at the top of the form take focus and mark its field', () => {
         render(
             <FormPage
                 label="Pay"
@@ -301,10 +304,9 @@ describe('<FormPage>', () => {
         );
         const summary = screen.getByRole('alert');
         const form = screen.getByRole('form', { name: 'Pay' });
-        expect(form).not.toContainElement(summary);
+        expect(form.firstElementChild).toContainElement(summary);
         expect(document.activeElement).toBe(summary);
-        fireEvent.click(within(summary).getByRole('link'));
-        expect(document.activeElement).toBe(screen.getByLabelText('Amount'));
+        expect(screen.getByLabelText('Amount')).toHaveAttribute('aria-invalid', 'true');
     });
 
     it('calls onSubmit when the form is submitted, and skips browser validation by default', () => {
@@ -525,10 +527,11 @@ describe('ListPage.module.css: fluid list width', () => {
         expect(ruleBody(text, '.toolbar')).toMatch(/flex-wrap:\s*wrap/);
     });
 
-    it('uses the shared section rhythm and tightens a header to its content', () => {
-        expect(ruleBody(text, '.page')).toMatch(/gap:\s*var\(--xc-section-gap\)/);
+    it('spaces blocks by its own 8px list gap and tightens a header to its content', () => {
+        expect(ruleBody(text, '.page')).toMatch(/--xc-list-page-gap:\s*var\(--xc-space-2\)/);
+        expect(ruleBody(text, '.page')).toMatch(/gap:\s*var\(--xc-list-page-gap\)/);
         expect(ruleBody(text, '.page > [data-xc-section-header] + *'))
-            .toMatch(/margin-block-start:\s*calc\(var\(--xc-section-header-gap\) - var\(--xc-section-gap\)\)/);
+            .toMatch(/margin-block-start:\s*calc\(var\(--xc-section-header-gap\) - var\(--xc-list-page-gap\)\)/);
     });
 });
 
@@ -540,17 +543,28 @@ describe('page gutter ownership', () => {
     it('keeps page gutter use in Screen and tier values in the shell', () => {
         const users = filesBelow(coreSrcDir(), '.module.css')
             .filter((file) => readFileSync(file, 'utf8').includes('var(--xc-page-gutter)'));
-        expect(users).toEqual([screenPath]);
+        // The app bar uses the same gutter on every side so its buttons sit on the page's lines.
+        // The wide wallet menu sheet floats one gutter in from each edge (layout 1, ruling 2026-11-14).
+        // Wide Home's divider runs edge to edge across the content area and its
+        // split reaches the bottom edge (G115, revised 2026-11-15), so it reads
+        // the gutter to bleed through Screen's padding; it adds none of its own.
+        expect(users).toEqual([
+            join(coreSrcDir(), 'shared', 'commandPalette', 'CommandPalette.module.css'),
+            join(coreSrcDir(), 'shared', 'components', 'AppHeader.module.css'),
+            join(coreSrcDir(), 'shared', 'components', 'HomeWideLayout.module.css'),
+            screenPath,
+        ]);
 
         const tokens = css('tokens.css');
-        expect(tokens).toMatch(/--xc-page-gutter:\s*var\(--xc-space-3\)/);
-        expect(tokens).toMatch(/--xc-page-top:\s*var\(--xc-space-3\)/);
+        // The gutter and the top inset are 8px at every width.
+        expect(tokens).toMatch(/--xc-page-gutter:\s*var\(--xc-space-2\)/);
+        expect(tokens).toMatch(/--xc-page-top:\s*var\(--xc-space-2\)/);
 
         const shell = readFileSync(join(coreSrcDir(), 'shared', 'components', 'LeftNav.module.css'), 'utf8');
         // One gutter on every tier: the shell sets only the top inset per tier.
         expect(shell).not.toMatch(/--xc-page-gutter:/);
-        expect(shell).toMatch(/data-xc-tier='rail'[^}]*--xc-page-top:\s*var\(--xc-space-4\)/s);
-        expect(shell).toMatch(/data-xc-tier='full'[^}]*--xc-page-top:\s*var\(--xc-space-4\)/s);
+        expect(shell).toMatch(/data-xc-tier='rail'[^}]*--xc-page-top:\s*var\(--xc-space-2\)/s);
+        expect(shell).toMatch(/data-xc-tier='full'[^}]*--xc-page-top:\s*var\(--xc-space-2\)/s);
         expect(shell).toMatch(/@media \(orientation: landscape\) and \(max-height: 480px\) and \(min-aspect-ratio: 3\/2\)[\s\S]*--xc-page-top:\s*var\(--xc-space-2\)/);
     });
 
@@ -673,7 +687,8 @@ describe('list page rhythm tokens', () => {
     it('defines one section gap, header gap, and list row padding', () => {
         expect(tokens).toMatch(/--xc-section-gap:\s*var\(--xc-space-4\)/);
         expect(tokens).toMatch(/--xc-section-header-gap:\s*var\(--xc-space-2\)/);
-        expect(tokens).toMatch(/--xc-list-row-padding:\s*var\(--xc-space-3\)/);
+        // List rows use 8px padding everywhere.
+        expect(tokens).toMatch(/--xc-list-row-padding:\s*var\(--xc-space-2\)/);
     });
 
     it('uses gaps instead of child margins inside headers and empty states', () => {
@@ -736,7 +751,7 @@ describe('route wrap() returns: every stage lays out through a template', () => 
         const roots = wrapCallRoots('TokenAdminForm.jsx');
         expect(roots.length).toBeGreaterThan(4);
         const faults = roots
-            .filter(({ name }) => !['ListPage', 'FormPage', 'ResultScreen'].includes(name))
+            .filter(({ name }) => !['ListPage', 'FormPage', 'FormFrame', 'ResultScreen'].includes(name))
             .map(({ line, name }) => `TokenAdminForm.jsx:${line} wrap(${name})`);
         expect(faults).toEqual([]);
     });
@@ -744,14 +759,17 @@ describe('route wrap() returns: every stage lays out through a template', () => 
 
 // DelegateVoteForm's wrap() helper is a bare Screen. The load error, the
 // loading line, both ResultScreen states and the done panel reach the page
-// through the ListPage each wrap() call passes, and the review and form
-// stages through FormPage, so no state draws straight into the Screen box.
+// through the ListPage each wrap() call passes, and the form stage through
+// FormPage. Review uses ConfirmActionModal, so no state draws straight into
+// the Screen box.
 describe('DelegateVoteForm: every wrap() call passes ListPage or FormPage', () => {
-    it('roots the load error, loading line, done panels, review and form in a template', () => {
+    it('roots non-review states in templates and review in ConfirmActionModal', () => {
         const roots = wrapCallRoots('DelegateVoteForm.jsx');
-        expect(roots.length).toBeGreaterThanOrEqual(7);
+        expect(roots.length).toBeGreaterThanOrEqual(6);
+        expect(readFileSync(join(coreSrcDir(), 'shared', 'routes', 'DelegateVoteForm.jsx'), 'utf8'))
+            .toContain('<ConfirmActionModal');
         const faults = roots
-            .filter(({ name }) => !['ListPage', 'FormPage'].includes(name))
+            .filter(({ name }) => !['ListPage', 'FormPage', 'FormFrame'].includes(name))
             .map(({ line, name }) => `DelegateVoteForm.jsx:${line} wrap(${name})`);
         expect(faults).toEqual([]);
     });
@@ -909,11 +927,13 @@ describe('SleepForm: every wrap() call passes a FormPage', () => {
     const opens = (name) => (node) => node.type === 'JSXOpeningElement'
         && node.name.type === 'JSXIdentifier' && node.name.name === name;
 
-    it('roots the load error, the loading line, the done panels, review and form in FormPage', () => {
+    it('roots non-review states in FormPage and review in ConfirmActionModal', () => {
         const roots = sleepFormWrapRoots();
-        expect(roots.length).toBeGreaterThanOrEqual(7);
+        expect(roots.length).toBeGreaterThanOrEqual(6);
+        expect(readFileSync(join(coreSrcDir(), 'shared', 'routes', 'SleepForm.jsx'), 'utf8'))
+            .toContain('<ConfirmActionModal');
         const faults = roots
-            .filter(({ name }) => name !== 'FormPage')
+            .filter(({ name }) => !['FormPage', 'FormFrame'].includes(name))
             .map(({ line, name }) => `SleepForm.jsx:${line} wrap(${name})`);
         expect(faults).toEqual([]);
     });
@@ -983,7 +1003,7 @@ describe('DividendForm: every stage renders inside FormPage', () => {
         expectInsideFormPage(screen.getByText('Loading…'));
     });
 
-    it('passes a FormPage to every wrap() call, the done-stage results included', () => {
+    it('templates every wrap() call and uses ConfirmActionModal for review', () => {
         const path = join(coreSrcDir(), 'shared', 'routes', 'DividendForm.jsx');
         const tree = parse(readFileSync(path, 'utf8'), { sourceType: 'module', plugins: ['jsx'] });
         const roots = [];
@@ -1004,8 +1024,9 @@ describe('DividendForm: every stage renders inside FormPage', () => {
             }
         };
         visit(tree.program);
-        expect(roots.length).toBeGreaterThanOrEqual(7);
-        expect(roots.filter(({ name }) => name !== 'FormPage')
+        expect(roots.length).toBeGreaterThanOrEqual(6);
+        expect(readFileSync(path, 'utf8')).toContain('<ConfirmActionModal');
+        expect(roots.filter(({ name }) => !['FormPage', 'FormFrame'].includes(name))
             .map(({ line, name }) => `DividendForm.jsx:${line} wrap(${name})`)).toEqual([]);
     });
 });
@@ -1127,11 +1148,13 @@ describe('AdvancedActionsForm: every wrap() call passes a page template', () => 
             : (value && typeof value === 'object' ? holds(value, test) : false)));
     };
 
-    it('roots the signer notice, load error, loading line, done panels, review and form in ListPage or FormPage', () => {
+    it('roots non-review states in templates and review in ConfirmActionModal', () => {
         const roots = advancedWrapRoots();
-        expect(roots.length).toBeGreaterThanOrEqual(8);
+        expect(roots.length).toBeGreaterThanOrEqual(7);
+        expect(readFileSync(join(coreSrcDir(), 'shared', 'routes', 'AdvancedActionsForm.jsx'), 'utf8'))
+            .toContain('<ConfirmActionModal');
         const faults = roots
-            .filter(({ name }) => !['ListPage', 'FormPage'].includes(name))
+            .filter(({ name }) => !['ListPage', 'FormPage', 'FormFrame'].includes(name))
             .map(({ line, name }) => `AdvancedActionsForm.jsx:${line} wrap(${name})`);
         expect(faults).toEqual([]);
     });
@@ -1157,7 +1180,7 @@ describe('ProjectRosterForm: every wrap() state lays out through a template', ()
         const roots = wrapCallRoots('ProjectRosterForm.jsx');
         expect(roots.length).toBeGreaterThanOrEqual(10);
         const faults = roots
-            .filter(({ name }) => !['ListPage', 'FormPage'].includes(name))
+            .filter(({ name }) => !['ListPage', 'FormPage', 'FormFrame'].includes(name))
             .map(({ line, name }) => `ProjectRosterForm.jsx:${line} wrap(${name})`);
         expect(faults).toEqual([]);
     });
@@ -1202,7 +1225,7 @@ describe('BatchComposerForm: every wrap() call passes a page template', () => {
         const roots = batchWrapRoots();
         expect(roots.length).toBeGreaterThanOrEqual(6);
         const faults = roots
-            .filter(({ name }) => !['ListPage', 'FormPage'].includes(name))
+            .filter(({ name }) => !['ListPage', 'FormPage', 'FormFrame'].includes(name))
             .map(({ line, name }) => `BatchComposerForm.jsx:${line} wrap(${name})`);
         expect(faults).toEqual([]);
     });
@@ -1318,7 +1341,7 @@ describe('SwapForm: every stage renders inside FormPage', () => {
         const roots = wrapCallRoots('SwapForm.jsx');
         expect(roots.length).toBeGreaterThanOrEqual(6);
         const faults = roots
-            .filter(({ name }) => name !== 'FormPage')
+            .filter(({ name }) => !['FormPage', 'FormFrame'].includes(name))
             .map(({ line, name }) => `SwapForm.jsx:${line} wrap(${name})`);
         expect(faults).toEqual([]);
     });
@@ -1338,18 +1361,19 @@ describe('SwapForm: every stage renders inside FormPage', () => {
     it('lays out the offline notice in the FormPage status region', async () => {
         Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
         await mountSwap();
-        await screen.findByRole('button', { name: /^Network: / });
+        // The Network field sits in the closed From section, so it is queried as hidden.
+        await screen.findByRole('button', { name: /^Network: /, hidden: true });
         const notices = screen.getAllByText('Swapping needs a network connection.');
         expect(notices).toHaveLength(1);
         expect(notices[0].closest('[data-form-status]'), 'inside the FormPage status').not.toBeNull();
     });
 });
 
-// ContractStakeForm's wrap() helper is a bare Screen. The load error, the
-// loading line, the not-stakeable notice and every done-stage panel reach the
-// page through the ListPage each wrap() call passes, and the review and form
-// stages through FormPage, so no state draws straight into the Screen box.
-describe('ContractStakeForm: every stage renders inside a page template', () => {
+// The Staking form's wrap() helper is a bare Screen. On a contract target the
+// load error, the loading line, the not-stakeable notice and every result
+// reach the page through the FormPage each wrap() call passes, like the
+// review and form stages, so no state draws straight into the Screen box.
+describe('StakingForm on a contract: every stage renders inside a page template', () => {
     const CHAIN_ID = 'bitcoin-mainnet';
     const ADDRESSES = {
         [CHAIN_ID]: [{
@@ -1361,15 +1385,15 @@ describe('ContractStakeForm: every stage renders inside a page template', () => 
         }],
     };
 
-    function listPageClass() {
-        const list = render(<ListPage><p>x</p></ListPage>);
-        const name = list.container.firstChild.className.split(' ')[0];
-        list.unmount();
+    function formPageClass() {
+        const page = render(<FormPage label="x"><p>x</p></FormPage>);
+        const name = page.container.firstChild.className.split(' ')[0];
+        page.unmount();
         return name;
     }
 
     async function mountStake(overrides = {}) {
-        const { ContractStakeForm } = await import('../../../packages/core/src/shared/routes/ContractStakeForm.jsx');
+        const { StakingForm } = await import('../../../packages/core/src/shared/routes/StakingForm.jsx');
         const { createElement } = await import('react');
         const messaging = {
             getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
@@ -1390,40 +1414,45 @@ describe('ContractStakeForm: every stage renders inside a page template', () => 
         return render(createElement(
             MessagingProvider,
             { shell: 'desktop', messaging: proxy },
-            createElement(ContractStakeForm, { walletId: 'w', chainId: CHAIN_ID, contractActionIndex: '7', onBack() {} }),
+            createElement(StakingForm, {
+                walletId: 'w',
+                target: { kind: 'contract', chainId: CHAIN_ID, contractActionIndex: '7' },
+                action: 'stake',
+                onBack() {},
+            }),
         ));
     }
 
-    function expectInListPageWithinScreen(element, container) {
-        const page = element.closest(`.${CSS.escape(listPageClass())}`);
-        expect(page, 'inside ListPage').not.toBeNull();
-        expect(page.parentElement, 'ListPage is not the Screen root').not.toBe(container);
+    function expectInFormPageWithinScreen(element, container) {
+        const page = element.closest(`.${CSS.escape(formPageClass())}`);
+        expect(page, 'inside FormPage').not.toBeNull();
+        expect(page.parentElement, 'FormPage is not the Screen root').not.toBe(container);
         expect(container.contains(page)).toBe(true);
     }
 
-    it('lays out the load error as a ListPage notice', async () => {
+    it('lays out the load error as a FormPage notice', async () => {
         const { container } = await mountStake({
             getAddressesByChain: vi.fn().mockRejectedValue(new Error('Address store unavailable')),
         });
         const status = await screen.findByText('Address store unavailable');
-        expectInListPageWithinScreen(status, container);
+        expectInFormPageWithinScreen(status, container);
     });
 
-    it('lays out the loading line inside ListPage', async () => {
+    it('lays out the loading line inside FormPage', async () => {
         const { container } = await mountStake({ getAddressesByChain: vi.fn(() => new Promise(() => {})) });
-        expectInListPageWithinScreen(screen.getByText('Loading…'), container);
+        expectInFormPageWithinScreen(screen.getByText('Loading…'), container);
     });
 
-    it('lays out the not-stakeable notice inside ListPage', async () => {
+    it('lays out the not-stakeable notice inside FormPage', async () => {
         const { container } = await mountStake({
             getContractByActionIndex: vi.fn().mockResolvedValue({ row: { cooldown_blocks: null } }),
         });
         const notice = await screen.findByText(/is not stakeable/);
-        expectInListPageWithinScreen(notice, container);
+        expectInFormPageWithinScreen(notice, container);
     });
 
-    it('roots both ResultScreen states and the broadcast panel in ListPage', () => {
-        const path = join(coreSrcDir(), 'shared', 'routes', 'ContractStakeForm.jsx');
+    it('roots both ResultScreen states and the broadcast panel in FormPage', () => {
+        const path = join(coreSrcDir(), 'shared', 'routes', 'StakingForm.jsx');
         const tree = parse(readFileSync(path, 'utf8'), { sourceType: 'module', plugins: ['jsx'] });
         const roots = [];
         const visit = (node) => {
@@ -1451,11 +1480,12 @@ describe('ContractStakeForm: every stage renders inside a page template', () => 
         const rootsHolding = (test) => roots.filter(({ arg }) => holds(arg, test)).map(({ name }) => name);
 
         expect(roots.length).toBeGreaterThanOrEqual(7);
-        expect(roots.filter(({ name }) => !['ListPage', 'FormPage'].includes(name))
-            .map(({ line, name }) => `ContractStakeForm.jsx:${line} wrap(${name})`)).toEqual([]);
+        expect(roots.filter(({ name }) => !['ListPage', 'FormPage', 'FormFrame'].includes(name))
+            .map(({ line, name }) => `StakingForm.jsx:${line} wrap(${name})`)).toEqual([]);
         expect(rootsHolding((node) => node.type === 'JSXOpeningElement'
-            && node.name.type === 'JSXIdentifier' && node.name.name === 'ResultScreen')).toEqual(['ListPage', 'ListPage']);
-        expect(rootsHolding((node) => node.type === 'JSXText' && node.value.includes('was broadcast'))).toEqual(['ListPage']);
+            && node.name.type === 'JSXIdentifier' && node.name.name === 'ResultScreen')).toEqual(['FormPage', 'FormPage']);
+        // The broadcast panel: the page holding the result's Done action.
+        expect(rootsHolding((node) => node.type === 'JSXText' && node.value.trim() === 'Done')).toEqual(['FormPage']);
     });
 });
 
@@ -1498,7 +1528,7 @@ describe('ComposeMessage: the load error, the loading line and the sent panel re
     it('lays out the loading line inside the FormPage group, not bare in the Screen', async () => {
         await mountCompose({ getAddressesByChain: vi.fn(() => new Promise(() => {})) });
         const loading = await screen.findByText('Loading wallet…');
-        const group = screen.getByRole('group', { name: 'New message' });
+        const group = screen.getByRole('group', { name: 'New Message' });
         expect(group.contains(loading), 'the loading line sits in the FormPage').toBe(true);
     });
 
@@ -1506,7 +1536,7 @@ describe('ComposeMessage: the load error, the loading line and the sent panel re
         const roots = wrapCallRoots('ComposeMessage.jsx');
         expect(roots.length).toBeGreaterThanOrEqual(7);
         const faults = roots
-            .filter(({ name }) => !['FormPage', 'ResultScreen'].includes(name))
+            .filter(({ name }) => !['FormPage', 'FormFrame', 'ResultScreen'].includes(name))
             .map(({ line, name }) => `ComposeMessage.jsx:${line} wrap(${name})`);
         expect(faults).toEqual([]);
     });
@@ -1538,14 +1568,19 @@ describe('Send: every stage renders inside FormPage or ListPage, not bare Screen
         expect(element.closest(templateSelector()), 'inside ListPage or FormPage').not.toBeNull();
     }
 
-    async function mountSend({ quantity = '100000000', settings = { walletMode: 'full', grace: { testSendThresholdSats: 0 } }, overrides = {} } = {}) {
+    async function mountSend({
+        quantity = '100000000', settings = { grace: { testSendThresholdSats: 0 } }, walletMode = 'full', overrides = {},
+    } = {}) {
         const { Send } = await import('../../../packages/core/src/shared/routes/Send.jsx');
+        // The wallet's mode is read from the wallet list, not from settings.
+        publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
         const balances = { native: { tick: 'BTC', quantity, divisibility: 8 }, tokens: [] };
         const base = {
             getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
             getAddressBalances: vi.fn().mockResolvedValue(balances),
             getWalletBalances: vi.fn().mockResolvedValue({ [CHAIN_ID]: [{ address: FROM, balances, error: null }] }),
             getSettings: vi.fn().mockResolvedValue(settings),
+            listWallets: vi.fn().mockResolvedValue([{ id: 'w', name: 'W', walletMode }]),
             listContacts: vi.fn().mockResolvedValue([]),
             getRecentDestinations: vi.fn().mockResolvedValue([]),
             ...overrides,
@@ -1572,8 +1607,8 @@ describe('Send: every stage renders inside FormPage or ListPage, not bare Screen
     });
 
     it('lays out the signer-mode refusal inside a template', async () => {
-        await mountSend({ settings: { walletMode: 'signer' } });
-        expectInsideTemplate(await screen.findByText(/This wallet is in signer mode/));
+        await mountSend({ walletMode: 'signer' });
+        expectInsideTemplate(await screen.findByText(/This wallet is the signer for another phone/));
     });
 
     it('lays out the no-networks state inside a template', async () => {
@@ -1595,7 +1630,7 @@ describe('Send: every stage renders inside FormPage or ListPage, not bare Screen
         const roots = wrapCallRoots('Send.jsx');
         expect(roots.length).toBeGreaterThanOrEqual(13);
         const faults = roots
-            .filter(({ name }) => !['ListPage', 'FormPage'].includes(name))
+            .filter(({ name }) => !['ListPage', 'FormPage', 'FormFrame'].includes(name))
             .map(({ line, name }) => `Send.jsx:${line} wrap(${name})`);
         expect(faults).toEqual([]);
     });

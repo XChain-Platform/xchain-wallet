@@ -35,6 +35,6 @@ export function addressLockStateError(read, row, height) {
     // A wake block needs the height to judge; Review and signing refresh it.
     if (!Number.isSafeInteger(height)) return null;
     return resumeBlock > height
-        ? t('routes.sleepForm.addressLockedUntil', { resumeBlock: resumeBlock.toLocaleString('en-US') })
+        ? t('routes.sleepForm.addressLockedUntil', { resumeBlock: String(resumeBlock) })
         : null;
 }

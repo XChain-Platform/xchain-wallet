@@ -59,7 +59,7 @@ afterEach(() => {
 describe('Privacy reset and validation', () => {
     it('reset writes defaults for privacy controls only', async () => {
         render(<PrivacySection />);
-        fireEvent.click(screen.getByRole('button', { name: 'Reset to defaults' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reset to Defaults' }));
         await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
         const patch = update.mock.calls[0][0];
         expect(Object.keys(patch)).toEqual(['privacy']);

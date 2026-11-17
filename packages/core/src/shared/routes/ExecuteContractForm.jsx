@@ -9,14 +9,18 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormNotice, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+// Network, From and the fee selector render inside the standard
+// FromSection and FeeSection.
+import { Button, ChainBadge, FormPage, Icon, Input, ListPage, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { InPageScreen } from '@xchain-wallet/core/ui/navHistory.js';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { ConfirmActionModal } from '../components/ConfirmActionModal.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
-import { FeesCard } from '../components/FeesCard.jsx';
+// The Fees card renders inside the standard FeeSection.
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { protocolCoinTickerFor } from '../../registry/nativeFee.js';
 import {
@@ -26,7 +30,6 @@ import {
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { revealHiddenText } from '../utils/textHardening.js';
-import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -41,8 +44,11 @@ import {
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { useContractManifest } from '../hooks/useContractManifest.js';
 import { extractSingle, sanitizeAbi, contractOwnerWithdraw } from './contractResponseShape.js';
+import { contractFieldName, useContractTarget } from '../hooks/useContractTarget.js';
+import { TargetField } from '../components/TargetField.jsx';
+import { ContractsList } from './ContractsList.jsx';
 import { OwnerWithdrawWarning } from '../components/OwnerWithdrawWarning.jsx';
-import { ContractConsentPanel } from '../components/ContractConsentPanel.jsx';
+import { permissionsToVerbs, bpsToPercent } from '../utils/contractConsentLabels.js';
 import { preferredSourceId } from '../addressSelection.js';
 import styles from './IssueTokenForm.module.css';
 import contractStyles from './ContractScreens.module.css';
@@ -55,13 +61,55 @@ import { compareDecimalStrings, formatWithThousands, tokenAmountPrecisionError }
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/execute.js';
 import '../../i18n/locales/en/send.js';
+import '../../i18n/locales/en/components.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
+import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
+// Call contract is laid out on the Wallet Form Standard frame.
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    useFormSections,
+} from '../components/formStandard/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+const NO_ACKNOWLEDGMENTS = new Set();
+
+function contractManifestFacts(manifest) {
+    const permissions = manifest?.permissions ?? null;
+    const status = manifest?.status ?? (Array.isArray(permissions) ? 'declared' : 'unavailable');
+    if (status === 'unavailable') {
+        return [{
+            label: t('components.contractConsentPanel.permissionYouGrant'),
+            value: t('components.contractConsentPanel.theWalletCouldnTLook'),
+        }];
+    }
+    const permissionValue = status === 'unrestricted'
+        ? t('components.contractConsentPanel.anythingByContinuingYouGrant')
+        : (() => {
+            const verbs = permissionsToVerbs(permissions);
+            return verbs?.length
+                ? verbs.map((verb) => `${t('components.contractConsentPanel.itCan')} ${verb}`).join(', ')
+                : t('components.contractConsentPanel.youGrantNoActionPermissions');
+        })();
+    return [
+        { label: t('components.contractConsentPanel.permissionYouGrant'), value: permissionValue },
+        {
+            label: t('components.contractConsentPanel.maxFeeItCanTake'),
+            value: bpsToPercent(manifest?.maxTakeBps) ?? t('components.contractConsentPanel.noLimitOfItsOwn'),
+        },
+        {
+            label: t('components.contractConsentPanel.whereThisComesFrom'),
+            value: t('components.contractConsentPanel.reportedByTheXchainIndex'),
+        },
+    ];
+}
 
 function isPositiveDecimal(value) {
     const text = String(value).trim();
@@ -145,12 +193,12 @@ function abiArgumentError(param, value, descriptor) {
 /**
  * EXECUTE contract method form (§42.4).
  *
- * Two authoring lanes. When the contract publishes an `abi` block
+ * The method is always picked from the contract's declared list
  * (xchain-documentation/protocol/Contract_ABI.md, surfaced by the explorer
- * on /api/contract/{idx}), the form renders a method selector plus one
- * typed input per declared param; a manual lane (free-text method name +
- * pipe-delimited params) remains the fallback and an explicit toggle,
- * because the abi is self-declared metadata that may be absent or wrong.
+ * on /api/contract/{idx}): a method selector plus one typed input per
+ * declared param. There is no free-text method field; when the list cannot
+ * load (lookup error, no abi, no methods) the form shows an error with Try
+ * Again and Execute stays disabled.
  *
  * Inputs split the pipe-delimited parameter string into an array on
  * submit. The SDK validator expects PARAMS as an array, not a single
@@ -180,7 +228,18 @@ function abiArgumentError(param, value, descriptor) {
  * @param {string} [props.initialParamsText]
  * @param {() => void} props.onBack
  */
-export function ExecuteContractForm({ walletId, chainId, contractActionIndex, initialMethod, initialParamsText, onBack }) {
+export function ExecuteContractForm({
+    walletId,
+    chainId: openedChainId,
+    contractActionIndex: openedContractActionIndex,
+    initialMethod,
+    initialParamsText,
+    onBack,
+}) {
+    // The contract starts as the one the opening page named; the Contract
+    // field's list icon can pick another, which resets the call below.
+    const contractTarget = useContractTarget(openedChainId, openedContractActionIndex);
+    const { chainId, contractActionIndex } = contractTarget;
     const { messaging, shell } = useMessaging();
     const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
@@ -200,31 +259,44 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
     const [depositQuantity, setDepositQuantity] = useState('');
     const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
 
-    // ABI lane state: the contract's self-declared method metadata (null =
-    // none published / not loaded), an explicit manual-mode escape hatch,
-    // and per-param values for the selected method (joined into paramsText,
-    // which stays the single source of truth for submit).
+    // Method list state: the contract's declared methods (null until loaded),
+    // whether the lookup is loading, ready or failed, a counter that Try Again
+    // bumps to re-read, a prefill refusal, and per-param values for the
+    // selected method (joined into paramsText, which stays the single source
+    // of truth for submit).
     const [contractAbi, setContractAbi] = useState(/** @type {{version: number, methods: Record<string, any>} | null} */ (null));
-    const [manualMode, setManualMode] = useState(false);
+    const [abiStatus, setAbiStatus] = useState(/** @type {'loading' | 'ready' | 'error'} */ ('loading'));
+    const [abiLoadError, setAbiLoadError] = useState(/** @type {string | null} */ (null));
+    const [abiAttempt, setAbiAttempt] = useState(0);
+    const [linkError, setLinkError] = useState(/** @type {string | null} */ (null));
     const [abiParamValues, setAbiParamValues] = useState(/** @type {string[]} */ ([]));
     // OWNER_WITHDRAW_OPT_IN off the same contract row: a swap or add-liquidity
     // call hands tokens to a contract whose deployer may be able to pull them
     // out, so true carries the warning. Null (no field, no row) shows nothing.
     const [ownerWithdraw, setOwnerWithdraw] = useState(/** @type {boolean | null} */ (null));
+    // The same row's exported name, for the Contract field.
+    const [contractRow, setContractRow] = useState(/** @type {any | null} */ (null));
 
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    // The standard section a Call refusal belongs to, and a counter
+    // bumped on every attempt, so that section reopens each time.
+    const [formErrorSection, setFormErrorSection] = useState(/** @type {string | null} */ (null));
+    const [reviewAttempt, setReviewAttempt] = useState(0);
+    // Open state held above the picker and review early returns.
+    // From starts closed, Call open, Deposit and the fee closed.
+    const formSections = useFormSections({ from: false, call: true, deposit: false, fee: false });
+    const failIn = (section, message) => {
+        setFormError(message);
+        setFormErrorSection(section);
+    };
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const submitInFlightRef = useRef(false);
     const contractIdentityRef = useRef(`${chainId}\0${contractActionIndex}`);
-    // What the user has typed or reviewed by the time the abi answers. The abi
-    // reply is asynchronous, so it reads the latest values through this ref.
-    const typedCallRef = useRef({ method: '', paramsText: '', stage: 'form' });
-    typedCallRef.current = { method, paramsText, stage };
 
     useEffect(() => {
         let cancelled = false;
@@ -260,20 +332,23 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         if (stage === 'review') setTimeout(() => passwordRef.current?.focus(), 0);
     }, [stage]);
 
-    // Fetch the contract's declared abi once (same explorer row ContractDetail
-    // reads). Absence or fetch failure just leaves the manual lane in place;
-    // the abi is optional display metadata. Reconciles with any deep-link
-    // prefill: a prefilled method the abi knows seeds its typed inputs, a
-    // method the abi does NOT know keeps manual mode so the link's intent
-    // is preserved verbatim.
+    // Fetch the contract's declared methods (same explorer row ContractDetail
+    // reads). The method is always picked from this list, so a failed lookup,
+    // an absent abi or no declared methods leaves the form in an error state
+    // with Try Again and Execute disabled. A deep-link prefill that names a
+    // method the list knows preselects it and seeds its inputs; one the list
+    // does not know is refused with a clear message.
     useEffect(() => {
         let cancelled = false;
         const contractIdentity = `${chainId}\0${contractActionIndex}`;
+        setAbiStatus('loading');
+        setAbiLoadError(null);
+        setLinkError(null);
         if (contractIdentityRef.current !== contractIdentity) {
             contractIdentityRef.current = contractIdentity;
             setContractAbi(null);
             setOwnerWithdraw(null);
-            setManualMode(false);
+            setContractRow(null);
             setMethod(initialMethod || '');
             setParamsText(initialParamsText || '');
             setAbiParamValues([]);
@@ -284,55 +359,66 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
             setResult(null);
             setStage('form');
         }
-        if (typeof messaging.getContractByActionIndex !== 'function') return undefined;
+        if (typeof messaging.getContractByActionIndex !== 'function') {
+            setAbiLoadError(t('execute.methodsLoadFailed'));
+            setAbiStatus('error');
+            return undefined;
+        }
         messaging.getContractByActionIndex({ chainId, contractActionIndex })
             .then((resp) => {
                 if (cancelled) return;
                 const row = extractSingle(resp);
+                setContractRow(row || null);
                 setOwnerWithdraw(contractOwnerWithdraw(row));
                 // sanitizeAbi guarantees every kept method has an array `params`,
                 // so the .map sites below (and at render) can never throw on a
-                // malformed/hostile abi. Null => fall back to the manual lane.
+                // malformed/hostile abi. Null means the contract declares none.
                 const abi = sanitizeAbi(row && row.abi);
-                if (!abi) return;
+                const names = abi ? Object.keys(abi.methods) : [];
+                if (!abi || names.length === 0) {
+                    setAbiLoadError(t('execute.noMethods'));
+                    setAbiStatus('error');
+                    return;
+                }
                 setContractAbi(abi);
-                const names = Object.keys(abi.methods);
+                setAbiStatus('ready');
                 if (initialMethod && names.includes(initialMethod)) {
                     const declared = abi.methods[initialMethod].params || [];
                     const givenText = initialParamsText || '';
                     const given = givenText === '' ? [] : givenText.split('|');
                     if (given.length > declared.length) {
-                        // The manual lane exposes every supplied value instead
-                        // of hiding arguments that the ABI does not declare.
-                        setManualMode(true);
+                        // Hiding arguments the method does not declare would
+                        // change the call, so the link is refused instead.
+                        setMethod('');
+                        setAbiParamValues([]);
+                        setParamsText('');
+                        setLinkError(t('execute.linkTooManyArgs', { method: initialMethod, count: declared.length }));
                         return;
                     }
                     const declaredValues = declared.map((p, i) => (given[i] !== undefined ? given[i] : ''));
+                    setMethod(initialMethod);
                     setAbiParamValues(declaredValues);
                     setParamsText(declaredValues.join('|'));
                 } else if (initialMethod) {
-                    setManualMode(true);
-                } else if (typedCallRef.current.method.trim() !== ''
-                    || typedCallRef.current.paramsText.trim() !== ''
-                    || typedCallRef.current.stage !== 'form') {
-                    // A call the user already typed or is reviewing stays exactly
-                    // as it is; the declared methods wait behind the toggle
-                    // instead of replacing the method and arguments under them.
-                    setManualMode(true);
+                    setMethod('');
+                    setAbiParamValues([]);
+                    setParamsText('');
+                    setLinkError(t('execute.linkUnknownMethod', { method: initialMethod }));
                 } else {
                     const first = names[0];
                     setMethod(first);
                     setAbiParamValues(new Array((abi.methods[first].params || []).length).fill(''));
-                    // Clear any manual-lane text typed before the abi resolved, so
-                    // the auto-selected method can't silently submit stale params
-                    // (mirrors selectAbiMethod's reset).
                     setParamsText('');
                 }
             })
-            .catch(() => { /* optional metadata; manual lane covers absence */ });
+            .catch((err) => {
+                if (cancelled) return;
+                setAbiLoadError(userFacingMessage(err, t('execute.methodsLoadFailed')));
+                setAbiStatus('error');
+            });
         return () => { cancelled = true; };
         // eslint-disable-next-line react-hooks/exhaustive-deps -- initial* are mount-time prefill constants
-    }, [chainId, contractActionIndex, messaging]);
+    }, [chainId, contractActionIndex, messaging, abiAttempt]);
 
     const descriptor = chainRegistry.get(chainId);
     const coinTicker = protocolCoinTickerFor(descriptor || chainId);
@@ -533,7 +619,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
     // middle value would silently shift later args after the empty-filter in
     // paramsArray; the lane therefore requires every declared param filled
     // before the action enables.
-    const abiActive = Boolean(contractAbi) && !manualMode;
+    const abiActive = Boolean(contractAbi) && abiStatus === 'ready';
     const abiSpec = abiActive && method && contractAbi.methods[method] ? contractAbi.methods[method] : null;
     const abiParams = Array.isArray(abiSpec?.params) ? abiSpec.params : [];
     const abiArgumentErrors = abiParams.map((param, index) => abiArgumentError(
@@ -547,6 +633,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         setAbiParamValues(new Array(count).fill(''));
         setParamsText('');
         setFormError(null);
+        setLinkError(null);
     }
 
     function setAbiParam(i, value) {
@@ -583,13 +670,10 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
     }, [contractActionIndex, method, paramsArray]);
     const executeQuoteInputsValid = useMemo(() => {
         if (!fromAddress?.address || !/^[1-9]\d*$/.test(String(contractActionIndex ?? '').trim())) return false;
+        if (!abiSpec) return false;
         if (!method.trim() || method.includes('|') || method.includes(';')) return false;
         if (actionTextSafetyError(method, 'Method')) return false;
-        if (abiActive && abiArgumentErrors.some(Boolean)) return false;
-        if (!abiActive && paramsText.trim()) {
-            const manualParts = paramsText.split('|').map((part) => part.trim());
-            if (manualParts.some((part) => part === '')) return false;
-        }
+        if (abiArgumentErrors.some(Boolean)) return false;
         if (paramsArray.some((param) => actionTextSafetyError(param, 'Parameter') || param.includes(';'))) {
             return false;
         }
@@ -604,7 +688,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
             if (depositBalance != null && compareDecimalStrings(quantity, depositBalance) === 1) return false;
         }
         return true;
-    }, [fromAddress?.address, contractActionIndex, method, abiActive, abiArgumentErrors,
+    }, [fromAddress?.address, contractActionIndex, method, abiSpec, abiArgumentErrors,
         paramsText, paramsArray, hasDeposit, depositQuantity, depositTick, depositDivisibility,
         depositBalance]);
     const [quoteBatchParams, setQuoteBatchParams] = useState(null);
@@ -641,47 +725,61 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         source: fromAddress?.address,
         actionData: executeQuoteActionData,
     });
+    const quotedProtocolFee = normalizeProtocolFee(protocolFeeQuote);
+    const legacyDecoded = useMemo(() => ({
+        summary: t('execute.callContract'),
+        details: [],
+        warnings: nativeFee.payFeeInNativeCoin
+            ? [NATIVE_FEE_WARNING, NATIVE_FEE_UNVERIFIED_NOTICE]
+            : [],
+    }), [nativeFee.payFeeInNativeCoin]);
+    const legacyComposed = useMemo(() => ({
+        action: hasDeposit ? 'BATCH' : 'EXECUTE',
+        chainId,
+        decoded: legacyDecoded,
+        quote: protocolFeeQuote,
+        protocolFeeKnownFree: quotedProtocolFee.known && quotedProtocolFee.free,
+    }), [chainId, hasDeposit, legacyDecoded, protocolFeeQuote, quotedProtocolFee.free, quotedProtocolFee.known]);
 
     function handleReview(event) {
         event.preventDefault();
+        // Each attempt may reopen the section holding the refusal;
+        // failIn names it (From, Call, Deposit or the fee).
+        setReviewAttempt((n) => n + 1);
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        if (feeStop) { setFormError(feeStop.formError); return; }
+        if (feeStop) { failIn('fee', feeStop.formError); return; }
         // EXECUTE is signed from an address on this chain; without one there is
         // nothing to pay the call's fee from.
         if (!fromAddress) {
-            setFormError('No source address available.');
+            failIn('from', 'No source address available.');
             return;
         }
         if (!/^[1-9]\d*$/.test(String(contractActionIndex ?? '').trim())) {
-            setFormError('Contract ID must be a positive whole number.');
+            failIn('call', 'Contract ID must be a positive whole number.');
             return;
         }
-        // The method name is the call itself; a blank one has no target.
-        if (!method.trim()) {
-            setFormError('Method name is required.');
+        // The method comes only from the contract's declared list.
+        if (!abiActive) {
+            failIn('call', abiLoadError || t('execute.methodsLoading'));
+            return;
+        }
+        if (!abiSpec) {
+            failIn('call', linkError || t('execute.chooseMethod'));
             return;
         }
         if (method.includes('|') || method.includes(';')) {
-            setFormError('Method name cannot contain "|" or ";".');
+            failIn('call', 'Method name cannot contain "|" or ";".');
             return;
         }
         const methodSafetyError = actionTextSafetyError(method, 'Method');
         if (methodSafetyError) {
-            setFormError(methodSafetyError);
+            failIn('call', methodSafetyError);
             return;
         }
-        if (abiActive) {
-            const argumentError = abiArgumentErrors.find(Boolean);
-            if (argumentError) {
-                setFormError(argumentError);
-                return;
-            }
-        } else if (paramsText.trim()) {
-            const manualParts = paramsText.split('|').map((part) => part.trim());
-            if (manualParts.some((part) => part === '')) {
-                setFormError('Arguments cannot be blank between "|" separators.');
-                return;
-            }
+        const argumentError = abiArgumentErrors.find(Boolean);
+        if (argumentError) {
+            failIn('call', argumentError);
+            return;
         }
         // Validator forbids pipes/semicolons inside each PARAM, which
         // our split eliminates; it also forbids them at the field
@@ -690,11 +788,11 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         for (const p of paramsArray) {
             const parameterSafetyError = actionTextSafetyError(p, 'Parameter');
             if (parameterSafetyError) {
-                setFormError(parameterSafetyError);
+                failIn('call', parameterSafetyError);
                 return;
             }
             if (p.includes(';')) {
-                setFormError(`Parameter "${p}" contains a semicolon, which is not allowed in parameters.`);
+                failIn('call', `Parameter "${p}" contains a semicolon, which is not allowed in parameters.`);
                 return;
             }
         }
@@ -702,12 +800,12 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         // amount, or an amount with no token, has nothing it could send.
         if (hasDeposit) {
             if (!depositTick.trim()) {
-                setFormError('Choose the token to deposit, or clear the deposit amount.');
+                failIn('deposit', 'Choose the token to deposit, or clear the deposit amount.');
                 return;
             }
             const q = depositQuantity.trim();
             if (!isPositiveDecimal(q)) {
-                setFormError('Deposit amount must be a positive number.');
+                failIn('deposit', 'Deposit amount must be a positive number.');
                 return;
             }
             const precisionError = tokenAmountPrecisionError(q, {
@@ -716,11 +814,12 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 noun: 'Deposit amount',
             });
             if (precisionError) {
-                setFormError(precisionError);
+                failIn('deposit', precisionError);
                 return;
             }
             if (depositBalance != null && compareDecimalStrings(q, depositBalance) === 1) {
-                setFormError(
+                failIn(
+                    'deposit',
                     `Deposit amount exceeds the ${formatWithThousands(depositBalance)} `
                     + `${depositTick.trim().toUpperCase()} available.`,
                 );
@@ -728,6 +827,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
             }
         }
         setFormError(null);
+        setFormErrorSection(null);
         if (singleEncode) { openConfirmScreen(); return; }
         setStage('review');
     }
@@ -827,13 +927,15 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
 
     const header = (
         <PageHeader
+            nested={stage === 'review' || stage === 'submitting'}
             onBack={stage === 'review'
                 ? () => { setSubmitError(null); setStage('form'); }
                 : onBack}
             backDisabled={stage === 'submitting'}
+            // A fixed title; the contract is the Method section's first field.
             title={stage === 'review' || stage === 'submitting'
                     ? t('execute.review.title')
-                    : t('uri.intent.execute', { contract: contractActionIndex })}
+                    : t('execute.title')}
         />
     );
     // The review always opens at its top instead of inheriting how far the
@@ -879,145 +981,96 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                     <dd className={styles.detailsValue}>{String(txid || '(none)')}</dd>
                 </dl>
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>{t('common.done')}</Button>
+                    <Button variant="success" icon={<Icon.CheckIcon />} onClick={onBack}>{t('common.done')}</Button>
                 </div>
             </ListPage>,
         );
     }
 
     if (stage === 'review' || stage === 'submitting') {
-        return wrap(
-            <FormPage
-                demoGuard={demoGuard}
-                label={t('execute.review.title')}
-                onSubmit={handleSubmit}
-                noValidate
-                status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error">{submitError}</StatusMessage>
-                ) : null}
-                actions={(
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={stage === 'submitting' || (
-                            isWatcherMode
-                                ? false
-                                : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)
-                        )}
-                    >
-                        {isWatcherMode
-                            ? t('send.review.createUnsigned')
-                            : isHwSource
-                                ? t('send.review.sign')
-                                : t('execute.callContract')}
-                    </Button>
-                )}
-            >
-                <p className={styles.summary}>
-                    {t(hasDeposit ? 'execute.review.summary.deposit' : 'execute.review.summary.call', {
-                        quantity: depositQuantity.trim(),
-                        tick: depositTick.trim().toUpperCase(),
-                        method: actionParams.METHOD,
-                        args: paramsArray.length > 0
-                            ? t('execute.review.args', { count: paramsArray.length })
-                            : '',
-                        contract: actionParams.CONTRACT_ACTION_INDEX,
-                    })}
-                </p>
-                <dl className={styles.detailsList}>
-                    {descriptor ? (
-                        <>
-                            <dt className={styles.detailsLabel}>{t('send.fields.chain')}</dt>
-                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
-                        </>
-                    ) : null}
-                    <dt className={styles.detailsLabel}>{t('send.fields.from')}</dt>
-                    <dd className={styles.detailsValue}>
-                        <AddressText address={fromAddress.address} />
-                    </dd>
-                    <dt className={styles.detailsLabel}>{t('execute.contract')}</dt>
-                    <dd className={styles.detailsValue}>#{actionParams.CONTRACT_ACTION_INDEX}</dd>
-                    {hasDeposit ? (
-                        <>
-                            <dt className={styles.detailsLabel}>{t('execute.deposit')}</dt>
-                            <dd className={styles.detailsValue}>
-                                {depositQuantity.trim()} {depositTick.trim().toUpperCase()}
-                            </dd>
-                        </>
-                    ) : null}
-                    <dt className={styles.detailsLabel}>{t('execute.method')}</dt>
-                    <dd className={styles.detailsValue}>{actionParams.METHOD}</dd>
-                    {paramsArray.length > 0 ? (
-                        <>
-                            <dt className={styles.detailsLabel}>{t('execute.params')}</dt>
-                            <dd className={styles.detailsValue}>
-                                <ol style={{ margin: 0, paddingLeft: '1.25rem' }}>
-                                    {paramsArray.map((p, i) => (
-                                        <li key={i} className={contractStyles.monospaceValue}>{revealHiddenText(p)}</li>
-                                    ))}
-                                </ol>
-                            </dd>
-                        </>
-                    ) : null}
-                    <dt className={styles.detailsLabel}>{t('send.networkFee')}</dt>
-                    <dd className={styles.detailsValue}>
-                        {feeEstimate
-                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
-                            : t('common.estimateUnavailable')}
-                    </dd>
-                    <dt className={styles.detailsLabel}>{t('execute.protocolFee')}</dt>
-                    <dd className={styles.detailsValue}>
-                        {nativeFee.payFeeInNativeCoin
-                            ? t('execute.protocolFee.native', { coin: coinTicker || t('execute.nativeCoin') })
-                            : t('execute.protocolFee.xchain')}
-                    </dd>
-                    <ContractConsentPanel
-                        manifest={manifest}
-                        labelClassName={styles.detailsLabel}
-                        valueClassName={styles.detailsValue}
-                    />
-                </dl>
-                {/* The review stage is the watcher lane's last stop before the
-                    PSBT leaves for a signer wallet, so the forfeiture terms are
-                    stated here rather than only on the confirm page. */}
-                {nativeFee.payFeeInNativeCoin ? (
-                    <FormNotice variant="warning" role="alert" lines={[NATIVE_FEE_WARNING, NATIVE_FEE_UNVERIFIED_NOTICE]} />
-                ) : null}
-                {isWatcherMode ? (
-                    <p className={styles.hint}>
-                        {t('common.watcherBuildsUnsigned')}
-                    </p>
-                ) : (
-                    <SignCredentials
-                        unlocked={signerReady}
-                        fromAddress={fromAddress}
-                        chainId={chainId}
-                        password={password}
-                        onPasswordChange={(v) => {
-                            setPassword(v);
-                            if (submitError) setSubmitError(null);
-                        }}
-                        onStatusChange={onHwStatusChange}
-                        passwordRef={passwordRef}
-                        submitError={submitError}
-                        disabled={stage === 'submitting'}
-                        getSignerStatus={messaging.getSignerStatus}
-                        signerInfo={hwSignerInfo}
-                    />
-                )}
-            </FormPage>,
+        const callTarget = method
+            ? t('components.confirmSummary.contractMethodTarget', { index: String(contractActionIndex), method })
+            : t('components.confirmSummary.contractTarget', { index: String(contractActionIndex) });
+        return (
+            <ConfirmActionModal
+                phase={stage === 'submitting' ? 'signing' : 'ready'}
+                composed={legacyComposed}
+                report={null}
+                reportLoading={false}
+                acknowledged={NO_ACKNOWLEDGMENTS}
+                onAcknowledge={() => {}}
+                canApprove={stage === 'review'}
+                onApprove={() => handleSubmit({ preventDefault() {} })}
+                onReject={() => { setStage('form'); setSubmitError(null); }}
+                decoded={legacyDecoded}
+                headline={t('execute.callContract')}
+                chainLabel={descriptor?.displayName || chainId}
+                screenVariant={variant}
+                error={submitError}
+                sourceAddress={fromAddress?.address}
+                nativeTicker={coinTicker}
+                credentials={<p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>}
+                credentialsReady
+                summary={{
+                    verb: t('execute.callContract'),
+                    target: callTarget,
+                    ...(hasDeposit && depositTick.trim() && depositQuantity.trim()
+                        ? { amount: depositQuantity.trim(), ticker: depositTick.trim().toUpperCase(), direction: 'out' }
+                        : { direction: 'none' }),
+                    chainId,
+                    address: fromAddress?.address,
+                    facts: [
+                        ...paramsArray.map((param, index) => ({
+                            label: `${t('execute.params')} ${index + 1}`,
+                            value: revealHiddenText(param),
+                        })),
+                        ...contractManifestFacts(manifest),
+                    ],
+                    ...(!nativeFee.flag && quotedProtocolFee.known ? {
+                        protocolFee: {
+                            amount: quotedProtocolFee.free ? '0' : String(quotedProtocolFee.amount ?? ''),
+                            ticker: 'XCHAIN',
+                        },
+                    } : {}),
+                }}
+                networkFee={feeEstimate?.coinAmount ? {
+                    amount: String(feeEstimate.coinAmount), ticker: coinTicker, estimate: true,
+                } : null}
+            />
         );
     }
 
     // confirm page, rendered in place of the form (the overlay modal
     // didn't fit small/mobile viewports); form state stays intact behind it.
     if (actionConfirm.open) {
+        // The contract and method called; a deposit sent with the call is
+        // the amount leaving the signer.
+        const callTarget = method
+            ? t('components.confirmSummary.contractMethodTarget', { index: String(contractActionIndex), method })
+            : t('components.confirmSummary.contractTarget', { index: String(contractActionIndex) });
+        const callSummary = {
+            verb: t('execute.callContract'),
+            target: callTarget,
+            ...(hasDeposit && depositTick.trim() && depositQuantity.trim()
+                ? { amount: depositQuantity.trim(), ticker: depositTick.trim().toUpperCase(), direction: 'out' }
+                : { direction: 'none' }),
+            chainId,
+            address: fromAddress?.address,
+            facts: [
+                ...paramsArray.map((param, index) => ({
+                    label: `${t('execute.params')} ${index + 1}`,
+                    value: revealHiddenText(param),
+                })),
+                ...contractManifestFacts(manifest),
+            ],
+        };
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={callSummary}
                 screenVariant={variant}
                 chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
+                feeEstimate={feeEstimate}
                 feeText={feeEstimate?.coinAmount
                     ? t('send.networkFeeValue', {
                         amount: feeEstimate.coinAmount,
@@ -1046,6 +1099,9 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
             <TokenPicker
                 purpose="send"
                 walletId={walletId}
+                // The deposit rides a DEPOSIT action, which moves tokens only.
+                kindFilter="tokens"
+                kindLocked
                 title={t('execute.tokenToDeposit')}
                 networkFilter={coinFromChainId(chainId)}
                 onSelect={(sel) => {
@@ -1055,6 +1111,20 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 }}
                 onBack={() => setTokenPickerOpen(false)}
             />
+        );
+    }
+
+    // The Contract field's list icon: the contracts list, rendered in place
+    // of the form; opening a contract makes it the one this form calls.
+    if (contractTarget.pickerOpen) {
+        return (
+            <InPageScreen>
+                <ContractsList
+                    walletId={walletId}
+                    onOpenContract={contractTarget.pick}
+                    onBack={contractTarget.closePicker}
+                />
+            </InPageScreen>
         );
     }
 
@@ -1072,54 +1142,103 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         );
     }
 
+    // Reveal keys and closed summaries of the standard sections.
+    const sectionErrorKey = (section) => (formError && formErrorSection === section && reviewAttempt > 0 ? reviewAttempt : 0);
+    const callSummary = method.trim()
+        ? `${method.trim()}(${paramsArray.join(', ')})`
+        : 'No method yet';
+    const depositSummary = depositTick
+        ? (depositQuantity.trim() ? `${depositQuantity.trim()} ${depositTick.toUpperCase()}` : depositTick.toUpperCase())
+        : t('execute.noDeposit');
+
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label={t('execute.callContract')}
+            lead={<OwnerWithdrawWarning ownerWithdraw={ownerWithdraw} />}
             onSubmit={handleReview}
             noValidate
             status={formError ? (
                 <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="success"
+            action={(
+                <FormAction
                     icon={<Icon.ContractIcon />}
                     loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
+                    disabled={actionConfirm.composing || !abiActive}
                 >
                     {t('execute.callContract')}
-                </Button>
+                </FormAction>
+            )}
+            from={(
+                /* The target contract pins the network, so From shows
+                   it locked; the caller is the From address. */
+                <FromSection
+                    {...formSections.bind('from')}
+                    chainId={chainId}
+                    chainIds={[chainId]}
+                    chainRegistry={chainRegistry}
+                    lockNetwork
+                    networkHelp={t('execute.networkHelp')}
+                    address={fromAddress?.address || null}
+                    addressLabel={t('execute.caller')}
+                    addressHelp={t('execute.callerHelp')}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel={t('send.source.choose')}
+                    revealKey={sectionErrorKey('from')}
+                />
+            )}
+            fee={(
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeCustomEstimate}
+                    revealKey={sectionErrorKey('fee')}
+                    fees={{
+                        quote: protocolFeeQuote,
+                        pending: protocolFeePending,
+                        children: <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} unverified />,
+                    }}
+                />
             )}
         >
-            <OwnerWithdrawWarning ownerWithdraw={ownerWithdraw} />
-            {/* The target contract pins the network, so the field is single-option. */}
-            <NetworkField value={chainId} onChange={() => {}} chainIds={[chainId]} chainRegistry={chainRegistry} />
-            {fromAddress ? (
-                <AddressField
-                    label={t('execute.caller')}
-                    help={t('execute.callerHelp')}
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel={t('send.source.choose')}
-                />
-            ) : null}
+            {/* The main section holds the method and its arguments;
+                the owner-withdraw warning leads the form, above From. */}
+            <FormSection
+                id="call"
+                // "Method", so the header never reads as the Call action.
+                title={t('execute.method')}
+                icon={Icon.ContractIcon}
+                {...formSections.bind('call')}
+                revealKey={sectionErrorKey('call')}
+                summary={callSummary}
+            >
+            <TargetField
+                label={t('execute.contract')}
+                help={t('execute.contractHelp')}
+                name={contractFieldName(contractRow)}
+                detail={`#${contractActionIndex}`}
+                onPick={contractTarget.openPicker}
+                pickLabel={t('execute.pickContract')}
+            />
             {abiActive ? (
                 <>
+                    {linkError ? <StatusMessage variant="error">{linkError}</StatusMessage> : null}
                     <Select
                         label={t('execute.method')}
                         help={(abiSpec ? [abiSpec.summary, abiSpec.view ? '(declared read-only)' : null].filter(Boolean).join(' ') : '') || t(
                             'execute.methodHelp'
                         )}
                         value={method}
-                        onChange={(e) => selectAbiMethod(e.target.value)}
+                        onChange={(e) => e.target.value && selectAbiMethod(e.target.value)}
                     >
+                        {method === '' ? <Select.Option value="" icon={<Icon.ListIcon />}>{t('execute.chooseMethod')}</Select.Option> : null}
                         {Object.keys(contractAbi.methods).map((name) => (
-                            <option key={name} value={name}>{name}</option>
+                            <Select.Option key={name} value={name} icon={<Icon.ContractIcon />}>{name}</Select.Option>
                         ))}
                     </Select>
                     {abiParams.map((p, i) => (
@@ -1140,56 +1259,36 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                             />
                         </div>
                     ))}
-                    <Button type="button" variant="ghost" icon={<Icon.PencilIcon />} onClick={() => setManualMode(true)}>
-                        {t('execute.enterMethodManually')}
-                    </Button>
                 </>
+            ) : abiStatus === 'error' ? (
+                <StatusMessage
+                    variant="error"
+                    recovery={{
+                        label: t('common.tryAgain'),
+                        onAction: () => setAbiAttempt((n) => n + 1),
+                    }}
+                >
+                    {abiLoadError}
+                </StatusMessage>
             ) : (
-                <>
-                    <Input
-                        label={t('execute.method')}
-                        help={t('execute.methodHint')}
-                        value={method}
-                        onChange={(e) => { setMethod(e.target.value); setFormError(null); }}
-                        autoComplete="off"
-                        autoCapitalize="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                    />
-                    <Input
-                        label={t('execute.params')}
-                        optional
-                        help={t('execute.paramsHint')}
-                        value={paramsText}
-                        onChange={(e) => { setParamsText(e.target.value); setFormError(null); }}
-                        className={contractStyles.monospaceInput}
-                        autoComplete="off"
-                        autoCapitalize="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                    />
-                    {contractAbi ? (
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            icon={<Icon.ContractIcon />}
-                            onClick={() => {
-                                // Back to the declared-methods lane; reselect the
-                                // current method when the abi knows it, else the first.
-                                const names = Object.keys(contractAbi.methods);
-                                setManualMode(false);
-                                selectAbiMethod(names.includes(method) ? method : names[0]);
-                            }}
-                        >
-                            {t('execute.useDeclaredMethods')}
-                        </Button>
-                    ) : null}
-                </>
+                <p>{t('execute.methodsLoading')}</p>
             )}
-            <TokenField
-                label={t('execute.deposit')}
-                help={t('execute.depositTokenHelp')}
+            </FormSection>
+
+            {/* The optional deposit sent ahead of the call is its own
+                closed Optional section; the Token field drops its own tag. */}
+            <FormSection
+                id="deposit"
+                title={t('execute.deposit')}
+                icon={Icon.CoinsIcon}
                 optional
+                {...formSections.bind('deposit')}
+                revealKey={sectionErrorKey('deposit')}
+                summary={depositSummary}
+            >
+            <TokenField
+                label={t('execute.tokenLabel')}
+                help={t('execute.depositTokenHelp')}
                 value={depositTick && chainId ? { chainId, tick: depositTick } : null}
                 placeholder={t('execute.noDeposit')}
                 onOpenPicker={() => setTokenPickerOpen(true)}
@@ -1224,28 +1323,15 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                     />
                     <Button
                         type="button"
-                        variant="ghost"
+                        variant="danger"
+                        icon={<Icon.TrashIcon />}
                         onClick={() => { setDepositTick(''); setDepositQuantity(''); setFormError(null); }}
                     >
                         {t('execute.removeDeposit')}
                     </Button>
                 </>
             ) : null}
-
-            <FeesCard chainId={chainId} quote={protocolFeeQuote} pending={protocolFeePending} feeSelector={feeTiers ? (
-                <FeeSelector
-                    chainId={chainId}
-                    label={t('send.networkFee')}
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
-            ) : null}>
-                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} unverified />
-            </FeesCard>
-
-        </FormPage>,
+            </FormSection>
+        </FormFrame>,
     );
 }

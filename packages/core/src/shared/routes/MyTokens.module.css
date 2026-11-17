@@ -11,7 +11,7 @@
 /* Neutralize ListPage's section gap only between this screen's toolbar and
    token list so the filter row attaches directly to its results. */
 .page > div + .list {
-    margin-block-start: calc(-1 * var(--xc-section-gap));
+    margin-block-start: calc(-1 * var(--xc-list-page-gap));
 }
 
 .list > li + li {

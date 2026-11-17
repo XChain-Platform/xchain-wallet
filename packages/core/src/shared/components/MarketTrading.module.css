@@ -28,6 +28,319 @@
     min-width: 0;
 }
 
+/* The split order book (bids left, asks right, one table). */
+.splitHead {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    margin: 0 0 var(--xc-space-2);
+    min-width: 0;
+}
+
+.splitTitle {
+    margin: 0;
+    font-weight: 600;
+}
+
+.splitSpread {
+    min-width: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-variant-numeric: tabular-nums;
+    text-align: end;
+    overflow-wrap: anywhere;
+}
+
+.splitTable {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    font-size: var(--xc-text-xs);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+}
+
+.splitCaption {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.splitSizeCol {
+    width: 20%;
+}
+
+.splitPriceCol {
+    width: 30%;
+}
+
+.splitTable th {
+    padding: 0 var(--xc-space-1) var(--xc-space-1);
+    color: var(--xc-text-muted);
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.splitTable td {
+    padding: 0 var(--xc-space-1);
+    height: 28px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.splitSizeBid {
+    text-align: start;
+}
+
+.splitPriceBid {
+    text-align: end;
+}
+
+.splitPriceAsk {
+    text-align: start;
+    border-inline-start: 1px solid var(--xc-border);
+}
+
+.splitSizeAsk {
+    text-align: end;
+}
+
+td.splitPriceBid {
+    color: var(--xc-success);
+}
+
+td.splitPriceAsk {
+    color: var(--xc-danger-fg);
+}
+
+/* The price button fills its cell so the whole cell is the tap target. */
+.splitPick.splitPick {
+    display: block;
+    width: 100%;
+    min-height: var(--xc-control-h-sm);
+    padding: 0;
+    color: inherit;
+    font: inherit;
+    text-align: inherit;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.splitLast {
+    max-width: none;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    margin: var(--xc-space-2) 0 0;
+    padding-top: var(--xc-space-2);
+    border-top: 1px solid var(--xc-border);
+    font-variant-numeric: tabular-nums;
+}
+
+.splitLastUp,
+.splitLastDown,
+.splitLastFlat {
+    font-size: var(--xc-text-md);
+    font-weight: 700;
+}
+
+.splitLastUp {
+    color: var(--xc-success);
+}
+
+.splitLastDown {
+    color: var(--xc-danger-fg);
+}
+
+.splitLastFlat {
+    color: var(--xc-text);
+}
+
+.splitLastLabel {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+}
+
+/* The Trade page's order form (PlaceOrderPanel layout="trade"): the
+   Swap | Limit | Market toggle heads its Trade Details section. */
+.tradeType {
+    width: 100%;
+}
+
+.segLabel {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    --xc-icon-size: var(--xc-icon-sm);
+}
+
+.segLabel svg {
+    flex: 0 0 auto;
+}
+
+.fieldUnit {
+    padding-inline: var(--xc-space-2);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/* 25 / 50 / 75 / 100 (100 is the same path as the Max icon inside the Amount field). */
+.pctRow {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--xc-space-2);
+}
+
+.pctChip.pctChip {
+    width: 100%;
+    min-width: 0;
+    border-radius: var(--xc-radius-pill);
+}
+
+.tradeRows {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    font-size: var(--xc-text-sm);
+}
+
+.tradeRowLabel {
+    color: var(--xc-text-muted);
+}
+
+.tradeRowValue {
+    min-width: 0;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    text-align: end;
+    overflow-wrap: anywhere;
+}
+
+/* The swap ticket is the shared Give/Get Quick pair
+   (SwapTicket in marketTradeParts.jsx); this wrapper only catches blur. */
+.quickTicket {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+/* The Buying / Selling tag at the foot of the You pay card, beside the flip. */
+.flipTagBuy,
+.flipTagSell {
+    flex: 0 0 auto;
+    padding: 1px var(--xc-space-2);
+    border-radius: var(--xc-radius-sm);
+    font-size: var(--xc-text-xs);
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.flipTagBuy {
+    background: color-mix(in srgb, var(--xc-success) 18%, var(--xc-surface));
+    color: var(--xc-success);
+}
+
+.flipTagSell {
+    background: color-mix(in srgb, var(--xc-danger) 18%, var(--xc-surface));
+    color: var(--xc-danger-fg);
+}
+
+/* Limit and Fill now share one row at every width. As the row narrows the
+   chips drop the unit first, then "at", then "now" ("Fill 0.0000005315");
+   the button's name and tip keep the whole text. */
+.chipRow {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--xc-space-2);
+}
+
+/* Without container queries the chips keep their full text. */
+@supports (container-type: inline-size) and (width: 1cqw) {
+    .chipRow {
+        container-type: inline-size;
+    }
+
+    @container (max-width: 440px) {
+        .chipUnit {
+            display: none;
+        }
+    }
+
+    @container (max-width: 380px) {
+        .chipAt {
+            display: none;
+        }
+    }
+
+    @container (max-width: 345px) {
+        .chipNow {
+            display: none;
+        }
+    }
+}
+
+.priceChip.priceChip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--xc-space-1);
+    width: 100%;
+    min-width: 0;
+    min-height: var(--xc-tap-min);
+    padding: 0 var(--xc-space-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border: 1px solid var(--xc-control-border);
+    border-radius: var(--xc-radius-pill);
+    background: var(--xc-control-bg);
+    color: var(--xc-text);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    --xc-icon-size: var(--xc-icon-xs);
+}
+
+.priceChipText {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.priceChip svg {
+    flex: 0 0 auto;
+}
+
+.priceChip {
+    --xc-icon-size: var(--xc-icon-xs);
+}
+
+/* The chosen chip takes the brand fill the wallet's other choice chips and
+   segments use (ui/Chip .pressed), never the button's pressed ring. */
+.priceChip.priceChip[aria-pressed='true'],
+.priceChip.priceChip[aria-pressed='true']:hover:not(:disabled) {
+    --xc-button-hover-bg: var(--xc-control-selected);
+    --xc-button-hover-border: var(--xc-control-selected);
+    background: var(--xc-control-selected);
+    border-color: var(--xc-control-selected);
+    color: var(--xc-control-selected-text);
+    box-shadow: none;
+}
+
 @media (max-width: 420px) {
     .orderBookGrid {
         grid-template-columns: minmax(0, 1fr);

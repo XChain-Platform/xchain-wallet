@@ -103,7 +103,8 @@ describe('Receive QR height fit', () => {
         vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function measured() {
             if (this === scroller) return rect(114, 430, 360);
             if (this === surface) return rect(211, 300);
-            if (/^Copy (QR code|payment link)$/.test(this.getAttribute('aria-label') || '')) return rect(646, 36, 159);
+            // The Copy row is the first item of the QR's ActionList (G101).
+            if (this.tagName === 'LI' && /^Copy (QR code|payment link)/.test(this.textContent || '')) return rect(646, 36, 159);
             return rect(0, 0, 0);
         });
 

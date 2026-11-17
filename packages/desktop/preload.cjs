@@ -76,11 +76,11 @@
 //     renderer pulls the verified descriptor batch through this call
 //     to hot-swap its own registry realm.
 //
-//   - `xchainWalletUpdater.{onEvent,getState,install}`: the renderer's
+//   - `xchainWalletUpdater.{getChannel,onEvent,getState,install}`: the renderer's
 //     half of the update path. Main runs the check, the K1 signature
 //     gate and `quitAndInstall`; the renderer subscribes to status
 //     (`onEvent`), reads status that landed before it mounted
-//     (`getState`), and asks for check, download, or restart steps
+//     (`getState`), reads the install channel (`getChannel`), and asks for check, download, or restart steps
 //     (`install`).
 //     Read-and-ask only: nothing here hands the renderer a path, a
 //     URL, or a way to skip the signature gate.
@@ -119,6 +119,7 @@ const CHAIN_REGISTRY_CHANNEL = 'xchain:chain-registry';
 const UPDATER_EVENT_CHANNEL = 'xchain:updater';
 const UPDATER_INSTALL_CHANNEL = 'xchain:updater-install';
 const UPDATER_STATE_CHANNEL = 'xchain:updater-state';
+const UPDATER_CHANNEL_CHANNEL = 'xchain:updater-channel';
 const DEEP_LINK_CHANNEL = 'xchain:uri';
 const DEEP_LINK_TAKE_CHANNEL = 'xchain:deep-link-take';
 const SCREEN_PROTECTION_CHANNEL = 'xchain:screen-protection';
@@ -360,6 +361,10 @@ contextBridge.exposeInMainWorld('xchainWalletWindow', {
 // repo. So the shipped desktop wallet checked for updates on launch,
 // told no one, and could not install one. Both halves are exposed here.
 contextBridge.exposeInMainWorld('xchainWalletUpdater', {
+    getChannel() {
+        assertNoArguments('xchainWalletUpdater.getChannel', arguments);
+        return ipcRenderer.invoke(UPDATER_CHANNEL_CHANNEL);
+    },
     /**
      * Subscribe to updater events: `available`, `verifying`, `rejected`,
      * `error`, `downloaded`. Returns an unsubscribe.

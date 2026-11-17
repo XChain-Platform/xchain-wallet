@@ -11,21 +11,42 @@ import { markDemoWallet, clearDemoWalletId } from '../../../packages/core/src/fl
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
 import { ActionConfirmScreen } from '../../../packages/core/src/shared/components/ActionConfirmScreen.jsx';
 import { ActionIntentSummary } from '../../../packages/core/src/shared/components/ActionIntentSummary.jsx';
+import { ActionList, ActionListItem } from '../../../packages/core/src/shared/components/ActionList.jsx';
+import { ActionsDetailsToggle } from '../../../packages/core/src/shared/components/ActionsDetailsToggle.jsx';
 import { ActivityRow } from '../../../packages/core/src/shared/components/ActivityRow.jsx';
+import { AllocationCard } from '../../../packages/core/src/shared/components/AllocationCard.jsx';
+import { HomeWideLayout } from '../../../packages/core/src/shared/components/HomeWideLayout.jsx';
 import { AddressDiscoveryNotice } from '../../../packages/core/src/shared/components/AddressDiscoveryNotice.jsx';
 import { AdsNotice } from '../../../packages/core/src/shared/components/AdsNotice.jsx';
-import { AlertsOverlay } from '../../../packages/core/src/shared/components/AlertsOverlay.jsx';
 import { AmountField } from '../../../packages/core/src/shared/components/AmountField.jsx';
 import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
+import { BootHeader } from '../../../packages/core/src/shared/components/BootHeader.jsx';
 import { BackupReminderCard } from '../../../packages/core/src/shared/components/BackupReminderCard.jsx';
 import { BalanceChanges } from '../../../packages/core/src/shared/components/BalanceChanges.jsx';
 import { BalanceHeroMenu } from '../../../packages/core/src/shared/components/BalanceHeroMenu.jsx';
 import { BalanceList } from '../../../packages/core/src/shared/components/BalanceList.jsx';
 import { BalancesUncheckedState } from '../../../packages/core/src/shared/components/BalancesUncheckedState.jsx';
+import { BetMarketCard } from '../../../packages/core/src/shared/components/BetMarketCard.jsx';
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
+import { CollapseHandle } from '../../../packages/core/src/shared/components/CollapseHandle.jsx';
+import {
+    ConfirmAddressCard,
+    ConfirmChangesCard,
+    ConfirmCostCard,
+    ConfirmHero,
+    ConfirmNotice,
+} from '../../../packages/core/src/shared/components/ConfirmSummary.jsx';
+import { DispenserExplorerCard } from '../../../packages/core/src/shared/components/DispenserExplorerCard.jsx';
+import { FileField } from '../../../packages/core/src/shared/components/FileField.jsx';
+import { FillRing } from '../../../packages/core/src/shared/components/FillRing.jsx';
+import { ListFilterMenu } from '../../../packages/core/src/shared/components/ListFilterMenu.jsx';
+import { ListField } from '../../../packages/core/src/shared/components/ListField.jsx';
+import { ListFilterPopover } from '../../../packages/core/src/shared/components/ListFilterPopover.jsx';
+import { ListSearchField } from '../../../packages/core/src/shared/components/ListSearchField.jsx';
 import { CollectiblesView } from '../../../packages/core/src/shared/components/CollectiblesView.jsx';
 import { ConfirmActionModal } from '../../../packages/core/src/shared/components/ConfirmActionModal.jsx';
 import { ConfirmModal } from '../../../packages/core/src/shared/components/ConfirmModal.jsx';
+import { ConfirmButtons, ConfirmStandard } from '../../../packages/core/src/shared/components/ConfirmStandard.jsx';
 import { ContactsPickerScreen } from '../../../packages/core/src/shared/components/ContactsPickerScreen.jsx';
 import { DurationSlider } from '../../../packages/core/src/shared/components/DurationSlider.jsx';
 import { ContractConsentPanel } from '../../../packages/core/src/shared/components/ContractConsentPanel.jsx';
@@ -34,9 +55,19 @@ import { DerivationPathCrossCheck } from '../../../packages/core/src/shared/comp
 import { DiagnosticDetails } from '../../../packages/core/src/shared/components/DiagnosticDetails.jsx';
 import { DispenserBadge, __clearDispenserBadgeCache } from '../../../packages/core/src/shared/components/DispenserBadge.jsx';
 import { DraftDiscardButton } from '../../../packages/core/src/shared/components/DraftDiscardButton.jsx';
+import { DraftNotice } from '../../../packages/core/src/shared/components/DraftNotice.jsx';
 import { EmptyStateNudge } from '../../../packages/core/src/shared/components/EmptyStateNudge.jsx';
+import { EraseScheduledNotice } from '../../../packages/core/src/shared/components/EraseScheduledNotice.jsx';
+import { ERASE_HOLD_MS, ERASE_SCHEDULE_STORAGE_KEY } from '../../../packages/core/src/flows/eraseSchedule.js';
+import { ExplorerFavicon } from '../../../packages/core/src/shared/components/ExplorerFavicon.jsx';
 import { FeesCard } from '../../../packages/core/src/shared/components/FeesCard.jsx';
+import { FiatCurrencyField } from '../../../packages/core/src/shared/components/FiatCurrencyField.jsx';
+import { FiatCurrencyPicker } from '../../../packages/core/src/shared/components/FiatCurrencyPicker.jsx';
 import { GatedFileViewer } from '../../../packages/core/src/shared/components/GatedFileViewer.jsx';
+import { HardwareFirstRun } from '../../../packages/core/src/shared/components/HardwareFirstRun.jsx';
+import { HardwareSignPage } from '../../../packages/core/src/shared/components/HardwareSignPage.jsx';
+import { HardwareWalletDetails } from '../../../packages/core/src/shared/components/HardwareWalletDetails.jsx';
+import { begin as hwBegin } from '../../../packages/core/src/signers/hardwareSession.js';
 import { HeaderActionMenu } from '../../../packages/core/src/shared/components/HeaderActionMenu.jsx';
 import { HomeFilterBar } from '../../../packages/core/src/shared/components/HomeFilterBar.jsx';
 import { HomeListFilterMenu } from '../../../packages/core/src/shared/components/HomeListFilterMenu.jsx';
@@ -47,12 +78,31 @@ import { KeyQR } from '../../../packages/core/src/shared/components/KeyQR.jsx';
 import { LayoutModeToggle } from '../../../packages/core/src/shared/components/LayoutModeToggle.jsx';
 import { LearnNote } from '../../../packages/core/src/shared/components/LearnNote.jsx';
 import { LeftNav } from '../../../packages/core/src/shared/components/LeftNav.jsx';
+import { LinkedCardsBadge } from '../../../packages/core/src/shared/components/LinkedCardsBadge.jsx';
 import { ListToolbar } from '../../../packages/core/src/shared/components/ListToolbar.jsx';
 import { ListPickerScreen } from '../../../packages/core/src/shared/components/ListPickerScreen.jsx';
 import { LockedSendOutcomeNotice } from '../../../packages/core/src/shared/components/LockedSendOutcomeNotice.jsx';
+import { useLockedAutopayNotice } from '../../../packages/core/src/shared/components/LockedAutopayNotice.jsx';
+
+// The notice is a hook (the Locked form's status slot merges its element), so
+// a one-line host renders it here.
+function LockedAutopayHost({ messaging }) {
+    return <div>{useLockedAutopayNotice(messaging)}</div>;
+}
 import { LockedTokenContext } from '../../../packages/core/src/shared/components/LockedTokenContext.jsx';
-import { LogConsole } from '../../../packages/core/src/shared/components/LogConsole.jsx';
+import { LogConsole, LogConsoleControls, useLogConsole } from '../../../packages/core/src/shared/components/LogConsole.jsx';
 import { expectNoSeriousAxeViolations } from '../helpers/axe.js';
+
+// The console's filter-panel controls and its list, as the logs page draws them.
+function LogConsoleFixture() {
+    const state = useLogConsole();
+    return (
+        <>
+            <LogConsoleControls state={state} />
+            <LogConsole state={state} />
+        </>
+    );
+}
 
 vi.mock('qrcode', () => ({
     default: { toDataURL: vi.fn().mockResolvedValue('data:image/png;base64,iVBORw0KGgo=') },
@@ -114,6 +164,26 @@ const fixtures = [
             onPasswordChange={noop}
         />,
     )],
+    // An order's actions: a link row, a button row, a locked row with its
+    // reason and the red Cancel row (G101).
+    ['ActionList', () => (
+        <ActionList label="Order actions">
+            <ActionListItem icon={<span>E</span>} title="Edit order" description="Change the price, amount or expiry" onClick={noop} />
+            <ActionListItem icon={<span>M</span>} title="Open the market" description="See the book and trade" href="#market" />
+            <ActionListItem icon={<span>C</span>} title="Copy transaction ID" description="a3f9...c21e" onClick={noop} disabled disabledReason="Waiting for the transaction" />
+            <ActionListItem icon={<span>X</span>} title="Cancel order" description="Returns the escrowed tokens" onClick={noop} />
+        </ActionList>
+    )],
+    ['ActionsDetailsToggle', () => (
+        <ActionsDetailsToggle
+            actions={(
+                <ActionList>
+                    <ActionListItem icon={<span>E</span>} title="Edit order" description="Change the price" onClick={noop} />
+                </ActionList>
+            )}
+            details={<p>Price 0.000004 BTC each</p>}
+        />
+    )],
     ['ActionIntentSummary', () => (
         <ActionIntentSummary
             decoded={decoded}
@@ -163,18 +233,17 @@ const fixtures = [
         </MessagingContext.Provider>
     ), () => screen.findByTestId('address-discovery-status')],
     ['AdsNotice', () => <AdsNotice onContinue={noop} />],
-    ['AlertsOverlay', () => (
-        <AlertsOverlay
-            alerts={[{
-                id: 'backup',
-                severity: 'warning',
-                title: 'Back up your wallet',
-                message: 'Save a recovery copy.',
-                action: { label: 'Review backup', onSelect: noop },
-            }]}
-            onClose={noop}
+    // Wide Home's allocation donut and legend (G115).
+    ['AllocationCard', () => (
+        <AllocationCard
+            chainRegistry={chainRegistry}
+            rows={[
+                { chainId: 'bitcoin-mainnet', tick: 'BTC', kind: 'native', quantity: '2', divisibility: 0, fiatRate: 100 },
+                { chainId: 'bitcoin-mainnet', tick: 'XCP', kind: 'token', quantity: '5', divisibility: 0, fiatRate: 6 },
+            ]}
         />
     )],
+    ['BootHeader', () => <BootHeader title="Wallet Setup" />],
     ['AmountField', () => (
         <AmountField
             amount="1"
@@ -218,8 +287,30 @@ const fixtures = [
     ['BalancesUncheckedState', () => (
         <BalancesUncheckedState onRetry={noop} onReceive={noop} />
     )],
+    ['BetMarketCard', () => (
+        <BetMarketCard
+            market={{
+                action_index: 7,
+                label: 'Will it rain tomorrow?',
+                tick: 'XCHAIN',
+                feed_status: 'open',
+                deadline: Math.floor(Date.now() / 1000) + 86400 * 3,
+                pools: [{ outcome: 0, pool: '2' }, { outcome: 1, pool: '1' }],
+            }}
+            onOpen={noop}
+        />
+    )],
     ['BottomTabBar', () => (
         <BottomTabBar currentView="home" onSelect={noop} onOpenSettings={noop} />
+    )],
+    // The shared collapse handle (G100) in both orientations: the side
+    // menu's edge tab and wide Home's overview divider tab.
+    ['CollapseHandle', () => (
+        <div>
+            <div id="a11y-collapse-panel">Panel</div>
+            <CollapseHandle orientation="vertical" collapsed={false} aria-controls="a11y-collapse-panel" aria-label="Hide Side Menu" />
+            <CollapseHandle orientation="horizontal" collapsed aria-controls="a11y-collapse-panel" aria-label="Expand overview" />
+        </div>
     )],
     ['CollectiblesView', () => withMessaging(
         <CollectiblesView rows={[{
@@ -247,8 +338,44 @@ const fixtures = [
             credentialsReady
         />
     )],
+    ['ConfirmSummary', () => (
+        <main>
+            <ConfirmHero
+                summary={{ verb: 'Send', amount: '1', ticker: 'BTC', direction: 'out', chainId: 'bitcoin-mainnet', recipient: address }}
+            />
+            <ConfirmAddressCard address={address} />
+            <ConfirmChangesCard rows={[{ label: 'Balance', before: '2 BTC', after: '1 BTC' }]} />
+            <ConfirmCostCard
+                rows={[
+                    { key: 'fee', label: 'Network fee', value: '0.000015 BTC', fiat: '~$0.98' },
+                    { key: 'total', label: 'Total', value: '1.000015 BTC', total: true },
+                ]}
+            />
+            <ConfirmNotice text="The network checks this before it is sent." />
+        </main>
+    )],
     ['ConfirmModal', () => (
         <ConfirmModal title="Delete item?" message="This cannot be undone." onConfirm={noop} onCancel={noop} />
+    )],
+    ['ConfirmStandard', () => (
+        <main>
+            <ConfirmStandard
+                label="Confirm Send 1 BTC to"
+                icon="send"
+                sentence="Send 1 BTC to"
+                address={address}
+                total={{ main: '1.000015 BTC', line: null, fiatLine: 'Includes about $0.98 in fees' }}
+                facts={[{ key: 'fee', label: 'Network fee', value: '0.000015 BTC ($0.98)' }]}
+                warning={{
+                    title: 'Not checked with the network',
+                    points: [{ key: 'p', text: 'The network gave no verdict on this action, so it may still fail on the chain.' }],
+                    overrides: [],
+                    role: 'status',
+                    state: 'notChecked',
+                }}
+            />
+            <ConfirmButtons onReject={noop} onApprove={noop} />
+        </main>
     )],
     ['DurationSlider', () => (
         <DurationSlider coin="BTC" value="144" onChange={noop} wakeText="Ends at block 900,144, est. tomorrow" />
@@ -288,11 +415,63 @@ const fixtures = [
     ['DraftDiscardButton', () => (
         <DraftDiscardButton onClick={noop} label="Discard saved draft">Discard</DraftDiscardButton>
     )],
+    ['DraftNotice', () => (
+        <DraftNotice onRestore={noop} onDiscard={noop}>
+            Your unfinished payment was saved as a draft. Restore it to continue. Nothing was sent.
+        </DraftNotice>
+    )],
     ['EmptyStateNudge', () => (
         <EmptyStateNudge title="No tokens" body="Tokens appear here." actionLabel="Receive" onAction={noop} />
     )],
+    // An erase scheduled from a lock screen, as the unlocked app shows it.
+    ['EraseScheduledNotice', () => {
+        const now = Date.now();
+        globalThis.localStorage.setItem(ERASE_SCHEDULE_STORAGE_KEY, JSON.stringify({ scheduledAt: now, dueAt: now + ERASE_HOLD_MS }));
+        return <EraseScheduledNotice />;
+    }, async () => {
+        await screen.findByText(/scheduled from the lock screen/);
+        globalThis.localStorage.removeItem(ERASE_SCHEDULE_STORAGE_KEY);
+    }],
+    // G122: the Fiat currency field (with its help tip) and its picker page.
+    ['FiatCurrencyField', () => (
+        <FiatCurrencyField value="EUR" help="Dispensers pricing in this currency can use this oracle." onOpenPicker={noop} />
+    )],
+    ['FiatCurrencyPicker', () => (
+        <FiatCurrencyPicker
+            codes={['USD', 'EUR', 'KRW']}
+            value="USD"
+            noneOption={{ label: 'None, coin-paid' }}
+            onSelect={noop}
+            onBack={noop}
+        />
+    )],
+    // A decorative explorer logo (aria-hidden); the row's title names the explorer.
+    ['ExplorerFavicon', () => (
+        <a href="https://explorer.example/tx/1">
+            View on Mempool
+            <ExplorerFavicon src="logo.png" label="Mempool" explorerId="mempool" />
+        </a>
+    )],
     // The protocol-fee layout: network fee, protocol fee with its pay-in-native
     // switch, and the total.
+    ['DispenserExplorerCard', () => (
+        <DispenserExplorerCard
+            chainId="bitcoin-mainnet"
+            row={{ give_tick: 'XCHAIN', give_amount: '10', give_escrow: '100', escrow_remaining: '40', source: address, timestamp: Math.floor(Date.now() / 1000) - 3600 }}
+            priceLabel="0.001 BTC"
+            onSelect={noop}
+        />
+    )],
+    ['FileField', () => (
+        <FileField label="File (up to 7,792 bytes)" fileName="notes.txt" onFile={noop} onClear={noop} />
+    )],
+    // A partly filled order's row ring and a filled order's header ring.
+    ['FillRing', () => (
+        <div>
+            <FillRing percent={62} tone="warning" caption="Partly" label="62% filled" status="partly" />
+            <FillRing percent={100} tone="success" mark="tick" size="lg" label="100% filled" status="filled" />
+        </div>
+    )],
     ['FeesCard', () => (
         <FeesCard
             feeSelector={<div>Network fee selector</div>}
@@ -319,6 +498,23 @@ const fixtures = [
             plaintextBase64="SGVsbG8sIHdhbGxldC4="
             onClose={noop}
         />
+    )],
+    // A fresh install's connect flow opens on step 1, Choose.
+    ['HardwareFirstRun', () => withMessaging(
+        <HardwareFirstRun
+            pairTrezor={() => new Promise(noop)}
+            pairLedger={() => new Promise(noop)}
+            onBack={noop}
+            onCreated={noop}
+        />,
+    )],
+    // The sign page draws only while a sign op is open, so the fixture opens one.
+    ['HardwareSignPage', () => {
+        hwBegin({ signerId: 'a11y-fixture', vendor: 'ledger', model: 'Nano X', op: 'signPsbt' });
+        return <HardwareSignPage />;
+    }],
+    ['HardwareWalletDetails', () => withMessaging(
+        <HardwareWalletDetails wallet={{ id: 'hw-1', name: 'My Ledger', format: 'hardware' }} onBack={noop} />,
     )],
     ['HeaderActionMenu', () => (
         <HeaderActionMenu
@@ -363,6 +559,17 @@ const fixtures = [
             onReceive={noop}
         />,
     )],
+    // Wide Home's frame (G115): the named top section, the divider with its
+    // collapse handle (CollapseHandle) and the list and detail split's separator.
+    ['HomeWideLayout', () => (
+        <HomeWideLayout
+            hero={<section aria-label="Main Wallet">Main Wallet</section>}
+            allocation={<section aria-label="Allocation">Allocation</section>}
+            list={<ul aria-label="Balances"><li>Bitcoin</li></ul>}
+            detail={<p>Bitcoin</p>}
+            detailLabel="Bitcoin"
+        />
+    )],
     ['HwFirmwareBanner', () => (
         <HwFirmwareBanner signerInfo={{ vendor: 'unknown', model: 'Test device', firmwareVersion: '1.0.0' }} />
     )],
@@ -387,6 +594,7 @@ const fixtures = [
             onOpenSettings={noop}
         />
     )],
+    ['LinkedCardsBadge', () => <LinkedCardsBadge label="Action 1 is linked to Action 2" />, () => screen.findByRole('img', { name: 'Action 1 is linked to Action 2' })],
     ['ListPickerScreen', () => (
         <ListPickerScreen
             variant="small"
@@ -397,9 +605,41 @@ const fixtures = [
             onBack={noop}
         />
     )],
+    // A bound list with its clear action, as on Access lists.
+    ['ListField', () => (
+        <ListField
+            label="Block list"
+            help="Members of this block list are denied interaction with the token."
+            placeholder="Select block list"
+            valueText="List #42 · 3 members"
+            onOpenPicker={noop}
+            onClear={noop}
+            clearLabel="Remove block-list"
+        />
+    )],
+    ['ListFilterMenu', () => (
+        <ListFilterMenu query="" onQueryChange={noop} searchPlaceholder="Search items" searchLabel="Search items" />
+    )],
+    ['ListFilterPopover', () => (
+        <ListFilterPopover label="Filter list"><p>Panel controls</p></ListFilterPopover>
+    )],
+    ['ListSearchField', () => (
+        <ListSearchField value="" onChange={noop} placeholder="Search items" />
+    )],
     ['ListToolbar', () => (
         <ListToolbar query="" onQueryChange={noop} searchLabel="Search items" />
     )],
+    // PC-16 Phase B: the Locked screen's auto pay line with its Stop button.
+    ['LockedAutopayNotice', () => (
+        <LockedAutopayHost
+            messaging={{
+                lockedAutopayStatus: vi.fn().mockResolvedValue({
+                    active: true, orders: 2, caps: [{ chainId: 'bitcoin-mainnet', ticker: 'BTC', amount: '0.045' }],
+                }),
+                stopLockedAutopay: vi.fn().mockResolvedValue({ active: false }),
+            }}
+        />
+    ), () => screen.findByTestId('locked-autopay')],
     // One send that went out and one that did not while the wallet was locked.
     ['LockedSendOutcomeNotice', () => (
         <MessagingContext.Provider
@@ -419,7 +659,7 @@ const fixtures = [
         </MessagingContext.Provider>
     ), () => screen.findByTestId('locked-send-outcome')],
     ['LockedTokenContext', () => <LockedTokenContext chainId="bitcoin-mainnet" tick="XCHAIN" />],
-    ['LogConsole', () => <LogConsole />],
+    ['LogConsole', () => <LogConsoleFixture />],
 ];
 
 const componentModules = import.meta.glob(
@@ -431,6 +671,9 @@ function componentNamesAThroughL() {
         .map((path) => path.slice(path.lastIndexOf('/') + 1, -4))
         .filter((name) => /^[A-L]/.test(name))
         .filter((name) => name !== 'HeaderSettingsButton')
+        // Holds only the wallet's bets loader and the card chip text; My bets
+        // draws the Bet Markets cards (ruling 2026-11-13), covered by BetMarketCard.
+        .filter((name) => name !== 'BetMyBetsPanel')
         .sort();
 }
 

@@ -40,6 +40,7 @@ import {
 } from '../branding/branding.js';
 import { fetchWithRetry } from '../shared/utils/fetchWithRetry.js';
 import { readRawFile } from './rawFileRead.js';
+import { imagePreviewDataUrl } from '../shared/utils/publishingFile.js';
 
 /**
  * @typedef {Object} TisMediaEntry
@@ -1090,8 +1091,9 @@ export const TIS_ACTION_REF_RE = /^action:(?:(BTC|LTC|DOGE):)?([0-9]+)$/i;
 
 /**
  * Fetch + parse an on-chain TIS document via the explorer's raw FILE
- * endpoint. Never raises; resolves null on any miss so the renderer
- * falls back to the plain description string.
+ * endpoint. A FILE holding a bare image instead of JSON yields a bundle
+ * whose only content is that picture. Never raises; resolves null on any
+ * miss so the renderer falls back to the plain description string.
  *
  * @param {object} args
  * @param {any} args.sdk                     per-chain SDK (explorer client configured)
@@ -1111,10 +1113,36 @@ export async function fetchOnChainTisBundle({ sdk, actionIndex, coin = null }) {
             ? bytes
             : new Uint8Array(/** @type {any} */ (bytes));
         const text = new TextDecoder().decode(u8);
-        return parseTisText(text);
+        return parseTisText(text) ?? rawImageBundle(u8, actionIndex, coin);
     } catch {
         return null;
     }
+}
+
+// Same ceiling the gated-file viewer puts on inline previews, so an
+// oversized FILE never becomes a token picture either.
+const MAX_RAW_IMAGE_BYTES = 5 * 1024 * 1024;
+
+// A DESCRIPTION pointer may name a FILE that is the picture itself rather
+// than a TIS document. The bytes decide (the on-chain MIME is issuer text):
+// a raster image or an SVG becomes the token's single picture, and anything
+// else stays "no bundle". The picture travels as a data: URL built from the
+// bytes already in hand, because every shell's CSP admits data: images but
+// no remote image origin, and a string survives the token-info cache and a
+// messaging hop where a blob: URL would not. <img> keeps an SVG script-inert.
+// Typed `large` so it serves as header icon, hero and gallery entry at once.
+function rawImageBundle(bytes, actionIndex, coin) {
+    if (bytes.length > MAX_RAW_IMAGE_BYTES) return null;
+    const url = imagePreviewDataUrl(bytes);
+    if (!url) return null;
+    const bundle = tisToMediaBundle({});
+    bundle.images.push({
+        url,
+        dataRef: coin ? `action:${coin}:${actionIndex}` : `action:${actionIndex}`,
+        type: 'large',
+        name: null,
+    });
+    return bundle;
 }
 
 // Shared TIS text → media-bundle path for the off-chain (URL fetch) and

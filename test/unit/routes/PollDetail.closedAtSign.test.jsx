@@ -20,6 +20,7 @@ import { act as domAct, cleanup, fireEvent, render } from '@testing-library/reac
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { PollDetail } from '../../../packages/core/src/shared/routes/PollDetail.jsx';
+import { resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = Object.freeze({
@@ -43,7 +44,11 @@ const POLL = Object.freeze({
 });
 const COMPOSED = Object.freeze({ psbt: 'bb00', encoding: 'psbt', actionString: 'VOTE|0|7|0', version: 1 });
 
-afterEach(cleanup);
+afterEach(() => {
+    cleanup();
+    // Each test publishes its own wallet mode; forget it.
+    resetWalletModes();
+});
 
 async function drain(rounds = 30) {
     for (let i = 0; i < rounds; i += 1) {
@@ -68,6 +73,8 @@ function harness({ later, walletMode = 'full' }) {
         getActiveAddresses: () => Promise.resolve({ [CHAIN]: { id: ADDRESS.id } }),
         governanceVotes: () => Promise.resolve([]),
         getSettings: () => Promise.resolve({ walletMode, preflightPrivacy: 'off' }),
+        // The wallet's mode comes from its wallet-list record.
+        listWallets: () => Promise.resolve([{ id: 'wallet-1', walletMode }]),
         signerReady: () => Promise.resolve({ ready: true }),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
         composeVoteForConfirm: () => Promise.resolve(COMPOSED),
@@ -100,12 +107,14 @@ async function approveVote(messaging) {
         ));
         await drain();
     });
+    // The Stable row opens Cast Vote with it chosen; Sign Vote opens the
+    // confirm screen.
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('checkbox', { name: '0: Stable' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Vote for Stable' }));
         await drain();
     });
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('button', { name: 'Vote' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Sign Vote' }));
         await drain();
     });
     const approve = utils.getByTestId('confirm-approve');
@@ -124,6 +133,12 @@ describe('Poll page: a poll that closes between Review and Approve', () => {
         const utils = await approveVote(messaging);
         expect(calls.cast).toBe(0);
         expect(utils.container.textContent).toMatch(/This poll closed while the review was open\. Nothing was sent\./);
+        // The closed poll takes Cast Vote away: the poll page returns, the
+        // refusal first, and its tab strip offers Result in place of Vote.
+        expect(utils.getByRole('heading', { name: 'Poll' })).toBeTruthy();
+        expect(utils.queryByRole('button', { name: 'Sign Vote' })).toBeNull();
+        const sectionTabs = utils.getByRole('tablist', { name: 'Poll sections' });
+        expect([...sectionTabs.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(['Result', 'Activity', 'Details']);
     });
 
     it('refuses a freshly closed poll while the reusable row is still open', async () => {
@@ -173,15 +188,16 @@ async function buildWatcherVote(messaging) {
         await drain();
     });
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('checkbox', { name: '0: Stable' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Vote for Stable' }));
         await drain();
     });
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('button', { name: 'Vote' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Sign Vote' }));
         await drain();
     });
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('button', { name: 'Create unsigned transaction' }));
+        expect(utils.getByTestId('confirm-modal')).toBeInTheDocument();
+        fireEvent.click(utils.getByTestId('confirm-approve'));
         await drain(60);
     });
     return utils;

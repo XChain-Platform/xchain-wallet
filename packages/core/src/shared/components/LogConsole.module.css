@@ -1,0 +1,15 @@
+/* The log console's part of its page's filter panel, under the search box:
+   the level toggles on one wrapping line, then Copy all and Clear. */
+
+.controls {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+.levels,
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-1);
+}

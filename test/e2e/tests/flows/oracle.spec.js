@@ -8,6 +8,7 @@ import {
     expect,
     test,
 } from '../../fixtures/wallet.js';
+import { pickFiatCurrency, pickToken } from '../../fixtures/pickerFields.js';
 import {
     describeOffenders,
     documentOverflow,
@@ -99,22 +100,6 @@ async function gotoPalette(page, title) {
     await expect(dialog).toBeHidden({ timeout: 15_000 });
 }
 
-async function useWatcherMode(page) {
-    await gotoPalette(page, 'Settings');
-    const row = page.getByRole('main').getByRole('button', { name: /^Wallet mode/i });
-    await expect(row).toBeVisible({ timeout: 30_000 });
-    await row.click();
-
-    const watcher = page.getByRole('radio', { name: /^Watcher/ });
-    await expect(watcher).toBeVisible({ timeout: 30_000 });
-    await watcher.click();
-    const confirm = page.getByRole('dialog', { name: /Switch to Watcher/ });
-    await expect(confirm).toBeVisible();
-    await confirm.getByRole('button', { name: 'Confirm mode change' }).click();
-    await expect(confirm).toBeHidden({ timeout: 30_000 });
-    await expect(watcher).toBeChecked();
-}
-
 async function sharedControlRows(page) {
     return page.getByRole('main').evaluate((main) => {
         // Skip aria-hidden subtrees: decoration such as the fee slider tick labels, not controls.
@@ -200,22 +185,28 @@ for (const viewport of VIEWPORTS) {
     test(`oracle flow renders at ${viewport.width}x${viewport.height}`, async ({ page }) => {
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
         await installOracleReads(page);
-        // Demo wallets hide the create commands, so this walk uses a real dev wallet.
-        await createWallet(page);
-        await useWatcherMode(page);
+        // Demo wallets hide the create commands, so this walk uses a real dev
+        // wallet, created in watch-only mode (the mode is chosen at create).
+        await createWallet(page, { walletMode: 'watcher' });
 
-        await test.step('oracle console', async () => {
-            await gotoPalette(page, 'My markets');
+        // My markets is the All list narrowed to markets this wallet created
+        // (ruling 2026-11-13). The fixture market belongs to ORACLE, not to
+        // this fresh wallet, so the walk reaches it from All.
+        await test.step('market list', async () => {
+            await gotoPalette(page, 'Betting');
             await expect(page.getByText(MARKET_TITLE, { exact: false }).first()).toBeVisible({ timeout: 30_000 });
-            await expectScreenLayout(page, 'My markets', `${viewport.name} oracle console`);
+            await expectScreenLayout(page, 'Bet Markets', `${viewport.name} market list`);
         });
 
         await test.step('oracle record', async () => {
-            await page.getByRole('main').getByRole('button', { name: 'View market' }).click();
+            await page.getByRole('main').locator(`[data-market-index="${MARKET.action_index}"]`).click();
             await expect(page.getByRole('heading', { name: MARKET_TITLE, exact: true })).toBeVisible();
             await page.getByRole('main').getByRole('button', { name: ORACLE, exact: true }).click();
 
             const main = page.getByRole('main');
+            // The record opens on Actions (G102); its counts and fees are on About.
+            await expect(main.getByRole('list', { name: 'Oracle actions' })).toBeVisible({ timeout: 30_000 });
+            await main.getByRole('tab', { name: 'About' }).click();
             await expect(main.getByText('Markets opened', { exact: true })).toBeVisible({ timeout: 30_000 });
             await expect(main.getByText('ORACLELAYOUTTOKEN', { exact: true })).toBeVisible();
             await expectScreenLayout(page, 'Oracle record', `${viewport.name} oracle record`);
@@ -232,14 +223,15 @@ for (const viewport of VIEWPORTS) {
             const networkPicker = page.getByRole('dialog', { name: 'Priced token network' });
             await networkPicker.getByRole('button', { name: /^Select Litecoin/ }).click();
             await expect(networkPicker).toBeHidden();
-            await form.getByLabel('Token ticker', { exact: true }).fill(TICK);
-            await form.getByLabel('Currency', { exact: true }).selectOption(FIAT);
+            // G122: the Token and Fiat currency fields open picker pages.
+            await pickToken(form, TICK);
+            await pickFiatCurrency(form, FIAT);
             // Exact or by role: each field's 'About ...' help tip (U57) carries its label too.
             await form.getByRole('textbox', { name: /^Price of one/ }).fill(PRICE);
             await form.getByLabel('Usage fee', { exact: true }).fill(USAGE_FEE);
             await form.getByLabel('Memo', { exact: true }).fill(MEMO);
 
-            const preview = form.getByRole('button', { name: 'Publish price', exact: true });
+            const preview = form.getByRole('button', { name: 'Publish Price', exact: true });
             await preview.scrollIntoViewIfNeeded();
             const before = await page.getByRole('main').evaluate((main) => main.scrollTop);
             expect(before, `${viewport.name}: the form did not scroll, so review top restoration was not exercised`)

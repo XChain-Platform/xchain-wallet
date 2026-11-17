@@ -50,11 +50,11 @@ assert.match(src, /(?:t\('settings\.privacy\.labelsSurviveRestore'\)|Labels surv
 // extension could only proxy the user's entire browser.
 assert.match(src, /import \{ shellCapabilities \}/,
     'PrivacySection imports the shell-capability check');
-assert.match(src, /\{shellCapabilities\(\)\.socksProxy && \(/,
+assert.match(src, /\{show\('tor'\) && shellCapabilities\(\)\.socksProxy && \(/,
     'the Tor toggle is gated on the shell actually supporting SOCKS');
 // The gate must WRAP the Tor row specifically, not sit somewhere else
 // in the file while the row stays unconditional.
-const torGate = src.indexOf('shellCapabilities().socksProxy && (');
+const torGate = src.indexOf("show('tor') && shellCapabilities().socksProxy && (");
 const torRow = src.indexOf("onToggle('torRouting'");
 assert.ok(torGate > 0 && torRow > torGate && torRow - torGate < 600,
     'the capability gate encloses the Tor toggle row');
@@ -67,9 +67,9 @@ assert.ok(!/Route SDK requests through a local Tor SOCKS5 proxy when available/.
 // different direction: without the negative branch the feature reads as
 // absent, and without `disabled`/`checked={false}` the row would be an
 // operable switch again on a shell that proxies nothing.
-assert.match(src, /\{!shellCapabilities\(\)\.socksProxy && \(/,
+assert.match(src, /\{show\('tor'\) && !shellCapabilities\(\)\.socksProxy && \(/,
     'the non-proxying shells render an explicit unavailable row');
-const unavailGate = src.indexOf('!shellCapabilities().socksProxy && (');
+const unavailGate = src.indexOf("show('tor') && !shellCapabilities().socksProxy && (");
 const unavailBlock = src.slice(unavailGate, unavailGate + 900);
 assert.match(unavailBlock, /(?:t\('settings\.privacy\.notAvailableOnThisPlatform'\)|Not available on this platform)/,
     'the unavailable row names the platform limit in the hint');

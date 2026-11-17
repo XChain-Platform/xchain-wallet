@@ -18,6 +18,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { PsbtSignForm } from '../../../packages/core/src/shared/routes/PsbtSignForm.jsx';
 import { isAutoLockHeld } from '../../../packages/core/src/shared/hooks/autoLockGuard.js';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import listPageStyles from '../../../packages/core/src/ui/ListPage.module.css';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -49,7 +50,7 @@ beforeEach(() => {
     });
 });
 
-afterEach(() => { cleanup(); vi.useRealTimers(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); resetWalletModes(); });
 
 async function drainMicrotasks(rounds = 12) {
     for (let i = 0; i < rounds; i += 1) await Promise.resolve();
@@ -158,7 +159,7 @@ async function broadcastWith(broadcastSignedTxRequest) {
         ? { broadcastSignedTxRequest }
         : { __absent: ['broadcastSignedTxRequest'] };
     const utils = await mountAndPaste(overrides);
-    const submitBtn = findButton(utils, /Sign on (Ledger|Trezor)|Sign transaction/i);
+    const submitBtn = findButton(utils, /^Sign Transaction$/);
     expect(submitBtn, 'submit button present').toBeTruthy();
     await domAct(async () => {
         fireEvent.click(submitBtn);
@@ -207,8 +208,8 @@ describe('PSBT sign screen: a paste that cannot be read', () => {
         expect(note).toBeTruthy();
         const clear = Array.from(note.querySelectorAll('button')).find((b) => /^Clear$/.test(b.textContent));
         expect(clear).toBeTruthy();
-        const browse = findButton(utils, /Browse for \.psbt file/);
-        // Document order: textarea, then the error, then the Browse and Scan buttons.
+        const browse = utils.getByRole('button', { name: 'Choose a transaction file' });
+        // Document order: textarea, then the error, then the transaction file field.
         expect(textarea.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(note.compareDocumentPosition(browse) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         await domAct(async () => { fireEvent.click(clear); await drainMicrotasks(); });
@@ -247,9 +248,12 @@ describe('PSBT sign screen: an address load that fails', () => {
     });
 
     it('shares the wrapper the watch-only notice uses', async () => {
-        const watcher = await mountOnly({ getSettings: () => Promise.resolve({ walletMode: 'watcher' }) });
+        // The wallet mode now comes from the wallet's own record.
+        publishWalletModes({ wallets: [{ id: 'w', walletMode: 'watcher' }], activeWalletId: 'w' });
+        const watcher = await mountOnly();
         const watcherClass = expectNoticeInListPage(watcher, /cannot sign transactions/).className;
         cleanup();
+        resetWalletModes();
         const failed = await mountOnly({
             getAddressesByChain: () => Promise.reject(new Error('node unreachable')),
         });
@@ -340,7 +344,7 @@ describe('PSBT sign screen: auto-lock waits for the request in flight', () => {
             signPsbtUserInitiatedHw: () => new Promise((resolve) => { finish = resolve; }),
         });
         await domAct(async () => {
-            fireEvent.click(findButton(utils, /Sign on (Ledger|Trezor)|Sign transaction/i));
+            fireEvent.click(findButton(utils, /^Sign Transaction$/));
             await drainMicrotasks();
         });
         expect(isAutoLockHeld()).toBe(true);
@@ -366,7 +370,7 @@ describe('PSBT sign screen: auto-lock waits for the request in flight', () => {
 describe('PSBT sign screen: a signing attempt that fails', () => {
     async function signWith(signPsbtUserInitiatedHw) {
         const utils = await mountAndPaste({ signPsbtUserInitiatedHw });
-        const submitBtn = findButton(utils, /Sign on (Ledger|Trezor)|Sign transaction/i);
+        const submitBtn = findButton(utils, /^Sign Transaction$/);
         await domAct(async () => {
             fireEvent.click(submitBtn);
             await drainMicrotasks();
@@ -390,7 +394,7 @@ describe('PSBT sign screen: a signing attempt that fails', () => {
 
     it('names no shell API when this shell cannot sign on a device', async () => {
         const utils = await mountAndPaste({ __absent: ['signPsbtUserInitiatedHw'] });
-        const submitBtn = findButton(utils, /Sign on (Ledger|Trezor)|Sign transaction/i);
+        const submitBtn = findButton(utils, /^Sign Transaction$/);
         await domAct(async () => {
             fireEvent.click(submitBtn);
             await drainMicrotasks();

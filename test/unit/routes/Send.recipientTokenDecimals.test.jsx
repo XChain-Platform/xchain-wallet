@@ -8,12 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// An added recipient's amount belongs to the token it was typed for. Picking
-// another token for that row, or turning per-recipient tokens off so the row
-// takes the first row's token, can leave an amount with more decimal places
+// A recipient's amount belongs to the token it was typed for. Picking another
+// token for a Multi row after typing its amount, or writing an Advanced line
+// in a token with fewer places, can leave an amount with more decimal places
 // than the token has. The network refuses such a SEND after the fee is spent,
-// so the form clears the row amount on a token change and refuses an amount
-// past the row token's places before composing.
+// so the row is refused when it is added, and the line when Send is pressed.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
@@ -88,85 +87,55 @@ function mount() {
 
 afterEach(() => cleanup());
 
-async function fillFirst(tick, amount) {
-    fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: ALICE } });
-    fireEvent.change(screen.getByLabelText(/^Token$/), { target: { value: tick } });
-    fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: amount } });
-    // The row checks read the source balances, which load after the form settles.
-    await screen.findByText(new RegExp(tick + ' available'));
+/** Open Multi once the source balances (which carry each token's places) have loaded. */
+async function openMulti() {
+    await screen.findByText(/BTC available/);
+    fireEvent.click(screen.getByRole('tab', { name: 'Multi' }));
 }
 
-function pickRowToken(tick) {
-    fireEvent.click(screen.getByRole('button', { name: /Recipient 2 token/ }));
-    fireEvent.click(screen.getByRole('button', { name: `Pick ${tick}` }));
+async function startRow(to, tick, amount) {
+    fireEvent.click(await screen.findByRole('button', { name: /Add Recipient/ }));
+    fireEvent.change(screen.getByLabelText(/^To$/), { target: { value: to } });
+    fireEvent.click(screen.getByRole('button', { name: /^Token/ }));
+    fireEvent.click(await screen.findByRole('button', { name: `Pick ${tick}` }));
+    fireEvent.change(await screen.findByLabelText(/^Amount/, { selector: 'input' }), { target: { value: amount } });
 }
 
-function rowAmount() {
-    return /** @type {HTMLInputElement} */ (screen.getByLabelText(/^Recipient 2 amount/));
-}
-
-describe('Send: an added recipient amount follows its token decimal places', () => {
-    it('clears the row amount when another token is picked for the row', async () => {
-        const messaging = mount();
-        await fillFirst('PEPE', '7');
-        fireEvent.click(await screen.findByRole('button', { name: /Add recipient/ }));
-        fireEvent.change(screen.getByLabelText('Recipient 2 address'), { target: { value: BOB } });
-        fireEvent.click(screen.getByRole('switch', { name: /different token/i }));
-        pickRowToken('XCP');
-        fireEvent.change(rowAmount(), { target: { value: '0.5' } });
-        pickRowToken('PEPE');
-        expect(rowAmount().value).toBe('');
-        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
-        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
-    });
-
-    it('keeps the row amount when the same token is picked again', async () => {
+describe('Send: a recipient amount follows its token decimal places', () => {
+    it('refuses a Multi row whose amount has more places than the token picked after it', async () => {
         mount();
-        await fillFirst('PEPE', '7');
-        fireEvent.click(await screen.findByRole('button', { name: /Add recipient/ }));
-        fireEvent.click(screen.getByRole('switch', { name: /different token/i }));
-        pickRowToken('XCP');
-        fireEvent.change(rowAmount(), { target: { value: '0.5' } });
-        pickRowToken('XCP');
-        expect(rowAmount().value).toBe('0.50000000');
+        await openMulti();
+        await startRow(BOB, 'XCP', '0.5');
+        // The token changes after the amount was typed for XCP.
+        fireEvent.click(screen.getByRole('button', { name: /^Token/ }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Pick PEPE' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Add$/ }));
+        // The amount field states the token's places; the row is not added.
+        expect(screen.getAllByText(/at most 0 decimal places|PEPE has no decimal places/).length).toBeGreaterThan(0);
+        expect(screen.queryAllByTestId('send-multi-row')).toHaveLength(0);
     });
 
-    it('refuses a row amount past its token places once the row takes the first token', async () => {
+    it('adds and composes a row amount within its token places', async () => {
         const messaging = mount();
-        await fillFirst('PEPE', '7');
-        fireEvent.click(await screen.findByRole('button', { name: /Add recipient/ }));
-        fireEvent.change(screen.getByLabelText('Recipient 2 address'), { target: { value: BOB } });
-        fireEvent.click(screen.getByRole('switch', { name: /different token/i }));
-        pickRowToken('XCP');
-        fireEvent.change(rowAmount(), { target: { value: '0.5' } });
-        // Turning per-recipient tokens off sends the row in PEPE, which has no decimal places.
-        fireEvent.click(screen.getByRole('switch', { name: /different token/i }));
-        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
-        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
-        expect(screen.getAllByText(/Recipient 2: amount can have at most 0 decimal places/).length).toBeGreaterThan(0);
-    });
-
-    it('clears a row that inherits the first token when that token changes', async () => {
-        mount();
-        await fillFirst('XCP', '1');
-        fireEvent.click(await screen.findByRole('button', { name: /Add recipient/ }));
-        fireEvent.click(screen.getByRole('switch', { name: /different token/i }));
-        // The row has no token of its own, so it sends the first row's XCP.
-        fireEvent.change(rowAmount(), { target: { value: '0.5' } });
-        fireEvent.change(screen.getByLabelText(/^Token$/), { target: { value: 'PEPE' } });
-        expect(rowAmount().value).toBe('');
-    });
-
-    it('still composes a row amount within its token places', async () => {
-        const messaging = mount();
-        await fillFirst('PEPE', '7');
-        fireEvent.click(await screen.findByRole('button', { name: /Add recipient/ }));
-        fireEvent.change(screen.getByLabelText('Recipient 2 address'), { target: { value: BOB } });
-        fireEvent.click(screen.getByRole('switch', { name: /different token/i }));
-        pickRowToken('XCP');
-        fireEvent.change(rowAmount(), { target: { value: '0.5' } });
+        await openMulti();
+        await startRow(ALICE, 'PEPE', '7');
+        fireEvent.click(screen.getByRole('button', { name: /^Add$/ }));
+        await startRow(BOB, 'XCP', '0.5');
+        fireEvent.click(screen.getByRole('button', { name: /^Add$/ }));
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled());
         expect(messaging.composeForConfirm.mock.calls[0][0].legs[1]).toEqual({ to: BOB, tick: 'XCP', amount: '0.5' });
+    });
+
+    it('names an Advanced line whose amount has more places than its token', async () => {
+        const messaging = mount();
+        await screen.findByText(/BTC available/);
+        fireEvent.click(screen.getByRole('tab', { name: 'Advanced' }));
+        fireEvent.change(screen.getByLabelText('Recipients'), {
+            target: { value: `${ALICE},XCP,0.5\n${BOB},PEPE,1.5` },
+        });
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+        expect(screen.getAllByText(/Line 2: PEPE has no decimal places/).length).toBeGreaterThan(0);
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 });

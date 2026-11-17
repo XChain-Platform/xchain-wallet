@@ -20,7 +20,7 @@ const messages = {
     'addressDiscovery.found':
         '{count, plural, =0 {Found no other used addresses} one {Found # used address} other {Found # used addresses}}',
     'addressDiscovery.failed': "Couldn't finish checking for used addresses on {chains}. Try again",
-    'addressDiscovery.action': 'Check for used addresses',
+    'addressDiscovery.action': 'Check for Used Addresses',
 };
 
 addEnglish(messages);

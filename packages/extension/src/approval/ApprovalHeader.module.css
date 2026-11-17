@@ -1,0 +1,9 @@
+/* The Screen's header slot pads its content by the page gutter, which would
+   leave the app bar floating inside the window. The bar cancels that padding
+   so it runs edge to edge from the top like the in-app bar: the slot pads the
+   block by the gutter less 2px and the end edge by the same less 2px (see
+   Screen.module.css .header). */
+.bleed {
+    margin-block-start: calc(-1 * (var(--xc-page-gutter) - 2px));
+    margin-inline: calc(-1 * var(--xc-page-gutter)) calc(-1 * (var(--xc-page-gutter) - 2px));
+}

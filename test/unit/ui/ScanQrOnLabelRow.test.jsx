@@ -76,9 +76,9 @@ describe('Scan transaction sits inside the paste field', () => {
         expect(textarea.compareDocumentPosition(scan) & Node.DOCUMENT_POSITION_FOLLOWING)
             .toBeTruthy();
         expect(scan).toHaveAttribute('aria-pressed', 'false');
-        // Not in the row below the box, which keeps the file browse action.
-        const browse = screen.getByRole('button', { name: /Browse for \.psbt file/ });
-        expect(browse.parentElement.contains(scan)).toBe(false);
+        // Not in the file field below the box, which keeps the file browse action.
+        const browse = screen.getByRole('button', { name: 'Choose a transaction file' });
+        expect(browse.closest('[data-file-field]').contains(scan)).toBe(false);
     });
 
     it('toggles the scanner and flips the accessible name', async () => {

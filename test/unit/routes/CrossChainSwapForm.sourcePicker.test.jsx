@@ -75,11 +75,13 @@ afterEach(() => { cleanup(); vi.clearAllMocks(); });
 describe('CrossChainSwapForm: source address picker', () => {
     it('opens on the give chain, not the get chain', async () => {
         mount();
+        // From is a closed standard section; open it to reach the address picker.
+        fireEvent.click(await screen.findByRole('button', { name: /^From\b/, expanded: false }));
         await waitFor(() => expect(pickerButton()).toBeInTheDocument());
 
         fireEvent.click(pickerButton());
 
-        expect(await screen.findByText('From address')).toBeInTheDocument();
+        expect(await screen.findByText('From Address')).toBeInTheDocument();
         expect(screen.getByTestId('picker-chain').textContent).toBe(DOGE);
         expect(screen.getByTestId('picker-chain').textContent).not.toBe(BTC);
     });

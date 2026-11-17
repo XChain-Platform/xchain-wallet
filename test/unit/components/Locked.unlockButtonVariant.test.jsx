@@ -35,12 +35,12 @@ function mount() {
 }
 
 describe('Locked unlock button', () => {
-    it('draws the initially disabled Unlock Wallet submit with an icon and the success fill', () => {
+    it('draws the Unlock Wallet submit enabled, with an icon and the success fill, before a password is typed (G130)', () => {
         clearLockoutState();
         mount();
         const button = screen.getByRole('button', { name: 'Unlock Wallet' });
         expect(button).toHaveAttribute('type', 'submit');
-        expect(button).toBeDisabled();
+        expect(button).toBeEnabled();
         expect(button.querySelector('svg')).toBeInTheDocument();
         expect(buttonStyles.success).toBeTruthy();
         expect(button).toHaveClass(buttonStyles.success);

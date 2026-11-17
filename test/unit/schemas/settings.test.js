@@ -8,12 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: schemas/settings: createDefaultSettings, createDefaultAdsChainState, validateSettings.
+// Unit: schemas/settings: createDefaultSettings, createDefaultAdsSettings, validateSettings.
 
 import { describe, it, expect } from 'vitest';
 import {
     createDefaultSettings,
-    createDefaultAdsChainState,
+    createDefaultAdsSettings,
     validateSettings,
     deflateSettings,
     inflateSettings,
@@ -24,7 +24,7 @@ import {
     NUMBER_FORMATS,
     SMALL_BALANCE_THRESHOLDS,
     WALLET_MODES,
-    ADS_DEFAULT_ENABLED,
+    ADS_DEFAULT_PER_TRANSACTION,
     CLIPBOARD_AUTO_CLEAR_DEFAULT,
     FORM_DRAFT_TTL_OPTIONS,
     FORM_DRAFT_TTL_OFF,
@@ -87,9 +87,10 @@ describe('createDefaultSettings', () => {
         expect(s.grace.undoSendSeconds).toBe(UNDO_SEND_SECONDS_DEFAULT);
         expect(s.developerMode).toBe(false);
         expect(s.learnMode).toBe(false);
-        expect(s.ads.enabled).toBe(ADS_DEFAULT_ENABLED);
+        expect(s.ads.perTransaction).toBe(ADS_DEFAULT_PER_TRANSACTION);
         expect(s.backupReminders).toBe('off');
-        expect(s.walletMode).toBe('full');
+        // §20: wallet mode is per wallet now; the legacy key has no default.
+        expect('walletMode' in s).toBe(false);
         expect(s.activeNetwork).toBe('mainnet');
         expect(s.privacy.clipboardAutoClearSeconds).toBe(CLIPBOARD_AUTO_CLEAR_DEFAULT);
         expect(s.smallBalanceThreshold).toBe('dust');
@@ -140,14 +141,17 @@ describe('undo-send settings', () => {
     });
 });
 
-describe('createDefaultAdsChainState', () => {
-    it('stores NO amounts (null = follow the release default), counters zeroed', () => {
-        const a = createDefaultAdsChainState();
-        expect(a.perTxAmountSats).toBe(null);
-        expect(a.triggerAmountSats).toBe(null);
-        expect(a.accumulatedSats).toBe(0);
-        expect(a.lifetimeDonatedSats).toBe(0);
-        expect(a.lifetimeTxCount).toBe(0);
+describe('createDefaultAdsSettings', () => {
+    it('is on at $0.05 per transaction, sent at $5 to Protocol, with an empty queue', () => {
+        expect(createDefaultAdsSettings('EUR')).toEqual({
+            perTransaction: '0.05',
+            sendAt: '5',
+            recipient: 'protocol',
+            currency: 'EUR',
+            queued: '0',
+            donated: '0',
+            donationCount: 0,
+        });
     });
 });
 
@@ -335,21 +339,31 @@ describe('validateSettings', () => {
         expect(validateSettings({ ...s, ads: null }).ok).toBe(false);
     });
 
-    it('rejects ads.enabled non-boolean', () => {
+    it('rejects ads amounts that are not plain two-decimal fiat inside the bounds', () => {
         const s = createDefaultSettings();
-        expect(validateSettings({ ...s, ads: { ...s.ads, enabled: 'yes' } }).ok).toBe(false);
+        const bad = [
+            { perTransaction: 0.05 },
+            { perTransaction: '-1' },
+            { perTransaction: '0.005' },
+            { perTransaction: '10.01' },
+            { sendAt: '0' },
+            { sendAt: '10000.01' },
+            { recipient: 'DONATE1' },
+            { currency: '' },
+            { queued: '1e3' },
+            { donated: null },
+            { donationCount: -1 },
+        ];
+        for (const patch of bad) {
+            expect(validateSettings({ ...s, ads: { ...s.ads, ...patch } }).ok, JSON.stringify(patch)).toBe(false);
+        }
     });
 
-    it('accepts valid ads.perChain entry', () => {
+    it('accepts a custom amount, None, and a queue past its send-at total', () => {
         const s = createDefaultSettings();
         const r = validateSettings({
             ...s,
-            ads: {
-                ...s.ads,
-                perChain: {
-                    'bitcoin-mainnet': { perTxAmountSats: 1, triggerAmountSats: 1000, accumulatedSats: 0, lifetimeDonatedSats: 0, lifetimeTxCount: 0 },
-                },
-            },
+            ads: { ...s.ads, perTransaction: '0', sendAt: '12.5', queued: '30.15', donated: '75', donationCount: 3 },
         });
         expect(r.ok).toBe(true);
     });

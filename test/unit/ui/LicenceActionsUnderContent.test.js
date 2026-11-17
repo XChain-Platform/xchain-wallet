@@ -57,10 +57,40 @@ afterEach(() => {
 });
 
 describe('Licence gate actions sit under the terms', () => {
-    it('keeps the terms box, its gate and the fill body from growing into spare height', () => {
+    it('lets the terms box and its gate fill the spare height on phone and popup widths, and stop at content height from 834px', () => {
+        for (const selector of ['.licenseScroll', '.licenseGate']) {
+            // Only the rules that set flex: the short-landscape rule after the
+            // 834px block sets just a min-height and leaves the growth alone.
+            const bodies = ruleBodies(onboardingCss, selector).filter((body) => flexGrow(body) !== null);
+            expect(flexGrow(bodies[0]), `${selector} base flex-grow`).toBe(1);
+            expect(flexGrow(bodies[bodies.length - 1]), `${selector} 834px flex-grow`).toBe(0);
+        }
+        const stack = ruleBodies(onboardingCss, 'form.licenseForm > [data-form-stack]');
+        expect(flexGrow(stack[0])).toBe(1);
+        expect(stack[0]).toMatch(/min-height\s*:\s*0\s*;/);
+        expect(flexGrow(stack[stack.length - 1])).toBe(0);
+    });
+
+    it('keeps every gap between the header, terms, acknowledgement row and button at 8px', () => {
+        const [gate] = ruleBodies(onboardingCss, '.licenseGate');
+        expect(gate).toMatch(/gap\s*:\s*var\(--xc-space-2\)\s*;/);
+        const [form] = ruleBodies(onboardingCss, 'form.licenseForm');
+        expect(form).toMatch(/--xc-form-gap\s*:\s*var\(--xc-space-2\)\s*;/);
+        expect(form).not.toMatch(/(?:^|[;\s])gap\s*:\s*var\(--xc-space-2\)\s*;/);
+        const [body] = ruleBodies(formPageCss, '.body');
+        expect(body).toMatch(/gap\s*:\s*var\(--xc-form-gap\)\s*;/);
+        const [controls] = ruleBodies(onboardingCss, '.licenseControls');
+        expect(controls).toMatch(/gap\s*:\s*var\(--xc-space-2\)\s*;/);
+        // No margin or padding on the licence parts may exceed the 8px token.
+        for (const selector of ['.licenseGate', '.licenseControls', '.licenseAck', '.licenseActions']) {
+            for (const body of ruleBodies(onboardingCss, selector)) {
+                expect(body, selector).not.toMatch(/(?:margin|padding)(?:-[a-z]+)?\s*:[^;]*(?:space-[3-9]|form-gap|page-top)/);
+            }
+        }
+    });
+
+    it('keeps the fill body from growing into spare height', () => {
         const checks = [
-            [ONBOARDING_CSS, onboardingCss, '.licenseScroll'],
-            [ONBOARDING_CSS, onboardingCss, '.licenseGate'],
             [FORM_PAGE_CSS, formPageCss, '.fill > .body'],
         ];
         for (const [file, source, selector] of checks) {
@@ -76,7 +106,7 @@ describe('Licence gate actions sit under the terms', () => {
 
     it('lets the terms box shrink with its own scroll and keep a readable floor on a short screen', () => {
         const [base] = ruleBodies(onboardingCss, '.licenseScroll');
-        expect(base).toMatch(/(?:^|[;\s])flex\s*:\s*0 1 auto\s*;/);
+        expect(base).toMatch(/(?:^|[;\s])flex\s*:\s*1 1 auto\s*;/);
         expect(base).toMatch(/min-height\s*:\s*160px\s*;/);
         expect(base).toMatch(/overflow-y\s*:\s*auto\s*;/);
         const [gate] = ruleBodies(onboardingCss, '.licenseGate');
@@ -103,12 +133,25 @@ describe('Licence gate actions sit under the terms', () => {
         expect(checkbox.compareDocumentPosition(accept) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
-    it('switches the shared controls wrapper to a row at 834px', () => {
-        const wideControls = onboardingCss.match(
-            /@media \(min-width: 834px\) \{[\s\S]*?\.licenseControls\s*\{([^}]*)\}/,
-        )?.[1] ?? '';
-        expect(wideControls).toMatch(/flex-direction\s*:\s*row\s*;/);
-        expect(wideControls).toMatch(/align-items\s*:\s*center\s*;/);
-        expect(wideControls).toMatch(/justify-content\s*:\s*space-between\s*;/);
+    it('keeps the checkbox and button on one row at every width, including the 834px tablet window', () => {
+        const bodies = ruleBodies(onboardingCss, '.licenseControls');
+        expect(bodies.length).toBeGreaterThan(0);
+        // No rule at any breakpoint may stack the row.
+        for (const body of bodies) {
+            expect(body).not.toMatch(/flex-direction\s*:\s*column/);
+        }
+        const [base] = bodies;
+        expect(base).toMatch(/flex-direction\s*:\s*row\s*;/);
+        expect(base).toMatch(/flex-wrap\s*:\s*wrap\s*;/);
+        expect(base).toMatch(/align-items\s*:\s*center\s*;/);
+        expect(base).toMatch(/justify-content\s*:\s*space-between\s*;/);
+        expect(base).toMatch(/gap\s*:\s*var\(--xc-space-2\)\s*;/);
+        // The button keeps its natural width at the tablet breakpoint.
+        for (const body of ruleBodies(onboardingCss, '.licenseActions > button')) {
+            expect(body).not.toMatch(/width\s*:\s*100%/);
+        }
+        for (const body of ruleBodies(onboardingCss, '.licenseActions')) {
+            expect(body).not.toMatch(/width\s*:\s*100%/);
+        }
     });
 });

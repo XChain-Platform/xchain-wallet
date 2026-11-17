@@ -113,6 +113,23 @@ afterEach(() => {
     vi.useRealTimers();
 });
 
+// Single's one recipient (1 XCHAIN to `first`) opens as Multi's first row, and
+// the dispenser's pay-to address is added as the second (9 XCHAIN, the asset
+// the last row used).
+async function addDispenserAsSecondRecipient(first) {
+    fireEvent.change(screen.getByLabelText(/^To$/), { target: { value: first } });
+    fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '1' } });
+    await flushTimers();
+    fireEvent.click(screen.getByRole('tab', { name: 'Multi' }));
+    await flushTimers();
+    expect(screen.getAllByTestId('send-multi-row')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: /Add Recipient/ }));
+    fireEvent.change(screen.getByLabelText(/^To$/), { target: { value: DISPENSER_ADDR } });
+    fireEvent.change(screen.getByLabelText(/^Amount/, { selector: 'input' }), { target: { value: '9' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Add$/ }));
+    await flushTimers();
+}
+
 // A negative assertion only means something once the debounced lookup ran.
 async function lookupSettled(messaging) {
     await flushTimers();
@@ -247,12 +264,7 @@ describe('Send review: destination matches an open dispenser', () => {
             getListByActionIndex: vi.fn().mockResolvedValue({ list: [{ address: DISPENSER_ADDR }] }),
         }, { prefill: { chainId: CHAIN_ID, tick: 'XCHAIN' } });
         await flushTimers();
-        fireEvent.change(screen.getByLabelText(/^To$/), { target: { value: OTHER } });
-        fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '1' } });
-        fireEvent.click(screen.getByRole('button', { name: /Add recipient/ }));
-        fireEvent.change(screen.getByLabelText('Recipient 2 address'), { target: { value: DISPENSER_ADDR } });
-        fireEvent.change(screen.getByLabelText(/^Recipient 2 amount/), { target: { value: '9' } });
-        await flushTimers();
+        await addDispenserAsSecondRecipient(OTHER);
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
         await flushTimers();
 
@@ -275,12 +287,7 @@ describe('Send review: destination matches an open dispenser', () => {
             }),
         }, { prefill: { chainId: CHAIN_ID, tick: 'XCHAIN' } });
         await flushTimers();
-        fireEvent.change(screen.getByLabelText(/^To$/), { target: { value: OTHER } });
-        fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '1' } });
-        fireEvent.click(screen.getByRole('button', { name: /Add recipient/ }));
-        fireEvent.change(screen.getByLabelText('Recipient 2 address'), { target: { value: DISPENSER_ADDR } });
-        fireEvent.change(screen.getByLabelText(/^Recipient 2 amount/), { target: { value: '9' } });
-        await flushTimers();
+        await addDispenserAsSecondRecipient(OTHER);
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
         await lookupSettled(messaging);
 

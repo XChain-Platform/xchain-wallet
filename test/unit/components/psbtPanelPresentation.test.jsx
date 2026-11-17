@@ -85,7 +85,7 @@ describe('PSBT confirmation presentation', () => {
         );
 
         expect(container.querySelector('details').open).toBe(false);
-        fireEvent.click(screen.getByRole('button', { name: 'Copy action fields', hidden: true }));
+        fireEvent.click(screen.getByRole('button', { name: 'Copy Action Fields', hidden: true }));
         expect(await screen.findByText('Copied')).toBeTruthy();
         expect(writeText).toHaveBeenCalledWith(JSON.stringify({ action: 'SEND', memo: 'raw fields' }, null, 2));
 

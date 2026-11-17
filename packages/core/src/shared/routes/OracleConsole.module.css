@@ -5,6 +5,14 @@
     gap: var(--xc-space-2);
 }
 
+/* One market: its card, its action list 8px under it, then any open form. */
+.market {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: var(--xc-space-2);
+}
+
 .card {
     min-width: 0;
     overflow-wrap: anywhere;
@@ -23,12 +31,6 @@
     flex: 1 1 14rem;
     min-width: 0;
     overflow-wrap: anywhere;
-}
-
-.actionRow {
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--xc-space-2);
 }
 
 .outcomeRow {
@@ -58,10 +60,5 @@
     .card {
         margin-top: var(--xc-space-3);
         padding: var(--xc-space-3);
-    }
-
-    .actionRow > * {
-        max-width: 100%;
-        white-space: normal;
     }
 }

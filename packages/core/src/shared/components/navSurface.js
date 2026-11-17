@@ -8,8 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { createContext, useContext } from 'react';
-import { isNavSurfaceDestination } from '../routeRegistry.js';
+import { createContext } from 'react';
 
 /**
  * The navigation surface the unlocked layout has on screen: 'sidebar' (the
@@ -23,15 +22,5 @@ export const NavSurfaceContext = createContext(
 
 /** The routed view id (the shell's unlockedView), provided by ShellRouteOutlet. */
 export const CurrentRouteContext = createContext(/** @type {string | null} */ (null));
-
-/**
- * True when the visible navigation surface links straight to the current
- * route, so an on-screen Back control would only duplicate it. Outside the
- * unlocked layout (onboarding, lock screen, tests without a shell) both
- * contexts are empty and this is false, which keeps Back.
- */
-export function useRouteIsNavDestination() {
-    const surface = useContext(NavSurfaceContext);
-    const routeId = useContext(CurrentRouteContext);
-    return isNavSurfaceDestination(routeId, surface);
-}
+// Back visibility no longer reads the nav surface: PageHeader follows the
+// shell history through NavHistoryContext (navHistory.js, G06).

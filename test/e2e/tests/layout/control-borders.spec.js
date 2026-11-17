@@ -18,6 +18,7 @@ import {
     dismissIntroCarousel,
     expect,
     gotoSection,
+    openFromSection,
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
@@ -87,15 +88,18 @@ async function checkControls(page, pass) {
 
     await test.step(`${pass} / IconSelect triggers`, async () => {
         await gotoSection(page, 'Messaging');
-        await main.getByRole('button', { name: 'New conversation' }).click();
+        await page.getByRole('button', { name: 'New message', exact: true }).click();
         await expectVisibleEdge('encryption select', main.getByRole('button', { name: /^Encryption:/ }), { surface: true });
+        await openFromSection(main);
         await expectVisibleEdge('compose network field', main.getByRole('button', { name: /^Network:/ }), { surface: true });
     });
 
     await test.step(`${pass} / ChainPicker triggers`, async () => {
         await openPaletteRoute(page, 'Cross-chain swap', /^Cross-chain swap/);
-        await expectVisibleEdge('give network picker', main.getByRole('button', { name: /^Give network:/ }), { surface: true });
-        await expectVisibleEdge('get network picker', main.getByRole('button', { name: /^Get network:/ }), { surface: true });
+        // The swap's one network picker (the give network) sits in the closed
+        // From section; the get network follows the Get token.
+        await openFromSection(main);
+        await expectVisibleEdge('network picker', main.getByRole('button', { name: /^Network:/ }), { surface: true });
         // The same form mounts TokenField, so its Button copy is loaded from here on.
         await expect(main.getByRole('button', { name: /^Give token:/ })).toBeVisible();
     });

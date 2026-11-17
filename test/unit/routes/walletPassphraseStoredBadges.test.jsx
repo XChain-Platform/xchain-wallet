@@ -115,13 +115,23 @@ describe('WalletDetails passphrase row reads passphraseStored', () => {
         return utils;
     }
 
+    // The page opens on Actions; the passphrase row sits on the Details tab.
+    async function openDetailsTab(utils) {
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('tab', { name: 'Details' }));
+            await drainMicrotasks();
+        });
+    }
+
     it('reads "Disabled" when the wallet has no passphrase', async () => {
         const utils = await renderDetails(NO_PASSPHRASE);
+        await openDetailsTab(utils);
         expect(utils.container.textContent).toMatch(/Disabled/);
     });
 
     it('reads "Stored" when the passphrase is captured, with no call to action', async () => {
         const utils = await renderDetails(STORED);
+        await openDetailsTab(utils);
         expect(utils.container.textContent).toMatch(/Stored/);
         expect(utils.container.textContent, 'a stored passphrase needs no further step')
             .not.toMatch(/needs its passphrase/i);
@@ -129,6 +139,7 @@ describe('WalletDetails passphrase row reads passphraseStored', () => {
 
     it('names the one-time capture and points at the unlock screen when still awaited', async () => {
         const utils = await renderDetails(AWAITING_CAPTURE);
+        await openDetailsTab(utils);
         expect(utils.container.textContent).toMatch(/needs its passphrase once/i);
         expect(utils.container.textContent, 'the remedy is the unlock screen, not a field here')
             .toMatch(/unlock screen/i);
@@ -138,7 +149,8 @@ describe('WalletDetails passphrase row reads passphraseStored', () => {
         const onRename = vi.fn();
         const utils = await renderDetails(STORED, { onRename });
 
-        fireEvent.click(utils.getByRole('button', { name: /Rename wallet/ }));
+        // The rename action is now the Edit wallet row of the Actions tab.
+        fireEvent.click(utils.getByRole('button', { name: /Edit wallet/ }));
 
         expect(onRename).toHaveBeenCalledWith(STORED);
     });
@@ -156,14 +168,15 @@ describe('WalletDetails passphrase row reads passphraseStored', () => {
         });
 
         // The exit now asks first; confirming inside the dialog starts the removal.
-        fireEvent.click(utils.getByRole('button', { name: 'Exit demo & wipe' }));
+        fireEvent.click(utils.getByRole('button', { name: /^Exit demo & wipe/ }));
         const dialog = utils.getByRole('dialog');
-        fireEvent.click(within(dialog).getByRole('button', { name: 'Exit demo & wipe' }));
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Exit Demo & Wipe' }));
 
         const hidden = { hidden: true };
         expect(utils.getByRole('button', { name: 'Back to previous screen', ...hidden }).disabled).toBe(true);
-        expect(utils.getByRole('button', { name: /Rename wallet/, ...hidden }).disabled).toBe(true);
-        expect(within(dialog).getByRole('button', { name: 'Exit demo & wipe' }).disabled).toBe(true);
+        // An ActionList row stays focusable while off (G101): aria-disabled, not native disabled.
+        expect(utils.getByRole('button', { name: /Edit wallet/, ...hidden })).toHaveAttribute('aria-disabled', 'true');
+        expect(within(dialog).getByRole('button', { name: 'Exit Demo & Wipe' }).disabled).toBe(true);
 
         finishRemoval();
         await domAct(async () => { await drainMicrotasks(); });

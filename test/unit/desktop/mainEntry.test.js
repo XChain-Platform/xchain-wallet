@@ -160,6 +160,7 @@ const runtime = vi.hoisted(() => ({
 const updater = vi.hoisted(() => ({
     attachUpdater: vi.fn(),
     checkForUpdates: vi.fn(),
+    desktopInstallChannel: vi.fn(() => 'desktop-direct'),
     downloadAndInstall: vi.fn(),
     restartAndInstall: vi.fn(),
 }));
@@ -216,6 +217,7 @@ vi.mock('../../../packages/desktop/main/signerBridgeListener.js', () => ({
 }));
 vi.mock('../../../packages/desktop/main/updater.js', () => ({
     attachUpdater: updater.attachUpdater,
+    desktopInstallChannel: updater.desktopInstallChannel,
 }));
 vi.mock('../../../packages/desktop/main/torRouting.js', () => ({ applyTorRouting: vi.fn(), applyProxyToSession: vi.fn(async () => {}) }));
 vi.mock('../../../packages/desktop/main/runtime.js', () => runtime);
@@ -429,6 +431,7 @@ describe('desktop main entry point', () => {
         };
 
         await expect(handlers.get('xchain:updater-state')(event)).resolves.toBeNull();
+        await expect(handlers.get('xchain:updater-channel')(event)).resolves.toBe('desktop-direct');
         await expect(handlers.get('xchain:updater-install')(event, 'check')).resolves.toEqual({
             ok: false,
             reason: 'desktop: updater unavailable',

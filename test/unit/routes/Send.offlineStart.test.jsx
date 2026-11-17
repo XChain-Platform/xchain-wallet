@@ -143,7 +143,12 @@ describe('Send offline start', () => {
         expect(messaging.getAddressBalances).not.toHaveBeenCalled();
         expect(screen.getByText(/Sending needs a network connection/)).toBeInTheDocument();
         expect(screen.getByText('Balance unavailable')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+        // G130: Send stays enabled offline; the press brings the one offline
+        // notice into view and focuses it instead of composing.
+        expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled();
+        act(() => { screen.getByRole('button', { name: 'Send' }).click(); });
+        expect(document.activeElement?.matches('[data-form-status]')).toBe(true);
+        expect(screen.getAllByText(/Sending needs a network connection/)).toHaveLength(1);
     });
 
     it('carries one offline message: the shell notice and the fee notice step aside', async () => {

@@ -20,6 +20,7 @@ export { GovernancePollWatcher } from './GovernancePollWatcher.js';
 export { DeadlineWatcher, describeWindow } from './DeadlineWatcher.js';
 export { DispenserEscrowWatcher } from './DispenserEscrowWatcher.js';
 export { CoinpayAutopayWatcher, pendingTxReferencesMatch } from './CoinpayAutopayWatcher.js';
+export { createLockedAutopay } from '../market/autopaySession.js';
 export { getActiveAddresses } from './getActiveAddresses.js';
 export {
     SOUND_NONE,

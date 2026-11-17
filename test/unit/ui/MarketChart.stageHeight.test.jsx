@@ -55,7 +55,8 @@ function readLayout(container) {
         stage,
         height: stage.style.height,
         cardChildren: card.children.length,
-        hasHeader: Boolean(card.querySelector('select[aria-label="Chart timeframe"]')),
+        // The timeframe picker is the shared themed dropdown trigger.
+        hasHeader: Boolean(card.querySelector('[data-xc-select][aria-label="Chart timeframe"]')),
     };
 }
 

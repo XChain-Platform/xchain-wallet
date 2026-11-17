@@ -23,6 +23,7 @@ import {
     applySurfaceStateEvent,
     attachSurfaceStateListener,
     createSurfaceStateBroadcaster,
+    SURFACE_ID,
     SURFACE_STATE_STORAGE_KEY,
 } from '../../../packages/extension/src/shared/surfaceStateSync.js';
 
@@ -228,6 +229,25 @@ describe('wallet removal reaches every open surface', () => {
         await events.publish('wallets', { change: 'removed', walletId: 'w2' });
         expect(popup.walletRemoved).toHaveBeenCalledWith('w2');
         expect(sidePanel.walletRemoved).toHaveBeenCalledWith('w2');
+    });
+
+    it('lets the window that removed the wallet skip its own echo while another window still reacts', async () => {
+        const bus = sessionStorageBus();
+        const remover = openSurface(bus);
+        const events = createSurfaceStateBroadcaster({ storageArea: bus.storageArea, runtime: {}, now: () => 1 });
+        // This test realm is the remover: its request carried its own surface id.
+        await events.publish('wallets', { change: 'removed', walletId: 'w2', originSurface: SURFACE_ID });
+        expect(remover.walletRemoved).not.toHaveBeenCalled();
+        // A removal asked for by a different window still reaches this one.
+        await events.publish('wallets', { change: 'removed', walletId: 'w3', originSurface: 'another-window' });
+        expect(remover.walletRemoved).toHaveBeenCalledWith('w3');
+    });
+
+    it('tags the removal broadcast with the requesting surface', async () => {
+        const { host, surfaceStateEvents } = makeHost();
+        const response = await host.handle({ type: 'wallet.remove', request: { walletId: 'w2', surfaceId: 's1' } });
+        expect(response.ok, JSON.stringify(response.error ?? {})).toBe(true);
+        expect(surfaceStateEvents.publish).toHaveBeenCalledWith('wallets', { change: 'removed', walletId: 'w2', originSurface: 's1' });
     });
 
     it('ignores a removal event with no wallet id', async () => {

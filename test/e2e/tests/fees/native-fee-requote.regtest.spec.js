@@ -35,19 +35,19 @@
 // depends on, judged against the fee the hub actually quotes. Nothing is
 // written to the venue, so there is nothing to restore.
 
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openIssueSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     encoderRpc,
     expectConfirmModal,
     EXPLORER_URL,
     fundAddress,
+    readIssueSource,
     minerRpc,
     mintXchain,
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
     REGTEST_TICKER,
-    selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
     waitForTokenBalance,
@@ -138,6 +138,8 @@ function feeToggle(scope) {
 }
 
 async function enableNativeFee(scope) {
+    // The switch sits in the Fees section, closed until opened.
+    await openIssueSection(scope, 'Speed and Fees');
     const toggle = feeToggle(scope);
     if (REGTEST_COIN === 'RBTC') {
         await expect(toggle, 'Bitcoin did not offer its native-fee choice')
@@ -168,8 +170,7 @@ test.describe(`§11.5: the protocol fee moving on ${REGTEST_CHAIN_LABEL}`, () =>
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(main);
-            source = await main.getByLabel('From').inputValue();
+            source = await readIssueSource(main);
             expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
             await fundAddress(source, FUNDING);
@@ -192,14 +193,14 @@ test.describe(`§11.5: the protocol fee moving on ${REGTEST_CHAIN_LABEL}`, () =>
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(main);
+            await readIssueSource(main);
             await main.getByLabel('Ticker').fill(TICK);
-            await main.getByLabel('Supply', { exact: true }).fill(SUPPLY);
+            await main.getByLabel('Max supply', { exact: true }).fill(SUPPLY);
             await enableNativeFee(main);
 
             const password = main.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-            await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+            await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
 
             await expectConfirmModal(page, 'this action', 120_000);
             // Approve must be LIVE first: if it were already blocked, the refusal

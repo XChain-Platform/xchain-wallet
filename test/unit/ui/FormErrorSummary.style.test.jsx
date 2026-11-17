@@ -25,7 +25,31 @@ describe('FormErrorSummary presentation', () => {
         for (const name of message.className.split(/\s+/).filter(Boolean)) {
             expect(summary).toHaveClass(name);
         }
-        expect(summary.querySelector('[aria-hidden="true"]')).toHaveTextContent('✕');
+        // The danger icon, a circled !, never an X (an X means dismiss), and
+        // no close control: the notice clears itself.
+        expect(summary).toHaveAttribute('data-tone', 'danger');
+        expect(summary.querySelector('[aria-hidden="true"] svg')).not.toBeNull();
+        expect(summary.querySelector('[aria-hidden="true"]')).not.toHaveTextContent('✕');
+        expect(summary.querySelector('[data-notice-dismiss]')).toBeNull();
+    });
+
+    it('lists the problems in plain text under a count title, with no links', () => {
+        render(
+            <FormErrorSummary
+                errors={[
+                    { id: 'pw', label: 'Password', message: 'Password must be at least 8 characters.' },
+                    { id: 'confirm', message: 'Passwords do not match.' },
+                ]}
+                focusKey={1}
+            />,
+        );
+        const summary = screen.getByRole('alert', { name: 'Form errors' });
+        expect(summary.querySelector('a')).toBeNull();
+        expect(summary).toHaveTextContent('Fix 2 things to continue');
+        expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+            'Password must be at least 8 characters.',
+            'Passwords do not match.',
+        ]);
     });
 
     it('takes its colours, border and radius only from StatusMessage', () => {

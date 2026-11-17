@@ -7,7 +7,7 @@
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 import { setLocale } from '../../../packages/core/src/i18n/index.js';
 
@@ -25,12 +25,12 @@ vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
     useMessaging: () => ({ messaging }),
 }));
 
-const { WalletModeSection } = await import(
-    '../../../packages/core/src/shared/components/settings/WalletModeSection.jsx'
+// §20: the mode is chosen per wallet at create, import or pair; its field
+// replaced the Settings section and carries the same dictionary rule.
+const { WalletModeField } = await import(
+    '../../../packages/core/src/shared/components/WalletModeField.jsx'
 );
-const { NetworkEndpointsSection } = await import(
-    '../../../packages/core/src/shared/components/settings/NetworkEndpointsSection.jsx'
-);
+const { EndpointsHarness: NetworkEndpointsSection } = await import('./networkRowHarness.jsx');
 
 beforeEach(async () => {
     messaging = {
@@ -46,11 +46,14 @@ afterEach(async () => {
 
 describe('settings copy goes through the dictionary', () => {
     it('wallet mode labels and hints are translated', () => {
-        render(<WalletModeSection />);
-        for (const text of ['Normal', 'Watcher (watch-only)', 'Signer (air-gapped)']) {
-            expect(screen.getByText(new RegExp(`⟦${text.replace(/[()]/g, '\\$&')}⟧`))).toBeTruthy();
+        const { container } = render(<WalletModeField value="full" onChange={() => {}} />);
+        // The modes are the themed dropdown's options, listed once it opens.
+        fireEvent.click(container.querySelector('button[aria-haspopup="listbox"]'));
+        for (const text of ['Normal', 'Signs on another phone', 'Signer for another phone']) {
+            // The picked mode shows in the trigger as well as the open list.
+            expect(screen.getAllByText(new RegExp(`⟦${text}⟧`)).length).toBeGreaterThan(0);
         }
-        expect(screen.getByText(/⟦Sign and broadcast transactions on this device/)).toBeTruthy();
+        expect(screen.getAllByText(/⟦Sign and send transactions on this device/).length).toBeGreaterThan(0);
     });
 
     it('the registry refresh status line is translated', async () => {

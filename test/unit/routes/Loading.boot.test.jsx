@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Slow and failed boots on the web shell (the shell the phone builds run)
-// and on the desktop renderer: each one gives way from the loading dots to a
+// and on the desktop renderer: each one gives way from the fading logo to a
 // screen the user can act on, and a retry starts exactly one new boot.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -42,7 +42,7 @@ import {
 } from '../../../packages/desktop/renderer/App.jsx';
 
 const WELCOME = { name: 'XChain Wallet' };
-const FAILED = { name: /wallet couldn't start/i };
+const FAILED = { name: 'Wallet Unavailable' };
 
 function acceptLicense() {
     localStorage.setItem('xc:licenseAcceptedAt', '2026-01-01T00:00:00.000Z');
@@ -50,12 +50,9 @@ function acceptLicense() {
     localStorage.setItem('xc:onboardingExplainerSeenAt', '2026-01-01T00:00:00.000Z');
 }
 
-// The loading dots are a polite live region holding exactly three empty spans.
+// The loading screen is the fading logo with an accessible status label.
 function loadingDots() {
-    return [...document.querySelectorAll('div[aria-live="polite"]')].find((node) => (
-        node.children.length === 3
-        && [...node.children].every((child) => child.tagName === 'SPAN' && child.textContent === '')
-    )) ?? null;
+    return document.querySelector('[role="status"][aria-label="Opening your wallet"]');
 }
 
 function installDesktopBridge(loadSession) {
@@ -80,14 +77,33 @@ afterEach(() => {
 });
 
 describe('Loading screen on its own', () => {
-    it('shows only the loading dots and no retry while a boot is pending', () => {
+    it('shows only the logo and a progress bar, with no header, while a boot is pending', () => {
         render(
             <MessagingProvider shell="web" messaging={{}}>
                 <Loading />
             </MessagingProvider>,
         );
         expect(loadingDots()).not.toBeNull();
+        expect(screen.getByRole('progressbar', { name: 'Opening your wallet' })).toBeInTheDocument();
+        expect(screen.queryByRole('banner')).toBeNull();
+        expect(document.querySelector('header')).toBeNull();
+        expect(screen.queryByRole('heading')).toBeNull();
+        expect(screen.queryByText('Opening Wallet')).toBeNull();
+        expect(screen.queryByText('XChain')).toBeNull();
         expect(screen.queryByRole('button', { name: /try again/i })).toBeNull();
+    });
+
+    it('labels the loading logo and holds exactly one progress bar', () => {
+        render(
+            <MessagingProvider shell="web" messaging={{}}>
+                <Loading />
+            </MessagingProvider>,
+        );
+        const status = screen.getByRole('status', { name: 'Opening your wallet' });
+        expect(status.querySelector('img')).not.toBeNull();
+        expect(status.querySelector('img').getAttribute('src')).toMatch(/^data:image\/png|xchain-boot-logo/);
+        expect(status.children).toHaveLength(2);
+        expect(screen.getAllByRole('progressbar')).toHaveLength(1);
     });
 
     it('reloads the page once when Try again is chosen without a retry action', () => {
@@ -229,7 +245,9 @@ describe('web shell boot', () => {
         await act(async () => { settleRetry({ hasWallet: true, hasSession: false, state: 'locked' }); });
         await waitFor(() => expect(loadingDots()).toBeNull());
         expect(screen.queryByRole('heading', FAILED)).toBeNull();
-        expect(screen.queryByRole('heading', WELCOME)).toBeNull();
+        // The unlock screen now carries the product name as its own heading, so
+        // the onboarding welcome is told apart by its header marker instead.
+        expect(document.querySelector('[data-onboarding-welcome-header]')).toBeNull();
         expect(document.querySelector('input[type="password"]')).not.toBeNull();
     });
 

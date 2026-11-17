@@ -16,7 +16,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { AdvancedActionsForm, fieldLabel } from '../../../packages/core/src/shared/routes/AdvancedActionsForm.jsx';
+import { selectOption, selectOptionValues } from '../../helpers/selectOption.js';
 
 const BTC = 'bitcoin-mainnet';
 const FROM = {
@@ -27,13 +29,16 @@ const FROM = {
     source: 'hd',
 };
 
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); resetWalletModes(); });
 
 function sleepMessaging() {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode: 'watcher' }], activeWalletId: 'w' });
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [BTC]: [FROM] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [BTC]: FROM }),
-        getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher', activeNetwork: 'mainnet' }),
+        getSettings: vi.fn().mockResolvedValue({ activeNetwork: 'mainnet' }),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'w', name: 'W', walletMode: 'watcher' }]),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         listActions: vi.fn().mockResolvedValue(['SLEEP']),
         getActionFormats: vi.fn().mockResolvedValue({ 0: 'VERSION|RESUME_BLOCK|MEMO' }),
@@ -57,9 +62,9 @@ describe('Advanced action field labels', () => {
                 <AdvancedActionsForm walletId="w" onBack={() => {}} />
             </MessagingProvider>,
         );
-        await waitFor(() => expect(document.querySelector('option[value="SLEEP"]')).toBeTruthy());
-        const picker = document.querySelector('option[value="SLEEP"]').closest('select');
-        fireEvent.change(picker, { target: { value: 'SLEEP' } });
+        const picker = await screen.findByRole('combobox', { name: 'Action' });
+        await waitFor(() => expect(selectOptionValues(picker)).toContain('SLEEP'));
+        selectOption(picker, 'SLEEP');
 
         expect(await screen.findByLabelText('Resume block')).toBeInTheDocument();
         expect(screen.queryByLabelText('RESUME_BLOCK')).not.toBeInTheDocument();

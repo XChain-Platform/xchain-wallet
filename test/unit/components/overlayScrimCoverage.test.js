@@ -56,15 +56,15 @@ describe('popover header', () => {
     });
 });
 
-describe('contact add-address dialog', () => {
-    it('uses the shared dialog scrim, padding, centred title and an outlined Cancel', () => {
+describe('contact add address', () => {
+    // The add-address dialog became the Add Address page (operator pick
+    // 2026-11-15; nothing is edited in a modal, G104), so Contacts keeps no
+    // scrim of its own to cover the viewport.
+    it('is a page, not a modal with its own scrim', () => {
         const css = readFileSync('packages/core/src/shared/routes/ContactsList.module.css', 'utf8');
-        const block = (selector) => new RegExp(`\\n${selector.replace('.', '\\.')}\\s*\\{([^}]*)\\}`).exec(css)?.[1] || '';
-        expect(block('.modalOverlay')).toMatch(/z-index:\s*var\(--xc-z-modal\)/);
-        expect(block('.modalOverlay')).toMatch(/background:\s*var\(--xc-overlay,/);
-        expect(block('.modalCard')).toMatch(/padding:\s*var\(--xc-space-4\)/);
-        expect(block('.modalTitle')).toMatch(/text-align:\s*center/);
+        expect(css).not.toMatch(/\.modalOverlay\b/);
         const jsx = readFileSync('packages/core/src/shared/routes/ContactsList.jsx', 'utf8');
-        expect(jsx).toMatch(/variant="secondary" onClick=\{\(\) => setAddAddrOpen\(false\)\}>Cancel</);
+        expect(jsx).not.toMatch(/aria-modal="true"/);
+        expect(jsx).toMatch(/'add-address': 'Add Address'/);
     });
 });

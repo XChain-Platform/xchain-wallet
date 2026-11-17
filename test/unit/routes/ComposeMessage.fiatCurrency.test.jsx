@@ -52,7 +52,9 @@ describe('ComposeMessage fiat currency', () => {
             </MessagingProvider>,
         );
 
-        expect(await screen.findByText(/€[0-9,.]+/)).toBeInTheDocument();
+        // The fee shows in euros in both the Fees section summary and the
+        // slider readout.
+        expect((await screen.findAllByText(/€[0-9,.]+/)).length).toBeGreaterThan(0);
         expect(document.body.textContent).not.toContain('$');
     });
 });

@@ -53,13 +53,13 @@ describe('ObligationsView offline', () => {
         expect(screen.getAllByText("You're offline")).toHaveLength(1);
         expect(screen.queryByText(/Scanning for payments due/)).toBeNull();
         expect(screen.queryByText('No payments due')).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Refresh payments' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Refresh Payments' })).toBeNull();
         expect(state.scanOptions.offline).toBe(true);
     });
 
     it('rechecks the connection from Try again', () => {
         renderView();
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         expect(state.recheck).toHaveBeenCalledTimes(1);
     });
 

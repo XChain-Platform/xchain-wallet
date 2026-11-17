@@ -137,7 +137,8 @@ describe('History shows unconfirmed transactions', () => {
         // real one through it.
         const { view } = mountHistory({ mempool: [mempoolRow()] });
         await waitFor(() => expect(screen.getByText('Pending')).toBeTruthy());
-        expect(view.container.querySelector(`[title="${THEIRS}"]`)).toBeTruthy();
+        // The row names no counterparty address; the detail page does.
+        expect(view.container.querySelector(`[title="${THEIRS}"]`)).toBeNull();
     });
 
     it('does not drop the row for lacking an action index, which no pending row has', async () => {
@@ -168,9 +169,8 @@ describe('History shows unconfirmed transactions', () => {
             }],
         });
         await waitFor(() => expect(screen.getByText('Pending')).toBeTruthy());
-        // The row identifies a transaction by its counterparty, the same way it
-        // does for a confirmed one; on our own send that is the recipient.
-        expect(view.container.querySelector(`[title="${THEIRS}"]`)).toBeTruthy();
+        // The row shows no recipient address, as for a confirmed one.
+        expect(view.container.querySelector(`[title="${THEIRS}"]`)).toBeNull();
     });
 
     it('upgrades in place rather than showing the transaction twice once it confirms', async () => {

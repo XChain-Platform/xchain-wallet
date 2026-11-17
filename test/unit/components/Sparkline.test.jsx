@@ -10,6 +10,7 @@ import React from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
 import {
+    formatCompactChartValue,
     Sparkline,
     describeChartSeries,
     synthesizeTokenChart,
@@ -53,6 +54,49 @@ describe('Sparkline', () => {
         expect(screen.getByRole('img')).toHaveAccessibleName(
             'Portfolio chart. Range 24h. Values range from $9.00 to $12.00. Start $12.00. End $9.00. Change -$3.00 (-25.00%).',
         );
+    });
+
+    it('shows compact high, middle and low labels with matching guides', () => {
+        const format = (value) => formatCompactChartValue(value, { locale: 'en-US', currency: 'USD' });
+        const { container } = render(
+            <Sparkline
+                series={[2_600_000, 3_200_000, 2_800_000]}
+                rangeLabel="1W"
+                showScale
+                formatValue={format}
+                formatScaleValue={format}
+            />,
+        );
+
+        expect([...container.querySelectorAll('[data-chart-scale]')].map((node) => node.textContent))
+            .toEqual(['$3.2M', '$2.9M', '$2.6M']);
+        expect([...container.querySelectorAll('[data-chart-guide]')].map((node) => node.getAttribute('data-chart-guide')))
+            .toEqual(['high', 'middle', 'low']);
+        expect(screen.getByRole('img')).toHaveAccessibleName(/Range high \$3\.2M, low \$2\.6M/);
+        expect(formatCompactChartValue(3_200_000, { locale: 'de-DE', currency: 'EUR' }))
+            .toMatch(/^3,2.*€$/);
+    });
+
+    it('updates the scale unit and collapses a flat range to one label', () => {
+        const fiat = (value) => formatCompactChartValue(value, { locale: 'en-US', currency: 'USD' });
+        const coin = (value) => formatCompactChartValue(value, { locale: 'en-US', unit: 'BTC' });
+        const { container, rerender } = render(
+            <Sparkline series={[2_600_000, 3_200_000]} showScale formatValue={fiat} formatScaleValue={fiat} />,
+        );
+
+        rerender(<Sparkline series={[2.6, 3.2]} showScale formatValue={coin} formatScaleValue={coin} />);
+        expect([...container.querySelectorAll('[data-chart-scale]')].map((node) => node.textContent))
+            .toEqual(['3.2 BTC', '2.9 BTC', '2.6 BTC']);
+
+        rerender(<Sparkline series={[7, 7, 7]} showScale formatValue={coin} formatScaleValue={coin} />);
+        expect(container.querySelectorAll('[data-chart-scale]')).toHaveLength(1);
+        expect(container.querySelector('[data-chart-scale="flat"]')).toHaveTextContent('7 BTC');
+    });
+
+    it('shows no scale labels when the series is empty', () => {
+        const { container } = render(<Sparkline series={[]} showScale />);
+        expect(container.querySelector('[data-chart-scale]')).toBeNull();
+        expect(container.firstChild).toBeNull();
     });
 
     it('uses semantic theme tokens for rising, falling, and flat series', () => {

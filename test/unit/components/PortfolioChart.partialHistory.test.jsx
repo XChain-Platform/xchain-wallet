@@ -122,7 +122,9 @@ describe('PortfolioChart partial daily history retries', () => {
         await selectDailyRange();
 
         expect(screen.getByText('Leaves out Bitcoin: no price history for this range.')).toBeInTheDocument();
-        expect(screen.getByRole('img')).toHaveAccessibleName(/End \$100\.00 USD/);
+        // Bitcoin sits out of the earlier points only: the line still ends on
+        // the whole total the headline shows (operator ruling 2026-11-16).
+        expect(screen.getByRole('img')).toHaveAccessibleName(/Start \$[0-9.]+ USD\. End \$40,100\.00 USD/);
 
         await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
 

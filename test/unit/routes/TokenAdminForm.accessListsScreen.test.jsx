@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { TokenAdminForm } from '../../../packages/core/src/shared/routes/TokenAdminForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
@@ -17,7 +17,7 @@ const SOURCE = Object.freeze({
     signerId: 'signer-1',
 });
 
-function mountAccessLists() {
+function mountAccessLists(record = {}) {
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [SOURCE] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: SOURCE.id } }),
@@ -26,6 +26,7 @@ function mountAccessLists() {
             allowList: '412',
             blockList: '413',
             creator: SOURCE.address,
+            ...record,
         }),
         getListByActionIndex: vi.fn().mockResolvedValue({ members: [] }),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
@@ -59,30 +60,58 @@ afterEach(() => {
 });
 
 describe('TokenAdminForm access-lists screen', () => {
-    it('puts guidance in named help tips and gives every section button an icon', async () => {
+    it('shows Allow list and Block list as picker fields like Token, with no grey buttons', async () => {
         mountAccessLists();
 
-        const allowSection = await screen.findByRole('region', { name: 'Allow-list' });
-        const blockSection = screen.getByRole('region', { name: 'Block-list' });
-        await waitFor(() => expect(within(allowSection).getByText('List #412')).toBeTruthy());
-
-        expect(screen.queryByText(/^Restrict who can interact/)).toBeNull();
-        expect(screen.queryByText(/^A list can be replaced here/)).toBeNull();
-        expect(screen.queryByText(/^Choose Remove list to detach/)).toBeNull();
-        const allowTip = within(allowSection).getByRole('button', { name: 'About the allow-list' });
-        const blockTip = within(blockSection).getByRole('button', { name: 'About the block-list' });
-        expect(allowTip).toHaveAccessibleDescription(/Only members of this allow-list/);
-        expect(blockTip).toHaveAccessibleDescription(/Members of this block-list are denied/);
-
-        const actionButtons = [
-            within(allowSection).getByRole('button', { name: 'Change allow-list' }),
-            within(allowSection).getByRole('button', { name: 'Remove allow-list' }),
-            within(blockSection).getByRole('button', { name: 'Change block-list' }),
-            within(blockSection).getByRole('button', { name: 'Use a shared block list' }),
-            within(blockSection).getByRole('button', { name: 'Remove block-list' }),
-        ];
-        for (const button of actionButtons) {
-            expect(button.querySelector('svg')).toBeTruthy();
+        // Each list is a field-shaped button named by its label and value,
+        // with the list icon inside it, exactly as the Token field above.
+        const allowField = await screen.findByRole('button', { name: /^Allow list: List #412/ });
+        const blockField = screen.getByRole('button', { name: /^Block list: List #413/ });
+        const tokenField = screen.getByRole('button', { name: /^Token:/ });
+        // Same control kind as Token, matched by role and label; the Token
+        // field's own class list gained a lead-icon class from the shared
+        // field-icon geometry, so class names are not compared.
+        for (const field of [allowField, blockField]) {
+            expect(field.tagName).toBe(tokenField.tagName);
+            expect(field.getAttribute('type')).toBe(tokenField.getAttribute('type'));
         }
+        expect(allowField.querySelector('svg')).toBeTruthy();
+        expect(blockField.querySelector('svg')).toBeTruthy();
+        expect(screen.queryByRole('region', { name: 'Allow-list' })).toBeNull();
+        expect(screen.queryByRole('region', { name: 'Block-list' })).toBeNull();
+
+        // Help sits in each label's ? tip.
+        const allowTip = screen.getByRole('button', { name: 'About Allow list' });
+        const blockTip = screen.getByRole('button', { name: 'About Block list' });
+        expect(allowTip).toHaveAccessibleDescription(/Only members of this allow list/);
+        expect(blockTip).toHaveAccessibleDescription(/Members of this block list are denied/);
+
+        // The old in-form buttons are gone; shared lists live in the picker.
+        for (const name of [
+            /Choose Allow-List/, /Change Allow-List/, /Choose Block-List/, /Change Block-List/,
+            /Use a Shared Block List/,
+        ]) {
+            expect(screen.queryByRole('button', { name })).toBeNull();
+        }
+        // Regtest can detach, so each bound field carries its clear action.
+        expect(screen.getByRole('button', { name: 'Remove allow-list' }).querySelector('svg')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Remove block-list' }).querySelector('svg')).toBeTruthy();
+        expect(screen.queryByText('Remove List')).toBeNull();
+    });
+
+    it('opens the list picker from each field and shows the pick in it', async () => {
+        mountAccessLists();
+        fireEvent.click(await screen.findByRole('button', { name: /^Block list:/ }));
+        expect(await screen.findByRole('heading', { name: 'Select Block List' })).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+        fireEvent.click(await screen.findByRole('button', { name: /^Allow list:/ }));
+        expect(await screen.findByRole('heading', { name: 'Select Allow List' })).toBeTruthy();
+    });
+
+    it('shows None set for an unbound list and None after a clear', async () => {
+        mountAccessLists({ allowList: null });
+        expect(await screen.findByRole('button', { name: 'Allow list: None set' })).toBeTruthy();
+        fireEvent.click(await screen.findByRole('button', { name: 'Remove block-list' }));
+        expect(screen.getByRole('button', { name: 'Block list: None after this update' })).toBeTruthy();
     });
 });

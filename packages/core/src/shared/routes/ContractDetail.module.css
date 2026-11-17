@@ -1,0 +1,116 @@
+/* Contract detail (screen walk 2026-11-14, layout 3): the identity card's own
+   lines (its frame, mark and badge are the oracle record's G16 card), the
+   panels under the Actions | Details | Activity toggle, and the function
+   rows' name and Read only or Writes tag. */
+
+/* The address under the name, with its copy button beside it. */
+.identityAddressRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: var(--xc-space-1);
+}
+
+.identityMono {
+    font-family: var(--xc-font-mono);
+}
+
+/* The copy control stays a real button, drawn small and muted. */
+.heroCopy {
+    display: inline-flex;
+}
+
+.heroCopy button {
+    --xc-icon-size: 14px;
+    --xc-button-height: 24px;
+    min-inline-size: 24px;
+    min-block-size: 24px;
+    margin-block: calc(-1 * var(--xc-space-1));
+    color: var(--xc-text-muted);
+}
+
+.heroCopy button:hover:not(:disabled) {
+    color: var(--xc-text);
+}
+
+/* Under a divider: what the contract holds, then publisher, block and calls. */
+.identityFoot {
+    display: flex;
+    flex-direction: column;
+    align-self: stretch;
+    gap: var(--xc-space-1);
+    margin-top: var(--xc-space-1);
+    padding-top: var(--xc-space-2);
+    border-top: 1px solid var(--xc-border-subtle, rgba(129, 139, 155, 0.35));
+}
+
+.identityHoldings {
+    margin: 0;
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.identityPublished {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0 var(--xc-space-1);
+}
+
+/* The publisher's AddressText in the muted line: the line's own colour. */
+.identityOwner[aria-label] {
+    color: inherit;
+}
+
+.panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.actionNote {
+    margin: 0;
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+}
+
+/* A function row's title: the function's own name, in code type. */
+.fnName {
+    font-family: var(--xc-font-mono);
+    overflow-wrap: anywhere;
+}
+
+.fnTag {
+    flex: 0 0 auto;
+    padding: 0 var(--xc-space-2);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: 999px;
+    background: var(--xc-bg-muted);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.fnTagRead {
+    color: var(--xc-success, #14b86c);
+    border-color: color-mix(in srgb, var(--xc-success, #14b86c) 45%, transparent);
+}
+
+/* A long value (a hash, a constructor argument) wraps anywhere. */
+.mono {
+    font-family: var(--xc-font-mono);
+    overflow-wrap: anywhere;
+}
+
+/* One holding per line in the Holdings fact. */
+.factLines {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+}

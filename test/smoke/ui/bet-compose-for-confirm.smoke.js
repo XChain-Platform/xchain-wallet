@@ -112,7 +112,8 @@ assert.match(actionsSrc, /actionData: \{ action: 'BET', params \}/,
 
 {
     const src = read('packages', 'core', 'src', 'shared', 'routes', 'BetFeedDetail.jsx');
-    assert.match(src, /messaging\.composeBetForConfirm\(\{/,
+    // G98: the Advanced section's choices wrap the compose request.
+    assert.match(src, /messaging\.composeBetForConfirm\(withAdvancedOptions\(\{/,
         'BetFeedDetail composes through the BET builder route');
     assert.ok(src.includes("builder: 'placeBetParams'"), 'BetFeedDetail names the placeBetParams builder');
 
@@ -153,23 +154,34 @@ assert.match(actionsSrc, /actionData: \{ action: 'BET', params \}/,
 
     // Resolve is legal only between the deadline and the end of the refund
     // window, so the button is offered only where the chain would accept it
-    // rather than letting the user pay a fee for a rejected transaction.
-    assert.match(src, /canResolve\s*=\s*f\.feed_status === 'closed'/,
+    // rather than letting the user pay a fee for a rejected transaction. The
+    // rule is one exported function the console and the market page's owner
+    // Actions tab both ask.
+    assert.match(src, /canResolve:\s*status === 'closed'/,
         'OracleConsole only offers resolve once betting has closed');
-    assert.match(src, /Number\(f\.expire_at\) > nowSec/,
+    assert.match(src, /Number\(feed\?\.expire_at\) > nowSec/,
         'OracleConsole only offers resolve before the refund window ends');
+    const detailSrc = read('packages', 'core', 'src', 'shared', 'routes', 'BetFeedDetail.jsx');
+    assert.match(detailSrc, /oracleActionLegality\(ownerFeed, oracle\.nowSec\)/,
+        'the market page reuses the console legality rule rather than re-deriving it');
 }
 
-// --- 7. MyBets aggregates across every address ------------------------
+// --- 7. My bets aggregates across every address ------------------------
 
 {
-    const src = read('packages', 'core', 'src', 'shared', 'routes', 'MyBets.jsx');
+    // My bets is a Bet Markets tab (the All list narrowed to the markets bet
+    // in): BetFeedsList reads the wallet's addresses once and the
+    // useWalletBets loader in BetMyBetsPanel.jsx asks for each address's bets.
+    const list = read('packages', 'core', 'src', 'shared', 'routes', 'BetFeedsList.jsx');
+    const panel = read('packages', 'core', 'src', 'shared', 'components', 'BetMyBetsPanel.jsx');
     // Address-aggregated, not active-address-scoped: bets are keyed to the
     // address that placed them and payouts credit that same address, so a
     // per-address view would quietly hide money.
-    assert.match(src, /getAddressesByChain\(walletId, accountId\)/,
-        'MyBets enumerates every address rather than the active one');
-    assert.match(src, /type: 'address'/, 'MyBets queries bets by bettor address');
+    assert.match(list, /getAddressesByChain\(walletId\)/,
+        'My bets enumerates every address rather than the active one');
+    assert.match(panel, /for \(const \[chainId, addrs\] of Object\.entries\(chains\)\)/,
+        'My bets reads every address on every chain');
+    assert.match(panel, /type: 'address'/, 'My bets queries bets by bettor address');
 }
 
 // --- 8. the confirm screen decodes BET rather than falling back --------
@@ -183,7 +195,8 @@ assert.match(decoderSrc, /function decodeBet\(/, 'the BET decoder exists');
 
 {
     const src = read('packages', 'core', 'src', 'shared', 'routes', 'CreateBetFeedForm.jsx');
-    assert.match(src, /messaging\.composeBetForConfirm\(\{/,
+    // G98: the Advanced section's choices wrap the compose request.
+    assert.match(src, /messaging\.composeBetForConfirm\(withAdvancedOptions\(\{/,
         'CreateBetFeedForm composes through the BET builder route');
     assert.ok(src.includes("builder: 'createMarketParams'"),
         'CreateBetFeedForm names the createMarketParams builder');
@@ -220,7 +233,8 @@ assert.match(decoderSrc, /function decodeBet\(/, 'the BET decoder exists');
 // submit an empty string.
 for (const route of ['BetFeedDetail', 'OracleConsole', 'CreateBetFeedForm']) {
     const src = read('packages', 'core', 'src', 'shared', 'routes', `${route}.jsx`);
-    assert.match(src, /import \{ ActionConfirmScreen \}/, `${route} imports the confirm page`);
+    // A route may also take the confirm screen's warnings card from it.
+    assert.match(src, /import \{ ActionConfirmScreen(?:, ActionWarningsCard)? \}/, `${route} imports the confirm page`);
     assert.match(src, /if \(actionConfirm\.open\)/, `${route} renders the confirm page it opens`);
     assert.match(src, /<ActionConfirmScreen/, `${route} renders ActionConfirmScreen`);
     assert.match(src, /passwordRef: passwordValueRef/,
@@ -237,13 +251,18 @@ for (const [shell, ...p] of [
     ['desktop', 'packages', 'desktop', 'renderer', 'App.jsx'],
 ]) {
     const src = read(...p);
-    for (const c of ['BetFeedsList', 'BetFeedDetail', 'CreateBetFeedForm', 'MyBets', 'OracleConsole', 'OracleRecord']) {
+    // My bets and My markets (the oracle console) are BetFeedsList tabs that
+    // BetFeedsList draws itself, so neither has a component of its own here.
+    for (const c of ['BetFeedsList', 'BetFeedDetail', 'CreateBetFeedForm', 'OracleRecord']) {
         // Startup code split: a route may load lazily on first open.
         assert.ok(src.includes(`import { ${c} }`) || new RegExp(`const\\s+${c}\\s*=\\s*lazyRoute\\(\\s*\\(\\)\\s*=>\\s*import\\([^)]*${c}\\.jsx`).test(src), `${shell}: imports ${c}`);
         assert.ok(src.includes(`<${c}`), `${shell}: renders ${c}`);
     }
-    for (const view of ['bet-markets', 'bet-market-detail', 'bet-create', 'my-bets', 'bet-oracle-console', 'bet-oracle-record']) {
+    for (const view of ['bet-markets', 'bet-market-detail', 'bet-create', 'bet-oracle-record']) {
         assert.ok(src.includes(`'${view}'`), `${shell}: routes the ${view} view`);
+    }
+    for (const retired of ['my-bets', 'bet-oracle-console']) {
+        assert.ok(!src.includes(`'${retired}'`), `${shell}: no longer routes the retired ${retired} view`);
     }
     // Reachable from the menu, not merely present in the bundle.
     assert.match(src, /onBetting: \(\) => setUnlockedView\('bet-markets'\)/,

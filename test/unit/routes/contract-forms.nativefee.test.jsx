@@ -69,8 +69,10 @@ function harness(chainId, overrides = {}) {
         signerReady: () => Promise.resolve({ ready: false }),
         getSignerStatus: () => Promise.resolve({ status: 'locked' }),
         preflight: () => Promise.resolve({ verdict: 'pass', findings: [], unverified: [] }),
-        // No published abi: the EXECUTE form falls back to its manual lane.
-        getContractByActionIndex: () => Promise.resolve({}),
+        // EXECUTE picks its method from the declared list.
+        getContractByActionIndex: () => Promise.resolve({
+            data: { abi: { version: 1, methods: { ping: { params: [] } } } },
+        }),
         listContractTemplates: () => Promise.resolve({ templates: [], patterns: [] }),
         listPendingDeploys: () => Promise.resolve([]),
         planDeploy: () => Promise.resolve({ single: true, totalChunks: 0, codeHash: 'ab' }),
@@ -119,10 +121,8 @@ async function mountExecute(messaging, chainId) {
         utils = mount(ExecuteContractForm, messaging, { chainId, contractActionIndex: '2308' });
         await drain();
     });
-    await domAct(async () => {
-        fireEvent.change(utils.getByLabelText('Method'), { target: { value: 'ping' } });
-        await drain();
-    });
+    // The declared list's only method, ping, is preselected.
+    expect(utils.getByLabelText('Method')).toHaveValue('ping');
     return utils;
 }
 
@@ -162,7 +162,8 @@ describe('EXECUTE carries the native-coin fee lane', () => {
         const utils = await mountExecute(messaging, LTC_CHAIN);
 
         expect(utils.container.textContent).toContain('Priced at review');
-        const feeSwitch = utils.getByLabelText(/Pay protocol fee in LTC/);
+        // Anchored: the row's help tip is labelled "About Pay protocol fee in …".
+        const feeSwitch = utils.getByLabelText(/^Pay protocol fee in LTC/);
         expect(feeSwitch.checked).toBe(true);
         expect(feeSwitch.disabled).toBe(true);
         // The caveat rides along on the mandatory variant too: there is no
@@ -184,7 +185,7 @@ describe('EXECUTE carries the native-coin fee lane', () => {
         const off = harness(BTC_CHAIN);
         const utils = await mountExecute(off.messaging, BTC_CHAIN);
 
-        expect(utils.getByLabelText(/Pay protocol fee in BTC/)).toBeTruthy();
+        expect(utils.getByLabelText(/^Pay protocol fee in BTC/)).toBeTruthy();
         // Nothing to warn about while the fee is an XCHAIN debit: a rejected
         // action costs no protocol fee at all.
         expect(utils.container.textContent).not.toContain(NATIVE_FEE_UNVERIFIED_NOTICE);
@@ -198,7 +199,7 @@ describe('EXECUTE carries the native-coin fee lane', () => {
         const on = harness(BTC_CHAIN);
         const ticked = await mountExecute(on.messaging, BTC_CHAIN);
         await domAct(async () => {
-            fireEvent.click(ticked.getByLabelText(/Pay protocol fee in BTC/));
+            fireEvent.click(ticked.getByLabelText(/^Pay protocol fee in BTC/));
             await drain();
         });
         // Ticking it is what makes the unverified caveat relevant, so it appears
@@ -218,7 +219,7 @@ describe('DEPLOY carries the native-coin fee lane', () => {
         const utils = await mountDeploy(messaging);
 
         await domAct(async () => {
-            fireEvent.click(utils.getByLabelText(/Pay protocol fee in BTC/));
+            fireEvent.click(utils.getByLabelText(/^Pay protocol fee in BTC/));
             await drain();
         });
         expect(utils.container.textContent).toContain(NATIVE_FEE_UNVERIFIED_NOTICE);

@@ -11,7 +11,7 @@
 // Regression suite: a settings write the vault refuses is reported once.
 //
 //   [P3] 2026-10-24: a full disk or a storage backend that went away made the
-//        Automatic Donation System switch (and every section that logs the
+//        Automatic Donations switch (and every section that logs the
 //        failure to the console) snap back with no message.
 
 import React from 'react';

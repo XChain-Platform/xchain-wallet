@@ -56,19 +56,15 @@ describe('STYLE_GUIDE component contracts', () => {
 
     it('uses shared Button variants for shared call-to-action controls', () => {
         const amountField = read('packages/core/src/shared/components/AmountField.jsx');
-        const alertsOverlay = read('packages/core/src/shared/components/AlertsOverlay.jsx');
         const alertsRoute = read('packages/core/src/shared/routes/AlertsRoute.jsx');
         const amountFieldCss = read('packages/core/src/shared/components/AmountField.module.css');
-        const alertsCss = read('packages/core/src/shared/components/AlertsOverlay.module.css');
 
-        expect(amountField).toMatch(/<Button[\s\S]*?aria-label="Use max available amount"/);
-        expect(alertsOverlay).toMatch(/<Button[\s\S]*?a\.action\.label/);
+        // Max is an in-field icon: the shared FieldIconButton, not a Button.
+        expect(amountField).toMatch(/<FieldIconButton[\s\S]*?label="Use max available amount"/);
         expect(alertsRoute).toMatch(/<Button[\s\S]*?variant="rowAction"[\s\S]*?openAlert\(alert\)/);
         expect(amountField).not.toContain('className={styles.amountMaxInline}');
-        expect(alertsOverlay).not.toContain('className={styles.alertAction}');
         expect(alertsRoute).not.toContain('className={styles.alertAction}');
         expect(amountFieldCss).not.toMatch(/\.amountMaxInline\s*\{/);
-        expect(alertsCss).not.toMatch(/\.alertAction\s*\{/);
     });
 
     it('uses shared controls on the adopted advanced, list, signing, and staking routes', () => {
@@ -91,12 +87,13 @@ describe('STYLE_GUIDE component contracts', () => {
         expect(routes['AdvancedActionsForm.jsx']).toMatch(/<Select[\s\S]*label="Action"/);
         expect(routes['AdvancedActionsForm.jsx']).toMatch(/<Textarea[\s\S]*list values/);
         expect(routes['MultisigSigningSession.jsx']).toMatch(/<Textarea[\s\S]*aria-label="Cosigner reply chunks"/);
-        expect(routes['MyLists.jsx']).toMatch(/<ListToolbar[\s\S]*searchLabel="Search lists"/);
-        expect(routes['MyLists.jsx']).toMatch(/<Button[\s\S]*>\s*Create list\s*<\/Button>/);
-        expect(routes['PsbtSignForm.jsx']).toMatch(/<AddressField[\s\S]*label="Signing address"[\s\S]*readOnly/);
+        expect(routes['MyLists.jsx']).toMatch(/<ListFilterMenu[\s\S]*searchLabel="Search lists"/);
+        expect(routes['MyLists.jsx']).toMatch(/<Button[\s\S]*icon=\{<Icon\.PlusIcon \/>\}[\s\S]*aria-label="Create list"/);
+        // The standard FromSection draws the read-only signing address field.
+        expect(routes['PsbtSignForm.jsx']).toMatch(/<FromSection[\s\S]*addressLabel="Signing address"/);
         expect(routes['PsbtSignForm.jsx']).toMatch(/<Textarea[\s\S]*label="Unsigned transaction/);
-        expect(routes['StakingList.jsx']).toMatch(/<Input[\s\S]*aria-label="Search staking positions"/);
-        expect(routes['StakingList.jsx']).toMatch(/<Button[\s\S]*>\s*New stake\s*<\/Button>/);
+        expect(routes['StakingList.jsx']).toMatch(/<ListFilterMenu[\s\S]*searchLabel="Search staking positions"/);
+        expect(routes['StakingList.jsx']).toMatch(/<Button[\s\S]*<Icon\.PlusIcon[\s\S]*aria-label="New Stake"/);
     });
 
     it('documents the shared Input size prop instead of inline big-field values', () => {

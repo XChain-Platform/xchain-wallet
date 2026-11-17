@@ -33,7 +33,12 @@ import { TokenDetail } from '../../../packages/core/src/shared/routes/TokenDetai
 
 const MAINNET_CHAIN = 'bitcoin-mainnet';
 const NO_ALERT_DATA = 'Price alerts need current market data.';
-const NO_MARKET_DATA = 'No market data available for this network.';
+const NO_MARKET_DATA = 'No market data for this network';
+
+// The market figures are rows of the Details tab.
+function openDetails() {
+    fireEvent.click(screen.getByRole('tab', { name: /Details/ }));
+}
 
 let savedResizeObserver;
 beforeAll(() => {
@@ -81,21 +86,23 @@ function renderNative(priceResult) {
 describe('TokenDetail missing price status text', () => {
     it('states the missing market data once and draws no price alert box', async () => {
         renderNative({ prices: {}, error: 'Price source unavailable' });
+        openDetails();
 
         expect(await screen.findAllByText(NO_MARKET_DATA)).toHaveLength(1);
         expect(screen.queryByText(NO_ALERT_DATA)).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Set price alert' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Set Price Alert' })).toBeNull();
     });
 
     it('draws no price alert box when price data is turned off', async () => {
         renderNative({ disabled: true });
+        openDetails();
 
-        await screen.findByText(/Price data is disabled/);
+        await screen.findByText('Off in Settings, Privacy');
         expect(screen.queryByText(NO_ALERT_DATA)).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Set price alert' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Set Price Alert' })).toBeNull();
     });
 
-    it('offers the price alert through More info when a live price exists', async () => {
+    it('offers the price alert as an Actions tile when a live price exists', async () => {
         renderNative({
             prices: {
                 [MAINNET_CHAIN]: {
@@ -108,11 +115,12 @@ describe('TokenDetail missing price status text', () => {
             },
         });
 
-        await screen.findByText('$40,000.00');
-        expect(screen.queryByRole('button', { name: 'Set price alert' })).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'More info' }));
-        fireEvent.click(screen.getByRole('menuitem', { name: 'Set price alert' }));
-        expect(await screen.findByRole('button', { name: 'Add alert' })).toBeTruthy();
+        openDetails();
+        expect((await screen.findAllByText('$40,000.00')).length).toBeGreaterThan(0);
+        expect(screen.queryByRole('button', { name: 'Set Price Alert' })).toBeNull();
+        fireEvent.click(screen.getByRole('tab', { name: /Actions/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Price alert/ }));
+        expect(await screen.findByRole('button', { name: 'Add Alert' })).toBeTruthy();
         expect(screen.queryByText(NO_ALERT_DATA)).toBeNull();
         expect(screen.queryByText(NO_MARKET_DATA)).toBeNull();
     });

@@ -3,38 +3,27 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Home's fourth quick action: All actions opens the actions menu, and a
-// shell that wires no actions menu gets Swap as its own button instead of a
-// one-item "More" menu.
+// Home carries no Send / Receive / Exchange / More quick action row. The
+// navigation (bottom bar, sidebar) holds Send and Receive, and the wallet menu
+// holds Exchange (Markets) and All actions, so Home is the balance hero, the
+// tabs and the content under them.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import React from 'react';
 import { clearDemoWalletId, markDemoWallet } from '../../../packages/core/src/flows/demoMode.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
-import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
-import homeModuleStyles from '../../../packages/core/src/shared/routes/Home.module.css';
+import { visibleWalletMenu } from '../../../packages/core/src/shared/walletMenu.js';
 
-const homeStyles = readFileSync(join(
-    process.cwd(),
-    'packages/core/src/shared/routes/Home.module.css',
-), 'utf8');
-const homeSource = readFileSync(join(
-    process.cwd(),
-    'packages/core/src/shared/routes/Home.jsx',
-), 'utf8');
-const heroSource = readFileSync(join(
-    process.cwd(),
-    'packages/core/src/shared/components/TotalBalanceHero.jsx',
-), 'utf8');
+const read = (path) => readFileSync(join(process.cwd(), path), 'utf8');
+const homeStyles = read('packages/core/src/shared/routes/Home.module.css');
+const homeSource = read('packages/core/src/shared/routes/Home.jsx');
+const heroSource = read('packages/core/src/shared/components/TotalBalanceHero.jsx');
 // The hero's controls live in the shared balance hero menu (U52).
-const heroMenuSource = readFileSync(join(
-    process.cwd(),
-    'packages/core/src/shared/components/BalanceHeroMenu.jsx',
-), 'utf8');
+const heroMenuSource = read('packages/core/src/shared/components/BalanceHeroMenu.jsx');
 
 const WALLET = { id: 'wallet-a', name: 'Main Wallet' };
 const BALANCES = {
@@ -49,7 +38,8 @@ const BALANCES = {
 
 function makeMessaging(settings = {}) {
     return {
-        listWallets: vi.fn().mockResolvedValue([WALLET]),
+        // §20: the mode is the wallet's own, carried on its safe record.
+        listWallets: vi.fn().mockResolvedValue([{ ...WALLET, walletMode: settings.walletMode || 'full' }]),
         listAccounts: vi.fn().mockResolvedValue([]),
         getWalletBalances: vi.fn().mockResolvedValue(BALANCES),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
@@ -58,7 +48,16 @@ function makeMessaging(settings = {}) {
     };
 }
 
-function mount(props, shell = 'web', settings = {}) {
+const handlers = {
+    onSend: vi.fn(),
+    onReceive: vi.fn(),
+    onExchange: vi.fn(),
+    onSwap: vi.fn(),
+    onActions: vi.fn(),
+    onHistory: vi.fn(),
+};
+
+async function mountHome(props = handlers, shell = 'web', settings = {}) {
     render(
         React.createElement(
             MessagingProvider,
@@ -66,201 +65,95 @@ function mount(props, shell = 'web', settings = {}) {
             React.createElement(Home, { activeWalletId: WALLET.id, ...props }),
         ),
     );
+    // The balance tabs render once the balances have loaded.
+    await screen.findAllByRole('tablist');
+}
+
+function expectNoQuickActions() {
+    expect(screen.queryByRole('group', { name: 'Quick actions' })).toBeNull();
+    for (const name of ['Send', 'Receive', 'Exchange', 'More', 'More actions', 'Swap']) {
+        expect(screen.queryByRole('button', { name })).toBeNull();
+    }
 }
 
 afterEach(() => {
     cleanup();
     clearDemoWalletId();
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 });
 });
 
-describe('Home overflow quick action', () => {
-    it('builds Home actions from the shared Button component', () => {
-        expect(homeSource).toContain("import { Button, EmptyState, Icon");
+describe('Home source', () => {
+    it('builds Home from the shared kit and keeps no quick action row', () => {
+        // Home's only buttons were the signer stack, now the shared ActionList (G101).
+        expect(homeSource).toContain("import { EmptyState, Icon");
+        expect(homeSource).toContain("import { ActionList, ActionListItem } from '../components/ActionList.jsx';");
         expect(heroMenuSource).toContain("import { Button, Icon }");
         expect(homeSource).not.toMatch(/<button\b/);
         expect(heroSource).not.toMatch(/<button\b/);
         expect(heroMenuSource).not.toMatch(/<button\b/);
-        expect(homeSource).toContain('icon={<Icon.GridIcon />}');
-        expect(homeSource).toContain("t('walletMenu.row.allActions')");
-    });
-
-    it('opens Swap directly instead of a one-item More menu', async () => {
-        const onSwap = vi.fn();
-        mount({ onSwap });
-
-        const swap = await screen.findByRole('button', { name: 'Swap' });
-        expect(screen.queryByRole('button', { name: 'More' })).toBeNull();
-        fireEvent.click(swap);
-        expect(onSwap).toHaveBeenCalledTimes(1);
+        expect(homeSource).not.toContain('QuickActionTile');
+        expect(homeSource).not.toContain("t('home.moreShort')");
+        expect(homeStyles).not.toMatch(/\.quickActions/);
+        expect(homeStyles).not.toMatch(/\.actionsFull/);
     });
 });
 
-describe('Home desktop actions', () => {
-    it('renders Send and Receive once while preserving supplementary actions', async () => {
-        mount({
-            onSend: vi.fn(),
-            onReceive: vi.fn(),
-            onCreateToken: vi.fn(),
-        }, 'desktop');
-
-        expect(await screen.findAllByRole('button', { name: 'Send' })).toHaveLength(1);
-        expect(screen.getAllByRole('button', { name: 'Receive' })).toHaveLength(1);
-        expect(screen.getByRole('button', { name: 'Create token' })).toBeTruthy();
-    });
-
+describe('Home draws no quick actions', () => {
     it.each([
-        [360, 4],
-        [833, 4],
-    ])('uses matching buttons in an even grid at %ipx (%i columns)', async (viewportWidth, expectedColumns) => {
-        Object.defineProperty(window, 'innerWidth', { configurable: true, value: viewportWidth });
-        mount({
-            onCreateToken: vi.fn(),
-            onMarkets: vi.fn(),
-            onMessaging: vi.fn(),
-            onHistory: vi.fn(),
-            onAddresses: vi.fn(),
-            onContracts: vi.fn(),
-            onStaking: vi.fn(),
-            onActions: vi.fn(),
-        }, 'desktop');
-
-        const createToken = await screen.findByRole('button', { name: 'Create token' });
-        const actionGrid = createToken.parentElement;
-        const actions = within(actionGrid).getAllByRole('button');
-
-        expect(actionGrid).toHaveClass(homeModuleStyles.actionsFull);
-        // All actions is a quick action above, so the grid holds the other seven.
-        expect(actions).toHaveLength(7);
-        expect(screen.getAllByRole('button', { name: 'All actions' })).toHaveLength(1);
-        actions.forEach((action) => {
-            expect(action).toHaveClass(buttonStyles.secondary, buttonStyles.md);
-        });
-        expect(expectedColumns).toBe(4);
-        expect(homeStyles).toMatch(
-            /\.actionsFull\s*\{[^}]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/,
-        );
-        expect(viewportWidth).toBeLessThan(834);
-    });
-});
-
-describe('Home wide-layout quick actions', () => {
-    const wideHandlers = {
-        onSend: vi.fn(),
-        onReceive: vi.fn(),
-        onExchange: vi.fn(),
-        onSwap: vi.fn(),
-        onActions: vi.fn(),
-        onCreateToken: vi.fn(),
-        onMarkets: vi.fn(),
-        onMessaging: vi.fn(),
-        onHistory: vi.fn(),
-        onAddresses: vi.fn(),
-        onStaking: vi.fn(),
-    };
-
-    afterEach(() => {
-        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 });
+        ['mobile web', 'web', 360],
+        ['extension', 'popup', 360],
+        ['desktop at 833px', 'desktop', 833],
+        ['desktop at 1280px', 'desktop', 1280],
+    ])('has no Send, Receive, Exchange or More button in the %s shell', async (_label, shell, width) => {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
+        await mountHome(handlers, shell);
+        expectNoQuickActions();
     });
 
-    it.each([834, 1280, 1440])('shows Send, Receive, Exchange and All actions at %ipx and no bottom row', async (viewportWidth) => {
-        Object.defineProperty(window, 'innerWidth', { configurable: true, value: viewportWidth });
-        mount(wideHandlers, 'desktop');
-
-        const row = await screen.findByRole('group', { name: 'Quick actions' });
-        expect(within(row).getAllByRole('button').map((button) => button.textContent.trim()))
-            .toEqual(['Send', 'Receive', 'Exchange', 'All actions']);
-        expect(screen.queryByRole('button', { name: 'Swap' })).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Create token' })).toBeNull();
-        expect(document.querySelector(`.${homeModuleStyles.actionsFull}`)).toBeNull();
+    it('has no quick actions without an actions menu or an Exchange handler', async () => {
+        await mountHome({ onSend: vi.fn(), onReceive: vi.fn() }, 'desktop');
+        expectNoQuickActions();
     });
 
-    it('opens the actions menu from the All actions quick action', async () => {
-        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
-        const onActions = vi.fn();
-        mount({ ...wideHandlers, onActions }, 'desktop');
-
-        const row = await screen.findByRole('group', { name: 'Quick actions' });
-        fireEvent.click(within(row).getByRole('button', { name: 'All actions' }));
-        expect(onActions).toHaveBeenCalledTimes(1);
-    });
-
-    it('shows the same four quick actions at 360px above the action grid', async () => {
-        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 });
-        mount(wideHandlers, 'desktop');
-
-        const row = await screen.findByRole('group', { name: 'Quick actions' });
-        expect(within(row).getAllByRole('button').map((button) => button.textContent.trim()))
-            .toEqual(['Send', 'Receive', 'Exchange', 'All actions']);
-        expect(screen.queryByRole('button', { name: 'Swap' })).toBeNull();
-        expect(screen.getByRole('button', { name: 'Create token' })).toBeTruthy();
-    });
-
-    it('keeps the Swap button when the shell passes no actions menu', async () => {
-        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
-        mount({ ...wideHandlers, onActions: undefined }, 'desktop');
-
-        const row = await screen.findByRole('group', { name: 'Quick actions' });
-        expect(within(row).getAllByRole('button').map((button) => button.textContent.trim()))
-            .toEqual(['Send', 'Receive', 'Exchange', 'Swap']);
-    });
-});
-
-describe('Home quick-action policy', () => {
-    const handlers = {
-        onSend: vi.fn(),
-        onReceive: vi.fn(),
-        onExchange: vi.fn(),
-        onSwap: vi.fn(),
-    };
-
-    it.each([
-        ['mobile web', 'web'],
-        ['extension', 'popup'],
-        ['desktop', 'desktop'],
-    ])('keeps the canonical order in the %s shell', async (_label, shell) => {
-        mount(handlers, shell);
-
-        const row = await screen.findByRole('group', { name: 'Quick actions' });
-        expect(within(row).getAllByRole('button').map((button) => button.textContent.trim()))
-            .toEqual(['Send', 'Receive', 'Exchange', 'Swap']);
-    });
-
-    it('explains the send restriction only after a demo user presses Send', async () => {
+    it('has no quick actions and no demo send notice in a demo wallet', async () => {
         markDemoWallet(WALLET.id);
-        mount(handlers);
-
-        const row = await screen.findByRole('group', { name: 'Quick actions' });
-        expect(within(row).getAllByRole('button').map((button) => button.textContent.trim()))
-            .toEqual(['Send', 'Receive', 'Exchange', 'Swap']);
-        expect(screen.queryByText("Demo wallets can't send. Create a real wallet to send."))
-            .toBeNull();
-
-        fireEvent.click(within(row).getByRole('button', { name: 'Send' }));
-
-        expect(handlers.onSend).not.toHaveBeenCalled();
-        const notice = screen.getByText("Demo wallets can't send. Create a real wallet to send.");
-        expect(notice).toBeVisible();
-        // The notice is the first item of the page content, above the controls that raised it.
-        expect(notice.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Exit demo & wipe' }));
-        expect(screen.getByRole('dialog', { name: 'Exit demo and delete its data?' }))
-            .toBeTruthy();
+        await mountHome();
+        expectNoQuickActions();
+        expect(screen.queryByText("Demo wallets can't send. Create a real wallet to send.")).toBeNull();
     });
 
-    it('keeps watcher-supported actions and explains their unsigned behavior', async () => {
-        mount(handlers, 'popup', { walletMode: 'watcher' });
-
-        const row = await screen.findByRole('group', { name: 'Quick actions' });
-        expect(within(row).getAllByRole('button').map((button) => button.textContent.trim()))
-            .toEqual(['Send', 'Receive', 'Exchange', 'Swap']);
-        const reason = screen.getByText(/builds Send and Swap transactions unsigned/);
-        expect(row.getAttribute('aria-describedby')).toBe(reason.id);
+    it('has no quick actions and no watch-only hint in a watch-only wallet', async () => {
+        await mountHome(handlers, 'popup', { walletMode: 'watcher' });
+        expectNoQuickActions();
+        expect(screen.queryByText(/builds Send and Swap transactions unsigned/)).toBeNull();
     });
+});
 
-    it('reflows to two columns at 320px and lets labels wrap', () => {
-        expect(homeStyles).toMatch(
-            /@media not all and \(min-width: 360px\)[\s\S]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/,
+describe('Home draws no pending airdrop card', () => {
+    it('has no resume card and reads no pending airdrops', async () => {
+        const messaging = {
+            ...makeMessaging(),
+            listPendingAirdropsForWallet: vi.fn().mockResolvedValue([
+                { id: 'a1', stage: 'ready-to-airdrop', amountPer: '1', token: 'TOK', recipients: [1, 2] },
+            ]),
+        };
+        render(
+            React.createElement(
+                MessagingProvider,
+                { shell: 'web', messaging },
+                React.createElement(Home, { activeWalletId: WALLET.id, onResumeAirdrop: vi.fn() }),
+            ),
         );
-        expect(homeStyles).toMatch(/overflow-wrap:\s*anywhere/);
+        await screen.findAllByRole('tablist');
+        expect(screen.queryByRole('group', { name: 'Pending airdrops' })).toBeNull();
+        expect(screen.queryByRole('button', { name: /Resume airdrop/ })).toBeNull();
+        expect(messaging.listPendingAirdropsForWallet).not.toHaveBeenCalled();
+    });
+});
+
+describe('the actions Home used to carry stay reachable elsewhere', () => {
+    it('keeps Send, Receive, Exchange and All actions in the wallet menu', () => {
+        const ids = visibleWalletMenu({ hasDexSurface: true }).flatMap((group) => group.rows.map((row) => row.id));
+        for (const id of ['send', 'receive', 'markets', 'actions']) expect(ids).toContain(id);
     });
 });

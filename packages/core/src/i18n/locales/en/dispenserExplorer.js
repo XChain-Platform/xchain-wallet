@@ -16,6 +16,10 @@ import { addEnglish } from '../../store.js';
 
 const messages = {
     'dispenserExplorer.loadMoreFor': 'Load more results for {name}',
+    'dispenserExplorer.cardLabel': '{give} for {price}, {chain}',
+    'dispenserExplorer.terms': 'Dispenser terms',
+    'dispenserExplorer.forPrice': ' for ',
+    'dispenserExplorer.opened': 'Opened {when}',
 };
 
 addEnglish(messages);

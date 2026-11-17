@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { PublishFileForm } from '../../../packages/core/src/shared/routes/PublishFileForm.jsx';
+import { typeCustomRate } from '../../helpers/customNetworkFee.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const TXID = 'ab'.repeat(32);
@@ -51,7 +52,7 @@ describe('PublishFileForm multipart publish', () => {
     it('starts the selected lane and finishes on the manifest action index', async () => {
         const shell = messaging();
         mount(shell);
-        const input = await screen.findByLabelText('File (up to 12,000,000 bytes)');
+        const input = await screen.findByLabelText('File to publish');
         fireEvent.click(screen.getByRole('button', { name: 'Upload method: Taproot upload' }));
         fireEvent.click(screen.getAllByRole('option')[1]);
         expect(screen.getByRole('button', { name: 'Upload method: Standard' })).toBeEnabled();
@@ -59,9 +60,8 @@ describe('PublishFileForm multipart publish', () => {
         fireEvent.change(input, {
             target: { files: [new File([bytes], 'large.bin', { type: 'application/octet-stream' })] },
         });
-        await waitFor(() => expect(document.body.textContent).toContain('20,000 bytes'));
-        fireEvent.click(screen.getByRole('checkbox'));
-        fireEvent.click(screen.getByRole('button', { name: 'Publish file' }));
+        await waitFor(() => expect(document.body.textContent).toContain('large.bin'));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish File' }));
 
         await waitFor(() => expect(shell.fileMultipart).toHaveBeenCalledOnce());
         expect(shell.fileMultipart).toHaveBeenCalledWith(expect.objectContaining({
@@ -109,25 +109,20 @@ describe('PublishFileForm multipart panel', () => {
 
 describe('PublishFileForm fee validation with multipart available', () => {
     it.each([
-        ['', 'Enter a custom fee rate.'],
-        ['1.123456789', 'Custom fee rate can have at most 8 decimal places.'],
-        ['999999999999999999999', 'Enter a rate no higher than 1,000 sat/vB.'],
+        // Typed into the one custom fee editor, the Network fee line (G113).
+        ['', 'Enter a custom network fee.'],
+        ['50000', 'Enter a rate no higher than 1,000 sat/vB.'],
     ])('refuses the custom fee %j before starting any publish path', async (rate, message) => {
         const shell = messaging();
         mount(shell);
-        const input = await screen.findByLabelText('File (up to 12,000,000 bytes)');
+        const input = await screen.findByLabelText('File to publish');
         fireEvent.change(input, {
             target: { files: [new File(['abc'], 'small.txt', { type: 'text/plain' })] },
         });
         await waitFor(() => expect(document.body.textContent).toContain('small.txt'));
-        fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
-            target: { value: '3' },
-        });
-        fireEvent.change(screen.getByLabelText('Custom fee rate (sat/vB)'), {
-            target: { value: rate },
-        });
-        fireEvent.click(screen.getByRole('checkbox'));
-        fireEvent.click(screen.getByRole('button', { name: 'Publish file' }));
+        fireEvent.click(await screen.findByRole('button', { name: /^Speed and Fees\b/, expanded: false }));
+        await typeCustomRate(rate);
+        fireEvent.click(screen.getByRole('button', { name: 'Publish File' }));
 
         expect(await screen.findByText(message)).toBeInTheDocument();
         expect(shell.fileMultipart).not.toHaveBeenCalled();

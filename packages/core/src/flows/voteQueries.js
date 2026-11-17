@@ -67,6 +67,38 @@ export async function pollResults({ sdkRegistry, chainId, pollIndex, opts }) {
     return sdk.getPollResults(pollIndex, opts);
 }
 
+function seg(value) {
+    return encodeURIComponent(String(value));
+}
+
+/**
+ * The live vote delegations one address has set (VOTE v3), one per token:
+ * token, delegate and when it was set. One read for the whole list. The
+ * explorer returns only live rows: a delegation later re-pointed or cleared
+ * is excluded server-side, so nothing here re-derives recency. An SDK
+ * without a getVoteDelegations method reads the same explorer route directly.
+ *
+ * @param {{ sdkRegistry: object, chainId: string, address: string, opts?: object }} params
+ * @returns {Promise<Array<{ tick: string, delegator: string, delegate: string, block_index?: number, timestamp?: number, action_index?: number | string, tx_hash?: string }>>}
+ */
+export async function voteDelegationsForAddress({ sdkRegistry, chainId, address, opts }) {
+    const sdk = requireSdk({ sdkRegistry, chainId }, 'voteDelegationsForAddress');
+    if (!address) throw new Error('voteDelegationsForAddress: address is required');
+    let response;
+    if (typeof sdk.getVoteDelegations === 'function') {
+        response = await sdk.getVoteDelegations(address, 'delegator', opts);
+    } else if (sdk.explorer && typeof sdk.explorer.get === 'function') {
+        response = await sdk.explorer.get(`/vote_delegations/${seg(address)}/delegator`, { ...(opts || {}), noRetry: true });
+    } else {
+        throw new Error('voteDelegationsForAddress: explorer read is unavailable');
+    }
+    const rows = Array.isArray(response) ? response : (Array.isArray(response?.data) ? response.data : []);
+    // A CLEAR row (no delegate) is never a live delegation, even if one
+    // reaches the client.
+    return rows.filter((row) => row && typeof row === 'object' && row.delegate
+        && String(row.delegator ?? address) === String(address));
+}
+
 /**
  * List ballots, optionally filtered. type ∈ {address, poll, block}. Used both to show
  * a poll's live ballots (before finalization) and a voter's own ballots.

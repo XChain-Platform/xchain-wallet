@@ -96,7 +96,7 @@ export class RouteErrorBoundary extends Component {
                         {t('components.routeErrorBoundary.goToHome')}
                     </Button>
                 )}
-                <Button type="button" variant="primary" onClick={this.retry}>
+                <Button type="button" variant="primary" icon={<Icon.RefreshIcon />} onClick={this.retry}>
                     {t('common.tryAgain')}
                 </Button>
             </>

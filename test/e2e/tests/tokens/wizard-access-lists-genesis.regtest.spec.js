@@ -1,7 +1,7 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { createWallet, expect, openPaletteCommand, submitTokenWizard, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openIssueSection, openPaletteCommand, submitTokenWizard, test } from '../../fixtures/wallet.js';
 import {
     explorerJson,
     expectConfirmModal,
@@ -44,12 +44,14 @@ async function approveAndReadTxid(page, what) {
 async function publishAddressList(page, member) {
     await openPaletteCommand(page, 'Create a list');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('List type')).toBeVisible({ timeout: 30_000 });
+    await expect(main.getByRole('button', { name: /^List type:/ })).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
-    await main.getByLabel('List type').selectOption('2');
+    // List type is the themed dropdown: open it, then pick Addresses.
+    await main.getByRole('button', { name: /^List type:/ }).click();
+    await main.getByRole('option', { name: 'Addresses', exact: true }).click();
     await main.getByLabel('Addresses', { exact: true }).fill(member);
     await expect(main).toContainText('1 valid address');
-    await main.getByRole('button', { name: 'Publish list', exact: true }).click();
+    await main.getByRole('button', { name: 'Publish List', exact: true }).click();
 
     const action = await waitForValidAction(await approveAndReadTxid(page, 'the address list'));
     expect(action.action).toBe('LIST');
@@ -66,7 +68,10 @@ async function publishAddressList(page, member) {
 
 async function chooseList(page, kind, actionIndex) {
     const main = page.getByRole('main');
-    await main.getByRole('button', { name: `Choose ${kind}-list` }).click();
+    // G114: the Allow list and Block list fields open the picker and read
+    // "None set" until a list is chosen.
+    const field = kind === 'allow' ? 'Allow list' : 'Block list';
+    await main.getByRole('button', { name: `${field}: None set` }).click();
     const row = page.getByRole('button', {
         name: new RegExp(`^Address list #${actionIndex}\\b`),
     });
@@ -100,13 +105,14 @@ test.describe(`wizard access-list fields on ${REGTEST_CHAIN_LABEL}`, () => {
 
         await openPaletteCommand(page, 'Create a token');
         const main = page.getByRole('main');
-        await main.getByRole('button', { name: /^Custom/ }).click();
+        // No template: the Custom token is the form with nothing picked. The
+        // network sits in the From section, closed until opened.
+        await openIssueSection(main, 'From');
         await selectVenueChain(main);
-        await main.getByRole('button', { name: 'Next', exact: true }).click();
 
-        await main.getByLabel('Token name (ticker)').fill(TICK);
-        await main.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
-        await main.getByRole('button', { name: 'Advanced settings (optional)' }).click();
+        await main.getByLabel('Ticker', { exact: true }).fill(TICK);
+        await main.getByLabel('Max supply', { exact: true }).fill(String(SUPPLY));
+        await openIssueSection(main, 'Allow and block lists');
         await chooseList(page, 'allow', allowList);
         await chooseList(page, 'block', blockList);
         await submitTokenWizard(page);

@@ -13,7 +13,7 @@
 // entries of a limit since removed, and those are not activity in a window.
 
 import { describe, it, expect } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { CoSignerAccountDetail } from '../../../packages/core/src/shared/routes/CoSignerAccountDetail.jsx';
 
@@ -42,17 +42,24 @@ function mountAccount(policy, ages) {
     );
 }
 
+// The row sits on the Details tab; the page opens on Actions.
+async function openDetails() {
+    fireEvent.click(await screen.findByRole('tab', { name: /Details/ }));
+}
+
 describe('CoSignerAccountDetail activity in current window', () => {
     it('counts only the entries inside the limit hours', async () => {
         mountAccount({ allowedActions: ['SEND'], maxPerWindow: { hours: 24, maxActions: 3 } },
             [HOUR, 2 * HOUR, 30 * HOUR]);
 
-        await waitFor(() => expect(screen.getByText('2 action(s)')).toBeTruthy());
+        await openDetails();
+        await waitFor(() => expect(screen.getByText('2 actions')).toBeTruthy());
     });
 
     it('reads zero when the stored entries outlive a removed limit', async () => {
         mountAccount({ allowedActions: ['SEND'] }, [HOUR, 2 * HOUR]);
 
-        await waitFor(() => expect(screen.getByText('0 action(s)')).toBeTruthy());
+        await openDetails();
+        await waitFor(() => expect(screen.getByText('0 actions')).toBeTruthy());
     });
 });

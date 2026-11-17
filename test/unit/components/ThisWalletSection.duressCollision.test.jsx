@@ -55,7 +55,7 @@ function changeTo(messaging, next) {
     fireEvent.change(screen.getByLabelText('Current wallet password'), { target: { value: 'current-password-1' } });
     fireEvent.change(screen.getByLabelText('New wallet password'), { target: { value: next } });
     fireEvent.change(screen.getByLabelText('Confirm new wallet password'), { target: { value: next } });
-    fireEvent.click(screen.getByRole('button', { name: 'Change password' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Change Password' }));
     return screen.getByLabelText('New wallet password');
 }
 

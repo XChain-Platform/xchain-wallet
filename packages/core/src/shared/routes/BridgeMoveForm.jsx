@@ -9,7 +9,22 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormErrorSummary, FormNotice, FormPage, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+// The source Network, From and the fee selector come from the
+// standard FromSection and FeeSection.
+import { AddressField, AddressText, Button, ChainBadge, FormNotice, FormPage, Icon, NetworkField, PageHeader, Screen, StatusMessage, useFormErrors } from '@xchain-wallet/core/ui';
+// The Wallet Form Standard frame (From, main section, Memo, Network
+// fee, status slot, one action).
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    MemoSection,
+    SummaryAddress,
+    joinSummaryParts,
+    useFormSections,
+} from '../components/formStandard/index.js';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -18,14 +33,16 @@ import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
-import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
-import { FeesCard } from '../components/FeesCard.jsx';
+// The Fees card and its pay-in-native switch render inside FeeSection.
 import { ResultScreen } from '../components/ResultScreen.jsx';
-import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { ActionConfirmScreen, ActionWarningsCard } from '../components/ActionConfirmScreen.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
+import { useFeeSchedule } from '../hooks/useFeeSchedule.js';
+import { baseItemFeeFromSchedule } from '../../flows/scheduleFee.js';
+import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -34,7 +51,7 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { addressValidationError, isValidAddressForChain } from '../utils/addressValidation.js';
 import { targetBlockSecondsForCoin } from '../utils/blockDateEstimate.js';
-import { MAX_MEMO_LENGTH, MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { invalidateTokenInfo } from '../utils/tokenInfoCache.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
@@ -59,6 +76,7 @@ import {
 } from './BridgeTick.js';
 import styles from './IssueTokenForm.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -143,10 +161,15 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [destPickerOpen, setDestPickerOpen] = useState(false);
 
-    const [formError, setFormError] = useState(/** @type {string | null} */ (null));
-    const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
-    // Counts Review presses, so the refusal a press raises takes focus.
-    const [reviewAttempt, setReviewAttempt] = useState(0);
+    // The form error standard: a Review press lists every problem in one
+    // notice at the top and outlines each failing field; a field clears when
+    // it changes. Refusals with no field (sign, network) go through form.fail.
+    const form = useFormErrors();
+    // The standard sections' open state, held above the picker pages
+    // (early returns) so it survives them, and the section the last press
+    // refusal belongs to, so that section reopens with it.
+    const formSections = useFormSections({ from: false, main: true, memo: false, fee: false });
+    const [errorSection, setErrorSection] = useState(/** @type {'from' | 'main' | 'fee' | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const [stage, setStage] = useState(/** @type {'form' | 'submitting' | 'done'} */ ('form'));
     const [hwStatus, setHwStatus] = useState('idle');
@@ -345,6 +368,19 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
         enabled: Boolean(actionString),
     });
     const feeQuote = quotedProtocolFee(protocolFeeQuote);
+    // XBRIDGE pays one flat fee, GAS_SCHEDULE.XBRIDGE_BASE, for every
+    // user-broadcast version (xchain-indexer actions/xbridge/index.js), so
+    // until the form is complete enough to quote, the Fees section shows it
+    // from the venue's own published schedule (read once per chain), never a
+    // copy in the wallet. The live quote takes over once it answers.
+    const feeSchedule = useFeeSchedule({ messaging, chainId: sourceChainId });
+    const scheduleBridgeFee = useMemo(
+        () => baseItemFeeFromSchedule(feeSchedule, { baseKey: 'XBRIDGE_BASE' }),
+        [feeSchedule],
+    );
+    const liveBridgeFeeKnown = normalizeProtocolFee(protocolFeeQuote).known;
+    const bridgeFeeQuote = liveBridgeFeeKnown ? protocolFeeQuote : (scheduleBridgeFee || protocolFeeQuote);
+    const bridgeFeePending = liveBridgeFeeKnown || scheduleBridgeFee ? false : protocolFeePending;
 
     const noDestinationAccount = destChainIds.length === 0;
     const requiredDestinationMissing = destChainIds.length > 0
@@ -412,16 +448,14 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
         || memoError
         || null;
 
-    // A refusal from a Review press describes the values it was pressed on; a
-    // changed field or fee makes it stale, so the page states the live one.
-    useEffect(() => {
-        setFormError(null);
-        setSubmitError(null);
-    }, [actionParams, fromAddressId, feePerKb, nativeFee.flag]);
-    // One refusal at a time: the live check of the current values first, then
-    // the last Review press.
-    const pressError = formError || submitError || null;
-    const pageError = blockingError || pressError;
+    // A refusal from a Review press describes the values it was pressed on. A
+    // field entry clears when that field changes (the kit does it, the From
+    // and Fees sections and the Move to field included, through their
+    // formErrorKey); the form-level refusal clears when what it describes changes.
+    useEffect(() => { form.clear('form'); }, [actionParams, fromAddressId, feePerKb, nativeFee.flag]);
+    // The live check of the current values shows first; a press refusal is
+    // only the list at the top.
+    const pressError = form.hasErrors;
 
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
     const passwordValueRef = useRef('');
@@ -450,7 +484,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
             source: fromAddress.source,
             signerId: fromAddress.signerId,
         };
-        setSubmitError(null);
+        form.clear('form');
         try {
             const r = await actionConfirm.run({
                 chainId: sourceChainId,
@@ -476,7 +510,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
             setStage('done');
         } catch (err) {
             if (isUserRejection(err)) return;
-            setFormError(submitFailureMessage(err, {
+            form.fail(submitFailureMessage(err, {
                 chainId: sourceChainId,
                 coinTicker: sourceCoin,
                 mandatory: nativeFee.mandatory,
@@ -487,34 +521,31 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
 
     async function handleSubmit(event) {
         event.preventDefault();
+        if (destinationUnavailable) return;
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        if (feeStop) { setFormError(feeStop.formError); return; }
-        if (stage === 'submitting') return;
-        setReviewAttempt((n) => n + 1);
-        if (!fromAddress || !sourceChainId) {
-            setFormError('No usable source address is available. Choose another source address.');
-            return;
-        }
-        if (!destChainId || !actionParams) {
-            setFormError('Pick a destination network for this bridge move.');
-            return;
-        }
-        if (blockingError || amountInputError) return;
-        if (!destAddress) {
-            setFormError('Enter a destination address to receive the transfer.');
-            return;
-        }
-        if (!destinationAddressValid) {
-            setFormError('Enter a valid address for the destination network.');
-            return;
-        }
-        if (!String(amount).trim()) {
-            setFormError('Enter an amount to move.');
-            return;
-        }
+        if (stage === 'submitting' && !feeStop) return;
+        // Every check runs on each press so the notice lists every problem and
+        // each failing field is marked.
+        const problems = {
+            'form:fee': feeStop ? feeStop.formError : null,
+            'form:from': sourceAddressError || (!fromAddress || !sourceChainId
+                ? 'No usable source address is available. Choose another source address.' : null),
+            'form:dest-network': !destChainId
+                ? 'Pick a destination network for this bridge move.' : destinationError,
+            'bridge-token': tokenError || leg.reason,
+            'bridge-dest-address': !destAddress
+                ? 'Enter a destination address to receive the transfer.'
+                : destinationAddressError,
+            'bridge-amount': !String(amount).trim()
+                ? 'Enter an amount to move.' : (amountInputError || amountError || overBalanceError),
+            'form:memo': memoError,
+        };
+        // Name the section each refusal belongs to (fee, From, else
+        // the main section) so it reopens with the message.
+        setErrorSection(problems['form:fee'] ? 'fee' : problems['form:from'] ? 'from' : 'main');
+        if (!form.validate(problems)) return;
         if (submitInFlightRef.current) return;
         submitInFlightRef.current = true;
-        setFormError(null);
         try {
             if (tick.toUpperCase() !== GAS_TICK && typeof messaging.getTokenInfo === 'function') {
                 let freshTokenInfo;
@@ -525,12 +556,12 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                         demo: false,
                     });
                 } catch {
-                    setFormError('Could not refresh this token\'s bridge settings. Check your connection and try again.');
+                    form.fail('Could not refresh this token\'s bridge settings. Check your connection and try again.');
                     return;
                 }
                 if (bridgeSettingsSnapshot(freshTokenInfo) !== bridgeSettingsSnapshot(tokenInfo)) {
                     invalidateTokenInfo(sourceChainId, tick);
-                    setFormError('This token\'s bridge settings changed. The form is refreshing them; review the route and try again.');
+                    form.fail('This token\'s bridge settings changed. The form is refreshing them; review the route and try again.');
                     return;
                 }
             }
@@ -557,7 +588,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
             }
             await openConfirmScreen();
         } catch (err) {
-            setSubmitError(submitFailureMessage(err, {
+            form.fail(submitFailureMessage(err, {
                 chainId: sourceChainId,
                 coinTicker: sourceCoin,
                 mandatory: nativeFee.mandatory,
@@ -570,12 +601,12 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
     }
 
     const doneTitle = result?.queued
-        ? 'Bridge transfer queued'
+        ? 'Bridge Transfer Queued'
         : result?.psbtHex && !result?.txid
-            ? 'Unsigned bridge transfer'
-            : 'Bridge transfer pending';
+            ? 'Unsigned Bridge Transfer'
+            : 'Bridge Transfer Pending';
     const header = (
-        <PageHeader onBack={onBack} title={stage === 'done' ? doneTitle : 'Move across networks'} />
+        <PageHeader onBack={onBack} title={stage === 'done' ? doneTitle : 'Move Across Networks'} />
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
@@ -640,11 +671,32 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
     }
 
     if (actionConfirm.open) {
+        // K6: the amount leaving this network, and the lock-and-credit fact the
+        // form leaves to this confirm screen instead of a standing notice.
+        const moveSummary = {
+            verb: t('components.confirmSummary.verbMove'),
+            amount: String(amount).trim(),
+            ticker: shown.label,
+            chainId: sourceChainId,
+            direction: 'out',
+            notice: destChainId && leg.version
+                ? bridgeMoveNoticeText({
+                    leg,
+                    amount,
+                    tickLabel: shown.label,
+                    sourceDescriptor,
+                    destDescriptor,
+                    requiredDepth,
+                })
+                : undefined,
+        };
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={moveSummary}
                 screenVariant={variant}
                 coinTicker={sourceCoin}
+                feeEstimate={feeEstimate}
                 signerReady={signerReady}
                 password={password}
                 onPasswordChange={setPassword}
@@ -662,7 +714,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={sourceChainId}
                 onChainChange={(cid) => {
@@ -672,8 +724,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                     setAmount('');
                     setAmountInputError(null);
                     setDestChainId(null);
-                    setFormError(null);
-                    setSubmitError(null);
+                    form.reset();
                 }}
                 onPick={(a) => { setFromAddressId(a.id); setSourcePickerOpen(false); }}
                 onBack={() => setSourcePickerOpen(false)}
@@ -685,16 +736,14 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="Receive at"
+                title="Receive At"
                 walletId={walletId}
                 chainId={destChainId}
                 onChainChange={(cid) => {
                     if (cid === destChainId) return;
                     setDestChainId(cid);
-                    setFormError(null);
-                    setSubmitError(null);
                 }}
-                onPick={(a) => { setDestAddress(a.address); setDestPickerOpen(false); }}
+                onPick={(a) => { setDestAddress(a.address); form.clear('bridge-dest-address'); setDestPickerOpen(false); }}
                 onBack={() => setDestPickerOpen(false)}
             />
         );
@@ -706,7 +755,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                 purpose="send"
                 walletId={walletId}
                 accountId={accountId}
-                title="Select token to move"
+                title="Select Token to Move"
                 networkFilter={coinFromChainId(sourceChainId)}
                 // The bridge moves TOKENS. A chain's native coin has no token
                 // row to lock and no escrow to hold it, so offering BTC/LTC/DOGE
@@ -725,79 +774,120 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
 
     const sourceChainIds = chainsWithAddresses(addressesByChain);
 
+    // The section each refusal belongs to. A live refusal of the
+    // current values opens its section at once; a press refusal reopens its
+    // section on every Review press, even after the user closed it.
+    const blockingSection = !blockingError
+        ? null
+        : blockingError === sourceAddressError
+            ? 'from'
+            : blockingError === memoError ? 'memo' : 'main';
+    // A live key changes with the refusal's text; the From one waits for a
+    // resolved source address, so the moment between the address list
+    // loading and the default address being picked does not open From.
+    const liveKey = (id) => (blockingSection === id && !(id === 'from' && !fromAddress)
+        ? `live:${blockingError}`
+        : null);
+    const pressKey = (id) => (!blockingError && pressError && errorSection === id
+        ? form.attempt + 1
+        : null);
+    const errorKey = (id) => liveKey(id) || pressKey(id) || 0;
+    // The main section's closed summary, "10 XCHAIN to D9xy...7c1c";
+    // no network names (they live in From and the Move to field).
+    const amountText = String(amount).trim();
+    const mainSummary = joinSummaryParts([
+        amountText ? amountText : shown.label,
+        destAddress ? <>to <SummaryAddress address={destAddress} /></> : null,
+    ], ' ') || null;
+    const onSourceNetworkChange = (cid) => {
+        if (cid === sourceChainId) return;
+        setSourceChainId(cid);
+        setTick(GAS_TICK);
+        setAmount('');
+        setAmountInputError(null);
+        setDestChainId(null);
+        form.reset();
+    };
+
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label="Move across networks"
             onSubmit={handleSubmit}
-            status={(feeWarning || pageError) ? (
-                <>
-                    {/* A warning, not a refusal: base D13 ruled there is NO dust floor in
-                        consensus, so a below-fee move is legal and the user may have a
-                        reason. `status` rather than `error` is deliberate - an alert role
-                        on a legal choice trains people to ignore the real refusals below
-                        it. */}
-                    {feeWarning ? (
-                        <StatusMessage variant="status">{feeWarning}</StatusMessage>
-                    ) : null}
-                    {blockingError ? (
-                        <StatusMessage variant="error">{blockingError}</StatusMessage>
-                    ) : pressError ? (
-                        // Leads the page, far above the button on a phone: it takes focus.
-                        <FormErrorSummary errors={[{ message: pressError }]} focusKey={reviewAttempt} />
-                    ) : null}
-                </>
-            ) : null}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="success"
+            data-form-standard="bridge-move"
+            errors={form}
+            status={[
+                /* A warning, not a refusal: base D13 ruled there is NO dust floor in
+                   consensus, so a below-fee move is legal and the user may have a
+                   reason. `status` rather than `error` is deliberate - an alert role
+                   on a legal choice trains people to ignore the real refusals below
+                   it. */
+                feeWarning ? (
+                    <StatusMessage key="fee-warning" variant="status">{feeWarning}</StatusMessage>
+                ) : null,
+                blockingError && !form.hasErrors ? (
+                    <StatusMessage key="blocking" variant="error">{blockingError}</StatusMessage>
+                ) : null,
+            ]}
+            /* From holds the source network (the network the token
+               leaves) and the From address. */
+            from={(
+                <FromSection
+                    {...formSections.bind('from')}
+                    chainId={sourceChainId || undefined}
+                    chainIds={sourceChainIds}
+                    chainRegistry={chainRegistry}
+                    onNetworkChange={onSourceNetworkChange}
+                    networkHelp="The network the token leaves. Your From address, the token and the network fee are on this network."
+                    address={fromAddress?.address || null}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    addressHelp="Your address on the source network that holds the tokens to move."
+                    revealKey={errorKey('from')}
+                    formErrorKey="form:from"
+                />
+            )}
+            fee={(
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    chainId={sourceChainId}
+                    coinTicker={sourceCoin}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeCustomEstimate}
+                    revealKey={errorKey('fee')}
+                    formErrorKey="form:fee"
+                    fees={{
+                        quote: bridgeFeeQuote,
+                        pending: bridgeFeePending,
+                        nativeFeeProps: nativeFee.toggleProps,
+                    }}
+                />
+            )}
+            action={(
+                <FormAction
                     icon={<Icon.MigrateIcon />}
                     loading={actionConfirm.composing || stage === 'submitting'}
-                    disabled={
-                        !!blockingError
-                        || !!amountInputError
-                        || destinationUnavailable
-                        || !destinationAddressValid
-                        || !fromAddress
-                        || !leg.version
-                        || actionConfirm.composing
-                    }
+                    aria-disabled={destinationUnavailable ? 'true' : undefined}
                 >
-                    {leg.leg === 'burn' ? 'Move back' : 'Move'}
-                </Button>
+                    {leg.leg === 'burn' ? 'Move Back' : 'Move'}
+                </FormAction>
             )}
         >
-            <NetworkField
-                label="Move from"
-                help="The network the token leaves. Your From address, the token and the network fee are on this network, and the move cannot be undone once it applies."
-                value={sourceChainId || ''}
-                onChange={(cid) => {
-                    if (cid === sourceChainId) return;
-                    setSourceChainId(cid);
-                    setTick(GAS_TICK);
-                    setAmount('');
-                    setAmountInputError(null);
-                    setDestChainId(null);
-                    setFormError(null);
-                    setSubmitError(null);
-                }}
-                chainIds={sourceChainIds}
-                chainRegistry={chainRegistry}
-            />
-            {fromAddress ? (
-                <AddressField
-                    label="From"
-                    help="Your address on the source network that holds the tokens to move."
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
-                />
-            ) : null}
+            {/* The main section holds the token, where it goes, the amount and
+                the signing block. The destination network stays a field here
+                because a typed Receive at address is validated against it. */}
+            <FormSection
+                id="main"
+                title="Bridge Transfer"
+                icon={Icon.MigrateIcon}
+                {...formSections.bind('main')}
+                revealKey={errorKey('main')}
+                summary={mainSummary}
+            >
             <TokenField
+                id="bridge-token"
                 label="Token"
                 help="The token to move across the bridge. Only tokens with a bridge route from the source network can be moved."
                 value={tick && sourceChainId ? { chainId: sourceChainId, tick } : null}
@@ -833,13 +923,15 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                         onChange={(cid) => {
                             if (cid === destChainId) return;
                             setDestChainId(cid);
-                            setFormError(null);
-                            setSubmitError(null);
                         }}
                         chainIds={offeredDestChainIds}
                         chainRegistry={chainRegistry}
+                        // The destination network, not the source (that sits in From).
+                        notSource
+                        formErrorKey="form:dest-network"
                     />
                     <AddressField
+                        id="bridge-dest-address"
                         label="Receive at"
                         help="The address on the destination network that receives the tokens. It starts as one of your own addresses; you can type or paste any valid address on that network."
                         icon="addresses"
@@ -853,6 +945,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
             )}
 
             <AmountField
+                id="bridge-amount"
                 label="Amount"
                 help="How much of the token to move. It must fit the token's decimal places."
                 amount={amount}
@@ -864,56 +957,20 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                     setAmount(stripped);
                 }}
                 onValidationError={setAmountInputError}
-                onMax={balance && Number(balance) > 0 ? () => setAmount(balance) : undefined}
+                onMax={balance && Number(balance) > 0 ? () => { setAmount(balance); form.clear('bridge-amount'); } : undefined}
                 maxDisabled={!balance}
                 balanceText={balance != null
                     ? `${formatWithThousands(balance)} ${shown.label} available`
                     : null}
             />
 
-            <Input
-                label="Memo"
-                help={MEMO_HINT}
-                optional
-                maxLength={MAX_MEMO_LENGTH}
-                value={memo}
-                onChange={(e) => setMemo(e.target.value)}
-            />
-
-            <FeesCard
-                chainId={sourceChainId}
-                quote={protocolFeeQuote}
-                pending={protocolFeePending}
-                feeSelector={feeTiers ? (
-                    <FeeSelector
-                        chainId={sourceChainId}
-                        label="Network fee"
-                        coinTicker={sourceCoin}
-                        tiers={feeTiers}
-                        value={feePick}
-                        onChange={setFeePick}
-                        customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                    />
-                ) : null}
-            >
-                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={sourceCoin} fee={protocolFeeQuote} />
-            </FeesCard>
-
-            {destChainId && leg.version ? (
-                <FormNotice>
-                    {bridgeMoveNoticeText({
-                        leg,
-                        amount,
-                        tickLabel: shown.label,
-                        sourceDescriptor,
-                        destDescriptor,
-                        requiredDepth,
-                    })}
-                </FormNotice>
-            ) : null}
-
+            {/* A watcher build has no confirm screen, so the warnings card's
+                line that a move can't be undone shows here instead. */}
             {isWatcherMode ? (
-                <p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>
+                <>
+                    <ActionWarningsCard ids={['BRIDGE_MOVE']} />
+                    <p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>
+                </>
             ) : null}
 
             {!isWatcherMode ? (
@@ -922,7 +979,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                     fromAddress={fromAddress}
                     chainId={sourceChainId}
                     password={password}
-                    onPasswordChange={(v) => { setPassword(v); if (submitError) setSubmitError(null); }}
+                    onPasswordChange={(v) => { setPassword(v); form.clear('form'); }}
                     onStatusChange={onHwStatusChange}
                     passwordRef={passwordRef}
                     submitError={null}
@@ -930,8 +987,19 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                     getSignerStatus={messaging.getSignerStatus}
                 />
             ) : null}
+            </FormSection>
 
-        </FormPage>,
+            {/* Memo is its own optional section holding only the memo: the
+                section title names the field and carries its count. A memo the
+                network would refuse opens it. */}
+            <MemoSection
+                {...formSections.bind('memo')}
+                revealKey={errorKey('memo')}
+                maxLength={MAX_MEMO_LENGTH}
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+            />
+        </FormFrame>,
     );
 }
 
@@ -998,7 +1066,7 @@ export function BridgePendingPanel({
                     + '. Nothing further is needed from you, and it cannot be cancelled or redirected.'}
             </p>
             <div className={styles.actions}>
-                <Button variant="primary" onClick={onDone}>Done</Button>
+                <Button variant="success" icon={<Icon.CheckIcon />} onClick={onDone}>Done</Button>
             </div>
         </>
     );
@@ -1027,12 +1095,12 @@ function bridgeMoveNoticeText({
     const targetSeconds = targetBlockSecondsForCoin(sourceDescriptor?.coin);
     const duration = targetSeconds ? approximateDurationText(depth * targetSeconds) : null;
     const arrival = `after ${depth} ${confirmationWord}${duration ? ` (~${duration})` : ''}`;
+    // That the move can't be undone or redirected is the warnings card's
+    // line (flows/actionWarnings.js BRIDGE_MOVE), so it is not said here too.
     if (leg.leg === 'burn') {
-        return `Burns ${moved} on ${sourceName} and releases it on ${destinationName} ${arrival}.`
-            + ' The release cannot be undone or redirected.';
+        return `Burns ${moved} on ${sourceName} and releases it on ${destinationName} ${arrival}.`;
     }
-    return `Locks ${moved} on ${sourceName} and credits it on ${destinationName} ${arrival}.`
-        + ' The credit cannot be undone or redirected.';
+    return `Locks ${moved} on ${sourceName} and credits it on ${destinationName} ${arrival}.`;
 }
 
 function approximateDurationText(seconds) {

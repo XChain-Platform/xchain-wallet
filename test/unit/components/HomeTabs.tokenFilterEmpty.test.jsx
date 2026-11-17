@@ -34,6 +34,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useCollectibleKeys.js', () => (
 }));
 
 import { HomeTabs } from '../../../packages/core/src/shared/components/HomeTabs.jsx';
+import { showHomeBalances } from '../../helpers/homeBalances.js';
 
 const chainRegistry = {
     byCoin: () => [],
@@ -54,13 +55,14 @@ function mount(overrides = {}) {
         ...overrides,
     };
     const view = render(<HomeTabs {...props} />);
-    fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+    showHomeBalances('tokens');
     return { ...view, props };
 }
 
 afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    globalThis.localStorage?.clear();
 });
 
 describe('HomeTabs token filter empty state', () => {
@@ -72,7 +74,7 @@ describe('HomeTabs token filter empty state', () => {
         expect(screen.getByText('Matching tokens appear here after you change or clear the filter.')).toBeInTheDocument();
         expect(screen.queryByText(/top toolbar/)).toBeNull();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Clear filter' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Clear Filter' }));
         expect(onTokenQueryChange).toHaveBeenCalledWith('');
     });
 
@@ -90,7 +92,7 @@ describe('HomeTabs token filter empty state', () => {
         mount({ onReceive: vi.fn() });
         expect(screen.queryByRole('searchbox', { name: 'Search tokens by name' })).toBeNull();
         expect(screen.getByRole('button', { name: 'Filter and sort' })).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Clear filter' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Clear Filter' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Receive' })).toBeNull();
     });
 });

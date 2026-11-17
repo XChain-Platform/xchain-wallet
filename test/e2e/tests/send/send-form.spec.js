@@ -119,7 +119,7 @@ test.describe('send form', () => {
     // This is the first coverage that drives that page in a real browser; the
     // unit suites mount it, but only here does the composed envelope, the
     // pre-flight round trip and the rendered copy meet each other.
-    test('the confirm page states the action, the chain and the exact fee', async ({ page }) => {
+    test('the confirm page states the exact network fee', async ({ page }) => {
         await toField(page).fill(VALID_BTC);
         await amountField(page).fill('0.01');
         await mainButton(page, 'Send').click();
@@ -139,33 +139,27 @@ test.describe('send form', () => {
         // SDK: confirm-broadcast.regtest.spec.js:82 and :172, and
         // preflight-gate.regtest.spec.js:174. What this venue still owns is
         // everything the mock CAN answer for honestly, below.
-        await expect(page.getByTestId('confirm-chain-badge')).toHaveText('Bitcoin');
         // §5.2.5: the fee comes from the composed PSBT, so it is an exact
         // amount, not the form's rate estimate.
-        await expect(confirm).toContainText(/Network fee: [\d.]+ BTC/);
+        await expect(confirm.getByText('Network fee', { exact: true })).toBeVisible();
+        await expect(confirm.getByTestId('confirm-fee-network')).toHaveText(/[\d.]+ BTC/);
         // §5.2.6: the hardware note names this screen as the intent surface,
         // so it appears only when a hardware device signs. This wallet signs
         // in software, so the review leaves it out.
         await expect(confirm).not.toContainText(/hardware device verifies native outputs/i);
     });
 
-    // §1.7 / wallet spec §21.7. The confirm page is the last place the user
-    // sees WHICH network is about to move their money, and it is reached
-    // several screens after the chain was picked. The "Approve & Sign on
-    // <chain>" button form is retired and a native payment decodes to no action,
-    // so the chain badge carries it and the button stays exact.
-    test('the confirm page names the chain it will sign on', async ({ page }) => {
+    // The old chain badge has no Confirm Standard equivalent. This dev-mock
+    // case continues to pin the exact fallback label and enabled state.
+    test('the confirm page keeps the Approve fallback exact and enabled', async ({ page }) => {
         await toField(page).fill(VALID_BTC);
         await amountField(page).fill('0.01');
         await mainButton(page, 'Send').click();
 
-        // The chain is named by the badge beside the signing footer: the chain
-        // suffix on the button itself was retired by operator decision. The
-        // button names the decoded action and amount ("Send 0.01 BTC"), but
+        // The button names the decoded action and amount ("Send 0.01 BTC"), but
         // this venue's dev-mock host has no decoder.describe(), so it shows
         // the bare "Approve" fallback; the decoded label is covered by the
         // ConfirmActionModal unit tests.
-        await expect(page.getByTestId('confirm-chain-badge')).toHaveText('Bitcoin');
         await expect(page.getByTestId('confirm-approve')).toHaveText(/^Approve$/);
         await expect(page.getByTestId('confirm-approve')).toBeEnabled();
     });

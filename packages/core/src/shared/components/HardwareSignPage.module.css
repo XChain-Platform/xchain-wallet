@@ -1,0 +1,105 @@
+/* The sign page covers the page it opened over, so that page keeps its
+   state underneath for Back. A fixed layer skips the body's top inset, so it
+   keeps clear of the notch and side insets itself; Screen pads the bottom. */
+.layer {
+    box-sizing: border-box;
+    position: fixed;
+    inset: 0;
+    z-index: var(--xc-z-modal);
+    display: flex;
+    flex-direction: column;
+    /* Logical sides: the larger side inset on both inline edges, as
+       NetworkPicker does, so the layer reads the same in either direction. */
+    padding-block: env(safe-area-inset-top, 0) 0;
+    padding-inline: max(env(safe-area-inset-left, 0rem), env(safe-area-inset-right, 0rem));
+    background: var(--xc-bg);
+    overflow: hidden;
+}
+
+.inline {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+}
+
+.appBar {
+    flex: 0 0 auto;
+    width: 100%;
+}
+
+.screenFrame {
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 0;
+    --xc-screen-h: 100%;
+}
+
+/* Screen owns the only gap below the page header: the standard 8px page inset. */
+.screenBody {
+    --xc-page-top: var(--xc-space-2);
+}
+
+/* Picture, heading, one line on what to check, then the steps: centred, in
+   the form column's width (the Confirm page it opened from uses the same), so
+   on a wide window the step line and a failure notice never span it. From
+   600px the FormPage around it draws the one form card (G126). */
+.body {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--xc-space-2);
+    text-align: center;
+    width: 100%;
+    max-width: var(--xc-form-card-max-width);
+    min-width: 0;
+    margin-inline: auto;
+}
+
+.body > [data-hardware-status-line] {
+    align-self: stretch;
+    margin-block-start: var(--xc-space-2);
+}
+
+.body > [role="alert"] {
+    align-self: stretch;
+    text-align: start;
+}
+
+/* The picture box is the logo's own size: a larger box around it added blank
+   space between a failure notice and the logo beyond the stack's 8px gap. */
+.picture {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.logo {
+    width: calc(var(--xc-space-8) * 2);
+    height: calc(var(--xc-space-8) * 2);
+    object-fit: contain;
+}
+
+/* The vendor marks are black; dark themes draw them light. */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-xc-theme="light"]) .logo {
+        filter: invert(1);
+    }
+}
+
+:root[data-xc-theme="dark"] .logo {
+    filter: invert(1);
+}
+
+.heading {
+    margin: 0;
+    font-size: var(--xc-text-xl);
+    font-weight: 700;
+}
+
+.hint {
+    margin: 0;
+    color: var(--xc-text-muted);
+}

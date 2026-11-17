@@ -205,7 +205,7 @@ assert.ok(
     'a11y spec waits on the notice screen with the shared KDF budget',
 );
 assert.ok(
-    !/Automatic Donation System[\s\S]{0,200}?timeout:\s*[0-9]/.test(a11ySrc),
+    !/Automatic Donations[\s\S]{0,200}?timeout:\s*[0-9]/.test(a11ySrc),
     'a11y spec pins no literal timeout on the notice heading',
 );
 

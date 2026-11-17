@@ -14,18 +14,21 @@ import { addEnglish } from '../../store.js';
 
 const messages = {
     // --- shell ---------------------------------------------------
-    'shell.markets.selectAsset': 'Choose market asset',
+    'shell.markets.selectAsset': 'Choose Asset',
     'shell.markets.back': 'Back to markets',
     'shell.settings.back': 'Back to settings',
     'shell.privateKeyQr': 'Private key QR',
     'shell.messageSent': 'Message sent',
     'shell.cannotOpenLink': "Can't open link",
     'shell.waitingLinkDropped': 'The waiting payment link was dropped.',
-    'shell.dismiss': 'Dismiss notice',
+    'shell.dismiss': 'Dismiss Notice',
     'shell.unknownState': 'unknown state "{state}"',
 
     // Copy moved out of JSX literals by the i18n sweep.
     'shell.header.appHeader': 'App header',
+    'shell.header.notifications': 'Notifications',
+    'shell.header.notificationsUnread': 'Notifications, {count} unread',
+    'shell.header.notificationsAction': 'Notifications, {count} unread, {action} needs your action',
     'shell.settingsButton.noWallet': 'No wallet',
     'shell.devVariantBadge.devVariant': 'Dev variant: {variant}',
     'shell.devVariantBadge.dragToMove': 'Drag to move',
@@ -37,12 +40,6 @@ const messages = {
     'shell.devVariantBadge.fullDesktop': 'full · desktop',
     'shell.devVariantBadge.sidebarChromePanel': 'sidebar · chrome panel',
     'shell.devVariantBadge.extensionChromePopup': 'extension · chrome popup',
-    'shell.platformLinks.main': 'Main site',
-    'shell.platformLinks.docs': 'Documentation',
-    'shell.platformLinks.encoder': 'Encoder status',
-    'shell.platformLinks.sync': 'Bootstraps & sync',
-    'shell.platformLinks.hub': 'Validator hub',
-    'shell.platformLinks.mcp': 'MCP for agents',
 };
 
 addEnglish(messages);

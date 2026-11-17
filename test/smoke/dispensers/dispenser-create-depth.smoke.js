@@ -30,10 +30,14 @@ assert.match(src, /p\.GET_TICK = getTick\.trim\(\);/, 'token lane emits GET_TICK
 assert.match(src, /p\.GET_AMOUNT = getTokenAmount\.trim\(\)/, 'token lane emits GET_AMOUNT');
 assert.match(src, /Buyers pay with/, 'form offers a coin-vs-token payment choice');
 
-// EXPIRATION as a Unix timestamp (not blocks), 'default' omits it.
-assert.match(src, /p\.EXPIRATION = String\(unix\)/, 'emits EXPIRATION as a Unix timestamp');
+// EXPIRATION as a Unix timestamp (not blocks), 'default' (3 months) omits it.
+// The shared Expiration choice converts the Expires picker to Unix seconds.
+const expirationChoice = read('packages', 'core', 'src', 'shared', 'components', 'expirationChoice.jsx');
+assert.match(src, /const expiration = expirationParam\(expMode, expInput\);\s*if \(expiration\) p\.EXPIRATION = expiration;/,
+    'emits EXPIRATION as a Unix timestamp from the shared Expiration choice');
 assert.match(src, /localInputToUnix/, 'converts the datetime picker to Unix seconds');
-assert.match(src, /type="datetime-local"/, 'expiration uses a datetime picker');
+assert.match(src, /<ExpirationFields/, 'expiration uses the shared Expiration choice');
+assert.match(expirationChoice, /type="datetime-local"/, 'expiration uses a datetime picker');
 
 // Allow/block lists via the shared PC-04 picker.
 assert.match(src, /p\.ALLOW_LIST = allowListIdx/, 'emits ALLOW_LIST');
@@ -41,6 +45,7 @@ assert.match(src, /p\.BLOCK_LIST = blockListIdx/, 'emits BLOCK_LIST');
 assert.match(src, /ListPickerScreen/, 'uses the shared list picker');
 
 // Oracle/fiat pricing is coin-only: it hides in the token lane.
-assert.match(src, /showAdvanced && payWith === 'coin'/, 'oracle/fiat advanced section is coin-only');
+// The currency is the Fiat currency field and its picker page (G122).
+assert.match(src, /payWith === 'coin' \? \(\s*<>\s*(?:\{\/\*[\s\S]*?\*\/\}\s*)?<FiatCurrencyField\s+id="dispenser-fiat-code"/, 'oracle/fiat advanced section is coin-only');
 
 console.log('dispenser-create-depth smoke: all assertions passed');

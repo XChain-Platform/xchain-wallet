@@ -48,6 +48,23 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
+describe('RenameAccountForm flat layout', () => {
+    it('has no FormSection wrappers and lists the fields in order', () => {
+        const { container } = mount();
+        expect(container.querySelector('[data-form-section-title]')).toBeNull();
+        expect(container.querySelector('[data-form-section-chevron]')).toBeNull();
+        const flat = container.querySelector('[data-flat-look-form]');
+        expect(flat).toBeTruthy();
+        const text = container.textContent;
+        const order = ['Account name', 'Icon colour', 'Icon shape', 'Icon image', 'Save Changes'].map((s) => text.indexOf(s));
+        expect(order.every((i) => i >= 0)).toBe(true);
+        expect([...order].sort((a, b) => a - b)).toEqual(order);
+        const tile = flat.firstElementChild;
+        expect(tile.compareDocumentPosition(screen.getByLabelText('Account name')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(screen.getByRole('radio', { name: 'Colour #1E90C7' })).toBeTruthy();
+    });
+});
+
 describe('RenameAccountForm name validation', () => {
     it('prefills the input with the initial name', () => {
         mount({ initialName: 'Savings' });
@@ -58,7 +75,7 @@ describe('RenameAccountForm name validation', () => {
     it('disables Save for an empty or whitespace-only name', () => {
         mount({ initialName: '' });
         const input = screen.getByLabelText('Account name');
-        const save = screen.getByRole('button', { name: 'Rename account' });
+        const save = screen.getByRole('button', { name: 'Save Changes' });
 
         expect(save.disabled).toBe(true);
         fireEvent.change(input, { target: { value: '   ' } });
@@ -86,7 +103,7 @@ describe('RenameAccountForm name validation', () => {
             target: { value: ' savings ' },
         });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Rename account' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
 
         expect(screen.getByText('An account named "savings" already exists.')).toBeTruthy();
         expect(messaging.renameAccount).not.toHaveBeenCalled();
@@ -97,7 +114,7 @@ describe('RenameAccountForm submission', () => {
     it('trims a valid name, renames the account, and reports completion', async () => {
         const { props } = mount({ initialName: '  Spending  ' });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Rename account' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
 
         await waitFor(() => expect(props.onRenamed).toHaveBeenCalledTimes(1));
         expect(messaging.renameAccount).toHaveBeenCalledTimes(1);
@@ -113,7 +130,7 @@ describe('RenameAccountForm submission', () => {
         messaging = {};
         const { props } = mount();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Rename account' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
 
         expect(await screen.findByText(
             'messaging.renameAccount is not available in this shell.',
@@ -130,7 +147,7 @@ describe('RenameAccountForm submission failures', () => {
         messaging.renameAccount.mockRejectedValue(failure);
         const { props } = mount();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Rename account' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
 
         expect(await screen.findByText(message)).toBeTruthy();
         expect(props.onRenamed).not.toHaveBeenCalled();
@@ -139,7 +156,7 @@ describe('RenameAccountForm submission failures', () => {
     it('clears a shown error when the user types', async () => {
         messaging.renameAccount.mockRejectedValue(new Error('Rename refused'));
         mount();
-        fireEvent.click(screen.getByRole('button', { name: 'Rename account' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
         expect(await screen.findByText('Rename refused')).toBeTruthy();
 
         fireEvent.change(screen.getByLabelText('Account name'), {
@@ -153,10 +170,10 @@ describe('RenameAccountForm submission failures', () => {
         messaging.renameAccount.mockReturnValue(new Promise(() => {}));
         mount();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Rename account' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
 
         await waitFor(() => expect(screen.getByLabelText('Account name').disabled).toBe(true));
         expect(screen.getByRole('button', { name: 'Back to previous screen' }).disabled).toBe(true);
-        expect(screen.getByRole('button', { name: 'Rename account' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Save Changes' }).disabled).toBe(true);
     });
 });

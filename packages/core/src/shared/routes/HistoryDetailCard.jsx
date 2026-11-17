@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import {
     Button,
     CopyButton,
@@ -31,19 +31,22 @@ import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useMessaging } from '../useMessaging.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useFiatRate } from '../hooks/useFiatRate.js';
 import { formatFiat } from '../components/BalanceList.jsx';
 import { coinToFiatExact } from '../../flows/priceLookup.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { ConfirmModal } from '../components/ConfirmModal.jsx';
+import { ActionList } from '../components/ActionList.jsx';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import { tickerForCoin, transactionExplorerLinks } from '../../registry/coinTicker.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/history.js';
 import '../../i18n/locales/en/pending.js';
+import '../../i18n/locales/en/tokenDetail.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
-import { TxStatusTimeline } from '../components/TxStatusTimeline.jsx';
+import { ActionsDetailsToggle } from '../components/ActionsDetailsToggle.jsx';
 import { classifyEntryStatus } from '../utils/historyFilter.js';
 import { AddressText } from '../../ui/AddressText.jsx';
 import { findContactByName, withEntriesAdded } from '../utils/contactMerge.js';
@@ -62,42 +65,20 @@ import { formatFiatAmountForSpeech } from '../utils/fiatAmountFormat.js';
 import { RelativeTime } from '../components/RelativeTime.jsx';
 import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import styles from './History.module.css';
-import { NATIVE_TICKER_BY_COIN, OFFLINE_ACTION_REASON, PENDING_WARNING_STATES, chainRegistry, coinOfChainId, describePendingAction, formatTimestamp, historyAmountDirection, peerAddressOfEntry, peerCacheKey, pendingCopyFor, pendingStateOf } from './HistoryShared.jsx';
+import facts from './FactRows.module.css';
+import { NATIVE_TICKER_BY_COIN, OFFLINE_ACTION_REASON, PENDING_WARNING_STATES, chainRegistry, coinOfChainId, describePendingAction, formatTimestamp, historyAmountDirection, peerAddressOfEntry, pendingCopyFor, pendingStateOf } from './HistoryShared.jsx';
 
-// Image sources here are bundled assets. Third-party explorers use the local
-// letter badge path below so opening History never fetches a remote favicon.
-function ExplorerFavicon({ src, label }) {
-    const [failed, setFailed] = useState(false);
-    if (failed) {
-        return <span className={styles.detailActionIcon} aria-hidden="true">{String(label).charAt(0)}</span>;
-    }
-    return (
-        <img
-            src={src}
-            alt=""
-            aria-hidden="true"
-            className={styles.detailActionFavicon}
-            onError={() => setFailed(true)}
-        />
-    );
-}
+import { ExplorerFavicon } from '../components/ExplorerFavicon.jsx';
 
 /**
  * Inline detail card. For LINK-threaded entries we render two
  * `detailSide` blocks side-by-side; for everything else, one block.
  */
-export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walletId, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed, networkAvailable = true }) {
+export function DetailCard({ entry, chainTip, walletId, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed, networkAvailable = true }) {
     const { messaging, shell } = useMessaging();
     const { showToast } = useToast();
-    const { settings, loading: settingsLoading } = useSettings();
-    // Speed up and Cancel sign a replacement, which a watch-only wallet
-    // cannot do, so they wait for the wallet mode; a failed settings read
-    // opens in full mode.
-    const walletModeReady = settings !== null || !settingsLoading;
-    const isWatcherMode = settings?.walletMode === 'watcher';
+    const { settings } = useSettings();
     const [balancesHidden] = useBalancesHidden();
-    const rbfConfirm = useConfirmModal();
-    const [activeDetailTab, setActiveDetailTab] = useState(/** @type {'status' | 'details' | 'raw'} */ ('status'));
 
     // Fiat equivalent, native-coin amounts only. `nativeAmountFieldOf`
     // returns null for anything that isn't unambiguously a native-coin SEND
@@ -114,28 +95,23 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
         ? coinToFiatExact(nativeAmount, fiatRate)
         : null;
 
-    // ───── More-menu / Save-as-contact state ─────
+    // ───── Actions tab / Save-as-contact state ─────
     // Contacts are fetched once so the "already a contact" check can run
-    // synchronously when deciding whether to expose the Save-as-contact
-    // option in the More dropdown.
+    // synchronously when deciding whether to offer the Save-as-contact row
+    // in the Actions tab.
     const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
     const [contactsLoaded, setContactsLoaded] = useState(false);
-    const [moreOpen, setMoreOpen] = useState(false);
     const [contactSaveStage, setContactSaveStage] = useState(
         /** @type {'hidden' | 'editing' | 'saving' | 'saved'} */ ('hidden'),
     );
     const [contactName, setContactName] = useState('');
     const [contactSaveError, setContactSaveError] = useState(/** @type {string | null} */ (null));
-    const moreWrapRef = useRef(/** @type {HTMLDivElement | null} */ (null));
 
     // ───── RBF (Speed up / Cancel) state ─────
-    // Exposed through the More menu now instead of as a standalone
-    // button cluster below the tabs. The status message renders inline
-    // between the action row and the tabs so the user sees the result
-    // of their tap without scrolling.
-    const [rbfBusy, setRbfBusy] = useState(/** @type {'speedup' | 'cancel' | null} */ (null));
-    const [rbfError, setRbfError] = useState(/** @type {string | null} */ (null));
-    const [rbfDone, setRbfDone] = useState(/** @type {string | null} */ (null));
+    // Offered as rows of the Actions tab's list. The outcome renders under
+    // that list so the user sees the result of their tap without scrolling.
+    const rbf = useRbfReplace({ entry, walletId, networkAvailable });
+    const { busy: rbfBusy, error: rbfError, done: rbfDone } = rbf;
 
     useEffect(() => {
         let cancelled = false;
@@ -149,33 +125,6 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
         return () => { cancelled = true; };
     }, [messaging]);
 
-    useEffect(() => {
-        if (!moreOpen) return undefined;
-        const onClick = (e) => {
-            if (moreWrapRef.current?.contains(e.target)) return;
-            setMoreOpen(false);
-        };
-        const onKey = (e) => { if (e.key === 'Escape') setMoreOpen(false); };
-        window.addEventListener('mousedown', onClick);
-        window.addEventListener('keydown', onKey);
-        return () => {
-            window.removeEventListener('mousedown', onClick);
-            window.removeEventListener('keydown', onKey);
-        };
-    }, [moreOpen]);
-
-    // M2.3: a pending entry has no block, so the LINK pairing it would
-    // render has not been indexed either. Suppressed outright rather
-    // than left to render an empty peer block that reads like a failed
-    // fetch. It comes back on its own when the confirmed entry replaces
-    // this one, because that entry carries the link record.
-    const isLinked = Boolean(entry.link) && Number(entry.blockIndex) > 0;
-    const peerKey = entry.link?.peerChainId && entry.link?.peerActionIndex
-        ? peerCacheKey(entry.link.peerChainId, entry.link.peerActionIndex)
-        : null;
-    const peer = peerKey ? peerCache[peerKey] : null;
-    const rbfDescriptor = chainRegistry.get(entry.chainId);
-    const replaceable = isEntryReplaceable(entry, { descriptor: rbfDescriptor });
     // §24.6 / Cluster Y FOLLOWUP 4: desktop-only "Open in new window"
     // affordance for pending (mempool-only) entries. The detached
     // window opens directly on this row via the History `initialFocus`
@@ -206,19 +155,23 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
         walletAddresses,
         explorerButtons,
     );
-    // Redact entry + peer raw payloads before stringifying. Cheap walk;
-    // returns the same shape so the JSON pretty-printer indents identically.
-    const rawForDisplay = balancesHidden ? redactAmountFields(entry.raw) : entry.raw;
-    const detailTabs = [
-        { id: 'status',  label: 'Status'  },
-        { id: 'details', label: 'Details' },
-        { id: 'raw',     label: 'Raw data' },
-    ];
 
-    // Compute Save-as-contact saveability + assemble the More menu so
-    // the rightmost button on the explorer row reads as a single
-    // entry-point for follow-up actions instead of being buried below
-    // the tab panels.
+    // The Actions tab's list (G101): the explorer links as "View on ..."
+    // rows, then Save as contact, Speed up, Cancel and the two receipt rows.
+    // Offline, an explorer row stays as a disabled row with the reason.
+    const actionRows = explorerButtons.map((link) => ({
+        id: `explorer-${link.id}`,
+        title: `View on ${link.label}`,
+        description: `This transaction on the ${link.label} explorer`,
+        icon: <ExplorerFavicon src={link.iconImg} label={link.label} explorerId={link.id} />,
+        href: link.url,
+        // A disabled row renders as a button, which takes no link attributes.
+        ...(networkAvailable ? { target: '_blank', rel: 'noopener noreferrer' } : {}),
+        disabled: !networkAvailable,
+        disabledReason: !networkAvailable ? OFFLINE_ACTION_REASON : undefined,
+    }));
+
+    // Compute Save-as-contact saveability for its row.
     const contactPeer = peerAddressOfEntry(entry);
     const contactPeerCoin = coinOfChainId(entry?.chainId);
     const contactPeerIsSelf = Boolean(entry?.address && contactPeer === entry.address);
@@ -231,106 +184,50 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
         && !contactAlreadySaved
         && Boolean(contactPeerCoin)
         && contactSaveStage !== 'saved';
-    async function runRbf(strategy) {
-        if (rbfBusy) return;
-        setMoreOpen(false);
-        setRbfBusy(strategy);
-        setRbfError(null);
-        setRbfDone(null);
-        try {
-            const quote = await replaceFromHistoryEntry({
-                messaging, entry, strategy, walletId, descriptor: rbfDescriptor, preview: true,
-            });
-            const ticker = tickerForCoin(rbfDescriptor?.coin);
-            const confirmed = await rbfConfirm.confirm({
-                title: strategy === 'cancel' ? 'Cancel this transaction?' : 'Speed up this transaction?',
-                message: `Old fee: ${quote.originalFee} ${ticker}. `
-                    + `New fee: ${quote.replacementFee} ${ticker}. `
-                    + `Additional cost: ${quote.feeIncrease} ${ticker}.`,
-                confirmLabel: strategy === 'cancel' ? 'Broadcast cancellation' : 'Broadcast replacement',
-                danger: strategy === 'cancel',
-            });
-            if (!confirmed) return;
-            const res = await replaceFromHistoryEntry({ messaging, entry, strategy, walletId, descriptor: rbfDescriptor });
-            setRbfDone(`Replacement sent: ${res?.replacementTxHash || 'Pending'}`);
-            // §37.2 / Cluster D FOLLOWUP 3: a cancel gets an Undo toast.
-            // The undo is a THIRD transaction replacing the cancel and
-            // re-issuing the spend, so it is only offered while the
-            // cancel is still in the mempool; `cancelUndoSnapshot`
-            // returns null when the pair cannot support one.
-            if (strategy === 'cancel') {
-                const snapshot = cancelUndoSnapshot({ entry, result: res, walletId });
-                if (snapshot) {
-                    showToast({
-                        message: 'Transaction cancelled',
-                        actionLabel: 'Undo',
-                        onAction: async () => {
-                            setRbfError(null);
-                            try {
-                                const undone = await undoCancel({ messaging, snapshot });
-                                setRbfDone(`Re-sent: ${undone?.replacementTxHash || 'Pending'}`);
-                            } catch (undoErr) {
-                                setRbfError(rbfFailureMessage(undoErr, 'Could not undo the cancellation.'));
-                            }
-                        },
-                    });
-                }
-            }
-        } catch (err) {
-            setRbfError(rbfFailureMessage(err, "Couldn't speed up or cancel this transaction. Try again later."));
-        } finally {
-            setRbfBusy(null);
-        }
-    }
-
-    const moreOptions = [];
     if (canSaveContact) {
-        moreOptions.push({
+        actionRows.push({
             id: 'save-contact',
-            label: 'Save as contact',
+            title: 'Save as contact',
+            description: 'Add the other address to your contacts',
             icon: <Icon.UsersIcon />,
             onClick: () => {
-                setMoreOpen(false);
                 setContactSaveStage('editing');
                 setContactName('');
                 setContactSaveError(null);
             },
         });
     }
-    // A transaction we have already replaced still satisfies the field
-    // contract `isEntryReplaceable` checks (it has a hash, no block, and
-    // an allowlisted action), so the offer has to be withdrawn here.
-    // Replacing a replacement bumps the fee on a transaction the network
-    // has already dropped, spends a fee, and moves nothing.
-    if (walletModeReady && !isWatcherMode && isReplaceCallAvailable(messaging) && replaceable.ok && !entry.pending?.replaced) {
-        moreOptions.push({
+    if (rbf.available) {
+        actionRows.push({
             id: 'rbf-speedup',
-            label: rbfBusy === 'speedup' ? 'Speeding up…' : 'Speed up transaction',
+            title: rbfBusy === 'speedup' ? 'Speeding up…' : 'Speed up transaction',
+            description: 'Pay a higher fee so it confirms sooner',
             icon: <Icon.ForwardIcon />,
             disabled: rbfBusy !== null || !networkAvailable,
             disabledReason: !networkAvailable ? OFFLINE_ACTION_REASON : undefined,
-            onClick: () => runRbf('speedup'),
+            onClick: () => rbf.run('speedup'),
         });
-        moreOptions.push({
+        actionRows.push({
             id: 'rbf-cancel',
-            label: rbfBusy === 'cancel' ? 'Cancelling…' : 'Cancel transaction',
+            title: rbfBusy === 'cancel' ? 'Cancelling…' : 'Cancel transaction',
+            description: 'Send the coins back to this wallet before it confirms',
             icon: <Icon.XIcon />,
-            danger: true,
+            tone: 'danger',
             disabled: rbfBusy !== null || !networkAvailable,
             disabledReason: !networkAvailable ? OFFLINE_ACTION_REASON : undefined,
-            onClick: () => runRbf('cancel'),
+            onClick: () => rbf.run('cancel'),
         });
     }
     // Receipt sharing is deliberately narrower than the detail payload. The
     // user opts into these six public transaction facts, never addresses,
     // memos, contact data, wallet identifiers, or arbitrary raw fields.
     const receipt = transactionReceiptText(entry, { settings, balancesHidden });
-    moreOptions.push({
+    actionRows.push({
         id: 'share-receipt',
-        label: 'Share receipt',
+        title: 'Share receipt',
+        description: 'Send the public transaction facts through another app',
         icon: <Icon.UploadIcon />,
         onClick: async () => {
-            setMoreOpen(false);
             const outcome = await shareOrCopy({
                 title: 'XChain transaction receipt',
                 text: receipt,
@@ -342,12 +239,12 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
             }
         },
     });
-    moreOptions.push({
+    actionRows.push({
         id: 'copy-receipt',
-        label: 'Copy receipt',
+        title: 'Copy receipt',
+        description: 'The same receipt as text, ready to paste',
         icon: <Icon.CopyIcon />,
         onClick: async () => {
-            setMoreOpen(false);
             const { ok } = await copyText(receipt);
             showToast({
                 message: ok ? 'Transaction receipt copied.' : 'Copy failed: clipboard unavailable',
@@ -416,261 +313,91 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                 </table>
             </section>
 
-            {/* Action row: explorer links followed by a "More" button
-                that drops down a list of follow-up actions (e.g. Save
-                as contact, Speed up, Cancel). The More button always
-                renders so users get a consistent place to look across
-                every action type; when no actions apply, the menu
-                surfaces a placeholder message instead.
-
-                The row also renders with no explorer links when an entry
-                has neither an action index nor a transaction id. Keeping
-                the More menu independent preserves Speed up and Cancel for
-                incomplete pending records. */}
-            {explorerButtons.length > 0 || moreOptions.length > 0 ? (
-                <div className={styles.detailActions} role="group" aria-label={t('history.detail.options')}>
-                    {explorerButtons.map((link) => networkAvailable ? (
-                        <a
-                            key={link.id}
-                            href={link.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={styles.detailAction}
-                        >
-                            {link.iconImg ? (
-                                <ExplorerFavicon src={link.iconImg} label={link.label} />
-                            ) : (
-                                <span className={styles.detailActionIcon} aria-hidden="true">{link.icon}</span>
-                            )}
-                            <span>{link.label} <span aria-hidden="true">↗</span></span>
-                        </a>
-                    ) : (
-                        <Button
-                            key={link.id}
-                            variant="secondary"
-                            block
-                            icon={link.iconImg ? (
-                                <ExplorerFavicon src={link.iconImg} label={link.label} />
-                            ) : link.icon}
-                            disabled
-                            title={OFFLINE_ACTION_REASON}
-                            aria-describedby="history-offline-action-reason"
-                        >
-                            {link.label}
-                        </Button>
-                    ))}
-                    <div className={styles.detailActionMoreWrap} ref={moreWrapRef}>
-                        <button
-                            type="button"
-                            className={styles.detailAction}
-                            aria-haspopup="menu"
-                            aria-expanded={moreOpen}
-                            onClick={() => setMoreOpen((o) => !o)}
-                        >
-                            <span className={styles.detailActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
-                            <span>{t('history.detail.more')}</span>
-                        </button>
-                        {moreOpen ? (
-                            <div className={styles.moreMenu} role="menu">
-                                {moreOptions.length > 0 ? (
-                                    moreOptions.map((opt) => (
-                                        /* Native menu items keep the menu role and its custom focus model. */
-                                        <button
-                                            key={opt.id}
-                                            type="button"
-                                            role="menuitem"
-                                            data-destructive={opt.danger ? 'true' : undefined}
-                                            className={styles.moreMenuItem}
-                                            onClick={opt.onClick}
-                                            disabled={Boolean(opt.disabled)}
-                                            title={opt.disabledReason}
-                                            aria-describedby={opt.disabledReason ? 'history-offline-action-reason' : undefined}
-                                        >
-                                            {opt.icon ? (
-                                                <span className={styles.moreMenuItemIcon} aria-hidden="true">
-                                                    {opt.icon}
-                                                </span>
-                                            ) : null}
-                                            <span>{opt.label}</span>
-                                        </button>
-                                    ))
-                                ) : (
-                                    /* Native menu items keep the menu role and its custom focus model. */
-                                    <button
+            {/* The shared Actions | Details toggle (G102, operator ruling
+                2026-11-13): Actions first and chosen on arrival, then
+                Details. No status or raw-data views. */}
+            <ActionsDetailsToggle
+                label={t('history.detail.view')}
+                actions={(
+                    /* One ActionList (G101), the explorer rows first, then
+                       Save as contact, Speed up, Cancel and the receipts. It
+                       is its own card, so the panel draws none. The Speed up
+                       / Cancel outcome and the Save-as-contact form sit under
+                       the list, where the tap happened. Copy receipt applies
+                       to every entry, so the list is never empty. */
+                    <div className={styles.detailActionsPanel}>
+                        <ActionList label={t('history.detail.options')} items={actionRows} />
+                        {rbfError ? (
+                            <StatusMessage variant="error" className={styles.rbfError}>{rbfError}</StatusMessage>
+                        ) : null}
+                        {rbfDone ? (
+                            <p className={styles.rbfDone} role="status">{rbfDone}</p>
+                        ) : null}
+                        {contactSaveStage === 'editing' || contactSaveStage === 'saving' ? (
+                            <form className={styles.saveContactForm} onSubmit={handleSaveContact}>
+                                <Input
+                                    type="text"
+                                    label={t('history.contact.saveAs', { address: shortenAddress(contactPeer || '') })}
+                                    help={t('history.contact.saveAsHelp')}
+                                    enterKeyHint="go"
+                                    autoComplete="off"
+                                    value={contactName}
+                                    onChange={(e) => setContactName(e.target.value)}
+                                    autoFocus
+                                    maxLength={80}
+                                    placeholder={t('common.contactName')}
+                                />
+                                {contactSaveError ? (
+                                    <StatusMessage variant="error" className={styles.saveContactError}>{contactSaveError}</StatusMessage>
+                                ) : null}
+                                <div className={styles.saveContactActions}>
+                                    <Button
                                         type="button"
-                                        role="menuitem"
-                                        className={styles.moreMenuItem}
-                                        disabled
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => {
+                                            setContactSaveStage('hidden');
+                                            setContactName('');
+                                            setContactSaveError(null);
+                                        }}
+                                        disabled={contactSaveStage === 'saving'}
                                     >
-                                        <span>{t('history.detail.noAdditionalActions')}</span>
-                                    </button>
-                                )}
-                            </div>
+                                        {t('common.cancel')}
+                                    </Button>
+                                    <Button
+                                        type="submit"
+                                        variant="primary"
+                                        size="sm"
+                                        loading={contactSaveStage === 'saving'}
+                                    >
+                                        {t('history.contact.save')}
+                                    </Button>
+                                </div>
+                            </form>
                         ) : null}
                     </div>
-                </div>
-            ) : null}
-
-            {/* RBF status: surfaces the outcome of Speed up / Cancel
-                picked from the More menu. Sits between the action row
-                and the tab strip so the user sees the result without
-                scrolling, mirroring the inline save-contact form. */}
-            {rbfError ? (
-                <StatusMessage variant="error" className={styles.rbfError}>{rbfError}</StatusMessage>
-            ) : null}
-            {rbfDone ? (
-                <p className={styles.rbfDone} role="status">{rbfDone}</p>
-            ) : null}
-
-            {/* Inline Save-as-contact form. Shown when the user picks
-                "Save as contact" from the More menu, sits between the
-                action buttons and the tab strip so the user doesn't
-                lose the page context the way the bottom-of-card prompt
-                did. */}
-            {contactSaveStage === 'editing' || contactSaveStage === 'saving' ? (
-                <form className={styles.saveContactForm} onSubmit={handleSaveContact}>
-                    <Input
-                        type="text"
-                        label={t('history.contact.saveAs', { address: shortenAddress(contactPeer || '') })}
-                        enterKeyHint="go"
-                        autoComplete="off"
-                        value={contactName}
-                        onChange={(e) => setContactName(e.target.value)}
-                        autoFocus
-                        maxLength={80}
-                        placeholder={t('common.contactName')}
-                    />
-                    {contactSaveError ? (
-                        <StatusMessage variant="error" className={styles.saveContactError}>{contactSaveError}</StatusMessage>
-                    ) : null}
-                    <div className={styles.saveContactActions}>
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                                setContactSaveStage('hidden');
-                                setContactName('');
-                                setContactSaveError(null);
-                            }}
-                            disabled={contactSaveStage === 'saving'}
-                        >
-                            {t('common.cancel')}
-                        </Button>
-                        <Button
-                            type="submit"
-                            variant="primary"
-                            size="sm"
-                            loading={contactSaveStage === 'saving'}
-                        >
-                            {t('history.contact.save')}
-                        </Button>
-                    </div>
-                </form>
-            ) : null}
-
-            {/* Tab strip: matches Home's HomeTabs visual rhythm. */}
-            <div className={styles.detailTabs} role="tablist" aria-label={t('history.detail.view')}>
-                {detailTabs.map((t) => (
-                    /* Native buttons preserve the tablist's roving tab semantics. */
-                    <button
-                        key={t.id}
-                        type="button"
-                        role="tab"
-                        aria-selected={activeDetailTab === t.id ? 'true' : 'false'}
-                        className={`${styles.detailTab} ${activeDetailTab === t.id ? styles.detailTabActive : ''}`}
-                        onClick={() => setActiveDetailTab(t.id)}
-                    >
-                        {t.label}
-                    </button>
-                ))}
-            </div>
-
-            <section
-                className={`${styles.detailSection} ${activeDetailTab === 'details' ? styles.detailSectionFlush : ''}`}
-                role="tabpanel"
-            >
-                {/* Details tab: full field dump (every value associated
-                    with the action), as opposed to the curated hero
-                    table at the top. */}
-                {activeDetailTab === 'details' ? (
-                    <table className={styles.detailsTable}>
-                        <tbody>
-                            {fullRows.map(([label, value]) => (
-                                <tr key={label}>
-                                    <th scope="row">{label}</th>
-                                    <td>{value}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                ) : null}
-
-                {activeDetailTab === 'status' ? (
-                    <TxStatusTimeline entry={entry} chainTip={chainTip} indexerWatermark={indexerWatermark} />
-                ) : null}
-
-                {activeDetailTab === 'raw' ? (
-                    <>
-                        <div className={styles.rawJsonWrap}>
-                            <span className={styles.rawJsonCopy}>
-                                <HistoryCopyButton
-                                    value={decodeActionToText(rawForDisplay)}
-                                    label={t('history.detail.copyRawJson')}
-                                />
-                            </span>
-                            <pre className={styles.detailDecoded} tabIndex={0}>
-                                {decodeActionToText(rawForDisplay)}
-                            </pre>
-                        </div>
-                        {isLinked ? (
-                            <div className={styles.detailPeerBlock}>
-                                <SectionHeader
-                                    title={t('history.detail.peerHeading', {
-                                        ticker: entry.link.peerCoinTicker,
-                                        index: entry.link.peerActionIndex,
-                                    })}
-                                    className={styles.detailSectionHeading}
-                                />
-                                {peer?.loading ? (
-                                    <StatusMessage>{t('history.detail.loadingPeer')}</StatusMessage>
-                                ) : peer?.error ? (
-                                    <StatusMessage variant="error">
-                                        {t('history.detail.peerError', { error: peer.error })}
-                                    </StatusMessage>
-                                ) : peer?.action ? (
-                                    <div className={styles.rawJsonWrap}>
-                                        <span className={styles.rawJsonCopy}>
-                                            <HistoryCopyButton
-                                                value={decodeActionToText(balancesHidden ? redactAmountFields(peer.action) : peer.action)}
-                                                label={t('history.detail.copyPeerRawJson')}
-                                            />
-                                        </span>
-                                        <pre className={styles.detailDecoded} tabIndex={0}>
-                                            {decodeActionToText(balancesHidden ? redactAmountFields(peer.action) : peer.action)}
-                                        </pre>
-                                    </div>
-                                ) : (
-                                    <EmptyState
-                                        title={t('history.detail.peerUnavailableTitle')}
-                                        body={t('history.detail.peerUnavailable', {
-                                            ticker: entry.link.peerCoinTicker,
-                                            index: entry.link.peerActionIndex,
-                                        })}
-                                        titleAs="h3"
-                                    />
-                                )}
-                            </div>
-                        ) : null}
-                    </>
-                ) : null}
-            </section>
+                )}
+                details={(
+                    /* Every value associated with the action, as opposed to
+                       the curated hero table at the top, in the detail
+                       pages' shared facts card (G14, FactRows): one row per
+                       fact, label left and value right, no copy buttons. */
+                    <dl className={facts.list} aria-label={t('tokenDetail.tabs.details')}>
+                        {fullRows.map(([label, value], index) => (
+                            <Fragment key={`${label}-${index}`}>
+                                <dt className={facts.label}>{label}</dt>
+                                <dd className={facts.value}>{value}</dd>
+                            </Fragment>
+                        ))}
+                    </dl>
+                )}
+            />
 
             {/* Interactive widgets appended below the static sections.
-                Save-as-contact and Speed up / Cancel moved up to the
-                More button in the action row; recipient bulk-save
-                stays here because it's a per-row affordance for
-                DIVIDEND / AIRDROP entries with its own UI. */}
+                Save-as-contact and Speed up / Cancel are rows of the
+                Actions tab; recipient bulk-save stays here because it's
+                a per-row affordance for DIVIDEND / AIRDROP entries with
+                its own UI. */}
             <RecipientsBlock entry={entry} walletId={walletId} />
             {detachAvailable ? (
                 <Button
@@ -692,15 +419,101 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                     {t('history.detail.openNewWindow')}
                 </Button>
             ) : null}
-            {rbfConfirm.request ? (
-                <ConfirmModal
-                    {...rbfConfirm.request}
-                    onConfirm={rbfConfirm.onConfirm}
-                    onCancel={rbfConfirm.onCancel}
-                />
-            ) : null}
+            {rbf.modal}
         </div>
     );
+}
+
+/**
+ * Speed up and Cancel for one History entry: whether they are on offer, the
+ * run itself (quote, confirm, broadcast, and the Undo toast a cancel gets),
+ * and its outcome. The inline card offers them as Actions tab rows; the Action
+ * detail page puts Speed Up under its status bar and Cancel in its header
+ * menu. Both render `modal` where the confirm dialog belongs.
+ *
+ * @param {{ entry: any, walletId: string, networkAvailable?: boolean }} props
+ */
+export function useRbfReplace({ entry, walletId, networkAvailable = true }) {
+    const { messaging } = useMessaging();
+    const { showToast } = useToast();
+    // Speed up and Cancel sign a replacement, which a watch-only wallet
+    // cannot do, so they wait for this wallet's mode; a wallet list that
+    // cannot say opens in full mode.
+    const { isWatcherMode, walletModeKnown: walletModeReady } = useWalletMode(walletId);
+    const rbfConfirm = useConfirmModal();
+    const [busy, setBusy] = useState(/** @type {'speedup' | 'cancel' | null} */ (null));
+    const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [done, setDone] = useState(/** @type {string | null} */ (null));
+    const descriptor = chainRegistry.get(entry?.chainId);
+    const replaceable = entry ? isEntryReplaceable(entry, { descriptor }) : { ok: false };
+    // A transaction we have already replaced still satisfies the field
+    // contract `isEntryReplaceable` checks (it has a hash, no block, and
+    // an allowlisted action), so the offer has to be withdrawn here.
+    // Replacing a replacement bumps the fee on a transaction the network
+    // has already dropped, spends a fee, and moves nothing.
+    const available = Boolean(walletModeReady && !isWatcherMode && isReplaceCallAvailable(messaging)
+        && replaceable.ok && !entry?.pending?.replaced);
+
+    async function run(strategy) {
+        if (busy) return;
+        setBusy(strategy);
+        setError(null);
+        setDone(null);
+        try {
+            const quote = await replaceFromHistoryEntry({
+                messaging, entry, strategy, walletId, descriptor, preview: true,
+            });
+            const ticker = tickerForCoin(descriptor?.coin);
+            const confirmed = await rbfConfirm.confirm({
+                title: strategy === 'cancel' ? 'Cancel this transaction?' : 'Speed up this transaction?',
+                message: `Old fee: ${quote.originalFee} ${ticker}. `
+                    + `New fee: ${quote.replacementFee} ${ticker}. `
+                    + `Additional cost: ${quote.feeIncrease} ${ticker}.`,
+                confirmLabel: strategy === 'cancel' ? 'Broadcast cancellation' : 'Broadcast replacement',
+                danger: strategy === 'cancel',
+            });
+            if (!confirmed) return;
+            const res = await replaceFromHistoryEntry({ messaging, entry, strategy, walletId, descriptor });
+            setDone(`Replacement sent: ${res?.replacementTxHash || 'Pending'}`);
+            // §37.2 / Cluster D FOLLOWUP 3: a cancel gets an Undo toast.
+            // The undo is a THIRD transaction replacing the cancel and
+            // re-issuing the spend, so it is only offered while the
+            // cancel is still in the mempool; `cancelUndoSnapshot`
+            // returns null when the pair cannot support one.
+            if (strategy === 'cancel') {
+                const snapshot = cancelUndoSnapshot({ entry, result: res, walletId });
+                if (snapshot) {
+                    showToast({
+                        message: 'Transaction cancelled',
+                        actionLabel: 'Undo',
+                        onAction: async () => {
+                            setError(null);
+                            try {
+                                const undone = await undoCancel({ messaging, snapshot });
+                                setDone(`Re-sent: ${undone?.replacementTxHash || 'Pending'}`);
+                            } catch (undoErr) {
+                                setError(rbfFailureMessage(undoErr, 'Could not undo the cancellation.'));
+                            }
+                        },
+                    });
+                }
+            }
+        } catch (err) {
+            setError(rbfFailureMessage(err, "Couldn't speed up or cancel this transaction. Try again later."));
+        } finally {
+            setBusy(null);
+        }
+    }
+
+    const modal = rbfConfirm.request ? (
+        <ConfirmModal
+            {...rbfConfirm.request}
+            onConfirm={rbfConfirm.onConfirm}
+            onCancel={rbfConfirm.onCancel}
+        />
+    ) : null;
+
+    return { available, busy, error, done, run, modal, networkAvailable };
 }
 
 /**
@@ -797,7 +610,7 @@ function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed, tr
             {settled ? (
                 meta?.confirmedBlockIndex ? (
                     <p className={styles.pendingTiming}>
-                        {t('pending.detail.confirmedBlock', { block: meta.confirmedBlockIndex.toLocaleString() })}
+                        {t('pending.detail.confirmedBlock', { block: String(meta.confirmedBlockIndex) })}
                     </p>
                 ) : null
             ) : failed ? (
@@ -982,26 +795,18 @@ function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balance
 }
 
 /**
- * Inline value + small copy-icon button. Used in the ActionDetail
- * table for fields a user typically needs to paste somewhere else
- * (action_index, tx_hash, source / destination addresses).
+ * A Details value for an identifier (an address, a transaction ID, an action
+ * number). A long identifier is AddressText in its fit form (G99): whole when
+ * it fits the row, cut in the middle only when it does not. No copy button
+ * rides beside it (operator ruling 2026-11-13): copying lives in the Actions
+ * list, as Copy receipt and Share receipt.
  */
-/**
- * A Details value with its copy button after it. A long identifier (an
- * address, a transaction ID) keeps both ends on one line and copies in
- * full; the button says "Copy" and names what it copies to assistive tech.
- * The button used to sit first with its whole name as text, which wrapped
- * to two lines on a phone and pushed every value out of line.
- */
-function CopyableValue({ display, fullValue, ariaLabel }) {
+function DetailValue({ display, fullValue }) {
     const full = String(fullValue ?? '');
     const identifier = typeof display === 'string' && display === full && full.length > 14 && !/\s/.test(full);
     return (
-        <span className={styles.copyableValue}>
-            <span className={styles.copyableText}>
-                {identifier ? <AddressText address={full} size="md" /> : display}
-            </span>
-            <HistoryCopyButton value={full} label={ariaLabel} visibleLabel={t('common.copy')} />
+        <span className={styles.copyableText}>
+            {identifier ? <AddressText address={full} size="md" /> : display}
         </span>
     );
 }
@@ -1066,15 +871,15 @@ function detailValue(value, key) {
     return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-function copyLabelForDetailField(key) {
+/** A raw field that holds a transaction ID or an address, shown as one. */
+function isIdentifierDetailField(key) {
     const normalized = String(key || '')
         .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
         .toLowerCase();
-    if (/(^|_)(tx_hash|txid|transaction_id)$/.test(normalized)) return 'Copy transaction ID';
-    if (normalized === 'source' || normalized === 'from') return 'Copy from address';
-    if (normalized === 'destination' || normalized === 'to') return 'Copy to address';
-    if (normalized.includes('address')) return `Copy ${detailFieldLabel(key).toLowerCase()}`;
-    return null;
+    return /(^|_)(tx_hash|txid|transaction_id)$/.test(normalized)
+        || normalized === 'source' || normalized === 'from'
+        || normalized === 'destination' || normalized === 'to'
+        || normalized.includes('address');
 }
 
 /**
@@ -1116,13 +921,7 @@ function fullDetailRows(entry, balancesHidden = false, chainTip = null, walletAd
 
     if (entry.action) rows.push(['Action', detailActionLabel(entry, transfer.amountDirection)]);
     if (actionIndex) {
-        rows.push(['Action number', (
-            <CopyableValue
-                display={formatDecimalAmount(actionIndex)}
-                fullValue={actionIndex}
-                ariaLabel={t('history.copy.actionNumber')}
-            />
-        )]);
+        rows.push(['Action number', String(actionIndex)]);
     }
     // The chain family reads from the chainId (e.g. 'bitcoin-regtest').
     // The network kind is not printed: the wallet never labels it (the
@@ -1133,31 +932,13 @@ function fullDetailRows(entry, balancesHidden = false, chainTip = null, walletAd
         if (coin) rows.push(['Network', capitalize(coin)]);
     }
     if (txHash) {
-        rows.push(['Transaction ID', (
-            <CopyableValue
-                display={txHash}
-                fullValue={txHash}
-                ariaLabel={t('common.copyTransactionId')}
-            />
-        )]);
+        rows.push(['Transaction ID', <DetailValue display={txHash} fullValue={txHash} />]);
     }
     if (entrySource) {
-        rows.push(['From', (
-            <CopyableValue
-                display={entrySource}
-                fullValue={entrySource}
-                ariaLabel={t('history.copy.fromAddress')}
-            />
-        )]);
+        rows.push(['From', <DetailValue display={entrySource} fullValue={entrySource} />]);
     }
     if (walletAddress) {
-        rows.push(['Address', (
-            <CopyableValue
-                display={walletAddress}
-                fullValue={walletAddress}
-                ariaLabel={t('history.copy.walletAddress')}
-            />
-        )]);
+        rows.push(['Address', <DetailValue display={walletAddress} fullValue={walletAddress} />]);
     }
 
     rows.push(['Direction', transfer.label]);
@@ -1170,14 +951,13 @@ function fullDetailRows(entry, balancesHidden = false, chainTip = null, walletAd
         balancesHidden ? `••••• ${nativeTicker}` : `${formatDisplayAmount(fee)} ${nativeTicker}`
     ) : '-']);
     rows.push(['Counterparty', transfer.counterparty ? (
-        <CopyableValue
+        <DetailValue
             display={transfer.counterparty}
             fullValue={transfer.counterparty === 'Self' ? entry.address : transfer.counterparty}
-            ariaLabel={t('history.detail.copyCounterparty')}
         />
     ) : '-']);
     rows.push(['Confirmations', confirmations == null ? '-' : formatDecimalAmount(confirmations)]);
-    rows.push(['Block', block == null ? '-' : formatDecimalAmount(block)]);
+    rows.push(['Block', block == null ? '-' : String(block)]);
     rows.push(['Time', formatTimestamp(timestamp)]);
     rows.push(['Memo', memo ?? '-']);
     rows.push(['Explorer', primaryExplorer?.url ? (
@@ -1247,13 +1027,8 @@ function fullDetailRows(entry, balancesHidden = false, chainTip = null, walletAd
         } else {
             display = String(v);
         }
-        const copyLabel = copyLabelForDetailField(k);
-        rows.push([detailFieldLabel(k), copyLabel && typeof v !== 'object' ? (
-            <CopyableValue
-                display={display}
-                fullValue={String(v ?? '')}
-                ariaLabel={copyLabel}
-            />
+        rows.push([detailFieldLabel(k), isIdentifierDetailField(k) && typeof v !== 'object' ? (
+            <DetailValue display={display} fullValue={String(v ?? '')} />
         ) : display]);
     }
 
@@ -1413,7 +1188,7 @@ function explorerLinksFor(entry, settings) {
         links.push({
             id: 'xchain',
             label: 'XChain',
-            iconImg: branding.faviconUrl(),
+            iconImg: branding.explorerLogoUrl('xchain'),
             url: xchainUrl,
         });
     }
@@ -1422,7 +1197,12 @@ function explorerLinksFor(entry, settings) {
     // working third-party coverage. Regtest is local-only; suppress
     // external links so they don't render mainnet URLs that 404.
     const descriptor = chainRegistry.get(entry.chainId) || { coin, networkKind };
-    links.push(...transactionExplorerLinks(descriptor, txHash));
+    // Each third-party explorer shows its own bundled logo (never a remote
+    // iconImg a registry entry names).
+    links.push(...transactionExplorerLinks(descriptor, txHash).map((link) => ({
+        ...link,
+        iconImg: branding.explorerLogoUrl(link.id) ?? undefined,
+    })));
     return links;
 }
 
@@ -1677,32 +1457,18 @@ function shortenAddress(addr) {
 // keys, not address / index / status fields.
 const AMOUNT_KEY_RE = /^(amount|quantity|supply|max_supply|maxSupply|give_amount|giveAmount|get_amount|getAmount|give_remaining|giveRemaining|get_remaining|getRemaining|escrow_quantity|escrowQuantity|mainchainrate|dispense_quantity|dispenseQuantity|dispense_count|dispenseCount|fee|fee_per_kb|feePerKb)$/i;
 
-/**
- * Recursively replace amount-field values with `'•••••'`. Object / array
- * traversal is preserved so the rest of the structure stays readable
- * when the redacted result is JSON.stringify'd into the Raw tab or
- * fed into the Details table. Returns the input unchanged when it
- * contains no amount fields, so the React identity stays stable.
- */
-function redactAmountFields(value) {
-    if (value === null || value === undefined) return value;
-    if (Array.isArray(value)) return value.map(redactAmountFields);
-    if (typeof value === 'object') {
-        const out = {};
-        for (const [k, v] of Object.entries(value)) {
-            out[k] = AMOUNT_KEY_RE.test(k) ? '•••••' : redactAmountFields(v);
-        }
-        return out;
-    }
-    return value;
-}
-
-/** Render the row's raw fields as pretty-printed JSON for the detail card. */
-function decodeActionToText(row) {
-    if (!row) return '(No data)';
-    try {
-        return JSON.stringify(row, null, 2);
-    } catch (err) {
-        return userFacingMessage(err, 'This action data could not be displayed.');
-    }
-}
+// The Action detail page lays the same facts out its own way (a hero, a
+// status bar and the Actions | Details toggle), so it reads them through
+// these rather than keeping a second copy of each rule.
+export {
+    DetailValue,
+    RecipientsBlock,
+    detailTransfer,
+    explorerLinksFor,
+    failedReasonOf,
+    firstPopulatedValue,
+    formatDetailAmount,
+    fullDetailRows,
+    isEmptyDetailValue,
+    nativeTickerForEntry,
+};

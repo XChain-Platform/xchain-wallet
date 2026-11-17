@@ -88,16 +88,11 @@ vi.mock('../../../packages/core/src/shared/hooks/useNativeFee.js', () => ({
 }));
 
 import { CreateOrderForm } from '../../../packages/core/src/shared/routes/CreateOrderForm.jsx';
-
-function fillBasicOrder() {
-    fireEvent.change(screen.getByLabelText('Ticker'), { target: { value: 'xcp' } });
-    fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '2.5' } });
-    fireEvent.change(screen.getByLabelText('Amount (BTC)'), { target: { value: '0.1' } });
-}
+import { pickOrderAsset } from '../../helpers/orderAssetPicker.js';
 
 async function renderForm(props = {}) {
     render(<CreateOrderForm walletId="wallet-1" onBack={vi.fn()} {...props} />);
-    await screen.findByDisplayValue('mSourceAddress');
+    await screen.findAllByDisplayValue('mSourceAddress');
 }
 
 beforeEach(() => {
@@ -131,30 +126,34 @@ beforeEach(() => {
 
 afterEach(() => cleanup());
 
+// The Asset picker takes the coin's name as the coin side, never as a token
+// named like it, so the coin can no longer reach an order as a token ticker.
 describe('CreateOrderForm native coin ticker', () => {
-    it.each(['BTC', 'btc'])('refuses %s typed as a token ticker on the give side', async (typed) => {
+    it.each(['BTC', 'btc'])('takes %s typed into the give picker as the coin side, never a token', async (typed) => {
         await renderForm();
-        fireEvent.change(screen.getByLabelText('Ticker'), { target: { value: typed } });
-        fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '1' } });
-        fireEvent.change(screen.getByLabelText('Amount (BTC)'), { target: { value: '0.1' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
+        await pickOrderAsset('give', typed);
+        fireEvent.change(await screen.findByLabelText(/^Give amount/), { target: { value: '1' } });
+        fireEvent.change(screen.getByLabelText(/^Get amount/), { target: { value: '0.1' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Place Order' }));
 
-        expect(await screen.findByRole('alert')).toHaveTextContent(
-            'BTC is the network coin. Choose Native BTC for that side instead of typing it as a token.',
-        );
+        expect(await screen.findAllByRole('alert')).not.toHaveLength(0);
+        expect(screen.getAllByRole('alert')[0]).toHaveTextContent('At least one side must be a token');
         expect(state.confirm).not.toHaveBeenCalled();
     });
 
-    it('refuses the coin typed as a token ticker on the get side', async () => {
+    it('takes the coin typed into the get picker as the coin side and composes it as the coin', async () => {
+        state.confirm.mockImplementation(async (args) => { await args.compose(); return { txid: 'tx-1' }; });
         await renderForm();
-        fireEvent.change(screen.getByLabelText('Ticker'), { target: { value: 'XCP' } });
-        fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '1' } });
-        fireEvent.click(screen.getAllByRole('radio', { name: 'A token' })[1]);
-        fireEvent.change(screen.getAllByLabelText('Ticker')[1], { target: { value: 'BTC' } });
-        fireEvent.change(screen.getAllByLabelText('Amount')[1], { target: { value: '1' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
+        await pickOrderAsset('give', 'XCP');
+        fireEvent.change(await screen.findByLabelText(/^Give amount/), { target: { value: '1' } });
+        await pickOrderAsset('get', 'BTC');
+        fireEvent.change(await screen.findByLabelText(/^Get amount/), { target: { value: '0.1' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Place Order' }));
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('BTC is the network coin.');
-        expect(state.confirm).not.toHaveBeenCalled();
+        await waitFor(() => expect(state.messaging.composeForConfirm).toHaveBeenCalledTimes(1));
+        const { params } = state.messaging.composeForConfirm.mock.calls[0][0].actionData;
+        expect(params.GET_TICK).toBe('');
+        expect(params.GET_AMOUNT).toBe('0.1');
+        expect(params.GIVE_TICK).toBe('XCP');
     });
 });

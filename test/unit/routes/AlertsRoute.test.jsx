@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import React from 'react';
+import { readFileSync } from 'node:fs';
+import { resolve as resolvePath } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { expectNoSeriousAxeViolations } from '../../a11y/helpers/axe.js';
@@ -30,6 +32,7 @@ const rows = [
 ];
 
 const mount = (props = {}) => render(<AlertsRoute onBack={vi.fn()} alerts={rows} {...props} />);
+const openFilter = () => fireEvent.click(screen.getByRole('button', { name: 'Filter notifications' }));
 
 afterEach(() => {
     cleanup();
@@ -45,14 +48,18 @@ describe('AlertsRoute', () => {
         expect(markAllButton).toBeTruthy();
         expect(markAllButton.querySelector('svg')).toHaveAttribute('width', '18');
         expect(within(header).getByText('3')).toBeTruthy();
-        expect(within(header).getAllByRole('button')).toHaveLength(2);
-        expect(screen.getByRole('searchbox', { name: 'Search alerts' })).toBeTruthy();
-        const select = screen.getByRole('combobox', { name: 'Filter alert type' });
-        expect(within(select).getByRole('option', { name: 'All types (4)' })).toBeTruthy();
-        expect(within(select).getByRole('option', { name: 'Price (1)' })).toBeTruthy();
-        expect(within(select).getByRole('option', { name: 'Activity (1)' })).toBeTruthy();
-        expect(within(select).getByRole('option', { name: 'Payments (1)' })).toBeTruthy();
-        expect(within(select).getByRole('option', { name: 'Security (1)' })).toBeTruthy();
+        // Back, Mark all read and the Filter button share the title line.
+        expect(within(header).getAllByRole('button')).toHaveLength(3);
+        // The search, Unread and the counted types sit in the filter panel.
+        openFilter();
+        expect(screen.getByRole('searchbox', { name: 'Search notifications' })).toBeTruthy();
+        const types = screen.getByRole('group', { name: 'Notification type' });
+        expect(within(types).getByRole('checkbox', { name: 'Unread (3)' })).toBeTruthy();
+        expect(within(types).getByRole('checkbox', { name: 'All types (4)' })).toBeChecked();
+        expect(within(types).getByRole('checkbox', { name: 'Price (1)' })).toBeTruthy();
+        expect(within(types).getByRole('checkbox', { name: 'Activity (1)' })).toBeTruthy();
+        expect(within(types).getByRole('checkbox', { name: 'Payments (1)' })).toBeTruthy();
+        expect(within(types).getByRole('checkbox', { name: 'Security (1)' })).toBeTruthy();
         expect(screen.getByRole('heading', { name: 'Today' })).toBeTruthy();
         expect(screen.getByRole('heading', { name: 'Yesterday' })).toBeTruthy();
         expect(screen.getByRole('heading', { name: earlierLabel })).toBeTruthy();
@@ -76,26 +83,49 @@ describe('AlertsRoute', () => {
 
     it('filters every alert text, reports matches, highlights matches, and clears search', () => {
         mount();
-        fireEvent.change(screen.getByRole('searchbox', { name: 'Search alerts' }), { target: { value: 'BTC' } });
+        // No match line while nothing is filtered.
+        expect(screen.queryByText(/notifications match/)).toBeNull();
+        openFilter();
+        const search = screen.getByRole('searchbox', { name: 'Search notifications' });
+        fireEvent.change(search, { target: { value: 'BTC' } });
 
-        expect(screen.getByText('1 alerts match')).toBeTruthy();
+        // The count is announced, never drawn between the header and the list (G95).
+        expect(screen.getByText('1 notifications match')).toHaveClass('sr-only');
         expect(screen.getAllByText('BTC')).toHaveLength(2);
         expect(screen.getAllByText('BTC').every((node) => node.tagName === 'MARK')).toBe(true);
         expect(screen.queryByText('Send still pending')).toBeNull();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));
+        fireEvent.change(search, { target: { value: '' } });
         expect(screen.getByText('Send still pending')).toBeTruthy();
+        expect(screen.queryByText(/notifications match/)).toBeNull();
     });
 
     it('shows type counts and filters to the selected type', () => {
         mount();
-        const select = screen.getByRole('combobox', { name: 'Filter alert type' });
-        expect(within(select).getByRole('option', { name: 'All types (4)' })).toBeTruthy();
-        expect(within(select).getByRole('option', { name: 'Payments (1)' })).toBeTruthy();
+        openFilter();
+        const types = screen.getByRole('group', { name: 'Notification type' });
+        expect(within(types).getByRole('checkbox', { name: 'All types (4)' })).toBeChecked();
+        const payments = within(types).getByRole('checkbox', { name: 'Payments (1)' });
 
-        fireEvent.change(select, { target: { value: 'payments' } });
+        fireEvent.click(payments);
+        expect(payments).toBeChecked();
+        expect(within(types).getByRole('checkbox', { name: 'All types (4)' })).not.toBeChecked();
         expect(screen.getByText('Payment due tomorrow')).toBeTruthy();
         expect(screen.queryByText('BTC rose above $120,000')).toBeNull();
+
+        // Unchecking the last type falls back to All.
+        fireEvent.click(payments);
+        expect(within(types).getByRole('checkbox', { name: 'All types (4)' })).toBeChecked();
+        expect(screen.getByText('BTC rose above $120,000')).toBeTruthy();
+    });
+
+    it('narrows to unread alerts beside the type choice', () => {
+        mount();
+        openFilter();
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Unread (3)' }));
+        expect(screen.queryByText('Send still pending')).toBeNull();
+        expect(screen.getByText('BTC rose above $120,000')).toBeTruthy();
+        expect(screen.getByText('Payment due tomorrow')).toBeTruthy();
     });
 
     it('marks every row read, clears the badge state, and persists through messaging', async () => {
@@ -122,7 +152,48 @@ describe('AlertsRoute', () => {
 
         expect(onSelect).toHaveBeenCalledOnce();
         expect(screen.queryByLabelText('Unread')).toBeNull();
-        await waitFor(() => expect(messaging.markAlertRead).toHaveBeenCalledWith({ id: 'price', walletId: 'wallet-1' }));
+        // The inbox also receives the alert's record (without its action) so it stays read.
+        await waitFor(() => expect(messaging.markAlertRead).toHaveBeenCalledWith({
+            id: 'price',
+            walletId: 'wallet-1',
+            alert: expect.objectContaining({
+                id: 'price', type: 'price', title: 'BTC rose above $120,000', read: true,
+            }),
+        }));
+    });
+
+    it('ends only rows that open a page in the trailing chevron, inside a rounded list card', () => {
+        const { container } = mount({ alerts: [{ ...rows[0], action: { label: 'Open price', onSelect: vi.fn() } }, rows[1]] });
+        const opens = screen.getByText('BTC rose above $120,000').closest('li');
+        const marksRead = screen.getByText('Send still pending').closest('li');
+        // G97: a drill-in row ends in the chevron; a row that only marks itself read has none.
+        expect(opens.querySelector('[data-alert-chevron]')).toBeTruthy();
+        expect(opens.querySelector('[data-alert-chevron]')).toHaveClass(routeStyles.chevron);
+        expect(marksRead.querySelector('[data-alert-chevron]')).toBeNull();
+        // G07: each day's rows sit in one list card.
+        const list = container.querySelector('ul');
+        expect(list.className).toContain(routeStyles.list);
+    });
+
+    it('gives every row the same trailing block: time and dot, then a chevron-wide slot as the last child', () => {
+        const { container } = mount({ alerts: [{ ...rows[0], action: { label: 'Open price', onSelect: vi.fn() } }, ...rows.slice(1)] });
+        const grids = [...container.querySelectorAll(`.${routeStyles.rowGrid}`)];
+        expect(grids).toHaveLength(rows.length);
+        for (const grid of grids) {
+            const kids = [...grid.children];
+            expect(kids).toHaveLength(4);
+            // Time and dot sit in the meta block directly before the final slot, on every row.
+            expect(kids[2]).toHaveClass(routeStyles.meta);
+            expect(kids[3]).toHaveClass(routeStyles.chevron);
+        }
+    });
+
+    it('pins the row grid to four columns ending in the chevron width, with the meta block right aligned', () => {
+        const css = readFileSync(resolvePath(process.cwd(), 'packages/core/src/shared/routes/AlertsRoute.module.css'), 'utf8');
+        const rule = (name) => css.match(new RegExp(`\\.${name}\\s*\\{([^}]*)\\}`))?.[1] || '';
+        expect(rule('rowGrid')).toMatch(/grid-template-columns:[^;]*auto\s+calc\(var\(--xc-space-8\)\s*\/\s*3\)/);
+        expect(css).not.toContain('rowGridOpens');
+        expect(rule('meta')).toMatch(/justify-content:\s*flex-end/);
     });
 
     it('loads delivered inbox rows through the shell messaging path', async () => {
@@ -133,9 +204,18 @@ describe('AlertsRoute', () => {
         expect(screen.getByText('Messages')).toBeTruthy();
     });
 
+    it('drops a stored read payment-due row once its notice has cleared', async () => {
+        const dead = { id: 'payment-due:bitcoin:7', type: 'payments', title: 'Payment due', message: 'Pay the order.', at: now, read: true };
+        messaging = { listAlertInbox: vi.fn(async () => [dead, rows[0]]) };
+        mount({ walletId: 'wallet-1', alerts: [] });
+
+        expect(await screen.findByText('BTC rose above $120,000')).toBeTruthy();
+        expect(screen.queryByText('Payment due')).toBeNull();
+    });
+
     it('shows one plain empty state and has no serious accessibility violations', async () => {
         const { container } = mount({ alerts: [] });
-        expect(screen.getByRole('heading', { name: 'No alerts' })).toBeTruthy();
+        expect(screen.getByRole('heading', { name: 'No notifications' })).toBeTruthy();
         expect(screen.getByText('Wallet activity, security, and price changes appear here.')).toBeTruthy();
         await expectNoSeriousAxeViolations(container);
     });

@@ -11,29 +11,43 @@
 // ConfirmActionModal (§5.1-5.2) is the wallet's standardized full-screen
 // confirmation surface. It replaces the action form within the same Screen
 // frame and uses the single-encode pipeline, so the previewed PSBT is the
-// signed PSBT. Anatomy top-to-bottom (§5.2): "Confirm" header, intent,
-// balance deltas, fee and total section, pre-flight panel, credentials and
-// hardware note, then the pinned reject and approve footer.
+// signed PSBT. Every variant (an action, a caller's PSBT, a message) draws the
+// one Confirm Standard body (G127 revised 2026-11-16, ConfirmStandard.jsx):
+// the status notice, the one hero icon, the name and sentence, the address
+// once, the one facts card with the fees, the short warning, what the signer
+// needs, and Reject and Approve docked below.
 //
 // Interaction contract (§5.1, page form): exactly two exits, approve or
 // back/reject; the header back arrow rejects the request. Both exits stay
 // reachable however long the intent is (§5.2.7 - a safety property, not
-// cosmetic). Once a signature exists both exits
-// lock until a terminal state. Approve disables synchronously in the
-// click handler's tick, before any await.
+// cosmetic). Once a signature exists both exits lock until a terminal state.
+// Approve never looks disabled (G130): it goes busy synchronously in the
+// click handler's tick, before any await, and a tap that cannot go ahead yet
+// (no password, a failing check, a refusal) sends nothing and says why at the
+// top of the page (G129).
 
 import { useState, useCallback, useContext, useEffect, useLayoutEffect, useRef } from 'react';
-import { AddressText, Button, Icon, Screen, PageHeader, StatusMessage } from '@xchain-wallet/core/ui';
-import { ActionIntentSummary } from './ActionIntentSummary.jsx';
-import { PreflightPanel } from './PreflightPanel.jsx';
+import { Notice, Screen, PageHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { LearnNote } from './LearnNote.jsx';
 import { xchainProtocolFeeLine } from '../../flows/protocolFeeDisclosure.js';
 import { FEE_BEARING_ACTIONS, isFeeBearingAction } from '../../flows/feeBearingActions.js';
 import { oracleUsageFeeLine } from '../../flows/oracleFeeDisclosure.js';
 import { envelopeTransactionLines } from '../../flows/envelopeFeeDisclosure.js';
-import { neutralizeControlText } from '../utils/textHardening.js';
+import { automaticDonationLine } from '../utils/adsDonationLine.js';
+import { actionWarningLines, actionWarningTitle, withoutCoveredWarnings } from '../../flows/actionWarnings.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
-import { formatDisplayAmount } from '../utils/amountFormat.js';
+import { formatDisplayAmount, groupDecodedAmounts } from '../utils/amountFormat.js';
+import { directionForVerb, summaryFromDecoded } from './ConfirmSummary.jsx';
+import { ConfirmDecisionFooter, ConfirmStandard } from './ConfirmStandard.jsx';
+import {
+    confirmHeadline,
+    confirmStatus,
+    confirmWarning,
+    decodedFacts,
+    feeFacts,
+    recipientFacts,
+} from '../utils/confirmStandardModel.js';
+import { TickerIcon } from './TickerIcon.jsx';
 import { formatUnixSecondsLocal } from '../utils/dateTime.js';
 import { formatNativeBaseUnits } from '../../registry/coinTicker.js';
 import { defaultRegistry } from '../../registry/index.js';
@@ -42,15 +56,17 @@ import { useFocusTrap } from '../utils/focusTrap.js';
 import { approveSettle } from '../utils/approveSettle.js';
 import { useLongOperationStatus } from '../hooks/useLongOperationStatus.js';
 import { CONTRACT_CALL_WARNING } from '../utils/securityMomentCopy.js';
-import { WalletIdentity } from './WalletIdentity.jsx';
 import { MessagingContext } from '../MessagingContext.js';
 import { readActiveWallet } from '../utils/activeWalletMemory.js';
 import styles from './ConfirmActionModal.module.css';
 import { t } from '../../i18n/index.js';
 import { useSuppressSpamToastsOnConfirm } from './ToastHost.jsx';
 import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/confirmStandard.js';
 import '../../i18n/locales/en/extension.js';
 import '../../i18n/locales/en/send.js';
+import '../../i18n/locales/en/execute.js';
+import '../../i18n/locales/en/actionWarnings.js';
 
 const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', 'done', 'error', 'signed-not-broadcast']);
 const chainRegistry = defaultRegistry();
@@ -106,14 +122,15 @@ function formatReviewDecoded(decoded) {
         }
         return { ...detail, value: formatted };
     });
-    return { ...decoded, summary, details };
+    // Every other quantity row (Give, Get, supply, price, escrow) groups too.
+    return groupDecodedAmounts({ ...decoded, summary, details });
 }
 
 // True only when the composed action is positively known to carry no protocol
 // fee. An unnamed action, or a variant name built on a fee-bearing one
 // (ORDER_MATCH, a DEPLOY chunk), is not known, and ISSUE is treated as fee
 // bearing because the envelope does not say whether it creates a token.
-function composedActionName(composed) {
+export function composedActionName(composed) {
     const carriers = [composed];
     const seen = new Set();
     for (let index = 0; index < carriers.length; index += 1) {
@@ -167,14 +184,6 @@ function escapeRegExp(value) {
     return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function reviewDetailLabel(label) {
-    const value = String(label || '');
-    if (value === 'Give') return 'You send';
-    if (value === 'Get') return 'You get';
-    if (/^(?:Destination|Receive address|Dispenser address|Delegate to)$/.test(value)) return 'To';
-    return value.replace(/^Recipient(?=\s|$)/, 'To');
-}
-
 export function reviewActionLabel(decoded, fallback, chainLabel) {
     const summary = String(decoded?.summary || '').trim();
     if (!summary) return fallback;
@@ -222,6 +231,37 @@ export function reviewActionLabel(decoded, fallback, chainLabel) {
 }
 
 /**
+ * What a transaction does that cannot be taken back, as one notice, from the
+ * ids the host classified off the parsed composed action
+ * (flows/actionWarnings.js). The confirm page itself states these lines in
+ * its warning slot; a watcher form's own review stage renders this card so
+ * both reviews say the same title and lines. Renders nothing for an action
+ * with nothing to warn about.
+ *
+ * @param {{ ids: unknown }} props
+ */
+export function ActionWarningsCard({ ids }) {
+    const lines = actionWarningLines(ids);
+    if (lines.length === 0) return null;
+    // The kind's title ("You can't undo this") carries what the short lines
+    // no longer repeat, so a watcher's review says it too.
+    const title = actionWarningTitle(ids) || t('actionWarnings.title');
+    return (
+        <StatusMessage variant="warning" role={null} testId="confirm-action-warnings" title={title}>
+            <ul aria-label={title}>
+                {lines.map((item) => (
+                    <li key={item.key} data-testid="confirm-action-warning">{item.text}</li>
+                ))}
+            </ul>
+        </StatusMessage>
+    );
+}
+
+function isPositiveDecimal(value) {
+    return value !== null && value !== undefined && Number(value) > 0;
+}
+
+/**
  * @param {object} props
  * @param {import('../hooks/useConfirmAction.js').ConfirmPhase} props.phase
  * @param {object|null} props.composed
@@ -233,7 +273,7 @@ export function reviewActionLabel(decoded, fallback, chainLabel) {
  * @param {(credentials: object) => void} props.onApprove
  * @param {() => void} props.onReject
  * @param {{ summary: string, details: Array<{label: string, value: string}>, warnings: string[] }} props.decoded
- * @param {object|null} [props.simulation]
+ * @param {object|null} [props.simulation]                   accepted for callers; the page shows no before and after
  * @param {string} props.chainLabel
  * @param {import('react').ReactNode} props.credentials      the SignCredentials block (host wires it)
  * @param {'action'|'psbt'|'message'} [props.variant]
@@ -247,9 +287,8 @@ export function reviewActionLabel(decoded, fallback, chainLabel) {
  *   message text being signed, shown verbatim
  * @param {string} [props.requestOrigin]                     browser-verified origin of the site
  *   that requested this approval; omitted for a wallet-initiated action
- * @param {string} [props.headline]                          header line; defaults to the
- *   decoded summary. The psbt/message variants set it explicitly, since neither
- *   renders a composed action's intent as its headline.
+ * @param {string} [props.headline]                          the page's accessible name; defaults to the
+ *   action sentence
  * @param {string|null} [props.refusal]                      fail-closed refusal (§5.5): renders a
  *   blocking alert INSTEAD of the credentials + Approve, for requests the wallet
  *   will not sign at all. Distinct from a pre-flight error, which the user may
@@ -259,75 +298,62 @@ export function reviewActionLabel(decoded, fallback, chainLabel) {
  *   several owned addresses at once, so its input list identifies them instead.
  * @param {string} [props.sourceName] the address-record label, followed by the
  *   wallet name when more than one wallet exists
- * @param {{ id: string, name?: string } | null} [props.signingWallet] wallet that will approve the request
+ * @param {{ id: string, name?: string } | null} [props.signingWallet] wallet that will approve the
+ *   request, named on the facts card's "Signing with" row (else the wallet active when the page opened)
  * @param {boolean} [props.hardwareSigner] whether approval happens on a hardware device
  * @param {string} [props.nativeTicker]                      the chain's native ticker, for coin-denominated lines
  *   read off the composed envelope (the oracle usage fee, the envelope's two transactions)
  * @param {(amount: string) => string|null} [props.formatNativeFee]
  * @param {(amount: string) => string|null} [props.formatProtocolFee]
- * @param {string} [props.totalText]                         total debit when amount and fees share one unit
+ * @param {(parts: { native?: string[], protocol?: string|null }) => string|null} [props.formatFeeTotal]
+ *   accepted for callers; each fee row now carries its own fiat figure (no Total block)
+ * @param {(reason: 'refusal'|'checking'|'fails'|'signAnyway'|'credentials') => void} [props.onApproveBlocked]
+ *   a tap on Approve that cannot go ahead yet: the page says why at its top, and
+ *   the caller marks its own field (the password's error) for 'credentials'
+ * @param {string} [props.credentialsBlockedText]  what is still missing when credentialsReady is false
+ *   (the password, a typed confirmation word, a device); a generic "finish the step" line otherwise
+ * @param {import('./ConfirmSummary.jsx').ConfirmSummaryInput|null} [props.summary]   action
+ *   variant: what only the form knows (ActionConfirmScreen resolves a fallback)
+ * @param {{ amount: string, ticker: string, fiat?: string|null, estimate?: boolean }|null} [props.networkFee]
+ *   the network fee as a figure (the composed fee, or the form's estimate marked as one)
+ * @param {string|null} [props.paymentAmount]               native coin the action itself sends; a "You send" row when the sentence does not say it
+ * @param {{ amount: string, ticker: string }|null} [props.dustChange]   no change output: a remainder under this went to the fee
+ * @param {import('react').ReactNode} [props.technicalDetails]   form-specific rows, shown in the page (never folded)
  */
 export function ConfirmActionModal({
     phase, composed, report, reportLoading, acknowledged, onAcknowledge,
-    canApprove, onApprove, onReject, decoded, simulation, chainLabel,
+    canApprove, onApprove, onReject, decoded, chainLabel,
     credentials, credentialsReady = false, variant = 'action',
-    screenVariant = 'small', feeText, totalText, error = null,
+    screenVariant = 'small', error = null,
     psbtPanel = null, messageText, requestOrigin = '', refusal = null, headline,
     sourceAddress = null, sourceName = '', nativeTicker = '',
     signingWallet = null, hardwareSigner = false,
     formatNativeFee, formatProtocolFee,
+    summary = null, networkFee = null, paymentAmount = null, dustChange = null, technicalDetails = null,
+    extraWarnings = [], warningTestId, onApproveBlocked, credentialsBlockedText = '',
 }) {
-    const formattedDecoded = formatReviewDecoded(decoded);
-    const fallbackHeadline = variant === 'message'
-        ? 'Sign message'
-        : variant === 'psbt'
-            ? 'Sign transaction'
-            : 'Review action';
-    const headlineText = headline !== undefined
-        ? headline
-        : (formattedDecoded?.summary?.split('\n')[0] || fallbackHeadline);
-    const defaultApproveLabel = 'Approve';
-    // The footer verb is always the bare Approve; the reviewed action and amount
-    // appear in the header label, never on the button.
-    const resolvedApproveLabel = defaultApproveLabel;
-    const actionHeaderLabel = variant === 'action' && formattedDecoded
-        ? reviewActionLabel(formattedDecoded, defaultApproveLabel, chainLabel)
-        : headlineText;
+    // The decoder's lines that the warning slot states from the action's own
+    // warning ids are left out, so each line shows once.
+    const cardIds = variant === 'action' ? composed?.actionWarnings : null;
+    const reviewFormatted = formatReviewDecoded(decoded);
+    const formattedDecoded = reviewFormatted && Array.isArray(cardIds) && cardIds.length > 0
+        ? { ...reviewFormatted, warnings: withoutCoveredWarnings(reviewFormatted.warnings, cardIds) }
+        : reviewFormatted;
+    const decodedHeadline = formattedDecoded?.summary?.split('\n')[0] || '';
     const isContractCall = variant === 'action'
-        && /^(?:contract call|call contract\b)/i.test(headlineText);
-    const reviewDetails = (formattedDecoded?.details || []).map((detail, index) => ({
-        ...detail,
-        label: reviewDetailLabel(detail.label),
-        index,
-    })).sort((left, right) => {
-        const rank = (label) => {
-            if (/^To(?:\s|$)/.test(label)) return 0;
-            if (label === 'You send') return 1;
-            if (label === 'You get') return 2;
-            if (label === 'Amount' || label === 'Quantity') return 3;
-            if (/fee/i.test(label)) return 4;
-            if (/^total/i.test(label)) return 5;
-            return 3;
-        };
-        return rank(left.label) - rank(right.label) || left.index - right.index;
-    }).map(({ index, ...detail }) => detail);
-    const reviewDecoded = formattedDecoded
-        ? { ...formattedDecoded, details: reviewDetails }
-        : formattedDecoded;
-    //Read off the composed envelope rather than taken as a prop, for
-    // the same reason as the label above: a rule every adapter has to remember
-    // is a rule one of them will forget, and the one that forgets shows a
-    // "pre-flight unavailable" warning on an ordinary payment.
+        && /^(?:contract call|call contract\b)/i.test(headline !== undefined ? String(headline || '') : decodedHeadline);
+    //Read off the composed envelope rather than taken as a prop: a rule
+    // every adapter has to remember is a rule one of them will forget, and the
+    // one that forgets shows a "not checked" warning on an ordinary payment.
     const preflightNotApplicable = !!composed?.bareNativePayment;
-    // The protocol fee in the DEFAULT (XCHAIN) payment lane, read from
-    // the pre-flight report the panel above already renders. The native lane
-    // uses the exact coin-denominated line below, so the helper returns null
-    // there rather than labelling the same charge as an XCHAIN debit.
+    // The protocol fee in the DEFAULT (XCHAIN) payment lane, read from the
+    // pre-flight report. The native lane uses the exact coin-denominated
+    // output below, so the helper returns null there rather than labelling
+    // the same charge as an XCHAIN debit.
     //
     // Action variant only. A caller-supplied PSBT (the psbt variant) was built
-    // elsewhere and the wallet cannot tell which lane paid its fee, so a line
-    // claiming "from your XCHAIN balance" could be flatly wrong; a bare native
-    // payment has no protocol fee at all.
+    // elsewhere and the wallet cannot tell which lane paid its fee; a bare
+    // native payment has no protocol fee at all.
     const protocolFee = (variant === 'action' && !preflightNotApplicable)
         ? xchainProtocolFeeLine({ report, composed })
         : null;
@@ -360,8 +386,8 @@ export function ConfirmActionModal({
         && !paysProtocolFeeNatively
         && !isKnownFreeAction(composed);
     // The SDK advisory is action-based and does not know whether these bytes
-    // contain a native-coin fee output. The exact fee row above is the one
-    // reliable disclosure: it renders once when an output is present and is
+    // contain a native-coin fee output. The exact protocol fee row is the one
+    // reliable disclosure: it shows once when an output is present and is
     // absent when the fee uses XCHAIN or the action is free.
     const displayedReport = reportWithoutUnverifiedNativeFeeWarning(report);
     // A Mode B dispenser's oracle usage fee: a coin output in these bytes that
@@ -370,9 +396,14 @@ export function ConfirmActionModal({
         ? oracleUsageFeeLine({ composed, ticker: nativeTicker })
         : null;
     // A Taproot envelope is a commit and a reveal signed on one Approve; list
-    // both with their own fees so the total above is not read as one transaction.
+    // both with their own fees so the fee rows are not read as one transaction.
     const envelopeLines = variant === 'action'
         ? envelopeTransactionLines({ composed, ticker: nativeTicker })
+        : null;
+    // §36: the wallet's queued automatic donation, when these bytes carry it.
+    // It is a real coin output, so it is named on its own row before Approve.
+    const adsDonation = variant === 'action'
+        ? automaticDonationLine({ composed, descriptor, ticker: nativeTicker })
         : null;
     const resolvedSigningWallet = useSigningWallet(signingWallet);
     const [approvalAttempt, setApprovalAttempt] = useState(null);
@@ -391,8 +422,54 @@ export function ConfirmActionModal({
         return () => clearTimeout(timer);
     }, [previewReady, composed]);
     const approveSettled = previewReady && (approveSettle.ms <= 0 || settledRequest === (composed ?? true));
-    const approveDisabled = approvalAttempt !== null && approvalAttempt.request === composed;
+    const approveInFlight = approvalAttempt !== null && approvalAttempt.request === composed;
     const signingTime = useLongOperationStatus(signaturePhase);
+
+    // The status notice, first on the page. Pre-flight applies to an action
+    // and to a caller's PSBT (report-only there, §5.5: it informs and never
+    // gates). It does not apply to a bare coin payment, to a PSBT that carries
+    // no XChain action (an ordinary payment), or to a message, which have no
+    // chain state to check, so those pages make no claim either way; a pass
+    // report must never turn an ordinary payment green.
+    const preflightApplies = (variant === 'action' || (variant === 'psbt' && !!decoded))
+        && !preflightNotApplicable;
+    const status = confirmStatus({
+        report: displayedReport,
+        applies: preflightApplies,
+        loading: reportLoading,
+        acknowledged,
+        approveGated: variant === 'action',
+    });
+
+    // Why a tap on Approve cannot go ahead yet, or null when it can. Approve
+    // never looks disabled (G130), so each of these is answered at the top of
+    // the page (G129) and sends nothing.
+    const blockedReason = refusal
+        ? { key: 'refusal', text: String(refusal) }
+        : !previewReady && !terminal && !signaturePhase
+            ? { key: 'checking', text: t('confirmStandard.blocked.checking') }
+            : previewReady && !canApprove
+                ? (status?.overrides?.length > 0
+                    && status.overrides.length === (displayedReport?.findings || []).filter((f) => f?.severity === 'error').length
+                    ? { key: 'signAnyway', text: t('confirmStandard.blocked.signAnyway') }
+                    : { key: 'fails', text: t('confirmStandard.blocked.fails') })
+                : previewReady && !credentialsReady
+                    ? {
+                        key: 'credentials',
+                        // A caller that knows what is missing names it; the
+                        // fallback names the step without guessing it is a
+                        // password (a typed DESTROY gate rides here too).
+                        text: credentialsBlockedText
+                            || (hardwareSigner ? t('confirmStandard.blocked.device') : t('confirmStandard.blocked.confirmStep')),
+                    }
+                    : null;
+    const [blockedTap, setBlockedTap] = useState(null);
+    // The notice stays only while the reason it answered still holds: typing
+    // the password or ticking Sign anyway clears it.
+    const shownBlocked = blockedTap && blockedReason && blockedTap.key === blockedReason.key && blockedTap.request === composed
+        ? blockedReason
+        : null;
+    const statusRef = useRef(null);
 
     useLayoutEffect(() => {
         if (!open) return;
@@ -425,17 +502,30 @@ export function ConfirmActionModal({
         return () => window.removeEventListener('keydown', handleEscape);
     }, [exitsLocked, onReject, open]);
 
-    // Approve disables SYNCHRONOUSLY in the click handler's tick, before any
+    // Approve goes busy SYNCHRONOUSLY in the click handler's tick, before any
     // await (§5.1). The parent's onApprove runs the async signing. The ref is
     // the guard: two clicks dispatched in one task both read the render's
-    // approveDisabled before React re-renders, so state alone let a double tap
+    // in-flight state before React re-renders, so state alone let a double tap
     // start two signing requests. The ref holds the same attempt as the
     // state, so a newly composed request is never blocked by an older one.
     const approveInFlightRef = useRef(null);
     const handleApprove = useCallback((e) => {
         if (e) e.preventDefault();
         if (approveInFlightRef.current && approveInFlightRef.current.request === composed) return;
-        if (approveDisabled || !approveSettled || !canApprove || !credentialsReady || refusal) return;
+        if (approveInFlight || signaturePhase || terminal) return;
+        if (blockedReason) {
+            // Nothing is sent: the reason goes to the top of the page, which
+            // scrolls there and takes focus so it is read out (G129).
+            setBlockedTap({ key: blockedReason.key, request: composed });
+            const scroller = pageRef.current?.querySelector('main');
+            if (scroller) scroller.scrollTop = 0;
+            statusRef.current?.focus?.({ preventScroll: true });
+            onApproveBlocked?.(blockedReason.key);
+            return;
+        }
+        // The short settle after the page opens (approveSettle) guards a tap
+        // that began on the form behind it; it is not a reason to report.
+        if (!approveSettled) return;
         const attempt = { request: composed };
         const finish = () => {
             if (approveInFlightRef.current === attempt) approveInFlightRef.current = null;
@@ -448,7 +538,7 @@ export function ConfirmActionModal({
         } catch {
             finish();
         }
-    }, [approveDisabled, approveSettled, canApprove, credentialsReady, refusal, composed, onApprove]);
+    }, [approveInFlight, signaturePhase, terminal, blockedReason, approveSettled, composed, onApprove, onApproveBlocked]);
 
     const handleReject = useCallback((e) => {
         if (e) e.preventDefault();
@@ -470,29 +560,254 @@ export function ConfirmActionModal({
             titleRef={titleRef}
         />
     );
+    // A tap on Approve that could not go ahead: the reason, directly under
+    // the status notice at the top of the page (G129, G130).
+    const blockedBlock = shownBlocked ? (
+        <Notice tone="danger" role="alert" testId="confirm-blocked" data-reason={shownBlocked.key} flush>
+            {shownBlocked.text}
+        </Notice>
+    ) : null;
+    // §5.3.4: a credential failure returns the page to `ready` with this error
+    // set, so the user retypes and re-approves the SAME PSBT. It sits at the
+    // top of the page, under the status notice.
+    const errorBlock = error?.presentation === 'status' ? (
+        <div className={styles.hwNote} role="status" data-testid="confirm-notice">
+            {userFacingMessage(
+                error,
+                'The request stopped because the wallet service returned no explanation.',
+            )}
+        </div>
+    ) : error ? (
+        <StatusMessage variant="error" role="alert" testId="confirm-error" flush>
+            {userFacingMessage(
+                error,
+                'The request stopped because the wallet service returned no explanation.',
+            )}
+        </StatusMessage>
+    ) : null;
+
+    // --- the sentence, the address and the icon ---
+    const form = variant === 'action'
+        ? (summary || summaryFromDecoded({ decoded: formattedDecoded, actionName: composedActionName(composed) }))
+        : null;
+    const chainId = form?.chainId || composed?.chainId || '';
+    const chainDescriptor = chainId ? chainRegistry.get(chainId) : descriptor;
+    const chainName = chainDescriptor?.displayName || (typeof chainLabel === 'string' ? chainLabel : '');
+    const head = confirmHeadline({
+        variant,
+        actionName: composedActionName(composed),
+        decoded: formattedDecoded,
+        summary: form,
+        sourceAddress,
+        chainName,
+    });
+    // The one hero icon: the token or coin the action is about, with its
+    // network pip; a kind with no token shows its own icon in a disc.
+    const mark = variant === 'action' && head.heroTick && chainDescriptor
+        ? <TickerIcon chainId={chainDescriptor.id} tick={head.heroTick} context="hero" />
+        : null;
+
+    // #40: the spender is the confirm hook's source, else the address the
+    // form says the action happens on; the one address line is labelled when
+    // it is the spender's.
+    const spender = sourceAddress || (variant === 'action' ? form?.address || null : null);
+    const addressIsSource = Boolean(spender) && head.address === spender;
+    const sourceWord = variant === 'message'
+        ? t('components.confirmActionModal.signingAddress')
+        : t('send.fields.from');
+    const sourceLabel = sourceName ? `${sourceWord} · ${sourceName}` : sourceWord;
+
+    // --- the fees, each named once ---
+    /** @type {import('../utils/confirmStandardModel.js').ConfirmFee[]} */
+    const fees = [];
+    if (variant === 'action') {
+        fees.push({
+            key: 'network',
+            label: composed?.envelopeFees
+                ? t('components.confirmSummary.networkFeeBoth')
+                : networkFee?.estimate
+                    ? t('components.confirmSummary.networkFeeEstimate')
+                    : t('send.networkFee'),
+            // Every transaction pays a network fee: an unknown amount stays a
+            // fee ("plus network fee"), never a silent zero.
+            amount: networkFee?.amount ? String(networkFee.amount) : null,
+            ticker: networkFee?.ticker || nativeTicker,
+            fiat: networkFee?.fiat || null,
+        });
+        // The protocol fee as the screen knows it: the XCHAIN lane from the
+        // pre-flight quote, the native lane from the composed output, else
+        // the form's own figure; a known-free action has no row.
+        const formProtocolFee = summary?.protocolFee?.amount ? summary.protocolFee : null;
+        const protocolLabel = t('execute.protocolFee');
+        if (protocolFee) {
+            fees.push({ key: 'protocol', label: protocolLabel, amount: String(protocolFee.amount), ticker: 'XCHAIN', fiat: protocolFeeFiat });
+        } else if (nativeProtocolFeeAmount) {
+            fees.push({ key: 'protocol', label: protocolLabel, amount: String(nativeProtocolFeeAmount), ticker: nativeTicker, fiat: nativeProtocolFeeFiat, notRefunded: true });
+        } else if (formProtocolFee && isPositiveDecimal(formProtocolFee.amount)) {
+            const tick = String(formProtocolFee.ticker || 'XCHAIN').toUpperCase();
+            const isCoin = tick === String(nativeTicker).toUpperCase();
+            const fiat = isCoin
+                ? (typeof formatNativeFee === 'function' ? formatNativeFee(formProtocolFee.amount) : null)
+                : (typeof formatProtocolFee === 'function' ? formatProtocolFee(formProtocolFee.amount) : null);
+            fees.push({ key: 'protocol', label: protocolLabel, amount: String(formProtocolFee.amount), ticker: tick, fiat });
+        } else if (protocolFeeUnavailable && !formProtocolFee) {
+            fees.push({ key: 'protocol', label: protocolLabel, amount: null, ticker: 'XCHAIN' });
+        }
+        if (oracleFee) {
+            fees.push({
+                key: 'oracle',
+                label: t('components.confirmSummary.oracleFee'),
+                amount: String(oracleFee.amount),
+                ticker: nativeTicker,
+                fiat: typeof formatNativeFee === 'function' ? formatNativeFee(oracleFee.amount) : null,
+            });
+        }
+        if (adsDonation) {
+            fees.push({
+                key: 'donation',
+                label: t('components.confirmSummary.automaticDonation'),
+                amount: String(adsDonation.coin),
+                ticker: nativeTicker,
+                display: adsDonation.value,
+            });
+        }
+    }
+
+    // --- the one facts card: the action's rows, who signs, the network and each fee ---
+    // There is no Total block (G127 revised 2026-11-16): the sentence says
+    // what the action moves and each fee is its own row with its fiat value.
+    const recipients = Array.isArray(form?.recipients) ? form.recipients.filter((row) => row && row.to) : [];
+    const feeLabels = new Set(fees.map((fee) => fee.label));
+    // A caller's PSBT shows its decoded action in its own panel
+    // (PsbtIntentPanel), so only the action variant draws the decode here.
+    const composedFacts = variant === 'action'
+        ? decodedFacts({
+            decoded: formattedDecoded,
+            sentence: head.sentence,
+            name: head.name,
+            address: head.address,
+            recipientsShown: recipients.length > 1,
+            kind: head.kind,
+            summary: form,
+        }).filter((fact) => !feeLabels.has(fact.label))
+        : [];
+    // A row the decode already states (its Memo) is the composed truth, so
+    // the form's own row of that name is left out rather than said twice.
+    const decodedLabels = new Set(composedFacts.map((fact) => fact.label.toLowerCase()));
+    const formFacts = (Array.isArray(summary?.facts) ? summary.facts : [])
+        .filter((fact) => fact && fact.label && String(fact.value ?? '').trim() !== '')
+        .filter((fact) => !decodedLabels.has(String(fact.label).toLowerCase()))
+        // The name line above the sentence already says it.
+        .filter((fact) => !head.name || String(fact.value).trim() !== head.name)
+        .map((fact, index) => ({ key: `form-${index}`, label: String(fact.label), value: String(fact.value), address: Boolean(fact.address), testId: fact.testId }));
+    // What leaves the wallet, when the sentence does not already say it (a
+    // dividend's whole payout, a coin buy's payment): one "You send" row in
+    // place of the retired Total's large figure.
+    const direction = form ? (form.direction || directionForVerb(form.verb)) : 'none';
+    // A form amount can arrive as "1000" or "1000 PEPE"; only its number is
+    // kept, and the ticker is added once.
+    const amountNumber = (value) => String(value ?? '').trim().split(/\s+/)[0];
+    const sentPayment = recipients.length > 1 ? null
+        : (direction === 'out' && form?.amount && form?.ticker)
+            ? `${formatDisplayAmount(amountNumber(form.amount))} ${String(form.ticker).toUpperCase()}`
+            : (paymentAmount ? `${formatDisplayAmount(amountNumber(paymentAmount))} ${String(nativeTicker).toUpperCase()}`.trim() : null);
+    // The sentence may group the digits ("1,000") where the form did not.
+    const ungrouped = (text) => String(text).replace(/(\d),(?=\d{3})/g, '$1');
+    const sentenceSays = (text) => new RegExp(`(^|\\s)${escapeRegExp(ungrouped(text))}(?=\\s|$|[,.])`).test(ungrouped(head.sentence));
+    const sentFact = variant === 'action' && sentPayment && !sentenceSays(sentPayment.split(' ')[0])
+        ? [{ key: 'you-send', label: t('confirmStandard.fact.youSend'), value: sentPayment, testId: 'confirm-you-send' }]
+        : [];
+    const facts = [
+        ...recipientFacts(recipients, chainId),
+        ...sentFact,
+        ...composedFacts,
+        ...formFacts,
+        ...(variant === 'action' && String(summary?.notice || '').trim()
+            ? [{
+                key: 'notice',
+                label: t('confirmStandard.facts'),
+                value: String(summary.notice).trim(),
+                testId: 'confirm-summary-notice',
+            }]
+            : []),
+        // #40: the page names the spender. When the one address line shows
+        // something else (a send's recipient), the source is a From row, so
+        // each address still shows once. A caller's PSBT lists its inputs,
+        // and a kind whose signing wallet says enough (a list transfer) has none.
+        ...(spender && !addressIsSource && variant !== 'psbt' && head.showSource
+            && !recipients.some((row) => row.to === spender)
+            ? [{ key: 'from', label: sourceLabel, value: spender, address: true, testId: 'confirm-source' }]
+            : []),
+        // The wallet that signs, which a switch in another surface must not
+        // change under an open review. Plain text: the hero is the page's
+        // one icon (G127).
+        ...(resolvedSigningWallet?.name
+            ? [{
+                key: 'wallet',
+                label: t('components.confirmActionModal.signingWith'),
+                value: resolvedSigningWallet.name,
+                testId: 'confirm-signing-wallet',
+            }]
+            : []),
+        ...(dustChange?.amount
+            ? [{ key: 'change', label: t('confirmStandard.change'), value: t('confirmStandard.changeNone', { amount: dustChange.amount, ticker: dustChange.ticker }), testId: 'confirm-dust-change' }]
+            : []),
+        ...feeFacts(fees),
+    ];
+    const messageFacts = variant === 'message' ? [
+        ...facts.filter((fact) => fact.key === 'wallet'),
+        ...(chainName ? [{ key: 'network', label: 'Network', value: chainName, testId: 'confirm-network' }] : []),
+        ...(head.address ? [{
+            key: 'address',
+            label: 'Address',
+            value: head.address,
+            address: true,
+            testId: 'confirm-address',
+        }] : []),
+    ] : null;
+
+    // --- the short warning after the details ---
+    const warning = confirmWarning({
+        actionWarningIds: cardIds,
+        decodedWarnings: variant === 'action' && Array.isArray(formattedDecoded?.warnings) ? formattedDecoded.warnings : [],
+        extraWarnings: [
+            ...(isContractCall ? [CONTRACT_CALL_WARNING] : []),
+            ...(Array.isArray(extraWarnings) ? extraWarnings : []),
+        ],
+        testId: warningTestId,
+    });
+    // Reject and Approve, docked. Approve is busy while a request is in
+    // flight and otherwise always live (G130).
     const footer = (
-        <div className={styles.footer}>
-            <Button
-                variant="secondary"
-                icon={<Icon.ThumbsDownIcon />}
-                onClick={handleReject}
-                disabled={exitsLocked}
-                data-testid="confirm-reject"
-            >
-                {t('extension.approval.reject')}
-            </Button>
-            <Button
-                variant="success"
-                icon={<Icon.ThumbsUpIcon />}
-                onClick={handleApprove}
-                disabled={approveDisabled || !approveSettled || signaturePhase || terminal || !canApprove || !credentialsReady || !!refusal}
-                data-testid="confirm-approve"
-                aria-label={resolvedApproveLabel}
-            >
-                {resolvedApproveLabel}
-            </Button>
+        <ConfirmDecisionFooter
+            onReject={handleReject}
+            onApprove={handleApprove}
+            rejectDisabled={exitsLocked}
+            approveLoading={approveInFlight || signaturePhase}
+        />
+    );
+
+    // Fail-closed refusal (§5.5): no credentials, no Approve, no override.
+    // Rendered where the credentials would be so the user sees WHY there is
+    // nothing to sign with.
+    const refusalBlock = refusal ? (
+        <StatusMessage variant="error" role="alert" testId="confirm-refusal" flush>
+            {refusal}
+        </StatusMessage>
+    ) : null;
+    const credentialsBlock = refusal ? null : (
+        <div className={styles.credentials}>
+            {credentials}
         </div>
     );
+    // Transaction-signing caveat only. Message signing moves no coins and has
+    // no outputs, so this note would be nonsense on that variant.
+    const hardwareNote = variant !== 'message' && hardwareSigner ? (
+        <p className={styles.hwNote}>
+            {t('components.confirmActionModal.aHardwareDeviceVerifiesNative')}
+        </p>
+    ) : null;
+    const pageLabel = t('components.confirmActionModal.confirm', { value: (headline !== undefined ? headline : head.sentence) || 'action' });
 
     // The confirm page always opens at its top; it must not inherit how far
     // the form behind it was scrolled.
@@ -504,200 +819,73 @@ export function ConfirmActionModal({
             footer={footer}
             restoreScroll={false}
         >
-            <div
-                className={styles.page}
-                data-testid="confirm-modal"
-                aria-label={t('components.confirmActionModal.confirm', { value: headlineText || 'action' })}
-            >
-                {/* §5.3.4: a credential failure returns the page to `ready`
-                    with this error set, so the user retypes and re-approves
-                    the SAME PSBT. It is the first item of page content,
-                    ahead of the header row. */}
-                {error?.presentation === 'status' ? (
-                    <div className={styles.hwNote} role="status" data-testid="confirm-notice">
-                        {userFacingMessage(
-                            error,
-                            'The request stopped because the wallet service returned no explanation.',
-                        )}
-                    </div>
-                ) : error ? (
-                    <StatusMessage variant="error" role="alert" testId="confirm-error">
-                        {userFacingMessage(
-                            error,
-                            'The request stopped because the wallet service returned no explanation.',
-                        )}
-                    </StatusMessage>
-                ) : null}
-
-                <div className={styles.header}>
-                    <span className={styles.actionLabel} data-testid="confirm-action-label">{actionHeaderLabel}</span>
-                    <span className={styles.chainBadge} data-testid="confirm-chain-badge">{chainLabel}</span>
-                </div>
-
-                <div className={styles.body}>
-                    <WalletIdentity wallet={resolvedSigningWallet} label={t('components.confirmActionModal.signingWith')} />
+            <ConfirmStandard
+                label={pageLabel}
+                status={status}
+                statusRef={statusRef}
+                acknowledged={acknowledged}
+                onAcknowledge={onAcknowledge}
+                top={blockedBlock || errorBlock ? <>{blockedBlock}{errorBlock}</> : null}
+                mark={mark}
+                icon={head.icon}
+                name={head.name}
+                actionCode={head.actionCode}
+                sentence={head.sentence}
+                address={variant === 'message' ? null : head.address}
+                chainName={variant === 'message' ? '' : chainName}
+                addressIsSource={addressIsSource}
+                addressLabel={addressIsSource ? sourceLabel : head.addressLabel}
+                afterAddress={(
                     <OriginIdentity
                         origin={requestOrigin}
                         label={t('extension.approval.requestingSite')}
                         testId="confirm-request-origin"
                     />
-
-                    {/* Settings > Developer Mode > Learn Mode. Renders
-                        nothing unless the user asked for it; first in the body
-                        because it frames everything under it. */}
-                    <LearnNote variant={variant} chainLabel={chainLabel} />
-
-                    {/* §5.5 PSBT variant: the input/output enumeration is the
-                        foregrounded content, ABOVE any action-data intent. */}
-                    {variant === 'psbt' ? psbtPanel : null}
-
-                    {/* §5.5 message variant: the full text, verbatim and
-                        never truncated - it is the whole thing being signed. */}
-                    {variant === 'message' && messageText !== undefined ? (
-                        <section className={styles.messageBox} aria-label={t('components.confirmActionModal.messageToSign')}>
-                            <p className={styles.messageLabel}>{t('components.confirmActionModal.messageToSign')}</p>
-                            <pre className={styles.messageText} data-testid="confirm-message-text" dir="auto">
-                                {messageText}
-                            </pre>
-                        </section>
-                    ) : null}
-
-                    {variant === 'action' && reviewDecoded ? (
-                        <ActionIntentSummary decoded={reviewDecoded} simulation={simulation} />
-                    ) : null}
-
-                    {isContractCall ? (
-                        <p className={styles.hwNote} data-testid="contract-call-warning">
-                            {CONTRACT_CALL_WARNING}
-                        </p>
-                    ) : null}
-
-                    {/* The wallet can hold several addresses per chain, so the
-                        action row names the spender alongside the balance debit.
-                        Message signing uses the same row for its signing address. */}
-                    {(variant === 'action' || variant === 'message') && sourceAddress ? (
-                        <dl className={styles.sourceRow} data-testid="confirm-source">
-                            <dt className={styles.sourceLabel}>
-                                {variant === 'message' ? t('components.confirmActionModal.signingAddress') : t('send.fields.from')}
-                            </dt>
-                            <dd className={styles.sourceValue}>
-                                {sourceName ? (
-                                    <span className={styles.sourceName}>{sourceName}</span>
-                                ) : null}
-                                <AddressText address={sourceAddress} highlight truncate={false} />
-                            </dd>
-                        </dl>
-                    ) : null}
-
-                    {/* Pre-flight on the PSBT variant is REPORT-ONLY (§5.5): the
-                        wallet cannot rebuild a caller's PSBT, so findings inform
-                        but never block. The caller controls `canApprove`; this
-                        renders the panel either way so the user still sees them. */}
-                    {/* A plain native-coin payment has no XChain action,
-                        so pre-flight does not apply to it. Rendering the panel's
-                        null-report state here would tell the user "Pre-flight
-                        unavailable; proceeding is at your discretion" on an
-                        ordinary payment - alarming, and false: nothing failed
-                        and nothing is missing. Not applicable means not shown. */}
-                    {feeText ? (
-                        <div className={styles.fee} data-testid="confirm-fee">{feeText}</div>
-                    ) : null}
-
-                    {envelopeLines ? (
-                        <div className={styles.fee} data-testid="confirm-envelope-transactions">
-                            <div>{t('components.confirmActionModal.twoTransactionsBothSignedNow')}</div>
-                            {envelopeLines.map((line) => (
-                                <div key={line.role} data-testid={`confirm-envelope-${line.role}`}>{line.text}</div>
-                            ))}
-                        </div>
-                    ) : null}
-
-                    {/* Directly under the miner fee so the two costs read as
-                        one section, and named as itself so neither passes for
-                        the other (the same rule the delta rows follow). */}
-                    {protocolFee ? (
-                        <div className={styles.fee} data-testid="confirm-protocol-fee">
-                            {protocolFee.text}{protocolFeeFiat ? ` (${protocolFeeFiat})` : ''}
-                        </div>
-                    ) : null}
-
-                    {nativeProtocolFeeAmount ? (
-                        <div className={styles.fee} data-testid="confirm-native-protocol-fee">
-                            {t('components.confirmActionModal.protocolFee')} {nativeProtocolFeeAmount} {nativeTicker}
-                            {nativeProtocolFeeFiat ? ` (${nativeProtocolFeeFiat})` : ''}
-                            {t('components.confirmActionModal.sentOnChainAndNot')}
-                        </div>
-                    ) : null}
-
-                    {protocolFeeUnavailable ? (
-                        <div className={styles.fee} data-testid="confirm-protocol-fee-unavailable">
-                            {t('components.confirmActionModal.protocolFeeEstimateUnavailable')}
-                        </div>
-                    ) : null}
-
-                    {oracleFee ? (
-                        <div className={styles.fee} data-testid="confirm-oracle-fee">{oracleFee.text}</div>
-                    ) : null}
-
-                    {totalText ? (
-                        <div className={styles.fee} data-testid="confirm-total">{totalText}</div>
-                    ) : null}
-
-                    {(variant === 'action' || variant === 'psbt') && !preflightNotApplicable ? (
-                        <PreflightPanel
-                            report={displayedReport}
-                            loading={reportLoading}
-                            acknowledged={acknowledged}
-                            onAcknowledge={onAcknowledge}
-                        />
-                    ) : null}
-
-                    {/* Fail-closed refusal (§5.5): no credentials, no Approve,
-                        no override. Rendered where the credentials would be so
-                        the user sees WHY there is nothing to sign with. */}
-                    {refusal ? (
-                        <StatusMessage variant="error" role="alert" testId="confirm-refusal">
-                            {refusal}
-                        </StatusMessage>
-                    ) : null}
-
-                    {refusal ? null : (
-                        <div className={styles.credentials}>
-                            {credentials}
-                        </div>
-                    )}
-
-                    {/* Transaction-signing caveat only. Message signing moves no
-                        coins and has no outputs, so this note would be nonsense
-                        on that variant. */}
-                    {variant !== 'message' && hardwareSigner ? (
-                        <p className={styles.hwNote}>
-                            {t('components.confirmActionModal.aHardwareDeviceVerifiesNative')}
-                        </p>
-                    ) : null}
-
-                    {phase === 'rechecking' ? (
-                        <p className={styles.recheck} data-testid="confirm-rechecking">{t('components.confirmActionModal.reChecking')}</p>
-                    ) : null}
-                    {signingTime.showElapsed ? (
-                        <p className={styles.recheck} role="status" data-testid="confirm-signing-elapsed">
-                            {t('components.confirmActionModal.signingFor')} {signingTime.elapsedSeconds} {t('components.confirmActionModal.secondsCheckYourHardwareWallet')}
-                        </p>
-                    ) : null}
-                    {signingTime.timedOut ? (
-                        <StatusMessage variant="error" role="alert" testId="confirm-signing-timeout">
-                            {t('components.confirmActionModal.signingIsTakingLongerThan')}
-                        </StatusMessage>
-                    ) : null}
-                    {/* The queue holds the signed transaction until the user
-                        broadcasts it from the queued-transactions banner. */}
-                    {phase === 'signed-not-broadcast' ? (
-                        <p className={styles.queued} data-testid="confirm-queued">
-                            {t('components.confirmActionModal.signedNotBroadcastYet')}
-                        </p>
-                    ) : null}
-                </div>
-            </div>
+                )}
+                facts={messageFacts || facts}
+                preserveFactOrder={variant === 'message'}
+                messageText={variant === 'message' ? messageText : undefined}
+                warning={warning}
+            >
+                {/* Settings > Developer Mode > Learn Mode. Renders nothing
+                    unless the user asked for it. */}
+                <LearnNote variant={variant} chainLabel={chainLabel} />
+                {envelopeLines ? (
+                    <div className={styles.envelope} data-testid="confirm-envelope-transactions">
+                        <p>{t('components.confirmActionModal.twoTransactionsBothSignedNow')}</p>
+                        {envelopeLines.map((line) => (
+                            <p key={line.role} data-testid={`confirm-envelope-${line.role}`}>{line.text}</p>
+                        ))}
+                    </div>
+                ) : null}
+                {/* §5.5 PSBT variant: the input/output enumeration is the
+                    foregrounded content for a caller's transaction. */}
+                {variant === 'psbt' ? psbtPanel : null}
+                {technicalDetails}
+                {refusalBlock}
+                {credentialsBlock}
+                {hardwareNote}
+                {phase === 'rechecking' ? (
+                    <p className={styles.recheck} data-testid="confirm-rechecking">{t('components.confirmActionModal.reChecking')}</p>
+                ) : null}
+                {signingTime.showElapsed ? (
+                    <p className={styles.recheck} role="status" data-testid="confirm-signing-elapsed">
+                        {t('components.confirmActionModal.signingFor')} {signingTime.elapsedSeconds} {t('components.confirmActionModal.secondsCheckYourHardwareWallet')}
+                    </p>
+                ) : null}
+                {signingTime.timedOut ? (
+                    <StatusMessage variant="error" role="alert" testId="confirm-signing-timeout" flush>
+                        {t('components.confirmActionModal.signingIsTakingLongerThan')}
+                    </StatusMessage>
+                ) : null}
+                {/* The queue holds the signed transaction until the user
+                    broadcasts it from the queued-transactions banner. */}
+                {phase === 'signed-not-broadcast' ? (
+                    <p className={styles.queued} data-testid="confirm-queued">
+                        {t('components.confirmActionModal.signedNotBroadcastYet')}
+                    </p>
+                ) : null}
+            </ConfirmStandard>
         </Screen>
     );
 }

@@ -114,7 +114,7 @@ export function tickerGrammarError(value, { noun = 'Ticker', allowDot = false } 
     // chain charges for finding that out. See the header.
     if (!allowDot && tick.includes('.'))
         return `${noun} cannot contain a dot. A dotted name is a subtoken: `
-            + "create one with the wizard's Subtoken template.";
+            + 'create one with the Subtoken template.';
 
     // Structural dot rules next: `A..B` and `.A` both pass a per-character
     // check and are refused by the chain, so catching them here saves the fee.

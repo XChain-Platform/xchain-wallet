@@ -8,7 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §44 Fee UX, Step 2: Send.jsx RBF toggle wiring.
+// Smoke for §44 Fee UX, Step 2: Send's RBF toggle wiring. The toggle lives in
+// the shared Advanced section (formStandard/AdvancedSection.jsx); Send seeds
+// its default from Settings and carries the clamped flag in its payload.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -22,28 +24,26 @@ const sendSrc = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'Send.jsx'),
     'utf8',
 );
-const sendCss = readFileSync(
-    join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'Send.module.css'),
+const advancedSrc = readFileSync(
+    join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'formStandard', 'AdvancedSection.jsx'),
     'utf8',
 );
-
-// --- state ----------------------------------------------------------
-
-assert.match(sendSrc, /const \[rbfEnabled, setRbfEnabled\] = useState\(true\)/, 'rbfEnabled defaults to true');
 
 // --- settings-derived default ---------------------------------------
 
 // §35.10: stored null follows the descriptor default, so Send resolves
-// the entry through resolveFeeConfig instead of reading the raw field.
+// the entry through resolveFeeConfig instead of reading the raw field, on
+// every render, so a chain switch always reseeds.
 assert.match(
     sendSrc,
-    /resolveFeeConfig\(settings\?\.fees\?\.\[chainId\]/,
+    /resolveFeeConfig\(settings\?\.fees\?\.\[chainId\], chainRegistry\.get\(chainId\)\)\.rbfByDefault/,
     'resolves settings.fees[chainId] against the chain descriptor',
 );
+assert.doesNotMatch(sendSrc, /settings\.fees\[chainId\]\) return;/, 'a chain with no stored fee entry still seeds');
 assert.match(
     sendSrc,
-    /setRbfEnabled\(rbfByDefault\)/,
-    'syncs state from the resolved preference on chain change',
+    /advanced=\{\{ rbfDefault: rbfByDefault/,
+    'hands the resolved default to the shared Advanced section',
 );
 
 // --- payload --------------------------------------------------------
@@ -57,44 +57,22 @@ assert.match(
 );
 assert.match(
     sendSrc,
-    /const rbfForSend = rbfSupported && rbfEnabled;/,
-    'clamps the per-send flag to the chain capability',
+    /const rbfForSend = rbfSupported && \(advancedEntry\.rbf \?\? rbfByDefault\);/,
+    'clamps the per-send flag (the user choice, else the default) to the chain capability',
 );
+assert.match(sendSrc, /rbf:\s*rbfForSend,/, 'clamped rbf flag flows into the send payload');
+
+// --- toggle UI (shared Advanced section) ----------------------------
+
+assert.match(advancedSrc, /<Switch\b/, 'toggle uses the kit Switch');
 assert.match(
-    sendSrc,
-    /rbf:\s*rbfForSend,/,
-    'clamped rbf flag flows into the send payload',
+    advancedSrc,
+    /const rbfChecked = rbfSupported && \(entry\.rbf \?\? effectiveRbfDefault\);/,
+    'the switch shows the clamped choice',
 );
-assert.doesNotMatch(sendSrc, /rbf:\s*rbfEnabled,/, 'no payload carries the unclamped flag');
-const rbfSeed = sendSrc.slice(
-    sendSrc.indexOf('const [rbfEnabled, setRbfEnabled]'),
-    sendSrc.indexOf('setRbfEnabled(rbfByDefault)'),
-);
-assert.ok(rbfSeed.length > 0, 'RBF seeding effect located');
-assert.doesNotMatch(
-    rbfSeed,
-    /settings\.fees\[chainId\]\) return;/,
-    'a chain with no stored fee entry still reseeds from the descriptor',
-);
-
-// --- toggle UI ------------------------------------------------------
-
-assert.match(sendSrc, /<Switch\b/, 'toggle uses the kit Switch');
-assert.match(sendSrc, /checked=\{rbfForSend\}/);
-assert.match(sendSrc, /disabled=\{!rbfSupported\}/, 'toggle disabled where the chain has no RBF');
-assert.match(sendSrc, /aria-label=\{t\('send\.rbf\.label'\)\}/, 'the switch is named by the visible label key');
-assert.match(sendSrc, /t\('send\.rbf\.label'\)/, 'visible label');
-assert.match(
-    sendSrc,
-    /t\('send\.rbf\.enabledHint'\)/,
-    'hint copy explains why',
-);
-
-// --- CSS hooks ------------------------------------------------------
-
-// The kit Switch owns the label and hint typography; only the row hook remains.
-for (const cls of ['rbfRow']) {
-    assert.match(sendCss, new RegExp(`\\.${cls}\\s*\\{`), `CSS hook .${cls}`);
-}
+assert.match(advancedSrc, /checked=\{rbfChecked\}/);
+assert.match(advancedSrc, /disabled=\{disabled \|\| !rbfSupported\}/, 'toggle disabled where the chain has no RBF');
+assert.match(advancedSrc, /aria-label=\{t\('send\.rbf\.label'\)\}/, 'the switch is named by the visible label key');
+assert.match(advancedSrc, /t\('send\.rbf\.enabledHint'\)/, 'hint copy explains why');
 
 console.log('send-rbf-toggle smoke OK');

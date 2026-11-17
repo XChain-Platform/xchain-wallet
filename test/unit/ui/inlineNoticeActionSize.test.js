@@ -23,7 +23,8 @@ describe('inline actions read at the surrounding text size', () => {
 
     it('draws the notice recovery action as the small shared Button, not a hand-sized one', () => {
         const jsx = read('StatusMessage.jsx');
-        expect((jsx.match(/size="sm"/g) || []).length).toBeGreaterThanOrEqual(2);
+        // One NoticeAction serves the lone notice and each line of a group.
+        expect(jsx).toMatch(/function NoticeAction\b[\s\S]*?<Button[\s\S]*?size="sm"/);
         expect(rule(read('StatusMessage.module.css'), '.recovery')).not.toMatch(/font-size|min-height|padding|border/);
     });
 });

@@ -17,7 +17,6 @@ import '../../i18n/locales/en/flows.js';
 import '../../i18n/locales/en/send.js';
 import { defaultRegistry } from '../../registry/index.js';
 import { protocolCoinTickerFor } from '../../registry/nativeFee.js';
-import { InfoTip } from '../../ui/InfoTip.jsx';
 import { Switch } from '../../ui/Switch.jsx';
 import { useFeeFiat } from '../hooks/useFeeFiat.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -101,9 +100,8 @@ function FeesCardContent({
     const pendingText = t('flows.feesCard.calculating');
     const reviewText = t('flows.feesCard.pricedAtReview');
     const unresolvedText = quoteUnavailable ? reviewText : pendingText;
-    const protocolHelp = effectiveNativeFeeProps?.unverified && payInNative
-        ? `${t('flows.feesCard.protocolFeeHelp')} ${t('flows.protocolFee.unverifiedNotice')}`
-        : t('flows.feesCard.protocolFeeHelp');
+    // Data state, not a toggle: the safety text shows only for an unverified fee.
+    const showUnverifiedHint = Boolean(effectiveNativeFeeProps?.unverified && payInNative);
     const selectorWithFiat = isValidElement(feeSelector) && typeof feeSelector.type !== 'string'
         // The card shares its price lookup; a card without a chain keeps the selector's own.
         ? cloneElement(feeSelector, {
@@ -124,16 +122,7 @@ function FeesCardContent({
                 />
                 <FeeRow
                     kind="protocol"
-                    label={(
-                        <span className={styles.labelWithHelp}>
-                            {t('execute.protocolFee')}
-                            <InfoTip
-                                aria={t('flows.feesCard.protocolFeeHelpLabel')}
-                                label={protocolHelp}
-                                className={styles.protocolHelp}
-                            />
-                        </span>
-                    )}
+                    label={t('execute.protocolFee')}
                     amount={unresolved
                         ? unresolvedText
                         : payInNative
@@ -154,6 +143,11 @@ function FeesCardContent({
                         />
                     ) : null}
                 />
+                {showUnverifiedHint ? (
+                    <p className={styles.hint} data-fees-unverified-hint="">
+                        {t('flows.protocolFee.unverifiedNotice')}
+                    </p>
+                ) : null}
                 <FeeRow
                     kind="total"
                     label={t('flows.feesCard.total')}

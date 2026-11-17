@@ -14,7 +14,7 @@
 //        corresponding mainnet coin price to test coins or their fees.
 
 import React from 'react';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessagingProvider } from '../../packages/core/src/shared/MessagingProvider.jsx';
 import { TotalBalanceHero } from '../../packages/core/src/shared/components/TotalBalanceHero.jsx';
@@ -116,8 +116,9 @@ function renderTokenDetail(chainId, networkKind) {
             onBack={() => {}}
         />,
     ));
+    // The balance card is named by its caption, the asset's own name.
     return screen.getByRole('region', {
-        name: `${tickerForDescriptor(descriptor)} balance`,
+        name: tickerForDescriptor(descriptor),
     });
 }
 
@@ -249,8 +250,15 @@ describe('regression/test-networks-no-fiat', () => {
 
             cleanup();
             const detail = renderTokenDetail(chainId, networkKind);
-            if (showsFiat) expect(detail).toHaveTextContent('$50,000.00');
-            else expect(detail).not.toHaveTextContent('$');
+            // The card leads with the coin amount; the unit button switches it to fiat.
+            const unitButton = screen.getByRole('button', { name: 'Show in USD' });
+            if (showsFiat) {
+                fireEvent.click(unitButton);
+                expect(detail).toHaveTextContent('$50,000.00');
+            } else {
+                expect(unitButton).toBeDisabled();
+                expect(detail).not.toHaveTextContent('$');
+            }
         },
     );
 
@@ -278,15 +286,18 @@ describe('regression/test-networks-no-fiat', () => {
             await primeFiatRates();
             render(<FeeRows chainId={chainId} />);
 
-            const networkFee = screen.getByTestId('confirm-fee');
-            const protocolFee = screen.getByTestId('confirm-protocol-fee');
+            // The facts card's fee rows (G127); re-read inside the wait, since
+            // a row's text is replaced when the rates arrive.
             await waitFor(() => {
+                const networkFee = screen.getByTestId('confirm-fee-network');
+                const protocolFee = screen.getByTestId('confirm-fee-protocol');
                 if (showsFiat) {
                     expect(networkFee).toHaveTextContent('$0.50');
                     expect(protocolFee).toHaveTextContent('$2.00');
                 } else {
                     expect(networkFee).not.toHaveTextContent('$');
                     expect(protocolFee).not.toHaveTextContent('$');
+                    expect(screen.getByTestId('confirm-modal')).not.toHaveTextContent('$');
                 }
             });
         },

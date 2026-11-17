@@ -95,25 +95,32 @@ assert.match(panel, /GIVE_COIN: coinTicker, GET_COIN: coinTicker/,
     'ORDER params carry the COIN networks (indexer rejects them missing)');
 assert.match(panel, /p\.GIVE_TICK\.toUpperCase\(\) === coinTicker\) p\.GIVE_TICK = ''/,
     'native GIVE side composes as an EMPTY tick (wire rule)');
-assert.match(panel, /Enable auto-pay/, 'consent checkbox present');
+assert.match(panel, /Auto pay/, 'consent switch present');
+assert.match(panel, /<Switch\s+label=/, 'consent is a labelled switch');
 assert.match(panel, /useState\(true\)/, 'checkbox defaults ON');
-assert.match(panel, /giveIsNative && !isWatcherMode && !isHwSource\(fromAddress\)/,
+assert.match(panel, /const signsUnattended = !isWatcherMode && !isHwSource\(fromAddress\);\s*const autopayEligible = giveIsNative && signsUnattended;/,
     'checkbox only for software signers on a native-GIVE order');
-assert.match(panel, /I understand the wallet must stay open for auto-pay to work\./,
-    'web keep-open acknowledgment copy');
+// Every Trade mode takes its side from the Buy | Sell toggle, so the notice
+// and checkbox show when the chosen side gives the coin.
+assert.match(panel, /const coinpaySide = giveIsNative \? side : null;/,
+    'the CoinPay choice shows when the chosen side gives the coin');
+assert.match(panel, /notice: confirmNotice/,
+    'web keep-open fact rides the confirm screen as a notice');
+assert.doesNotMatch(panel, /keepOpenAck/, 'no keep-open acknowledgement gate on the panel');
 assert.match(panel, /autopay: autopayArm \? \{ enabled: true \} : undefined/,
     'consent flag threads through the submit paths');
-assert.match(panel, /Outstanding auto-pay exposure/, 'aggregate exposure shown when armed');
+assert.match(panel, /Outstanding auto pay exposure/, 'aggregate exposure shown when armed');
 
 // ---- CreateOrderForm: the create-order route's own consent UI --------------
 const createOrder = read('packages', 'core', 'src', 'shared', 'routes', 'CreateOrderForm.jsx');
-assert.match(createOrder, /Enable auto-pay/, 'create-order consent switch present');
+assert.match(createOrder, /<strong>Auto pay<\/strong>/, 'create-order consent switch present');
 assert.match(createOrder, /const \[autopayEnabled, setAutopayEnabled\] = useState\(true\)/, 'create-order switch defaults ON');
 assert.match(createOrder, /const autopayEligible = giveIsNative && !isWatcherMode && !isHwSource;/,
     'create-order switch only for software signers on a native-GIVE order');
-assert.match(createOrder, /I understand this web wallet only auto-pays while it is open and unlocked\./,
-    'create-order web keep-open acknowledgment copy');
-assert.match(createOrder, /if \(ackRequired && !keepOpenAck\) \{/, 'create-order refuses an unacknowledged web arm');
+assert.match(createOrder, /Auto pay runs inside this wallet: a match is paid while the wallet is open, even when it\\?'s locked\./,
+    'create-order web keep-open fact on the confirm screen');
+assert.match(createOrder, /notice: confirmNotice/, 'create-order hands the fact to the confirm screen');
+assert.doesNotMatch(createOrder, /keepOpenAck/, 'create-order carries no keep-open acknowledgement gate');
 assert.match(createOrder, /\.\.\.\(autopayArm \? \{ autopay: \{ enabled: true \} \} : \{\}\)/,
     'create-order consent flag threads through the submit path');
 
@@ -123,7 +130,7 @@ assert.match(openOrders, /setAutopayEnabled\(\{ id: record\.id, enabled: record\
     'per-market order rows carry the local revocation toggle');
 const obligations = read('packages', 'core', 'src', 'shared', 'routes', 'ObligationsView.jsx');
 assert.match(obligations, /getAutopayStatus/, 'ObligationsView reads the armed/disarmed status');
-assert.match(obligations, /Auto-pay is disarmed/, 'disarmed re-arm banner present');
+assert.match(obligations, /Auto pay is disarmed/, 'disarmed re-arm banner present');
 
 // ---- Explorer dependency contract ---------------------------------------
 // The policy REFUSES to pay when order_matches rows lack fill amounts, so

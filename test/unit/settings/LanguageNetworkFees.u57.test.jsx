@@ -25,9 +25,7 @@ const { LanguageRegionSection } = await import(
 const { NetworkSection } = await import(
     '../../../packages/core/src/shared/components/settings/NetworkSection.jsx'
 );
-const { FeesSection } = await import(
-    '../../../packages/core/src/shared/components/settings/FeesSection.jsx'
-);
+const { FeesHarness: FeesSection } = await import('../components/networkRowHarness.jsx');
 
 afterEach(() => {
     cleanup();
@@ -58,7 +56,9 @@ describe('Network panel tip (U57)', () => {
         settings = { ...createDefaultSettings(), activeNetwork: 'mainnet', developerMode: false };
         render(<NetworkSection activeWallet={{ id: 'w1' }} />);
         expect(within(openTip('About the network setting')).getByText(/Mainnet uses real funds/)).toBeTruthy();
-        expect(screen.getByLabelText('Active network').tagName).toBe('SELECT');
+        // The mode select is the shared themed dropdown (ruling G96).
+        expect(screen.getByLabelText('Active network')).toHaveAttribute('role', 'combobox');
+        expect(screen.getByLabelText('Active network')).toHaveAttribute('data-xc-select');
     });
 });
 
@@ -72,11 +72,13 @@ describe('Fees fee-bump line (U12)', () => {
             },
         };
         render(<FeesSection />);
-        expect(screen.getByText('Dogecoin')).toBeTruthy();
+        fireEvent.click(document.querySelector('[data-network-row="dogecoin-mainnet"] button'));
+        // The page title names the coin; the reason sits in the switch's '?'
+        // tip (operator walk 2026-11-15), never naming the chain.
         const lines = screen.queryAllByText(/Fee bumping isn't supported/);
         expect(lines.length).toBeGreaterThan(0);
         for (const line of lines) {
-            expect(line.textContent).toBe("Fee bumping isn't supported on this network.");
+            expect(line.textContent).toMatch(/Fee bumping isn't supported on this network\.$/);
             expect(line.textContent).not.toMatch(/Dogecoin|Bitcoin|Litecoin/);
         }
     });

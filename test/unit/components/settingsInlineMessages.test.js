@@ -35,16 +35,16 @@ describe('settings inline messages', () => {
 
     it('keeps action results out of the muted hint style', () => {
         const display = readFileSync(join(settingsDir, 'DisplaySection.jsx'), 'utf8');
-        for (const name of ['watchMessage', 'resetMessage', 'displayMessage']) {
+        for (const name of ['resetMessage', 'displayMessage']) {
             expect(display).not.toMatch(new RegExp(`style=\\{ROW_HINT\\}>\\{${name}`));
             expect(display).toMatch(new RegExp(`\\{${name} \\? (\\(\\s*)?<StatusMessage`));
         }
         const about = readFileSync(join(settingsDir, 'AboutSection.jsx'), 'utf8');
         expect(about).toMatch(/\{status \? <StatusMessage variant="success">/);
+        expect(about).toMatch(/<StatusMessage variant="success" title=\{t\('settings\.about\.upToDate'\)\}>/);
+        expect(about).toMatch(/variant="info"\s+title=\{t\('settings\.about\.updateAvailable'\)\}/);
         const settings = readFileSync(files.at(-1), 'utf8');
-        // The update check result is a page notice drawn by StatusMessage.
-        expect(settings).toMatch(/variant: UPDATE_CHECK_VARIANT\[state\]/);
-        expect(settings).toMatch(/<StatusMessage variant=\{desktopUpdate\.variant\}>\{desktopUpdate\.message\}<\/StatusMessage>/);
+        expect(settings).not.toMatch(/UPDATE_CHECK_VARIANT|desktopUpdate/);
     });
 
     it('puts a row result under the row at full width, not in its label column', () => {

@@ -85,14 +85,15 @@ test.describe('LG K51 first wallet unlock', { tag: '@lg-k51' }, () => {
         // Exact or by role: each field's 'About ...' help tip (U57) carries its label too.
         await page.getByRole('textbox', { name: /^Confirm( password)?$/ }).fill(PASSWORD);
         await expect(page.getByLabel('Wallet name', { exact: true })).toHaveValue(WALLET_NAME);
-        await expect(page.getByRole('radio', { name: /^12 words/ })).toBeChecked();
+        // G44: the word count is the icon dropdown; its trigger names the pick.
+        await expect(page.getByRole('button', { name: 'Recovery phrase length: 12 words' })).toBeVisible();
         const next = page.getByRole('button', { name: 'Next' });
         await expectActionReachable(page, 'wallet details', next);
         await next.click();
 
         const words = await readRecoveryPhrase(page);
         expect(words).toHaveLength(12);
-        const backupCheck = page.getByLabel(/saved my recovery phrase/i);
+        const backupCheck = page.getByRole('checkbox', { name: /saved my recovery phrase/i });
         await expect(backupCheck).not.toBeChecked();
         await backupCheck.check();
         await expect(backupCheck).toBeChecked();

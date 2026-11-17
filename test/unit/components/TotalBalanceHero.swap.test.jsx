@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Home's Balance actions menu holds the currency swap first, then the chart
-// and balance toggles, as every blue balance box does.
+// Home's blue balance box carries the currency swap first, then the eye, as
+// two round buttons in the card.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -37,9 +37,9 @@ function mount({ rows = [BTC_ROW], nativePriceMap, networkFilter = 'all' } = {})
     );
 }
 
-function menuRows() {
-    fireEvent.click(screen.getByRole('button', { name: 'Balance actions' }));
-    return screen.getAllByRole('menuitem').concat(screen.queryAllByRole('menuitemcheckbox'));
+// The unit swap is the card's first round button, then the eye; no menu holds them.
+function cardButtons() {
+    return screen.getAllByRole('button');
 }
 
 beforeEach(() => window.localStorage.clear());
@@ -53,33 +53,29 @@ describe('TotalBalanceHero currency swap', () => {
         mount({ nativePriceMap: { 'bitcoin-mainnet': { priceFiat: 50000, change24hPct: 0 } } });
         await waitFor(() => expect(screen.getByText(/100,000\.00/)).toBeTruthy());
 
-        const rows = menuRows();
-        const swap = screen.getByRole('menuitem', { name: 'Show in BTC' });
-        expect(swap).not.toHaveAttribute('aria-disabled', 'true');
-        const order = [...document.querySelectorAll('[role="menuitem"], [role="menuitemcheckbox"]')];
-        expect(order[0]).toBe(swap);
-        expect(rows.length).toBeGreaterThan(2);
+        const swap = screen.getByRole('button', { name: 'Show in BTC' });
+        expect(swap).not.toBeDisabled();
+        expect(cardButtons().map((button) => button.getAttribute('aria-label'))).toEqual(['Show in BTC', 'Hide balance']);
+        expect(cardButtons()[0]).toBe(swap);
+        expect(screen.queryByRole('button', { name: 'Balance actions' })).toBeNull();
 
         fireEvent.click(swap);
         await waitFor(() => expect(screen.getByText('2')).toBeTruthy());
         expect(screen.getByText('BTC')).toBeTruthy();
 
-        menuRows();
-        fireEvent.click(screen.getByRole('menuitem', { name: 'Show in USD' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Show in USD' }));
         await waitFor(() => expect(screen.getByText(/100,000\.00/)).toBeTruthy());
         expect(screen.getByText('USD')).toBeTruthy();
     });
 
     it('disables the swap when the coin has no price', () => {
         mount({ nativePriceMap: {} });
-        menuRows();
-        expect(screen.getByRole('menuitem', { name: 'Show in BTC' })).toHaveAttribute('aria-disabled', 'true');
+        expect(screen.getByRole('button', { name: 'Show in BTC' })).toBeDisabled();
     });
 
     it('uses the filtered network coin when one network is chosen', () => {
         const ltc = { ...BTC_ROW, chainId: 'litecoin-mainnet', tick: 'LTC', fiatRate: 100 };
         mount({ rows: [ltc], networkFilter: 'litecoin-mainnet', nativePriceMap: { 'litecoin-mainnet': { priceFiat: 100, change24hPct: 0 } } });
-        menuRows();
-        expect(screen.getByRole('menuitem', { name: 'Show in LTC' })).not.toHaveAttribute('aria-disabled', 'true');
+        expect(screen.getByRole('button', { name: 'Show in LTC' })).not.toBeDisabled();
     });
 });

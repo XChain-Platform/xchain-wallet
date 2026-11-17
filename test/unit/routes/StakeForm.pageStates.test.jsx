@@ -40,7 +40,8 @@ vi.mock('../../../packages/core/src/shared/hooks/useConfirmAction.js', async (im
 });
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { StakeForm } from '../../../packages/core/src/shared/routes/StakeForm.jsx';
+// The stake-form route: the one Staking form on validator staking.
+import { NetworkStakeRoute as StakeForm } from '../../helpers/stakingFormRoutes.jsx';
 
 const CHAIN = 'bitcoin-mainnet';
 const SOURCE = Object.freeze({

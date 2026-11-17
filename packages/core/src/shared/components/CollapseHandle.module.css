@@ -1,0 +1,134 @@
+/* The collapse handle (G100), moved here from the side menu so wide Home's
+   overview divider wears the same tab. Operator 2026-11-13: the tab must
+   read as a button in every state, so it is 10 by 40px with a 10px chevron,
+   a strong border and a shadow. The button itself is the 24px tap minimum
+   (WCAG 2.2 2.5.8) across the tab, centred on it and otherwise clear; the
+   tab the reader sees is its ::before. It is the kit Button (ghost, icon
+   only) re-drawn as a tab; the doubled class outranks the Button base in
+   either sheet order. The caller positions it (absolutely, by offset, not
+   transform, so the Button's 1px press nudge cannot move it); nothing here
+   sets position or offsets, so the caller's class never competes with it. */
+.handle.handle {
+    --xc-collapse-handle-tab: 10px;
+    --xc-collapse-handle-length: 40px;
+    --xc-button-hover-bg: transparent;
+    --xc-button-hover-border: transparent;
+    --xc-icon-size: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* The kit Button caps its width to its parent, and an edge strip can be
+       0px wide, so the cap is lifted or the target collapses to a sliver. */
+    max-width: none;
+    flex: none;
+    /* Never under the tap minimum (the Button's own control height is
+       lifted to it); each orientation sets its exact height below. */
+    min-height: var(--xc-tap-min);
+    padding: 0;
+    background: transparent;
+    color: var(--xc-text);
+    box-shadow: none;
+    border: none;
+    border-radius: 0;
+    cursor: pointer;
+}
+
+/* Vertical (the side menu): the hit area is the tap minimum wide and the
+   tab long, and the tab is half a pill hanging off the edge, so its start
+   side has no border and its end corners are round. */
+.handle.handle[data-orientation='vertical'] {
+    width: var(--xc-tap-min);
+    min-width: var(--xc-tap-min);
+    height: var(--xc-collapse-handle-length);
+}
+
+/* Horizontal (a divider): the side menu's tab turned a quarter, hanging
+   under the line as the side tab hangs off the menu's edge (operator
+   2026-11-15: the same size and the same look, rotated). The hit area is
+   the tab long and the tap minimum tall. */
+.handle.handle[data-orientation='horizontal'] {
+    width: var(--xc-collapse-handle-length);
+    min-width: var(--xc-collapse-handle-length);
+    height: var(--xc-tap-min);
+}
+
+.handle.handle::before {
+    content: '';
+    position: absolute;
+    box-sizing: border-box;
+    background: var(--xc-surface-raised);
+    box-shadow: var(--xc-shadow-md);
+    border: 1px solid var(--xc-border-strong);
+    pointer-events: none;
+}
+
+.handle.handle[data-orientation='vertical']::before {
+    inset-block: 0;
+    inset-inline-start: calc((var(--xc-tap-min) - var(--xc-collapse-handle-tab)) / 2);
+    width: var(--xc-collapse-handle-tab);
+    border-inline-start: none;
+    border-start-end-radius: var(--xc-radius-sm);
+    border-end-end-radius: var(--xc-radius-sm);
+}
+
+/* The vertical tab's rules with block and inline swapped: the side against
+   the line has no border, and the two far corners are round. */
+.handle.handle[data-orientation='horizontal']::before {
+    inset-inline: 0;
+    inset-block-start: calc((var(--xc-tap-min) - var(--xc-collapse-handle-tab)) / 2);
+    height: var(--xc-collapse-handle-tab);
+    border-block-start: none;
+    border-end-start-radius: var(--xc-radius-sm);
+    border-end-end-radius: var(--xc-radius-sm);
+}
+
+.handle.handle:hover {
+    color: var(--xc-text);
+}
+
+.handle.handle:hover::before {
+    border-color: var(--xc-accent-primary);
+}
+
+.handle.handle:focus-visible {
+    outline: none;
+}
+
+.handle.handle:focus-visible::before {
+    outline: 2px solid var(--xc-accent-primary, var(--xc-text));
+    outline-offset: 2px;
+}
+
+/* Above the drawn tab, which is painted by the button's ::before. */
+.chevron {
+    position: relative;
+    display: inline-flex;
+    width: 10px;
+    height: 10px;
+}
+
+.chevron > svg {
+    width: 100%;
+    height: 100%;
+}
+
+/* The side menu's chevron points back while open and out while collapsed. */
+.handle[data-orientation='vertical'][data-collapsed='true'] .chevron {
+    transform: scaleX(-1);
+}
+
+/* On a divider it points up while the panel above is open and down while
+   it is collapsed. */
+.handle[data-orientation='horizontal'] .chevron {
+    transform: rotate(90deg);
+}
+
+.handle[data-orientation='horizontal'][data-collapsed='true'] .chevron {
+    transform: rotate(-90deg);
+}
+
+@media (forced-colors: active) {
+    .handle.handle::before {
+        border-color: ButtonText;
+    }
+}

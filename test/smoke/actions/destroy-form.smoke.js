@@ -44,6 +44,8 @@ const sharedRoutes = join(core, 'src', 'shared', 'routes');
 const formPath = join(sharedRoutes, 'DestroyForm.jsx');
 assert.ok(existsSync(formPath), 'DestroyForm.jsx exists');
 const src = readFileSync(formPath, 'utf8');
+const confirmSrc = readFileSync(join(core, 'src', 'shared', 'components', 'ConfirmActionModal.jsx'), 'utf8');
+const confirmStandardSrc = readFileSync(join(core, 'src', 'shared', 'components', 'ConfirmStandard.jsx'), 'utf8');
 
 // --- 1. Public surface + CSS reuse ------------------------------------
 
@@ -75,7 +77,15 @@ assert.ok(
     'DestroyForm calls decoder with action: "DESTROY"',
 );
 assert.ok(/decoderLib\.decodeAction/.test(src), 'DestroyForm invokes decoder.decodeAction');
-assert.ok(src.includes('decoded.warnings'), 'DestroyForm renders decoder warnings');
+assert.ok(
+    /<ConfirmActionModal[\s\S]*?composed=\{legacyComposed\}[\s\S]*?decoded=\{decoded\}/.test(src),
+    'DestroyForm sends the decoded DESTROY intent to the shared confirm page',
+);
+assert.ok(
+    /decodedWarnings:[^\n]*formattedDecoded\?\.warnings/.test(confirmSrc)
+        && /<ConfirmStandard\b[\s\S]*?warning=\{warning\}/.test(confirmSrc),
+    'ConfirmActionModal places decoder warnings in the G127 short warning',
+);
 
 // --- 5. Sign dispatch via the shared useActionForm hook (G6) ----------
 //
@@ -99,20 +109,18 @@ assert.ok(
     'DestroyForm distinguishes wrong-password from other errors',
 );
 
-// --- 6. Danger variant on the sign button ------------------------------
+// --- 6. Confirm Standard decision buttons -------------------------------
 //
-// §20 Cluster X Step 7: variant flips to 'primary' in watcher mode (the
-// "Create unsigned transaction" CTA is not destructive; destruction happens at
-// broadcast on a different wallet). Pin the conditional shape so a future
-// drop of the danger variant doesn't go unnoticed.
+// G127 replaced the action-specific sign button with the shared red Reject and
+// green Approve pair. The danger signal now belongs to Reject on every review.
 
 assert.ok(
-    /variant=\{isWatcherMode \? 'primary' : 'danger'\}/.test(src),
-    'DestroyForm uses the danger variant only for signing wallets',
+    /<Button[\s\S]*?variant="danger"[\s\S]*?data-testid="confirm-reject"/.test(confirmStandardSrc),
+    'DestroyForm confirmation gets the shared red Reject button',
 );
 assert.ok(
-    src.includes("'danger'") || src.includes('"danger"'),
-    'DestroyForm still uses the danger variant for full / HW signing',
+    /<Button[\s\S]*?variant="success"[\s\S]*?data-testid="confirm-approve"/.test(confirmStandardSrc),
+    'DestroyForm confirmation gets the shared green Approve button',
 );
 
 // --- 7. Core flow -----------------------------------------------------
@@ -206,5 +214,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK: destroy form smoke (DestroyForm §40.4 + destroyToken core flow + action.destroy handler + both messaging helpers + ActionsMenu entry + danger-variant sign button + popup/web wiring)',
+    'OK: destroy form smoke (DestroyForm §40.4 + destroyToken core flow + action.destroy handler + both messaging helpers + ActionsMenu entry + G127 confirm buttons + popup/web wiring)',
 );

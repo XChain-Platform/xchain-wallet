@@ -26,10 +26,11 @@ import {
     explorerJson,
     expectConfirmModal,
     fundAddress,
+    issuePlainToken,
+    readIssueSource,
     mintXchain,
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
-    selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
     waitForTokenBalance,
@@ -66,8 +67,9 @@ async function openPauseAction(page, tick, label) {
     await expect(row, `${tick} is on chain but My Tokens does not list it`)
         .toBeVisible({ timeout: 60_000 });
     await row.click();
-    await expect(page.getByText('Manage Token').first()).toBeVisible({ timeout: 30_000 });
-
+    // G12: My Tokens opens the shared token page, titled with the token's
+    // name (no "Manage Token" heading); the issuer's action row is what to
+    // wait for, and clickManageTokenAction waits for it.
     await clickManageTokenAction(main, label);
 }
 
@@ -81,13 +83,28 @@ async function openLockAddress(page) {
 }
 
 /**
- * Waits for the lock form's "This address is currently ..." line to read
- * `expected`; the state read is async, so the first paint always says active.
+ * The lock form shows no status line: an awake address leaves Lock address
+ * enabled once the chain state is read, with no "is locked" line.
  */
-async function expectAddressStateLine(page, expected) {
-    await expect(page.getByRole('main').getByText(/^This address is currently /),
-        'the lock form does not state the address\'s current pause state as the chain has it')
-        .toHaveText(expected, { timeout: 30_000 });
+async function expectAddressAwake(page) {
+    const main = page.getByRole('main');
+    await expect(main.getByRole('button', { name: 'Lock address', exact: true }),
+        'the lock form never enabled Lock address for an address the chain has awake')
+        .toBeEnabled({ timeout: 30_000 });
+    await expect(main.getByText(/^This address is locked /),
+        'the lock form reads an awake address as locked').toHaveCount(0);
+}
+
+/**
+ * A locked address gets one plain line naming its wake block, and Lock
+ * address stays disabled, since a locked address cannot lock again.
+ */
+async function expectAddressLockedUntil(page, resumeBlock) {
+    const main = page.getByRole('main');
+    await expect(main.getByText(
+        `This address is locked until block ${String(resumeBlock)}.`, { exact: false }),
+    'the lock form does not read the lock the chain has').toBeVisible({ timeout: 30_000 });
+    await expect(main.getByRole('button', { name: 'Lock address', exact: true })).toBeDisabled();
 }
 
 /** The latest valid SLEEP row for `tick`, straight off the explorer. */
@@ -114,8 +131,7 @@ test.describe(`SLEEP (tick pause/resume and address lock) on ${REGTEST_CHAIN_LAB
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(main);
-            source = await main.getByLabel('From').inputValue();
+            source = await readIssueSource(main);
             expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
             await fundAddress(source, FUNDING);
@@ -130,12 +146,8 @@ test.describe(`SLEEP (tick pause/resume and address lock) on ${REGTEST_CHAIN_LAB
 
             await openPaletteCommand(page, 'Issue token');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(main);
-            await main.getByLabel('Ticker').fill(TICK);
-            await main.getByLabel('Supply', { exact: true }).fill(SUPPLY);
-            const password = main.getByLabel('Password', { exact: true });
-            if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-            await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+            await readIssueSource(main);
+            await issuePlainToken(main, { ticker: TICK, supply: SUPPLY, password: PASSWORD });
 
             await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
@@ -146,9 +158,11 @@ test.describe(`SLEEP (tick pause/resume and address lock) on ${REGTEST_CHAIN_LAB
         await test.step('pause the token indefinitely', async () => {
             await openPauseAction(page, TICK, 'Pause token');
             const main = page.getByRole('main');
-            await expect(main.getByRole('radio', { name: /Pause indefinitely/ }))
+            // The pause setting is a themed dropdown, not a radio group.
+            await expect(main.getByRole('button', { name: /^Pause setting/ }))
                 .toBeVisible({ timeout: 30_000 });
-            await main.getByRole('radio', { name: /Pause indefinitely/ }).check();
+            await main.getByRole('button', { name: /^Pause setting/ }).click();
+            await page.getByRole('option', { name: /Pause indefinitely/ }).click();
             await main.getByRole('button', { name: 'Pause token', exact: true }).click();
 
             await expectConfirmModal(page, 'this action', 60_000);
@@ -170,15 +184,18 @@ test.describe(`SLEEP (tick pause/resume and address lock) on ${REGTEST_CHAIN_LAB
             // above as a lock on the owner's own address.
             await openLockAddress(page);
             await expect(page.getByLabel('Address to lock')).toHaveValue(source);
-            await expectAddressStateLine(page, 'This address is currently active (not paused).');
+            await expectAddressAwake(page);
         });
 
         await test.step('resume the token', async () => {
             await openPauseAction(page, TICK, 'Resume token');
             const main = page.getByRole('main');
-            await expect(main.getByRole('radio', { name: /Resume now/ })).toBeVisible({ timeout: 30_000 });
-            await main.getByRole('radio', { name: /Resume now/ }).check();
-            await main.getByRole('button', { name: 'Resume token', exact: true }).click();
+            // A paused token offers only Resume: the form has no pause
+            // setting to pick, and its main action reads Resume token.
+            const resume = main.getByRole('button', { name: 'Resume token', exact: true });
+            await expect(resume, 'a paused token\'s form does not offer Resume token').toBeEnabled({ timeout: 30_000 });
+            await expect(main.getByRole('button', { name: /^Pause setting/ })).toHaveCount(0);
+            await resume.click();
 
             await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
@@ -198,19 +215,21 @@ test.describe(`SLEEP (tick pause/resume and address lock) on ${REGTEST_CHAIN_LAB
             await expect(main.getByLabel('Address to lock'),
                 'the lock form offers a different address than the one that signed the rest of this test')
                 .toHaveValue(source);
-            await expectAddressStateLine(page, 'This address is currently active (not paused).');
+            await expectAddressAwake(page);
 
             await main.getByRole('slider', { name: 'Duration' }).fill('4');
             await main.getByLabel('Blocks').fill(String(LOCK_AHEAD_BLOCKS));
-            const endLine = main.getByText(/^Ends at block /);
-            await expect(endLine, 'the lock form never calculated its end block').toBeVisible({ timeout: 30_000 });
-            const resumeBlock = Number((await endLine.innerText()).match(/block ([\d,]+)/)?.[1]?.replace(/,/g, ''));
-            expect(Number.isFinite(resumeBlock) && resumeBlock > 0, 'unreadable end block on the lock form').toBe(true);
             await main.getByRole('button', { name: 'Lock address', exact: true }).click();
 
+            // The form no longer shows an end line; the review's wake condition names the block.
+            const wakeLine = main.getByText(/Automatically at block [\d,]+/);
+            await expect(wakeLine, 'the lock review never showed its wake block').toBeVisible({ timeout: 30_000 });
+            const resumeBlock = Number((await wakeLine.first().innerText()).match(/at block ([\d,]+)/)?.[1]?.replace(/,/g, ''));
+            expect(Number.isFinite(resumeBlock) && resumeBlock > 0, 'unreadable wake block on the lock review').toBe(true);
+
             // Legacy review stage: irreversibility warning, typed confirm, sign.
-            await expect(page.getByText('This pauses XChain actions from your address.', { exact: false }))
-                .toBeVisible({ timeout: 30_000 });
+            await expect(page.getByTestId('confirm-action-warnings'))
+                .toContainText("While locked, this address can't create any XChain action", { timeout: 30_000 });
             const sign = main.getByRole('button', { name: 'Lock address', exact: true });
             await expect(sign, 'Sign is live before LOCK was typed').toBeDisabled();
             const password = main.getByLabel('Password', { exact: true });
@@ -238,8 +257,7 @@ test.describe(`SLEEP (tick pause/resume and address lock) on ${REGTEST_CHAIN_LAB
 
             // Back to the form: it now reads the lock off the chain.
             await openLockAddress(page);
-            await expectAddressStateLine(page,
-                `This address is currently PAUSED until block ${resumeBlock.toLocaleString('en-US')}.`);
+            await expectAddressLockedUntil(page, resumeBlock);
         });
     });
 });

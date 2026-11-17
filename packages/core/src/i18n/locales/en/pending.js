@@ -42,7 +42,7 @@ const messages = {
     'pending.detail.failed': 'Failed before it reached the network',
     'pending.detail.failedHelp':
         "This wallet couldn't complete the send. Nothing was broadcast, so no coins moved and no fee was paid. You can send again.",
-    'pending.detail.dismissFailed': 'Remove from history',
+    'pending.detail.dismissFailed': 'Remove from History',
     // A transaction this wallet proved into a block that no feed will ever
     // list: a plain coin transfer, or an action the service recorded nothing
     // for. Both say what the block settled and what it did not.

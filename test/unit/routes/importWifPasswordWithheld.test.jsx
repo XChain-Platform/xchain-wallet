@@ -57,11 +57,11 @@ async function openImportForm(messaging) {
     );
     fireEvent.click(await screen.findByRole('button', { name: /Add or import address/i }));
     fireEvent.click(await screen.findByRole('menuitem', { name: /Import address/i }));
-    await screen.findByLabelText(/WIF private key/i);
+    await screen.findByLabelText(/WIF private key/i, { selector: 'input' });
 }
 
 async function submitWif() {
-    fireEvent.change(screen.getByLabelText(/WIF private key/i), {
+    fireEvent.change(screen.getByLabelText(/WIF private key/i, { selector: 'input' }), {
         target: { value: 'cSV3exampleRegtestWifValue' },
     });
     const pw = screen.queryByLabelText(/Wallet password/i, { selector: 'input' });

@@ -1,0 +1,89 @@
+/* The Send form's Multi and Advanced tabs. Blocks stack 8px apart (G80). */
+
+.multi,
+.advanced {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+/* One flush card of recipient rows with divider lines (G07). */
+.list {
+    composes: flush from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    overflow: hidden;
+}
+
+.list > li + li {
+    border-block-start: 1px solid var(--xc-border);
+}
+
+.item {
+    min-width: 0;
+}
+
+/* The row's own corners would show inside the card. */
+.row {
+    width: 100%;
+    min-width: 0;
+    border-radius: 0;
+}
+
+.rowContent {
+    min-width: 0;
+}
+
+/* "to bc1q..." under the amount; the address takes whatever width is left
+   and is cut in the middle only when it does not fit (G99). */
+.rowTo {
+    display: flex;
+    align-items: baseline;
+    gap: var(--xc-space-1);
+    min-width: 0;
+}
+
+.toWord {
+    flex: none;
+    color: var(--xc-text-muted);
+}
+
+.editing {
+    border-block-start: 1px solid var(--xc-border);
+    padding: var(--xc-space-2);
+    background: var(--xc-bg-muted);
+}
+
+.editor {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.editorActions {
+    display: flex;
+    gap: var(--xc-space-2);
+}
+
+.editorActions > * {
+    flex: 1 1 0;
+}
+
+.advancedText {
+    width: 100%;
+    white-space: pre;
+    overflow-x: auto;
+    font-family: var(--xc-font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+}
+
+.totals {
+    margin: 0;
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+}

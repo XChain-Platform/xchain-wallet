@@ -14,6 +14,7 @@ import {
     dismissIntroCarousel, expect, gotoSection, test, unlockedShell,
 } from '../fixtures/wallet.js';
 import { enterDemoWallet } from '../fixtures/responsive.js';
+import { pickOption } from '../fixtures/pickOption.js';
 import { createSweep, measureInPage, measureRulings } from './sweep.js';
 
 const OUT_ROOT = process.env.SWEEP_OUT
@@ -57,7 +58,7 @@ test('app dark setting sweep', async ({ page }, testInfo) => {
     });
     await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
     await gotoSection(page, 'Settings');
-    await page.getByLabel('Theme', { exact: true }).selectOption('dark');
+    await pickOption(page.getByLabel('Theme', { exact: true }), 'dark');
     await expect(page.locator('html')).toHaveAttribute('data-xc-theme', 'dark');
     await sweep.measure('darkset: appearance');
     await sweep.unlocked();
@@ -96,40 +97,17 @@ test('dark focus rings and hover contrast', async ({ page }, testInfo) => {
     }
 });
 
-/** Runs in the page: each Home quick action's name, tile box, icon box and label box. */
-function quickActionTiles() {
-    const group = document.querySelector('[role="group"][aria-label="Quick actions"]');
-    if (!group) return null;
-    const box = (el) => {
-        const r = el.getBoundingClientRect();
-        return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height };
-    };
-    return [...group.querySelectorAll('button')].map((button) => ({
-        name: (button.innerText || '').trim().replace(/\s+/g, ' '),
-        tile: box(button),
-        icon: box(button.firstElementChild),
-        label: box(button.lastElementChild),
-    }));
-}
-
-test('Home quick actions are four square tiles with the icon above the label', async ({ page }, testInfo) => {
+test('Home has no quick action tiles at any width', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'dark-1440');
     test.setTimeout(10 * 60 * 1000);
     await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
     for (const width of [360, 1280, 1440]) {
         await page.setViewportSize({ width, height: 900 });
         await gotoSection(page, 'Home');
-        await expect(page.getByRole('group', { name: 'Quick actions' })).toBeVisible();
-        const tiles = await page.evaluate(quickActionTiles);
-        expect(tiles.map((tile) => tile.name), `names at ${width}`)
-            .toEqual(['Send', 'Receive', 'Exchange', 'All actions']);
-        for (const { name, tile, icon, label } of tiles) {
-            const where = `${name} at ${width}`;
-            expect(Math.abs(tile.width - tile.height), `${where} square`).toBeLessThanOrEqual(1);
-            expect(icon.bottom, `${where} icon above label`).toBeLessThanOrEqual(label.top + 0.5);
-            const tileMid = (tile.left + tile.right) / 2;
-            expect(Math.abs((icon.left + icon.right) / 2 - tileMid), `${where} icon centred`).toBeLessThanOrEqual(1);
-            expect(Math.abs((label.left + label.right) / 2 - tileMid), `${where} label centred`).toBeLessThanOrEqual(1);
+        await expect(page.getByRole('group', { name: 'Quick actions' }), `quick actions at ${width}`).toHaveCount(0);
+        for (const name of ['Exchange', 'More']) {
+            await expect(page.getByRole('main').getByRole('button', { name, exact: true }), `${name} at ${width}`)
+                .toHaveCount(0);
         }
     }
 });

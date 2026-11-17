@@ -189,3 +189,14 @@
         content: '';
     }
 }
+
+/* The Duration label reads like every other field label (normal case,
+   field-label size and weight, the ? after it), not a small uppercase header
+   that could pass for a second fee picker. */
+.label.label {
+    gap: var(--xc-space-2);
+    font-size: var(--xc-text-sm);
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+}

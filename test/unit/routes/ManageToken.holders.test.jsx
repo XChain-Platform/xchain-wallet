@@ -6,14 +6,15 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const source = readFileSync(
-    join(process.cwd(), 'packages/core/src/shared/routes/ManageToken.jsx'),
+    join(process.cwd(), 'packages/core/src/shared/components/TokenOwnerActions.jsx'),
     'utf8',
 );
 
-describe('ManageToken holder data removal', () => {
-    it('does not request or render holder data and keeps owner copy in Details', () => {
+// Holders stay one Details row of the asset page (read when chosen); the
+// issuer's module adds no holder read of its own.
+describe('issuer actions: no holder data', () => {
+    it('does not request or render holder data', () => {
         expect(source).not.toContain('getHoldersForToken');
         expect(source).not.toContain('HoldersPanel');
-        expect(source).toContain("ariaLabel={t('routes.manageToken.copyOwnerAddress')}");
     });
 });

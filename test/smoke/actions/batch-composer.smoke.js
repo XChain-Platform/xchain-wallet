@@ -68,7 +68,7 @@ assert.match(form, /const EXCLUDED_ACTIONS = new Set\(\['BATCH', 'FILE'\]\)/, 'D
 // child that runs out of fee fails alone and its siblings stand. This assertion
 // used to demand the word "Atomic" and had been red ever since the form started
 // telling the truth instead - a gate pinning the OPPOSITE of the contract.
-assert.match(form, /each still confirms on its own/,
+assert.match(form, /each action still confirms on its own/,
     'form states that sub-actions confirm individually, not all-or-nothing');
 assert.doesNotMatch(form, /\bAtomic\b/,
     'form must not claim atomicity: a batch is not all-or-nothing');

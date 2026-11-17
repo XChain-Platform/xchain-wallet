@@ -114,7 +114,7 @@ export const FEE_STRATEGY_NAMES = /** @type {const} */ ([
  * @property {EndpointConfig} [hub]
  * @property {string} adsDonationAddress          §36.3 default destination for Automatic Donation System output; legacy custom descriptors may use only this field
  * @property {{ DONATE1: string, DONATE2: string, EXPLORER: string }} [adsDonationAddresses] network-specific Automatic Donation System destinations
- * @property {{ perTxAmountSats: number, triggerAmountSats: number }} [adsDefaults]  §36.1 per-coin ADS seed values in the chain's base unit; absent = generic ADS_DEFAULT_* fallback
+ * @property {{ perTxAmountSats: number, triggerAmountSats: number }} [adsDefaults]  LEGACY: per-coin donation amounts from before the wallet-wide fiat queue (2026-11-14); kept so the descriptors stay in sync with the platform registry, and read by nothing in the wallet
  * @property {string[]} [platformListOwners]      display-only platform list-owner addresses; never consensus
  * @property {boolean} [isUserAdded]              set by registry for Developer Mode entries
  */

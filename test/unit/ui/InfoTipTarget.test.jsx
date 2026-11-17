@@ -325,7 +325,10 @@ describe('StatusMessage semantics and presentation', () => {
 
     it('maps each variant class to its semantic colour tokens', () => {
         expect(statusCss).toMatch(/\.row\.status,\s*\.row\.info\s*\{[^}]*background:\s*var\(--xc-info-bg\)[^}]*color:\s*var\(--xc-info-text\)/s);
-        expect(statusCss).toMatch(/\.row\.error\s*\{[^}]*background:\s*var\(--xc-danger\)[^}]*color:\s*var\(--xc-on-danger\)/s);
+        // Notice Standard (2026-11-15): warning and error are one danger look,
+        // a light red tint with a thin red border, never a solid red fill.
+        expect(statusCss).toMatch(/\.row\.warning,\s*\.row\.error\s*\{[^}]*background:\s*var\(--xc-danger-bg\)[^}]*color:\s*var\(--xc-danger-text\)[^}]*border:\s*1px solid var\(--xc-danger\)/s);
+        expect(statusCss).not.toMatch(/--xc-on-danger/);
         expect(statusCss).toMatch(/\.row\.success\s*\{[^}]*background:\s*var\(--xc-success-bg,\s*rgba\(20, 111, 52, 0\.10\)\)/s);
         expect(statusCss).toMatch(/\.row\.success\s*\{[^}]*border:\s*1px solid var\(--xc-success,/s);
     });

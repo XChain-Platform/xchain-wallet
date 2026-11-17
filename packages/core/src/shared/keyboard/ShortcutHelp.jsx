@@ -20,6 +20,7 @@ import { SHORTCUT_GROUPS, formatBinding, resolveBindings } from './shortcuts.js'
 import styles from './ShortcutHelp.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
+import { WarningCard, WarningLine } from '../components/WarningCard.jsx';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/keyboard.js';
@@ -79,7 +80,7 @@ export function ShortcutHelp({ open, onClose, overrides }) {
         >
             <div className={styles.panel} role="presentation" onMouseDown={(e) => e.stopPropagation()}>
                 <header className={styles.header}>
-                    <span id="xc-shortcut-help-title" className={styles.title}>{t('keyboard.shortcutHelp.keyboardShortcuts')}</span>
+                    <span id="xc-shortcut-help-title" className={styles.title}>{t('keyboard.shortcutHelp.title')}</span>
                     <span className={styles.close}>
                         <Button
                             variant="secondary"
@@ -127,12 +128,16 @@ export function ShortcutHelp({ open, onClose, overrides }) {
                             </dl>
                         </section>
                     ) : null}
-                    <p className={styles.footerNote}>
-                        {t('keyboard.shortcutHelp.rebindWalletShortcutsInSettings')}
-                        {extensionCommands.length > 0
-                            ? t('keyboard.shortcutHelp.manageBrowserExtensionShortcutsIn')
-                            : null}
-                    </p>
+                    {/* A note sits in the shared WarningCard, never as a loose
+                        paragraph. */}
+                    <WarningCard className={styles.footerNote}>
+                        <WarningLine>
+                            {t('keyboard.shortcutHelp.rebindWalletShortcutsInSettings')}
+                            {extensionCommands.length > 0
+                                ? t('keyboard.shortcutHelp.manageBrowserExtensionShortcutsIn')
+                                : null}
+                        </WarningLine>
+                    </WarningCard>
                 </div>
             </div>
         </div>

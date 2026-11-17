@@ -96,16 +96,24 @@ describe('send asset switch', () => {
 
     it.each(SHELLS)('%s backs out of send-picker to Send and leaves Send\'s back target alone', (path) => {
         const src = readFileSync(path, 'utf8');
-        const picker = block(src, "unlockedView === 'send-picker'", "unlockedView === 'receive-picker'");
-        expect(picker).toMatch(/onBack=\{\(\) => \{\s*setSendPrefill\(cancelSendAssetSwitch\);\s*setUnlockedView\('send'\);/);
+        const picker = block(src, "unlockedView === 'send-picker'", "unlockedView === 'receive'");
+        // Back pops the picker off the history onto Send; a pick unwinds to
+        // that same Send, so Send's own Back still returns to what opened it.
+        expect(picker).toMatch(/onBack=\{\(\) => \{\s*setSendPrefill\(cancelSendAssetSwitch\);\s*goBack\(\);/);
+        expect(picker).toMatch(/setSendPrefill\(\(prev\) => applySendAssetPick\(prev, sel\)\);\s*nav\.land\('send'\);/);
         expect(picker).not.toMatch(/setUnlockedView\('home'\)/);
         expect(picker).not.toMatch(/setSendBackTo\(/);
         expect(src).toMatch(/setSendPrefill\(\(prev\) => beginSendAssetSwitch\(prev, carry\)\)/);
     });
 
-    it.each(SHELLS)('%s backs out of receive-picker to Receive', (path) => {
+    // The Receive picker is retired: Receive's Token field opens the token
+    // picker inside Receive, and Back from Receive leaves Receive (Home, or the
+    // shell's history), never to a picker.
+    it.each(SHELLS)('%s has no receive-picker route and Receive never backs out to a picker', (path) => {
         const src = readFileSync(path, 'utf8');
-        const picker = block(src, "unlockedView === 'receive-picker'", "unlockedView === 'receive'");
-        expect(picker).toMatch(/onBack=\{\(\) => setUnlockedView\('receive'\)\}/);
+        expect(src).not.toContain("'receive-picker'");
+        const receive = block(src, "unlockedView === 'receive'", "unlockedView === 'scan'");
+        expect(receive).toMatch(/onBack=\{\(\) => \{\s*setReceivePrefill\(null\);\s*(setUnlockedView\('home'\)|goBack\(\));\s*\}\}/);
+        expect(receive).not.toMatch(/onChangeAsset=/);
     });
 });

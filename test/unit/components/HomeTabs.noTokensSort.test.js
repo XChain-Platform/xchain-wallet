@@ -34,6 +34,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useFiatRate.js', () => ({
 }));
 
 import { HomeTabs } from '../../../packages/core/src/shared/components/HomeTabs.jsx';
+import { showHomeBalances } from '../../helpers/homeBalances.js';
 
 const descriptors = new Map([
     ['bitcoin-mainnet', {
@@ -97,7 +98,7 @@ afterEach(() => {
 describe('Home Tokens sorting', () => {
     it('does not show a sort control on Tokens', () => {
         mount();
-        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        showHomeBalances('tokens');
 
         expect(screen.queryByRole('combobox', { name: 'Sort balances' })).toBeNull();
     });
@@ -105,7 +106,7 @@ describe('Home Tokens sorting', () => {
     it('keeps Tokens in saved name order', () => {
         localStorage.setItem('xc:balances:sort:wallet-sort', 'name');
         mount();
-        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        showHomeBalances('tokens');
 
         expect(renderedKeys()).toEqual([
             'bitcoin-mainnet:AAA',
@@ -116,22 +117,28 @@ describe('Home Tokens sorting', () => {
 
     it('applies the saved sort choice across coin and token lists', () => {
         localStorage.setItem('xc:balances:sort:wallet-sort', 'name');
+        // Balances remembered as Coins on this wallet.
+        localStorage.setItem('xc:balances:type:wallet-sort', 'coins');
         mount();
 
         fireEvent.click(screen.getByRole('button', { name: 'Filter and sort' }));
-        expect(screen.getByRole('radio', { name: 'Name' })).toBeChecked();
+        const panel = screen.getByRole('dialog', { name: 'Filter and sort' });
+        const trigger = () => Array.from(panel.querySelectorAll('button[aria-haspopup="listbox"]'))
+            .find((button) => /^Sort by (name|value)$/.test(button.textContent.trim()));
+        expect(trigger().textContent.trim()).toBe('Sort by name');
         expect(renderedKeys()).toEqual([
             'litecoin-mainnet:LTC',
             'bitcoin-mainnet:BTC',
         ]);
 
-        fireEvent.click(screen.getByRole('radio', { name: 'Value' }));
+        fireEvent.click(trigger());
+        fireEvent.click(screen.getByRole('option', { name: /Sort by value/i }));
         expect(renderedKeys()).toEqual([
             'bitcoin-mainnet:BTC',
             'litecoin-mainnet:LTC',
         ]);
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        showHomeBalances('tokens');
         expect(renderedKeys()).toEqual([
             'bitcoin-mainnet:ZED',
             'bitcoin-mainnet:BETA',

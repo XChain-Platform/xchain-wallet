@@ -241,8 +241,12 @@ export const AddressCombobox = /* @__PURE__ */ forwardRef(function AddressCombob
                             onMouseEnter={() => setActiveIndex(i)}
                         >
                             <span className={styles.label}>
-                                {s.label}
-                                <span className={styles.badge}>
+                                {/* A recent destination has no name: its label is
+                                    the address itself, which the fitting line below
+                                    already shows whole when it fits (G99), so the
+                                    fixed short copy is not drawn above it. */}
+                                {s.source === 'history' ? null : s.label}
+                                <span className={s.source === 'history' ? `${styles.badge} ${styles.badgeOnly}` : styles.badge}>
                                     {s.source === 'contact' ? t('ui.addressCombobox.contact') : t('ui.addressCombobox.recent')}
                                 </span>
                             </span>

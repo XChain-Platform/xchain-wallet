@@ -60,11 +60,11 @@ describe('createSignerRecord', () => {
         expect(s.label).toBe('Ledger');
     });
 
-    it('defaults label to "Hardware signer" for unknown kind', () => {
+    it('defaults label to "Hardware wallet" for unknown kind', () => {
         // NOTE: The factory does not validate kind; it accepts any string and
         // falls through the defaultLabel else-branch. This is characterization.
         const s = createSignerRecord({ ...BASE_INPUT, kind: 'unknown' });
-        expect(s.label).toBe('Hardware signer');
+        expect(s.label).toBe('Hardware wallet');
     });
 
     it('uses provided label', () => {

@@ -38,7 +38,9 @@ vi.mock('../../../packages/core/src/shared/hooks/useConfirmAction.js', async (im
 });
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { StakeForm } from '../../../packages/core/src/shared/routes/StakeForm.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
+// The stake-form route: the one Staking form on validator staking.
+import { NetworkStakeRoute as StakeForm } from '../../helpers/stakingFormRoutes.jsx';
 
 const CHAIN = 'bitcoin-mainnet';
 const SOURCE = Object.freeze({
@@ -51,11 +53,14 @@ const SOURCE = Object.freeze({
 });
 
 function mountStake(walletMode = 'full') {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [SOURCE] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: SOURCE.id } }),
         signerReady: () => Promise.resolve({ ready: true }),
-        getSettings: () => Promise.resolve({ walletMode }),
+        getSettings: () => Promise.resolve({}),
+        listWallets: () => Promise.resolve([{ id: 'w', name: 'W', walletMode }]),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
         getWalletBalances: () => Promise.resolve({ [CHAIN]: [] }),
         getStakesForAddress: () => Promise.resolve([]),
@@ -87,6 +92,7 @@ async function readySubmit(container) {
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     localStorage.clear();
     confirmResult.current = null;
 });
@@ -99,9 +105,10 @@ describe('StakeForm main actions', () => {
         expect(submit.className).toMatch(/success/);
     });
 
-    it('names the watch-only submit Review stake, never Preview', async () => {
+    // Action labels are Title Case.
+    it('names the watch-only submit Review Stake, never Preview', async () => {
         const container = mountStake('watcher');
-        await waitFor(() => expect(container.querySelector('button[type="submit"]')?.textContent).toBe('Review stake'));
+        await waitFor(() => expect(container.querySelector('button[type="submit"]')?.textContent).toBe('Review Stake'));
         const submit = container.querySelector('button[type="submit"]');
         expect(submit.querySelector('svg')).not.toBeNull();
         expect(container.textContent).not.toContain('Preview');

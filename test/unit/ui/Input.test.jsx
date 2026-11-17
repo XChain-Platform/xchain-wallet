@@ -16,6 +16,7 @@ import { Input } from '../../../packages/core/src/ui/Input.jsx';
 import { IconSelect } from '../../../packages/core/src/ui/IconSelect.jsx';
 import { Select } from '../../../packages/core/src/ui/Select.jsx';
 import { Textarea } from '../../../packages/core/src/ui/Textarea.jsx';
+import { selectOption } from '../../helpers/selectOption.js';
 
 const originalInnerWidth = Object.getOwnPropertyDescriptor(window, 'innerWidth');
 
@@ -120,7 +121,8 @@ describe('<Input>', () => {
             </>,
         );
         expect(screen.getByLabelText('Notes').tagName).toBe('TEXTAREA');
-        expect(screen.getByLabelText('Network').tagName).toBe('SELECT');
+        // Select is the themed dropdown trigger, never a native select (ruling G96).
+        expect(screen.getByLabelText('Network')).toHaveAttribute('role', 'combobox');
     });
 
     it('uses one field-requirement convention in labels and accessibility metadata', () => {
@@ -358,7 +360,8 @@ describe('<Input>', () => {
         expect(screen.queryByText('Help')).toBeNull();
         expect(control.getAttribute('aria-describedby').split(' ')
             .every((id) => document.getElementById(id))).toBe(true);
-        fireEvent.change(control, { target: { value: 'one' } });
+        if (control.hasAttribute('data-xc-select')) selectOption(control, 'one');
+        else fireEvent.change(control, { target: { value: 'one' } });
         expect(control).not.toHaveAttribute('aria-invalid');
         expect(control.className).not.toBe(invalidClass);
         expect(screen.queryByRole('alert')).toBeNull();

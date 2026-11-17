@@ -39,7 +39,7 @@ import { assertSigningAllowed } from './panicMode.js';
 import { assertBroadcastSignaturesVerify, assertTxSignaturesVerify } from '../signers/verifyTxSignatures.js';
 import { rawTxid } from '../signers/verifySignedTx.js';
 import { assembleMultisigTx } from './multisigSpend.js';
-import { assertMultisigTransactionBinding } from './multisigTransactionBinding.js';
+import { assertMultisigTransactionBinding, findMatchingMultisigConfig } from './multisigTransactionBinding.js';
 import { isAlreadyOnNetworkRejection } from './broadcastPermanence.js';
 import { t } from '../i18n/index.js';
 import '../i18n/locales/en/multisig.js';
@@ -292,14 +292,38 @@ export async function getMultisigSigningSession({ vault, sessionId }) {
     return vault.multisigSigningSessions.get(sessionId);
 }
 
-/** @param {{ vault: any, walletId: string }} opts */
+// The public keys this wallet signs with in a session: the `origin: 'local'`
+// cosigners of the wallet's config that matches the session (the same match
+// the import and local-sign flows use). Public keys only; the cosigner's
+// signer id, path and fingerprint stay in the vault.
+function localPubkeysFor(wallet, session) {
+    if (!Array.isArray(session?.cosignerPubkeys)) return [];
+    const config = findMatchingMultisigConfig(wallet, session);
+    if (!config) return [];
+    return config.cosigners
+        .filter((cosigner) => cosigner?.origin === 'local' && typeof cosigner.pubkey === 'string')
+        .map((cosigner) => cosigner.pubkey.toLowerCase());
+}
+
+/**
+ * The wallet's sessions, each with `localPubkeys` (this wallet's own cosigner
+ * public keys in that session's setup) so the Sessions page can tell a
+ * session waiting on this wallet from one waiting on other cosigners. Two
+ * reads per call whatever the session count: the session list and the wallet.
+ * The field is derived on every read and never written back.
+ *
+ * @param {{ vault: any, walletId: string }} opts
+ */
 export async function listMultisigSigningSessions({ vault, walletId }) {
     if (!vault) throw new Error('listMultisigSigningSessions: vault is required');
     if (typeof walletId !== 'string' || walletId.length === 0) {
         throw new Error('listMultisigSigningSessions: walletId is required');
     }
     const all = await vault.multisigSigningSessions.list();
-    return all.filter((s) => s.walletId === walletId);
+    const mine = all.filter((s) => s.walletId === walletId);
+    if (mine.length === 0) return mine;
+    const wallet = await vault.wallets.get(walletId);
+    return mine.map((session) => ({ ...session, localPubkeys: localPubkeysFor(wallet, session) }));
 }
 
 /**

@@ -47,7 +47,10 @@ function messagingFor(overrides = {}) {
         getSettings: () => Promise.resolve({ walletMode: 'full' }),
         signerReady: () => Promise.resolve({ ready: true }),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
-        getContractByActionIndex: () => Promise.resolve({}),
+        // The method is always picked from the contract's declared list, so the row carries one.
+        getContractByActionIndex: () => Promise.resolve({
+            abi: { version: 1, methods: { transfer: { params: [] } } },
+        }),
         composeForConfirm: () => Promise.resolve({
             psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 1,
         }),
@@ -129,7 +132,7 @@ describe('ExecuteContractForm: the load error, loading line and broadcast panel 
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Call contract' }));
+            fireEvent.click(utils.getByRole('button', { name: 'Call Contract' }));
             await drain();
         });
         await domAct(async () => {

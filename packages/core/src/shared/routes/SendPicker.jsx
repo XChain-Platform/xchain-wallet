@@ -10,22 +10,27 @@
 
 import { ListPage } from '@xchain-wallet/core/ui';
 import { TokenPicker } from './TokenPicker.jsx';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/common.js';
+import '../../i18n/locales/en/send.js';
 
 function SendListPage(props) {
     return <ListPage {...props} />;
 }
 
 /**
- * Send picker: landing screen for the Send quick-action. Thin wrapper
- * over the shared {@link TokenPicker} with `purpose="send"`, which lists
- * only the spendable balances the active wallet/account holds. Selecting a
- * row hands {chainId, tick} to the host so the Send form opens with that
- * asset pre-populated.
+ * Send picker: the page Send's Asset field opens. Thin wrapper over the
+ * shared {@link TokenPicker} with `purpose="send"`, which lists only the
+ * spendable balances the active wallet/account holds. Selecting a row hands
+ * {chainId, tick} back to the Send form.
+ *
+ * It offers the coin and its tokens, so the page is titled Asset like the
+ * field that opens it (G60, as Receive's asset picker), and Back returns to
+ * Send rather than Home.
  *
  * Props are forwarded verbatim; `hideOwnFilter` is accepted for backward
- * compatibility but no longer meaningful; the inline toolbar is now the
- * single filter on every shell (previously Send filtered via a header
- * popover).
+ * compatibility but no longer meaningful; the title-bar filter is the
+ * single filter on every shell.
  *
  * @param {import('./TokenPicker.jsx').TokenPicker} props
  */
@@ -36,6 +41,8 @@ export function SendPicker(props) {
     return (
         <TokenPicker
             key={walletScope}
+            title={t('send.asset')}
+            backLabel={t('common.back')}
             {...rest}
             purpose="send"
             listPageComponent={SendListPage}

@@ -12,34 +12,49 @@
     margin-bottom: var(--xc-space-4);
 }
 
-/* The welcome brand is one centred stack: the full-size logo, then the
-   title, then the tagline; the logo's own bottom margin spaces it from the title. */
+/* The welcome brand is one centred stack: the full-size logo, then the tagline. */
 .welcomeHeader {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: var(--xc-space-2);
     width: 100%;
     min-width: 0;
     text-align: center;
 }
 
-.welcomeCopy {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--xc-space-1);
-    width: 100%;
-    min-width: 0;
+/* On narrow screens there is no card, so centre the welcome group in the page. */
+form.welcomeForm {
+    justify-content: center;
+    box-sizing: border-box;
+    min-height: 100%;
+    margin: 0 auto;
 }
 
-.welcomeTitle {
-    margin: 0;
-    color: var(--xc-text);
-    font-size: var(--xc-text-xl);
-    font-weight: 700;
-    line-height: 1.25;
-    overflow-wrap: anywhere;
+/* The headerless carousel fills the Screen body at narrow widths. FormPage
+   supplies its one centred card from 600px without changing this height. */
+div.carouselForm {
+    box-sizing: border-box;
+    height: 100%;
+    max-height: 100%;
+    min-height: 0;
+    overflow: hidden;
+}
+
+div.carouselForm > [data-form-stack] {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.welcomeLogo {
+    /* Preserve the welcome brand artwork width, which has no size token. */
+    display: block;
+    width: 140px;
+    max-width: 100%;
+    height: auto;
+    animation: logoEnter 720ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
 }
 
 .welcomeTagline {
@@ -49,32 +64,51 @@
     line-height: 1.5;
 }
 
-/* Each onboarding choice has its own colour (review 2026-11-10). */
-.freeWalletButton {
-    --xc-accent-primary: var(--xc-accent-secondary);
-    --xc-accent-primary-hover: #64226F;
-}
-
-.pairSignerButton {
+/* Connect Hardware Wallet: the slate of the welcome picture (hw-1, layout 1). */
+.hardwareButton {
     --xc-accent-primary: #334155;
     --xc-accent-primary-hover: #1E293B;
-}
-
-.entryIcon {
-    display: block;
-    width: var(--xc-icon-size);
-    height: var(--xc-icon-size);
-    object-fit: contain;
 }
 
 /* Short landscape viewports keep the first actions near the fold while the
    Screen body remains the single scroll container for every later action. */
 @media (max-height: 520px) {
+    .welcomeLogo,
     .logoPopup,
     .logoFull {
         /* Preserve the compact landscape artwork width, which has no size token. */
         width: 96px;
         margin-bottom: var(--xc-space-1);
+    }
+}
+
+/* At the card breakpoint the carousel card also wraps its controls. Narrow
+   screens keep the full-height carousel so its navigation stays visible. */
+@media (min-width: 600px) {
+    /* Match Locked's single-child centring. Auto block margins collapse to
+       zero when content is taller than the body, so it remains scrollable. */
+    .wideCentre.wideCentre.wideCentre {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .wideCentre.wideCentre.wideCentre > * {
+        margin-block: auto;
+    }
+
+    form.welcomeForm {
+        justify-content: flex-start;
+        min-height: auto;
+    }
+
+    div.carouselForm {
+        height: auto;
+        max-height: none;
+        overflow: visible;
+    }
+
+    div.carouselForm > [data-form-stack] {
+        flex: 0 1 auto;
     }
 }
 
@@ -99,6 +133,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+    .welcomeLogo,
     .logoPopup,
     .logoFull {
         animation: none;
@@ -132,13 +167,26 @@
 .licenseGate {
     display: flex;
     flex-direction: column;
-    /* The gate is as tall as the terms and controls, never taller; it shrinks
-       only when the screen is short. */
-    flex: 0 1 auto;
+    /* On phone and popup widths the gate takes all the height the form body
+       has, so the terms box gets every spare pixel; the tablet block below
+       returns it to its content height. */
+    flex: 1 1 auto;
     min-height: 0;
     gap: var(--xc-space-2);
     width: 100%;
     margin: 0 auto;
+}
+
+/* Every gap on the page is the standard 8px: header to terms, terms to the
+   acknowledgement row, and row to button. FormPage reads this variable for
+   both its stack and its notice correction. */
+form.licenseForm {
+    --xc-form-gap: var(--xc-space-2);
+}
+
+form.licenseForm > [data-form-stack] {
+    flex: 1 1 auto;
+    min-height: 0;
 }
 
 .licenseScroll {
@@ -150,7 +198,7 @@
        screen too short for the whole text the panel shrinks to the height
        left (FormPage fill) and keeps its own scroll: reaching its end
        unlocks the acknowledgement. */
-    flex: 0 1 auto;
+    flex: 1 1 auto;
     /* Retain enough initial license text to identify the scroll region. */
     min-height: 160px;
     overflow-y: auto;
@@ -169,51 +217,52 @@
     outline-offset: calc(var(--xc-space-1) / 2);
 }
 
+/* The license terms are the shared warning lines (WarningCard), so every
+   warning in the wallet reads like them. The lines inherit the terms' size
+   from .licenseScroll. */
 .licenseParagraph {
-    margin: 0 0 var(--xc-space-2);
-    max-width: none;
-    /* Start-aligned: justified text opens wide gaps between words on a
-       narrow phone. */
-    text-align: start;
-    hyphens: none;
+    composes: paragraph from '../components/WarningCard.module.css';
 }
 
-.licenseParagraph:last-child {
-    margin-bottom: 0;
-}
-
+/* A critical paragraph of the terms: the terms are one text, so the line
+   stays a paragraph at the terms' size, painted in the Notice Standard's
+   danger tone (2026-11-15: light red tint, thin red border, 8px corners, no
+   edge bar). */
 .licenseParagraphCritical {
-    composes: licenseParagraph;
+    composes: paragraph from '../components/WarningCard.module.css';
     font-weight: 600;
-    color: var(--xc-text);
     background: var(--xc-danger-bg);
-    /* Keep the critical-copy marker heavier than a hairline without adding a token. */
-    border-inline-start: 3px solid var(--xc-danger);
+    color: var(--xc-danger-text);
+    border: 1px solid var(--xc-danger);
+    border-radius: var(--xc-card-radius);
     padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: 0;
-    border-start-end-radius: var(--xc-radius-sm);
-    border-end-end-radius: var(--xc-radius-sm);
     margin: var(--xc-space-2) 0;
 }
 
 /* The kit Checkbox owns its grid (box and native input share one cell), so
    this rule only places it; a display override split the box from its input. */
 .licenseAck {
+    flex: 0 1 auto;
     margin: 0;
-    width: 100%;
+    width: auto;
+    min-width: 0;
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
     line-height: 1.4;
     white-space: nowrap;
 }
 
-/* The controls follow the terms as one group. Narrow layouts keep the
-   acknowledgement above Accept and continue. */
+/* The controls follow the terms as one group: acknowledgement left, Accept
+   and continue right, one line at every width. The row wraps only when both
+   cannot fit, which is below the smallest phone width. */
 .licenseControls {
     display: flex;
     flex: 0 0 auto;
-    flex-direction: column;
-    gap: var(--xc-form-gap);
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
     width: 100%;
     min-width: 0;
 }
@@ -222,21 +271,14 @@
    it must keep its one-pixel box, or it widens the page sideways. */
 .licenseActions {
     display: flex;
-    width: 100%;
+    flex: 0 0 auto;
+    justify-content: flex-end;
+    width: auto;
+    margin: 0;
 }
 
 .licenseActions > button {
-    width: 100%;
-}
-
-@media (min-width: 600px) {
-    .licenseActions {
-        justify-content: flex-end;
-    }
-
-    .licenseActions > button {
-        width: auto;
-    }
+    width: auto;
 }
 
 /* From 834px the terms read as a centred card two-thirds of the available
@@ -246,6 +288,7 @@
     .licenseGate {
         width: calc(100% * 2 / 3);
         max-width: calc(100% * 2 / 3);
+        flex: 0 1 auto;
     }
 
     .licenseScroll {
@@ -259,25 +302,6 @@
        element prefix outranks FormPage's fill rule in either bundle order. */
     form.licenseForm > [data-form-stack] {
         flex: 0 1 auto;
-    }
-
-    .licenseControls {
-        flex-direction: row;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--xc-space-3);
-    }
-
-    .licenseAck {
-        flex: 0 1 auto;
-        width: auto;
-        min-width: 0;
-    }
-
-    .licenseActions {
-        flex: 0 0 auto;
-        width: auto;
-        margin: 0;
     }
 }
 

@@ -17,8 +17,8 @@
 //     shortcuts), and Max sits inside the amount field it acts on,
 //   - primary, secondary and danger buttons keep the shared Button colours
 //     (secondary keeps its 1px outline) and a button drawn like one is a Button,
-//   - disabled buttons use the shared disabled colours, except the green main
-//     action, which stays green while disabled (ruling U63),
+//   - a disabled button never looks disabled: it keeps its variant's colours,
+//     full opacity and no filter (ruling G130, 2026-11-16),
 //   - a label sits above its field, one label-gap token away.
 
 import { writeFileSync } from 'node:fs';
@@ -62,8 +62,8 @@ const PALETTE_ROUTES = [
 ];
 
 const SETTINGS_SECTIONS = [
-    'This wallet', 'Accounts & addresses', 'Display', 'Keyboard', 'Privacy', 'Safety', 'Wallet mode',
-    'Backup', 'Fees', 'Network & endpoints', 'Connected sites', 'Automatic donation system', 'Developer', 'About',
+    'This wallet', 'Accounts & addresses', 'Display', 'Keyboard', 'Privacy', 'Safety',
+    'Backup', 'Fees', 'Network & endpoints', 'Connected sites', 'Automatic Donations', 'Developer', 'About',
 ];
 
 async function palette(page, destination) {
@@ -308,17 +308,20 @@ function formFaults() {
         const text = (btn.innerText || '').trim();
         if (isShared) {
             counts.buttons += 1;
-            if (btn.disabled && !sharedClass(btn, 'link')) {
+            if (btn.disabled || btn.getAttribute('aria-disabled') === 'true') {
                 counts.disabled += 1;
-                // The main forward action stays green while disabled (U63).
-                if (sharedClass(btn, 'success')) {
-                    if (cs.backgroundColor !== successFill) faults.push(`${name(btn)}: disabled main action fill ${cs.backgroundColor}, token ${successFill}`);
-                    continue;
+                // G130: a button never looks disabled. It keeps its variant's
+                // colours, full opacity and no filter; the variant checks below
+                // then hold it to the same colours as an enabled button.
+                if (cs.opacity !== '1' || (cs.filter && cs.filter !== 'none')) {
+                    faults.push(`${name(btn)}: disabled button greyed (opacity ${cs.opacity}, filter ${cs.filter})`);
                 }
-                if (cs.backgroundColor !== disabledBg || cs.borderTopColor !== disabledBorder || cs.color !== disabledText) {
+                if (!sharedClass(btn, 'link') && cs.backgroundColor === disabledBg && cs.color === disabledText) {
                     faults.push(`${name(btn)}: disabled look bg ${cs.backgroundColor} border ${cs.borderTopColor} text ${cs.color}`);
                 }
-                continue;
+                if (sharedClass(btn, 'success') && cs.backgroundColor !== successFill) {
+                    faults.push(`${name(btn)}: disabled main action fill ${cs.backgroundColor}, token ${successFill}`);
+                }
             }
             if (sharedClass(btn, 'secondary')) {
                 if (cs.borderTopWidth !== '1px' || cs.borderTopStyle !== 'solid' || cs.borderTopColor !== strongBorder) {
@@ -326,14 +329,14 @@ function formFaults() {
                 }
             }
             // The asset and market pickers draw a Button as a card (a design call).
-            // From FreeWallet wears the FreeWallet character's colour (U69).
+            // Import FreeWallet wears the FreeWallet character's colour (U69).
             const asCard = sharedClass(btn, 'assetCard') || sharedClass(btn, 'marketSelector') || sharedClass(btn, 'freeWalletButton');
-            // Pair an offline signer is slate #334155 by the operator's carousel pick (U69, 2026-11-10).
-            const offlineSigner = sharedClass(btn, 'pairSignerButton');
-            if (offlineSigner && cs.backgroundColor !== 'rgb(51, 65, 85)') {
-                faults.push(`${name(btn)}: offline signer fill ${cs.backgroundColor}, ruled slate rgb(51, 65, 85)`);
+            // Connect Hardware Wallet is slate #334155, as the welcome picture draws it (hw-1, 2026-11-15).
+            const hardwareSlate = sharedClass(btn, 'hardwareButton');
+            if (hardwareSlate && cs.backgroundColor !== 'rgb(51, 65, 85)') {
+                faults.push(`${name(btn)}: hardware wallet fill ${cs.backgroundColor}, ruled slate rgb(51, 65, 85)`);
             }
-            if (sharedClass(btn, 'primary') && !asCard && !offlineSigner && cs.backgroundColor !== accent) {
+            if (sharedClass(btn, 'primary') && !asCard && !hardwareSlate && cs.backgroundColor !== accent) {
                 faults.push(`${name(btn)}: primary fill ${cs.backgroundColor}, token ${accent}`);
             }
             if (sharedClass(btn, 'danger') && cs.backgroundColor !== danger) {
@@ -399,7 +402,7 @@ async function walk(page, size, out) {
     for (let i = 0; i < 3; i += 1) await page.keyboard.press('Escape').catch(() => {});
     if (await palette(page, 'Choose a token template')) {
         await page.getByRole('main').getByRole('button', { name: /^Custom/ }).click();
-        await expect(page.getByRole('form', { name: 'Issue token', exact: true })).toBeVisible();
+        await expect(page.getByRole('form', { name: 'Issue Token', exact: true })).toBeVisible();
         await record('Issue token');
     } else {
         results.push({ route: 'Issue token', skipped: true, faults: [], counts: {} });
@@ -477,7 +480,7 @@ for (const viewport of VIEWPORTS) {
             if (process.env.FORM_SWEEP_OUT) await page.screenshot({ path: `${process.env.FORM_SWEEP_OUT}/onb-${sizeKey(viewport)}-${route.replace(/[^a-z0-9]+/gi, '-')}.png` }).catch(() => {});
         };
         await record('Welcome');
-        for (const name of ['Create new wallet', 'Import wallet', 'From FreeWallet', 'Pair an offline signer']) {
+        for (const name of ['Create new wallet', 'Import wallet', 'Import FreeWallet', 'Connect Hardware Wallet']) {
             const button = page.getByRole('button', { name }).first();
             if (await button.count() === 0) continue;
             await button.click();

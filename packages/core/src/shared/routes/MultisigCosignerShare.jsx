@@ -12,50 +12,59 @@ import { useEffect, useState } from 'react';
 import {
     CopyButton,
     AddressField,
-    FieldNote,
+    Button,
     FormPage,
-    FormSection,
-    StatusMessage,
+    Icon,
+    ListPage,
+    Notice,
+    PageHeader,
+    Screen,
+    useFormErrors,
 } from '@xchain-wallet/core/ui';
+import { registry as registryLib } from '@xchain-wallet/core';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/multisig.js';
 import { KeyQR } from '../components/KeyQR.jsx';
-import { useMessaging } from '../useMessaging.js';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { xpubForNetwork } from '../utils/multisigXpub.js';
 import styles from './IssueTokenForm.module.css';
+import local from './MultisigCosignerShare.module.css';
+
+const chainRegistry = registryLib.defaultRegistry();
+const BTC_CHAIN_IDS = chainRegistry.byCoin('bitcoin').map((descriptor) => descriptor.id);
 
 /**
- * "Share as cosigner" (§22.2): shows the public key material one of this
- * wallet's addresses contributes to someone else's multisig, each value
- * copyable, so the other party can add this wallet as an external cosigner.
- *
- * Collapsed by default under Create multisig; the values are public keys
- * and reveal nothing that can spend.
+ * "Share as cosigner" (§22.2): a standalone Form Standard page that exports
+ * the public key material one address contributes to someone else's multisig.
  *
  * @param {object} props
  * @param {string} props.walletId
- * @param {Array<{ id: string, address: string, label?: string, source?: string }>} props.addresses   this wallet's addresses on the multisig network
- * @param {string} props.chainId
- * @param {'mainnet' | 'testnet' | 'regtest'} [props.networkKind]
- * @param {string} props.addressId
- * @param {(addressId: string) => void} props.onAddressChange
- * @param {(chainId: string) => void} props.onOpenAddressPicker
+ * @param {() => void} props.onBack
  */
 export function MultisigCosignerShare({
     walletId,
-    addresses,
-    chainId,
-    networkKind,
-    addressId,
-    onAddressChange,
-    onOpenAddressPicker,
+    onBack,
 }) {
-    const { messaging } = useMessaging();
+    const { messaging, shell } = useMessaging();
+    const variant = screenVariantFor(shell);
+    const formErrors = useFormErrors();
+    const [addressesByChain, setAddressesByChain] = useState(
+        /** @type {Record<string, any[]> | null} */ (null),
+    );
+    const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
+    const [addressId, setAddressId] = useState('');
+    const [pickerOpen, setPickerOpen] = useState(false);
     const [info, setInfo] = useState(/** @type {any} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [loading, setLoading] = useState(false);
+    const addresses = chainId ? addressesByChain?.[chainId] || [] : [];
     const selectedAddress = addresses.find((address) => address.id === addressId) || null;
-    const selectedInfo = info?.walletId === walletId && info?.addressId === addressId
+    const networkKind = chainId ? chainRegistry.get(chainId)?.networkKind : null;
+    const selectedInfo = info?.walletId === walletId
+        && info?.chainId === chainId
+        && info?.addressId === addressId
         ? info.value
         : null;
     const sharePayload = selectedInfo
@@ -63,97 +72,150 @@ export function MultisigCosignerShare({
         : null;
 
     useEffect(() => {
-        if (addressId && !addresses.some((address) => address.id === addressId)) {
-            onAddressChange('');
-            setInfo(null);
-            setError(null);
-        }
-    }, [addressId, addresses, onAddressChange]);
-
-    useEffect(() => {
-        setInfo(null);
-        setError(null);
-        if (!addressId) return undefined;
-        const requestedAddress = addresses.find((address) => address.id === addressId);
-        if (!requestedAddress) {
-            setError('Select an address from this wallet.');
-            return undefined;
-        }
-        // A shell without the route keeps the manual path rather than crashing.
-        if (typeof messaging.getMultisigCosignerInfo !== 'function') {
-            setError('Sharing cosigner keys is not available in this shell.');
-            return undefined;
-        }
         let cancelled = false;
-        messaging.getMultisigCosignerInfo({ walletId, addressId })
-            .then((r) => {
+        messaging.getAddressesByChain(walletId)
+            .then((byChain) => {
                 if (cancelled) return;
-                if ((r?.addressId && r.addressId !== addressId)
-                    || (r?.address && r.address !== requestedAddress.address)) {
-                    setError('The wallet returned cosigner keys for a different address. Select the address again.');
-                    return;
-                }
-                setInfo({ walletId, addressId, value: r });
+                const next = byChain || {};
+                setAddressesByChain(next);
+                setChainId(BTC_CHAIN_IDS.find((id) => Array.isArray(next[id]) && next[id].length > 0)
+                    || BTC_CHAIN_IDS[0]
+                    || null);
             })
             .catch((err) => {
-                if (!cancelled) setError(userFacingMessage(err, 'Could not read this wallet\'s cosigner keys.'));
+                if (!cancelled) {
+                    setAddressesByChain({});
+                    setError(userFacingMessage(err, 'Could not load this wallet\'s addresses.'));
+                }
             });
         return () => { cancelled = true; };
-    }, [walletId, addressId, addresses, messaging]);
+    }, [walletId, messaging]);
+
+    function chooseAddress(address) {
+        setAddressId(address?.id || '');
+        setInfo(null);
+        setError(null);
+        formErrors.clear('cosigner-share-address');
+        setPickerOpen(false);
+    }
+
+    async function handleShare(event) {
+        event?.preventDefault();
+        if (!selectedAddress) {
+            formErrors.validate({
+                'cosigner-share-address': 'Choose an address to share.',
+            });
+            return;
+        }
+        formErrors.reset();
+        setInfo(null);
+        setError(null);
+        if (typeof messaging.getMultisigCosignerInfo !== 'function') {
+            setError('Sharing cosigner keys is not available in this shell.');
+            return;
+        }
+        setLoading(true);
+        try {
+            const result = await messaging.getMultisigCosignerInfo({ walletId, addressId });
+            if ((result?.addressId && result.addressId !== addressId)
+                || (result?.address && result.address !== selectedAddress.address)) {
+                setError('The wallet returned cosigner keys for a different address. Select the address again.');
+                return;
+            }
+            setInfo({ walletId, chainId, addressId, value: result });
+        } catch (err) {
+            setError(userFacingMessage(err, 'Could not read this wallet\'s cosigner keys.'));
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    if (pickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title={t('multisig.share.address')}
+                walletId={walletId}
+                chainId={chainId}
+                onChainChange={(nextChainId) => {
+                    setChainId(nextChainId);
+                    setAddressId('');
+                    setInfo(null);
+                    setError(null);
+                }}
+                unavailableReason={unavailableAddressReason}
+                onPick={chooseAddress}
+                onBack={() => setPickerOpen(false)}
+            />
+        );
+    }
+
+    const guidance = (
+        <Notice tone="info" title={t('multisig.share.noticeTitle')} role="note">
+            {t('multisig.share.instructions')} {t('multisig.share.availability')}
+        </Notice>
+    );
+
+    const header = <PageHeader onBack={onBack} title={t('multisig.share.title')} />;
+    if (!addressesByChain) {
+        return (
+            <Screen variant={variant} header={header}>
+                <ListPage><p className={styles.hint}>{t('multisig.share.loadingWallet')}</p></ListPage>
+            </Screen>
+        );
+    }
 
     return (
-        <FormPage as="div" sectioned label={t('multisig.share.title')}>
-            <FormSection title={t('multisig.share.title')}>
-                <details style={{ margin: '0 0 var(--xc-space-3) 0' }}>
-                    <summary style={{ cursor: 'pointer', fontWeight: 600 }}>{t('multisig.share.title')}</summary>
-            <p className={styles.hint} style={{ textAlign: 'left', margin: 'var(--xc-space-2) 0' }}>
-                {t('multisig.share.instructions')}
-            </p>
-            <p className={styles.hint} style={{ textAlign: 'left', margin: 'var(--xc-space-2) 0' }}>
-                {t('multisig.share.availability')}
-            </p>
-            <AddressField
-                label={t('multisig.share.address')}
-                icon="addresses"
-                value={selectedAddress?.address || ''}
-                readOnly
-                onChange={() => {}}
-                onIconClick={() => onOpenAddressPicker?.(chainId)}
-                iconLabel={t('multisig.share.chooseAddress')}
-                placeholder={t('multisig.share.selectAddress')}
-            />
-            {error ? <FieldNote variant="error">{error}</FieldNote> : null}
-            {selectedInfo ? (
-                <>
-                    <div style={payloadStyle}>
-                        <strong>{t('multisig.share.payload')}</strong>
-                        <p className={styles.hint} style={{ textAlign: 'left', margin: 0 }}>
-                            {t('multisig.share.payloadHint')}
-                        </p>
-                        <KeyQR
-                            value={sharePayload}
-                            size={256}
-                            alt={t('multisig.share.qrAlt')}
-                        />
-                        <CopyButton
-                            value={sharePayload}
-                            label={t('multisig.share.copyPayload')}
-                        />
-                    </div>
-                    <dl className={styles.detailsList}>
-                        <ShareRow label={t('multisig.share.xpub')} value={xpubForNetwork(selectedInfo.xpub, networkKind)} hint={selectedInfo.accountPath ? t('multisig.share.account', { path: selectedInfo.accountPath }) : null} />
-                        <ShareRow label={t('multisig.share.publicKey')} value={selectedInfo.pubkey} />
-                        <ShareRow label={t('multisig.share.masterFingerprint')} value={selectedInfo.fingerprint} />
-                        <ShareRow label={t('multisig.share.derivationPath')} value={selectedInfo.derivationPath} />
-                    </dl>
-                    <p role="note" className={styles.hint} style={{ textAlign: 'left' }}>
-                        {t('multisig.share.identityCheck')}
-                    </p>
-                </>
-            ) : null}
-                </details>
-            </FormSection>
-        </FormPage>
+        <Screen variant={variant} header={header}>
+            <FormPage
+                label={t('multisig.share.title')}
+                onSubmit={handleShare}
+                errors={formErrors}
+                status={[guidance, error ? <Notice key="share-error" tone="danger">{error}</Notice> : null]}
+            >
+                <div className={local.shareActionStack}>
+                    <AddressField
+                        id="cosigner-share-address"
+                        label={t('multisig.share.address')}
+                        help={t('multisig.share.addressHelp')}
+                        icon="addresses"
+                        value={selectedAddress?.address || ''}
+                        readOnly
+                        onChange={() => {}}
+                        onIconClick={() => setPickerOpen(true)}
+                        iconLabel={t('multisig.share.chooseAddress')}
+                        placeholder={t('multisig.share.selectAddress')}
+                        error={formErrors.errorFor('cosigner-share-address')}
+                    />
+                    <Button
+                        type="submit"
+                        variant="success"
+                        block
+                        icon={<Icon.ShareIcon />}
+                        loading={loading}
+                    >
+                        {t('multisig.share.button')}
+                    </Button>
+                </div>
+                {selectedInfo ? (
+                    <>
+                        <div className={local.payload}>
+                            <strong>{t('multisig.share.payload')}</strong>
+                            <p className={styles.hint}>{t('multisig.share.payloadHint')}</p>
+                            <KeyQR value={sharePayload} size={256} alt={t('multisig.share.qrAlt')} />
+                            <CopyButton value={sharePayload} label={t('multisig.share.copyPayload')} />
+                        </div>
+                        <dl className={styles.detailsList}>
+                            <ShareRow label={t('multisig.share.xpub')} value={xpubForNetwork(selectedInfo.xpub, networkKind)} hint={selectedInfo.accountPath ? t('multisig.share.account', { path: selectedInfo.accountPath }) : null} />
+                            <ShareRow label={t('multisig.share.publicKey')} value={selectedInfo.pubkey} />
+                            <ShareRow label={t('multisig.share.masterFingerprint')} value={selectedInfo.fingerprint} />
+                            <ShareRow label={t('multisig.share.derivationPath')} value={selectedInfo.derivationPath} />
+                        </dl>
+                        <p role="note" className={styles.hint}>{t('multisig.share.identityCheck')}</p>
+                    </>
+                ) : null}
+            </FormPage>
+        </Screen>
     );
 }
 
@@ -205,12 +267,4 @@ const monoStyle = {
     fontFamily: 'var(--xc-font-mono)',
     overflowWrap: 'anywhere',
     wordBreak: 'break-word',
-};
-
-const payloadStyle = {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'flex-start',
-    gap: 'var(--xc-space-2)',
-    margin: 'var(--xc-space-3) 0',
 };

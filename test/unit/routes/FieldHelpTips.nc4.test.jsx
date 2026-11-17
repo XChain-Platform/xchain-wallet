@@ -66,7 +66,9 @@ function renderParallelComposer() {
 }
 
 function helpTriggerBeside(label, accessibleName) {
-    const labelNode = screen.getByText(label, { selector: 'span' });
+    // A dropdown trigger shows its current choice in a span too; skip those.
+    const [labelNode] = screen.getAllByText(label, { selector: 'span' })
+        .filter((node) => !node.closest('[role="combobox"]'));
     return within(labelNode.parentElement).getByRole('button', { name: accessibleName });
 }
 

@@ -167,8 +167,9 @@ describe('AboutSection: the switch exists only where the lane does', () => {
     it('explains the request in plain language, naming no API and no vendor', () => {
         lane();
         about();
+        // The explanation is the switch's '?' help tip (ruling 2026-11-13).
         const hint = screen.getByText(/Checks our download site once a day/i).textContent;
-        expect(hint).toMatch(/does not download or install them or send wallet data/i);
+        expect(hint).toMatch(/Downloading and installing stay up to you, and the check sends no wallet data/i);
         expect(hint).not.toMatch(/Play|Google|API|endpoint|JSON|semver/i);
     });
 });

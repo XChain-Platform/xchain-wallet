@@ -6,7 +6,10 @@
 import {
     dismissIntroCarousel,
     expect,
+    FROM_ADDRESS_LABEL,
     gotoSection,
+    openFormSection,
+    openFromSection,
     openSettings,
     test,
     unlockedShell,
@@ -93,7 +96,9 @@ async function showHomeFilters(page) {
 
 async function openSettingsSearch(page, query) {
     await openSettings(page);
-    const search = page.getByRole('main').getByRole('searchbox', { name: 'Search settings' });
+    // The search sits behind the header filter button (G04).
+    await page.getByRole('button', { name: 'Filter settings' }).click();
+    const search = page.getByRole('searchbox', { name: 'Search settings' });
     await search.fill(query);
 }
 
@@ -127,9 +132,11 @@ test('controls sharing a row match at phone and desktop widths', async ({ page }
 
         await test.step(`${width}px / Encrypted inbox`, async () => {
             await gotoSection(page, 'Messaging');
+            // The network filter moved into the title bar's filter icon, so
+            // the title bar's two actions are the matched pair.
             await expectMatchingControlSizes(`Encrypted inbox at ${width}px`, [
-                ['conversation search', main.getByRole('searchbox', { name: 'Search conversations' })],
-                ['network filter', main.getByRole('button', { name: /^Filter by network/ })],
+                ['new message plus', page.getByRole('button', { name: 'New message', exact: true })],
+                ['filter icon', page.getByRole('button', { name: 'Filter', exact: true })],
             ]);
         });
 
@@ -143,10 +150,15 @@ test('controls sharing a row match at phone and desktop widths', async ({ page }
 
         await test.step(`${width}px / Address lists`, async () => {
             await gotoSection(page, 'Lists');
+            // Search, Network and Show sit in the title bar filter panel (G95).
+            await page.getByRole('button', { name: 'Filter lists', exact: true }).click();
+            const panel = page.getByRole('dialog', { name: 'Filter lists' });
             await expectMatchingControlSizes(`Address lists at ${width}px`, [
-                ['list search', main.getByRole('searchbox', { name: 'Search lists' })],
-                ['network filter', main.getByRole('button', { name: /^Filter by network/ })],
+                ['list search', panel.getByRole('searchbox', { name: 'Search lists' })],
+                ['network filter', panel.getByRole('button', { name: /^Filter by network/ })],
+                ['show', panel.getByRole('combobox', { name: 'Show' })],
             ]);
+            await page.keyboard.press('Escape');
         });
 
         await test.step(`${width}px / Staking`, async () => {
@@ -159,11 +171,15 @@ test('controls sharing a row match at phone and desktop widths', async ({ page }
 
         await test.step(`${width}px / Contacts`, async () => {
             await gotoSection(page, 'Contacts');
+            // Search, Network and Sort sit in the title bar filter panel (G95).
+            await page.getByRole('button', { name: 'Filter contacts', exact: true }).click();
+            const panel = page.getByRole('dialog', { name: 'Filter contacts' });
             await expectMatchingControlSizes(`Contacts at ${width}px`, [
-                ['contact search', main.getByRole('searchbox', { name: 'Search contacts' })],
-                ['network filter', main.getByRole('button', { name: /^Filter by network/ })],
-                ['sort', main.getByRole('combobox', { name: 'Sort contacts' })],
+                ['contact search', panel.getByRole('searchbox', { name: 'Search contacts' })],
+                ['network filter', panel.getByRole('button', { name: /^Filter by network/ })],
+                ['sort', panel.getByRole('combobox', { name: 'Sort contacts' })],
             ]);
+            await page.keyboard.press('Escape');
         });
 
         await test.step(`${width}px / Smart contracts`, async () => {
@@ -183,13 +199,15 @@ test('controls sharing a row match at phone and desktop widths', async ({ page }
                 ['coin', main.getByRole('combobox', { name: 'Coin' })],
                 ['direction', main.getByRole('combobox', { name: 'Direction' })],
                 ['target price', main.getByRole('textbox', { name: 'Target price' })],
-                ['add alert', main.getByRole('button', { name: 'Add alert' })],
+                ['add alert', main.getByRole('button', { name: 'Add Alert' })],
             ]);
         });
 
         await test.step(`${width}px / Settings dApp permissions`, async () => {
             await openSettingsSearch(page, 'dApp permissions');
             await main.getByRole('button', { name: /^Connected sites/ }).click();
+            // The header plus opens the Block Site form.
+            await page.getByRole('button', { name: 'Block a site', exact: true }).click();
             const origin = main.getByRole('textbox', { name: 'Origin or wildcard to block' });
             // A filter `has` locator resolves inside the form, so it cannot start at main.
             const blockForm = main.locator('form').filter({
@@ -197,7 +215,7 @@ test('controls sharing a row match at phone and desktop widths', async ({ page }
             });
             await expectMatchingControlSizes(`Settings dApp permissions at ${width}px`, [
                 ['blocked origin', origin],
-                ['block', blockForm.getByRole('button', { name: 'Block origin', exact: true })],
+                ['block', blockForm.getByRole('button', { name: 'Block Site', exact: true })],
             ]);
         });
 
@@ -237,41 +255,45 @@ for (const width of VIEWPORTS) {
             await openPaletteRoute(page, 'Move a token', /^Move a token/);
             // The ChainPicker trigger and the TokenField button stack in one
             // column with the address field, so all three share one height.
+            // The chain picker and the address sit in the closed From section.
+            await openFromSection(main);
             await expectMatchingHeights(`Bridge move pickers at ${width}px`, [
-                ['chain picker trigger', main.getByRole('button', { name: /^Move from:/ })],
-                ['source address', main.getByRole('textbox', { name: 'From', exact: true })],
+                ['chain picker trigger', main.getByRole('button', { name: /^Network:/ })],
+                ['source address', main.getByRole('textbox', { name: FROM_ADDRESS_LABEL })],
                 ['token field', main.getByRole('button', { name: /^Token:/ })],
             ]);
         });
 
         await test.step(`${width}px / Fee selector ticks and help tip`, async () => {
             await gotoSection(page, 'Messaging');
-            await main.getByRole('button', { name: 'New conversation' }).click();
+            await page.getByRole('button', { name: 'New message', exact: true }).click();
+            // The slider sits in the Fees section, closed until opened.
+            await openFormSection(main, 'Speed and Fees');
             // The tier ticks are pointer-only labels under the slider; each
             // tick in the row keeps one height.
             const ticks = main.locator('button[class*="_sliderTick_"]');
             await expect(ticks).toHaveCount(4);
             await expectMatchingHeights(`Fee ticks at ${width}px`, [0, 1, 2, 3].map((i) => [`tick ${i}`, ticks.nth(i)]));
-            // The InfoTip trigger beside the fee label holds the tap target floor.
+            // The InfoTip trigger beside the Network fee label holds the tap target floor.
             await expectMatchingHeights(`Fee help tip at ${width}px`, [
-                ['info tip trigger', main.getByRole('button', { name: 'Fee priority help' })],
+                ['info tip trigger', main.getByRole('button', { name: 'Network fee help' })],
             ], await tokenPx(page, '--xc-tap-min'));
         });
 
         await test.step(`${width}px / Fee readout edit`, async () => {
             const amount = main.getByRole('button', { name: 'Edit exact fee amount' });
-            const rateButton = main.getByRole('button', { name: /^Edit fee rate/ });
-            // Each click-to-edit figure is as tall as the input that replaces
-            // it, so the readout row keeps its height when editing starts.
+            // The click-to-edit fee is as tall as the input that replaces it,
+            // so the Network fee line keeps its height when editing starts.
             await expectMatchingHeights(`Fee readout at ${width}px`, [
                 ['fee amount edit', amount],
-                ['fee rate edit', rateButton],
             ], await tokenPx(page, '--xc-control-h-sm'));
-            await rateButton.click();
-            await expectMatchingHeights(`Fee readout while editing the rate at ${width}px`, [
-                ['fee amount edit', amount],
-                ['custom fee rate', main.getByRole('textbox', { name: /^Custom fee rate/ })],
-            ]);
+            // Custom, the slider's last stop, opens that same line's editor in
+            // place (G113): one input, as tall as the figure it replaced.
+            await main.getByRole('slider', { name: 'Network fee' }).press('End');
+            await expect(main.getByRole('textbox', { name: /^Custom fee rate/ })).toHaveCount(0);
+            await expectMatchingHeights(`Fee readout while editing the fee at ${width}px`, [
+                ['network fee editor', main.getByRole('textbox', { name: /^Network fee amount/ })],
+            ], await tokenPx(page, '--xc-control-h-sm'));
         });
     });
 }

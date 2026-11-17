@@ -32,6 +32,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useActionConfirmFlow.js', async
 });
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { BridgeMoveForm } from '../../../packages/core/src/shared/routes/BridgeMoveForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
@@ -47,6 +48,8 @@ const BY_CHAIN = Object.freeze({ [BTC]: [BTC_ADDRESS], [DOGE]: [DOGE_ADDRESS] })
 const WAIT = { timeout: 4000 };
 
 function mountBridge({ getAddressesByChain, walletMode = 'full' } = {}) {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const walletBalances = {};
     for (const [chainId, addrs] of Object.entries(BY_CHAIN)) {
         walletBalances[chainId] = addrs.map((a) => ({
@@ -61,7 +64,8 @@ function mountBridge({ getAddressesByChain, walletMode = 'full' } = {}) {
         getWalletBalances: vi.fn().mockResolvedValue(walletBalances),
         getTokenInfo: vi.fn().mockResolvedValue(null),
         requoteNativeFee: vi.fn().mockResolvedValue(null),
-        getSettings: vi.fn().mockResolvedValue({ walletMode }),
+        getSettings: vi.fn().mockResolvedValue({}),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'w', name: 'W', walletMode }]),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
     };
@@ -107,6 +111,7 @@ async function submitMove(container) {
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     vi.clearAllMocks();
     __clearTokenInfoCache();
     confirmResult.current = null;
@@ -118,12 +123,18 @@ describe('BridgeMoveForm lays out every page state through FormPage', () => {
         await waitFor(() => expect(inputByLabel(container, /^Receive at/)?.value)
             .toBe(DOGE_ADDRESS.address), WAIT);
 
+        // From and Memo are closed sections; open them to read their help. The
+        // address carries the "From address" label.
+        fireEvent.click(screen.getByRole('button', { name: /^From\b/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^Memo\b/ }));
         const help = [
-            ['From', 'Your address on the source network that holds the tokens to move.'],
+            ['From address', 'Your address on the source network that holds the tokens to move.'],
             ['Receive at', 'The address on the destination network that receives the tokens. It starts as one of your own addresses; you can type or paste any valid address on that network.'],
             ['Amount (XCHAIN)', "How much of the token to move. It must fit the token's decimal places."],
-            ['Memo', 'A public note saved on the blockchain with this action. It cannot contain | or ;.'],
         ];
+        // A memo alone in its Memo section has no label row and no tip (ruling).
+        expect(screen.queryByRole('button', { name: 'About Memo' })).toBeNull();
+        expect(screen.getByRole('textbox', { name: 'Memo' })).toBeInTheDocument();
         for (const [label, copy] of help) {
             const trigger = screen.getByRole('button', { name: `About ${label}` });
             fireEvent.click(trigger);
@@ -142,11 +153,11 @@ describe('BridgeMoveForm lays out every page state through FormPage', () => {
 
         expect(byText(container, 'button[type="submit"]', 'Move')).not.toBeNull();
         expect(container.textContent).toContain(
-            'Watcher mode: this prepares the transaction for your offline signer.',
+            'Another phone signs for this wallet: this prepares the transaction for it.',
         );
     });
 
-    it('keeps the editable receiving address and route notice inside the form page', async () => {
+    it('keeps the editable receiving address inside the form page and leaves the route notice to confirm', async () => {
         const container = mountBridge();
         await waitFor(() => expect(inputByLabel(container, /^Receive at/)?.value)
             .toBe(DOGE_ADDRESS.address), WAIT);
@@ -154,10 +165,10 @@ describe('BridgeMoveForm lays out every page state through FormPage', () => {
         expect(receive.readOnly).toBe(false);
 
         fireEvent.change(inputByLabel(container, /^Amount/i), { target: { value: '10' } });
-        await waitFor(() => expect(container.textContent).toContain(
-            'Locks 10 XCHAIN on Bitcoin and credits it on Dogecoin after 6 confirmations (~60 min).'
-            + ' The credit cannot be undone or redirected.',
-        ), WAIT);
+        await waitFor(() => expect(inputByLabel(container, /^Amount/i).value).toBe('10'), WAIT);
+        // The lock-and-credit notice is on the confirm screen, not the form page.
+        expect(container.textContent).not.toContain('Locks 10 XCHAIN');
+        expect(container.textContent).not.toContain('cannot be undone or redirected.');
         expect(byText(container, 'dt', 'Source network')).toBeNull();
         expect(byText(container, 'dt', 'Destination network')).toBeNull();
         expect(byText(container, 'dt', 'Expected arrival')).toBeNull();

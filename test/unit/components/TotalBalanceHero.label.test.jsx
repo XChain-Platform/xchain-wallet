@@ -27,4 +27,17 @@ describe('Home balance hero label', () => {
         expect(screen.getByRole('region', { name: 'Active address balance' })).toBeTruthy();
         expect(screen.queryByText(/Total balance/)).toBeNull();
     });
+
+    // G11 and U12: the caption is the wallet name; a network filter never
+    // appends the network's name ("Main Wallet · LITECOIN").
+    it('keeps the caption to the wallet name while a network filter is on', () => {
+        const messaging = { getSettings: vi.fn(async () => ({})) };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <TotalBalanceHero rows={[]} walletId="w1" walletName="Main Wallet" networkFilter="litecoin" />
+            </MessagingProvider>,
+        );
+        const region = screen.getByRole('region', { name: 'Main Wallet' });
+        expect(region.textContent).not.toMatch(/litecoin/i);
+    });
 });

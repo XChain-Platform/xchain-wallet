@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { Button } from '../../ui/Button.jsx';
+import { AlertCircleIcon, CircleCheckIcon, InfoIcon, XIcon } from '../../ui/icons/index.jsx';
 import styles from './ToastStack.module.css';
 import { t } from '../../i18n/index.js';
 
@@ -50,6 +51,7 @@ function ToastItem({ toast, onAction, onDismiss }) {
         <div
             className={`${styles.toast} ${styles[`variant_${presentation.tone}`]}`}
             data-variant={presentation.tone}
+            data-tone={presentation.noticeTone}
             onKeyDown={(event) => {
                 if (event.key !== 'Escape') return;
                 event.preventDefault();
@@ -57,7 +59,7 @@ function ToastItem({ toast, onAction, onDismiss }) {
                 onDismiss();
             }}
         >
-            <span className={styles.icon} aria-hidden="true">{presentation.icon}</span>
+            <span className={styles.icon} aria-hidden="true"><presentation.Icon /></span>
             <span className={styles.message}>{toast.message}</span>
             <div className={styles.controls}>
                 {toast.actionLabel && toast.onAction ? (
@@ -73,7 +75,7 @@ function ToastItem({ toast, onAction, onDismiss }) {
                     size="sm"
                     variant="secondary"
                     className={styles.dismissBtn}
-                    icon={<span aria-hidden="true">×</span>}
+                    icon={<XIcon />}
                     onClick={onDismiss}
                     aria-label={t('components.toastHost.dismissNotification')}
                 />
@@ -82,10 +84,12 @@ function ToastItem({ toast, onAction, onDismiss }) {
     );
 }
 
+// The Notice Standard's tones and icons: warning and error are one danger
+// look (red tint, circle !); `tone` keeps the toast's own variant name.
 const TOAST_PRESENTATION = {
-    default: { tone: 'info', icon: 'ℹ' },
-    info: { tone: 'info', icon: 'ℹ' },
-    warning: { tone: 'warning', icon: '⚠' },
-    success: { tone: 'success', icon: '✓' },
-    error: { tone: 'error', icon: '✕' },
+    default: { tone: 'info', noticeTone: 'info', Icon: InfoIcon },
+    info: { tone: 'info', noticeTone: 'info', Icon: InfoIcon },
+    warning: { tone: 'warning', noticeTone: 'danger', Icon: AlertCircleIcon },
+    success: { tone: 'success', noticeTone: 'success', Icon: CircleCheckIcon },
+    error: { tone: 'error', noticeTone: 'danger', Icon: AlertCircleIcon },
 };

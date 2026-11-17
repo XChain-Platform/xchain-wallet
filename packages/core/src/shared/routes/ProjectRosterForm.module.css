@@ -8,3 +8,71 @@
 .rosterList > * + * {
     border-top: 1px solid var(--xc-border);
 }
+
+/* Where the save stands, one line above the action: a numbered marker per
+   transaction (a check once done) joined by a rule. */
+.steps {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+}
+
+.step {
+    display: flex;
+    flex: 0 1 auto;
+    align-items: center;
+    gap: var(--xc-space-1);
+    min-width: 0;
+}
+
+.step + .step::before {
+    content: '';
+    flex: 1 1 24px;
+    min-width: 12px;
+    height: 1px;
+    margin-inline-end: var(--xc-space-1);
+    background: var(--xc-border);
+}
+
+.step + .step {
+    flex: 1 1 auto;
+}
+
+.stepMarker {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border: 1px solid var(--xc-border);
+    border-radius: 50%;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+}
+
+.stepMarker svg {
+    width: 10px;
+    height: 10px;
+}
+
+.stepLabel {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.stepDone {
+    color: var(--xc-success);
+}
+
+.stepDone .stepMarker {
+    color: var(--xc-text-inverted);
+    background: var(--xc-success-fill);
+    border-color: var(--xc-success-fill);
+}

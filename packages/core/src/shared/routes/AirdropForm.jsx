@@ -11,19 +11,35 @@
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { t } from '../../i18n/index.js';
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, CopyButton, EmptyState, FeeSelector, FieldNote, FormNotice, FormPage, Icon, Input, ListPage, ListRow, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+// Network, From, the fee selector and the Fees card come from
+// the standard FromSection and FeeSection.
+import { Button, CopyButton, EmptyState, FieldNote, FormNotice, Icon, ListPage, ListRow, PageHeader, Screen, Select, StatusMessage, Textarea, useFormErrors } from '@xchain-wallet/core/ui';
+// The compose stage sits on the Wallet Form Standard frame.
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    joinSummary,
+    MemoSection,
+    useFormSections,
+} from '../components/formStandard/index.js';
 import {
     registry as registryLib,
     decoder as decoderLib,
     airdrop as airdropLib,
     schemas as schemasLib,
 } from '@xchain-wallet/core';
+import '../../i18n/locales/en/airdrop.js';
+import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/send.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useGatedTickNotice, gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { ConfirmActionModal } from '../components/ConfirmActionModal.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
@@ -39,14 +55,14 @@ import {
     multiplyDecimal,
     exceedsBalance,
 } from '../utils/dividendPerUnit.js';
-import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { TokenField } from '../components/TokenField.jsx';
+import { FileField } from '../components/FileField.jsx';
+import { WarningCard, WarningLine } from '../components/WarningCard.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
-import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
-import { FeesCard } from '../components/FeesCard.jsx';
+// The Fees card and its pay-in-native switch render inside FeeSection.
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
-import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
+import { isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useDropZone } from '../hooks/useDropZone.js';
@@ -69,9 +85,11 @@ import { submitFailureMessage, SIGNED_NOT_BROADCAST_MESSAGE } from '../utils/sub
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { classifyTickItems } from '../utils/listTickItems.js';
 import { currentListItems } from '../../flows/listMembership.js';
-import { MAX_MEMO_LENGTH, MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { existingListRowText } from '../utils/existingListRowText.js';
+import { ListField } from '../components/ListField.jsx';
+import { pickedListText } from '../utils/listLabel.js';
 import { ADDRESS_REFERENCE_ITEM_MESSAGE, addressReferenceNote } from '../utils/addressReferenceCopy.js';
 import {
     classifyRecipientEntries,
@@ -82,6 +100,7 @@ import {
 import { maxListItemsThatFit, splitListItems } from '../../airdrop/listSizeLimit.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+const NO_ACKNOWLEDGMENTS = new Set();
 const POLL_INTERVAL_MS = 10_000;
 // How long step 2 waits for the stored-list read-back before it treats the
 // read as failed, so a hung read cannot lock a paid-for airdrop.
@@ -90,6 +109,9 @@ const OWNED_LIST_REVALIDATE_MS = 16_000;
 const LIST_DETAIL_CONCURRENCY = 4;
 const UNION_LIST_UNSUPPORTED = 'This list combines other lists, so this wallet cannot count its recipients. '
     + 'Pick a plain address or token list.';
+
+// A first row naming the column, skipped like the addresses file's "address" header.
+const TICKS_FILE_HEADERS = new Set(['tick', 'ticker', 'token', 'tokens']);
 
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
@@ -209,6 +231,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     const [importedRecipientEntries, setImportedRecipientEntries] = useState(
         /** @type {{ text: string, entries: Array<{ value: string, line: number }> } | null} */ (null),
     );
+    // The name of the recipients file loaded into the box, shown in its field.
+    const [recipientsFileName, setRecipientsFileName] = useState('');
     const [showInvalid, setShowInvalid] = useState(false);
 
     // 'holders' mode: type/pick tokens -> new TICK list (TYPE=1). Same
@@ -216,6 +240,12 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // verbatim so validation matches exactly.
     const [ticksText, setTicksText] = useState('');
     const [holderTicksPickerOpen, setHolderTicksPickerOpen] = useState(false);
+    // The tokens file loaded into the box, and the lines of it that are not tickers.
+    const [ticksFileName, setTicksFileName] = useState('');
+    const [ticksFileText, setTicksFileText] = useState('');
+    const [ticksFileBadLines, setTicksFileBadLines] = useState(
+        /** @type {Array<{ value: string, line: number }>} */ ([]),
+    );
 
     // 'existing' mode: pick an already-published list (either type) via
     // the PC-10 listsForSource picker; no new LIST gets created.
@@ -247,6 +277,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     const [submitting, setSubmitting] = useState(false);
     const [clearingPending, setClearingPending] = useState(false);
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    const formErrors = useFormErrors();
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [pendingId, setPendingId] = useState(/** @type {string | null} */ (null));
     const [listTxid, setListTxid] = useState(/** @type {string | null} */ (null));
@@ -273,6 +304,12 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     const [indexReadError, setIndexReadError] = useState(/** @type {string | null} */ (null));
     const [hydrated, setHydrated] = useState(false);
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    // Section open state, held above the early returns so it survives the
+    // pickers and review. A refusal names its section and bumps the counter,
+    // so that section reopens even after being closed.
+    const formSections = useFormSections({ from: false, airdrop: true, memo: false, fee: false });
+    const [errorSection, setErrorSection] = useState(/** @type {'from' | 'airdrop' | 'memo' | 'fee' | null} */ (null));
+    const [reviewAttempt, setReviewAttempt] = useState(0);
 
     // The active map and the settings read are best-effort: a host without
     // `getActiveAddresses` / `getSettings`, or one whose call fails, still
@@ -949,6 +986,51 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         + `${excludedRecipients.length === 1 ? 'address' : 'addresses'}: ${excludedRecipients.join(', ')}.`
                     : null;
 
+    const listReviewDecoded = useMemo(() => {
+        if (!listDecoded) return null;
+        return {
+            ...listDecoded,
+            warnings: [
+                ...(listDecoded.warnings || []),
+                ...(accessListNotice ? [accessListNotice] : []),
+                ...(recipientPreview.volatile
+                    ? ['Holder counts can change before the airdrop confirms, so the distribution and protocol fee remain estimates.']
+                    : []),
+            ],
+        };
+    }, [accessListNotice, listDecoded, recipientPreview.volatile]);
+    const listLegacyComposed = useMemo(() => (listReviewDecoded ? {
+        action: 'LIST', chainId, decoded: listReviewDecoded,
+    } : null), [chainId, listReviewDecoded]);
+    const airdropReviewDecoded = useMemo(() => {
+        if (!airdropDecoded) return null;
+        const reconcileWarning = listReconcile && listReconcile.missing.length > 0
+            // Names each rejected address so the sender can see which recipient
+            // the network dropped (most often one from another network).
+            ? `The published list holds ${listReconcile.storedCount} of the ${listReconcile.expectedCount} addresses you submitted. The network rejected ${listReconcile.missing.length}, so this airdrop pays ${recipientPreview.count ?? listReconcile.storedCount}. Rejected: ${listReconcile.missing.join(', ')}.`
+            : null;
+        const volatileWarning = recipientPreview.volatile
+            ? 'This airdrop pays current token holders. The holder set is fixed only when the transaction confirms, so the count and final cost can change.'
+            : null;
+        // Signing waits until the published list has been checked against the submitted addresses.
+        const reconcilePendingNotice = reconcilePending
+            ? 'Checking the published list against the addresses you submitted before you can sign.'
+            : null;
+        return {
+            ...airdropDecoded,
+            warnings: [
+                ...(airdropDecoded.warnings || []),
+                ...(reconcilePendingNotice ? [reconcilePendingNotice] : []),
+                ...(reconcileWarning ? [reconcileWarning] : []),
+                ...(accessListNotice ? [accessListNotice] : []),
+                ...(volatileWarning ? [volatileWarning] : []),
+            ],
+        };
+    }, [accessListNotice, airdropDecoded, listReconcile, reconcilePending, recipientPreview.count, recipientPreview.volatile]);
+    const airdropLegacyComposed = useMemo(() => (airdropReviewDecoded ? {
+        action: 'AIRDROP', chainId, decoded: airdropReviewDecoded,
+    } : null), [airdropReviewDecoded, chainId]);
+
     // Exact decimal math, not a float product. This number prices the
     // preview and its funded twin below gates submit, so an ulp of drift is
     // the difference between a payable drop and one the chain rejects.
@@ -996,11 +1078,6 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         return compareDecimal(remainder, '0') === 1 ? remainder : null;
     }, [amountPer, maxPayable, maxPerRecipient, tickAmtBalance, fundedDistribution]);
 
-    const flowNetworkFee = useMemo(() => {
-        if (!feeEstimate?.coinAmount) return null;
-        return multiplyDecimal(feeEstimate.coinAmount, sourceMode === 'existing' ? '1' : '2');
-    }, [feeEstimate, sourceMode]);
-
     const applyImportedRecipients = useCallback((text) => {
         const entries = parseCsvEntries(text);
         const normalized = entries.map(({ value }) => value).join('\n');
@@ -1014,11 +1091,52 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         accept: ['.csv', '.txt', 'text/csv', 'text/plain'],
         readAs: 'text',
         onError: (msg) => setFormError(msg),
-        onFile: ({ content }) => {
+        onFile: ({ file, content }) => {
             const text = typeof content === 'string' ? content : '';
             applyImportedRecipients(text);
+            setRecipientsFileName(file?.name || '');
         },
     });
+
+    // Removing the file takes its addresses out of the box only while the
+    // box still holds exactly what the file loaded; typed edits stay.
+    function clearRecipientsFile() {
+        if (importedRecipientEntries && pasteText === importedRecipientEntries.text) setPasteText('');
+        setImportedRecipientEntries(null);
+        setRecipientsFileName('');
+    }
+
+    // A tokens file reads like the addresses file (first CSV column, one per
+    // line, line numbers kept) and fills the Tokens box, where it can be edited.
+    // A line that is not a ticker is named with its line number.
+    const ticksDrop = useDropZone({
+        accept: ['.csv', '.txt', 'text/csv', 'text/plain'],
+        readAs: 'text',
+        onError: (msg) => setFormError(msg),
+        onFile: ({ file, content }) => {
+            const text = typeof content === 'string' ? content : '';
+            const entries = parseCsvEntries(text);
+            const rows = entries.length > 0 && TICKS_FILE_HEADERS.has(entries[0].value.toLowerCase())
+                ? entries.slice(1)
+                : entries;
+            const normalized = rows.map(({ value }) => value).join('\n');
+            setTicksText(normalized);
+            setTicksFileText(normalized);
+            setTicksFileName(file?.name || '');
+            setTicksFileBadLines(rows.filter(
+                ({ value }) => tickerReferenceError(value, { allowRef: true }) !== null,
+            ));
+        },
+    });
+
+    // Removing the file takes its tokens out of the box only while the box
+    // still holds exactly what the file loaded; typed edits stay.
+    function clearTicksFile() {
+        if (ticksText === ticksFileText) setTicksText('');
+        setTicksFileText('');
+        setTicksFileName('');
+        setTicksFileBadLines([]);
+    }
 
     // PC-11: the single compose-stage submit handler for all three
     // source modes. 'existing' skips straight to 'review-airdrop' (no
@@ -1026,10 +1144,25 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // 'review-list' first, exactly as the pre-PC-11 flow did.
     function handleComposeSubmit(event) {
         event.preventDefault();
+        // Each attempt bumps the counter; a refusal belongs to the
+        // Airdrop section unless it names From, Memo or the fee.
+        setReviewAttempt((n) => n + 1);
+        setErrorSection('airdrop');
+        const primaryProblems = {
+            'airdrop-token': !token.trim() ? 'Pick the token to drop.' : null,
+            'airdrop-amount': !String(amountPer).trim()
+                ? 'Per-recipient amount is required.' : amountValidationError,
+        };
+        if (!formErrors.validate(primaryProblems)) {
+            setFormError(null);
+            return;
+        }
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        if (feeStop) { setFormError(feeStop.formError); return; }
+        if (feeStop) { setErrorSection('fee'); setFormError(null); formErrors.fail(feeStop.formError, 'form:fee'); return; }
         if (!chainId || !fromAddress) {
-            setFormError('Pick a source address first.');
+            setErrorSection('from');
+            setFormError(null);
+            formErrors.fail('Pick a source address first.', 'form:from');
             return;
         }
         if (!token.trim()) {
@@ -1038,7 +1171,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         }
         const tokenError = tickerReferenceError(token, { noun: 'Token ticker', allowRef: true });
         if (tokenError) {
-            setFormError(tokenError);
+            formErrors.validate({ 'airdrop-token': tokenError });
             return;
         }
         const amt = String(amountPer).trim();
@@ -1047,14 +1180,14 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             return;
         }
         if (amountValidationError) {
-            setFormError(amountValidationError);
+            formErrors.validate({ 'airdrop-amount': amountValidationError });
             return;
         }
         const amountComparison = compareDecimalStrings(amt, '0');
         if (amountComparison !== 1) {
-            setFormError(amountComparison === null
+            formErrors.validate({ 'airdrop-amount': amountComparison === null
                 ? 'Per-recipient amount must be a positive decimal number.'
-                : 'Per-recipient amount must be greater than zero.');
+                : 'Per-recipient amount must be greater than zero.' });
             return;
         }
         // Keep each payout within the dropped token's on-chain decimal scale.
@@ -1064,7 +1197,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             noun: 'Per-recipient amount',
         });
         if (precisionError) {
-            setFormError(precisionError);
+            formErrors.validate({ 'airdrop-amount': precisionError });
             return;
         }
         // Stop a drop the balance cannot cover here, not several
@@ -1074,19 +1207,19 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         if (fundedDistribution && exceedsBalance(fundedDistribution, tickAmtBalance)) {
             const TICK = token.trim();
             const lead = fundedCount === recipientPreview.count ? 'This pays' : 'Paying every listed address takes';
-            setFormError(
+            formErrors.validate({ 'airdrop-amount':
                 `${lead} ~${formatWithThousands(fundedDistribution)} ${TICK} in total, more than the `
                 + `${formatWithThousands(tickAmtBalance)} ${TICK} this address holds.`
-                + (maxPayable ? ` Up to ${formatWithThousands(maxPerRecipient)} each is payable.` : ''),
-            );
+                + (maxPayable ? ` Up to ${formatWithThousands(maxPerRecipient)} each is payable.` : '') });
             return;
         }
         if (memo && /[|;]/.test(memo)) {
+            setErrorSection('memo');
             setFormError('Memo cannot contain | or ; characters.');
             return;
         }
         const memoError = memoLengthError(memo.trim());
-        if (memoError) { setFormError(memoError); return; }
+        if (memoError) { setErrorSection('memo'); setFormError(memoError); return; }
         if (sourceMode === 'existing') {
             if (!listActionIndex) {
                 setFormError('Choose an existing list first.');
@@ -1119,16 +1252,21 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 return;
             }
         } else if (recipientsPending) {
-            setFormError('Still checking the recipient list. Try again in a moment.');
+            setFormError(null);
+            formErrors.validate({ 'airdrop-recipients': 'Still checking the recipient list. Try again in a moment.' });
             return;
         } else if (recipients.valid.length === 0) {
-            setFormError('Add at least one valid recipient address.');
+            setFormError(null);
+            formErrors.validate({ 'airdrop-recipients': 'Add at least one valid recipient address.' });
             return;
         }
         // A LIST this wallet could not verify is refused here, before compose,
         // rather than at Approve with a refusal that reads like tampering.
         if (listFit) {
-            setFormError(listTooLargeMessage(listFit, sourceMode === 'holders' ? 'holders' : 'paste'));
+            formErrors.validate({
+                [sourceMode === 'holders' ? 'airdrop-holder-ticks' : 'airdrop-recipients']:
+                    listTooLargeMessage(listFit, sourceMode === 'holders' ? 'holders' : 'paste'),
+            });
             return;
         }
         if (sourceMode === 'paste') setCommittedRecipients(recipients);
@@ -1465,12 +1603,14 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             : onBack;
     const header = (
         <PageHeader
+            // A review step's Back returns to compose inside this page.
+            nested={headerBack !== onBack}
             onBack={headerBack}
-            title={stage === 'review-list' ? (sourceMode === 'holders' ? 'Review token list' : 'Review address list')
-                    : stage === 'wait-index' ? 'Waiting for list to be indexed'
-                        : stage === 'review-airdrop' ? 'Review airdrop'
-                            : stage === 'done' ? 'Airdrop complete'
-                                : `Airdrop tokens`}
+            title={stage === 'review-list' ? (sourceMode === 'holders' ? t('airdrop.title.reviewTokenList') : t('airdrop.title.reviewAddressList'))
+                    : stage === 'wait-index' ? t('airdrop.title.waitingForIndex')
+                        : stage === 'review-airdrop' ? t('airdrop.reviewAirdrop')
+                            : stage === 'done' ? t('airdrop.title.complete')
+                                : t('airdrop.title.compose')}
         />
     );
     // A review always opens at its top instead of inheriting how far the
@@ -1500,21 +1640,22 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     if (isWatcherMode) {
         return wrapState(
             <>
-                <h2 className={styles.successTitle}>Not available in watcher mode</h2>
-                <p className={styles.hint}>
-                    Airdrop is a two-phase action: the wallet broadcasts a
-                    recipient-list transaction, waits for the network to
-                    confirm it, then broadcasts the airdrop transaction
-                    referencing the list. A watcher-mode wallet can't observe
-                    the recipient list landing on-chain (broadcasting happens on a different
-                    wallet), so this flow can't be split across an
-                    air-gapped boundary today.
-                </p>
-                <p className={styles.hint}>
-                    Switch this wallet to <strong>full</strong> mode to
-                    author an airdrop, or use a Full-mode wallet that holds
-                    the same seed.
-                </p>
+                <h2 className={styles.successTitle}>Not available when another phone signs</h2>
+                {/* Notes sit in the one warning card, never loose paragraphs. */}
+                <WarningCard data-airdrop-watcher-note="">
+                    <WarningLine>
+                        Airdrop is a two-phase action: the wallet broadcasts a
+                        recipient-list transaction, waits for the network to
+                        confirm it, then broadcasts the airdrop transaction
+                        referencing the list. Another phone signs for this wallet,
+                        so it can't see the recipient list land on-chain, and this
+                        flow can't be split across two phones today.
+                    </WarningLine>
+                    <WarningLine>
+                        To author an airdrop, use a wallet that signs on this
+                        device and holds the same recovery phrase.
+                    </WarningLine>
+                </WarningCard>
             </>,
         );
     }
@@ -1522,10 +1663,24 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // confirm page, rendered in place of the review stage (the overlay
     // modal didn't fit small/mobile viewports); flow state stays intact.
     if (actionConfirm.open) {
+        // The recipient list goes out first; the airdrop then sends the
+        // token, its total when the recipient count is known.
+        const listLeg = stage === 'review-list';
+        const airdropTick = String(airdropParams.TICK || '').toUpperCase();
+        const airdropSummary = {
+            verb: listLeg ? t('components.confirmSummary.verbCreateList') : t('airdrop.section.airdrop'),
+            ...(airdropTick ? { ticker: airdropTick } : {}),
+            ...(!listLeg && airdropTick && totalDistribution ? { amount: String(totalDistribution) } : {}),
+            direction: listLeg ? 'none' : 'out',
+            chainId,
+            address: fromAddress?.address,
+        };
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={airdropSummary}
                 screenVariant={variant}
+                feeEstimate={feeEstimate}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -1557,7 +1712,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 <p className={styles.successLabel}>Airdrop transaction</p>
                 <code className={styles.txid}>{airdropTxid}</code>
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={handleClearPending} loading={clearingPending}>Done</Button>
+                    <Button variant="success" icon={<Icon.CheckIcon />} onClick={handleClearPending} loading={clearingPending}>Done</Button>
                 </div>
             </>,
         );
@@ -1579,21 +1734,23 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         {minutes > 0 ? `${minutes} min ${waitElapsed % 60}s` : `${waitElapsed}s`}
                     </dd>
                 </dl>
-                <p className={styles.hint}>
-                    Waiting for the recipient-list transaction to be indexed. Once the
-                    explorer assigns an action index, we'll continue to the
-                    airdrop step. Safe to close the wallet; we'll resume from
-                    Home when you reopen it.
-                </p>
+                <WarningCard data-airdrop-wait-note="">
+                    <WarningLine>
+                        Waiting for the recipient-list transaction to be indexed. Once the
+                        explorer assigns an action index, we'll continue to the
+                        airdrop step. Safe to close the wallet; we'll resume from
+                        Home when you reopen it.
+                    </WarningLine>
+                    {slow ? (
+                        <WarningLine>
+                            This is taking longer than usual. Typical wait is 1–2
+                            block confirmations. You can leave it running or come
+                            back later.
+                        </WarningLine>
+                    ) : null}
+                </WarningCard>
                 {indexReadError ? (
                     <StatusMessage variant="error">{indexReadError}</StatusMessage>
-                ) : null}
-                {slow ? (
-                    <p className={styles.hint}>
-                        This is taking longer than usual. Typical wait is 1–2
-                        block confirmations. You can leave it running or come
-                        back later.
-                    </p>
                 ) : null}
                 <div className={styles.actions}>
                     <Button variant="ghost" onClick={onBack}>Close (keep waiting)</Button>
@@ -1604,295 +1761,107 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     }
 
     if (stage === 'review-list') {
-        return wrap(
-            <FormPage
-                demoGuard={demoGuard}
-                label="Review recipient list"
-                onSubmit={handleSignList}
-                status={(hw || singleEncode) && submitError ? (
-                    <StatusMessage variant="error">{submitError}</StatusMessage>
-                ) : null}
-                actions={(
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={submitting || actionConfirm.composing}
-                        disabled={singleEncode
-                            ? actionConfirm.composing
-                            : (hw ? hwStatus !== 'available' : (!signerReady && password.length === 0))}
-                    >
-                        {hw
-                            ? `Sign ${listNoun} on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                            : `Sign ${listNoun}`}
-                    </Button>
-                )}
-            >
-                <p className={styles.summary}>{listDecoded?.summary}</p>
-                <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>From</dt>
-                    <dd className={styles.detailsValue}>
-                        <AddressText address={fromAddress.address} />
-                    </dd>
-                    {(listDecoded?.details || []).map((d) => (
-                        <DetailRow key={d.label} label={d.label} value={d.value} />
-                    ))}
-                    <DetailRow
-                        label={recipientPreview.kind === 'tick'
-                            ? 'Holders (current, not final)'
-                            : 'Recipients'}
-                        value={recipientPreview.loading
-                            ? 'Counting…'
-                            : recipientPreview.error
-                                ? `Unknown (${recipientPreview.error})`
-                                : recipientPreview.count != null
-                                    ? formatWithThousands(recipientPreview.count)
-                                    : '?'}
-                    />
-                    {totalDistribution !== null ? (
-                        <DetailRow
-                            label={recipientPreview.volatile
-                                ? 'Estimated distribution at current count'
-                                : 'Total distribution'}
-                            value={`~${formatWithThousands(totalDistribution)} ${token.trim()}`}
-                        />
-                    ) : null}
-                    {roundingRemainder !== null ? (
-                        <DetailRow
-                            label="Rounding remainder"
-                            value={`${formatWithThousands(roundingRemainder)} ${token.trim()} stays at the source address`}
-                        />
-                    ) : null}
-                    <DetailRow
-                        label="Estimated network fees (2 transactions)"
-                        value={flowNetworkFee
-                            ? `${formatWithThousands(flowNetworkFee)} ${coinTicker}${feeEstimate?.rate ? ` (${feeEstimate.rate} each)` : ''}`
-                            : 'Estimate unavailable'}
-                    />
-                    <DetailRow
-                        label="Airdrop protocol fee"
-                        value="Calculated from the final recipient count when the airdrop executes"
-                    />
-                </dl>
-                {listDecoded && listDecoded.warnings.length > 0 ? (
-                    <FormNotice variant="warning" role="alert" lines={listDecoded.warnings} />
-                ) : null}
-                <p className={styles.hint}>
-                    Airdrop is a two-transaction flow. Step 1 broadcasts the
-                    {' '}{listNoun}; once the network has recorded it, step 2
-                    signs the airdrop that references it. {hw
-                        ? 'You will confirm on your hardware device twice.'
-                        : signerReady ? 'You will approve each one; the wallet is unlocked, so no password is needed.' : 'You will enter your password twice.'}
-                </p>
-                {recipientPreview.volatile ? (
-                    <p className={styles.hint}>
-                        Holder counts can change before the airdrop confirms, so the
-                        distribution and protocol fee remain estimates.
-                    </p>
-                ) : null}
-                {accessListNotice ? (
-                    <FormNotice variant="warning" role="alert">{accessListNotice}</FormNotice>
-                ) : null}
-                {holderPreview.failures.length > 0 ? (
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => setHolderPreviewRetry((attempt) => attempt + 1)}
-                        disabled={holderPreview.loading}
-                    >
-                        Retry holder counts
-                    </Button>
-                ) : null}
-                {/* On the single-encode path the credentials live on
-                    the confirm page, so this stage stays a pure recipient
-                    review and the button opens that page. */}
-                {singleEncode ? null : (
-                    <SignCredentials
-                        unlocked={signerReady}
-                        fromAddress={fromAddress}
-                        chainId={chainId}
-                        password={password}
-                        onPasswordChange={(v) => {
-                            setPassword(v);
-                            if (submitError) setSubmitError(null);
-                        }}
-                        onStatusChange={onHwStatusChange}
-                        passwordRef={passwordRef}
-                        submitError={submitError}
-                        disabled={submitting}
-                        getSignerStatus={messaging.getSignerStatus}
-                    />
-                )}
-            </FormPage>,
+        return (
+            <ConfirmActionModal
+                phase={submitting || actionConfirm.composing ? 'signing' : 'ready'}
+                composed={listLegacyComposed}
+                report={null}
+                reportLoading={false}
+                acknowledged={NO_ACKNOWLEDGMENTS}
+                onAcknowledge={() => {}}
+                canApprove={!submitting && !actionConfirm.composing}
+                onApprove={() => handleSignList({ preventDefault() {} })}
+                onReject={() => { setSubmitError(null); setStage('compose'); }}
+                decoded={listReviewDecoded}
+                chainLabel={descriptor?.displayName || chainId}
+                screenVariant={variant}
+                error={submitError}
+                sourceAddress={fromAddress?.address}
+                nativeTicker={coinTicker}
+                credentialsReady
+                summary={{
+                    verb: t('components.confirmSummary.verbCreateList'),
+                    direction: 'none',
+                    chainId,
+                    address: fromAddress?.address,
+                    facts: [
+                        {
+                            label: recipientPreview.kind === 'tick' ? 'Holders (current, not final)' : 'Recipients',
+                            value: recipientPreview.loading
+                                ? 'Counting…'
+                                : recipientPreview.error
+                                    ? `Unknown (${recipientPreview.error})`
+                                    : recipientPreview.count != null
+                                        ? formatWithThousands(recipientPreview.count)
+                                        : 'Unknown',
+                        },
+                        ...(totalDistribution !== null ? [{
+                            label: recipientPreview.volatile ? 'Estimated distribution' : 'Total distribution',
+                            value: `~${formatWithThousands(totalDistribution)} ${token.trim()}`,
+                        }] : []),
+                        ...(roundingRemainder !== null ? [{
+                            label: 'Rounding remainder',
+                            value: `${formatWithThousands(roundingRemainder)} ${token.trim()} stays at the source address`,
+                        }] : []),
+                    ],
+                    notice: `This is the first of two transactions. After the ${listNoun} confirms, you will approve the airdrop.`,
+                }}
+                networkFee={feeEstimate?.coinAmount ? {
+                    amount: String(feeEstimate.coinAmount), ticker: coinTicker, estimate: true,
+                } : null}
+            />
         );
     }
 
     if (stage === 'review-airdrop') {
-        return wrap(
-            <FormPage
-                demoGuard={demoGuard}
-                label="Review airdrop"
-                onSubmit={handleSignAirdrop}
-                status={(hw || singleEncode) && submitError ? (
-                    <StatusMessage variant="error">{submitError}</StatusMessage>
-                ) : null}
-                actions={(
-                    <>
-                        <Button type="button" variant="ghost" onClick={onBack} disabled={submitting}>
-                            Close (resume later)
-                        </Button>
-                        <Button
-                            type="submit"
-                            variant="primary"
-                            loading={submitting || actionConfirm.composing}
-                            disabled={
-                                !listActionIndex
-                                || reconcilePending
-                                || (sourceMode === 'existing' && existingListDetail?.unsupported)
-                                || (singleEncode
-                                    ? actionConfirm.composing
-                                    : (hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)))
-                            }
-                        >
-                            {hw
-                                ? `Sign airdrop on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : 'Sign airdrop'}
-                        </Button>
-                    </>
-                )}
-            >
-                <p className={styles.summary}>{airdropDecoded?.summary}</p>
-                <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>From</dt>
-                    <dd className={styles.detailsValue}>
-                        <AddressText address={fromAddress.address} />
-                    </dd>
-                    {(airdropDecoded?.details || []).map((d) => (
-                        <DetailRow
-                            key={d.label}
-                            label={d.label}
-                            value={d.label === 'Per-recipient amount'
-                                ? `${d.value} ${token.trim()}`
-                                : d.value}
-                        />
-                    ))}
-                    <dt className={styles.detailsLabel}>
-                        {recipientPreview.kind === 'tick' ? 'Holders (current, not final)' : 'Recipients'}
-                    </dt>
-                    <dd className={styles.detailsValue}>
-                        {recipientPreview.loading
-                            ? 'Counting…'
-                            : recipientPreview.error
-                                ? `Unknown (${recipientPreview.error})`
-                                : recipientPreview.count != null
-                                    ? formatWithThousands(recipientPreview.count)
-                                    : '?'}
-                    </dd>
-                    {totalDistribution !== null ? (
-                        <>
-                            <dt className={styles.detailsLabel}>Total distribution</dt>
-                            <dd className={styles.detailsValue}>
-                                ~{formatWithThousands(totalDistribution)} {token.trim()}
-                            </dd>
-                        </>
-                    ) : null}
-                    {roundingRemainder !== null ? (
-                        <DetailRow
-                            label="Rounding remainder"
-                            value={`${formatWithThousands(roundingRemainder)} ${token.trim()} stays at the source address`}
-                        />
-                    ) : null}
-                    <DetailRow
-                        label="Network fee"
-                        value={feeEstimate
-                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
-                            : 'Estimate unavailable'}
-                    />
-                    <DetailRow
-                        label="Airdrop protocol fee"
-                        value="Calculated from the final recipient count when the airdrop executes"
-                    />
-                </dl>
-                <DiagnosticDetails
-                    summary={`Holder count details (${holderPreview.failures.length})`}
-                    items={holderPreview.failures}
-                    className={styles.hint}
-                />
-                {holderPreview.failures.length > 0 ? (
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => setHolderPreviewRetry((attempt) => attempt + 1)}
-                        disabled={holderPreview.loading}
-                    >
-                        Retry holder counts
-                    </Button>
-                ) : null}
-                {airdropDecoded && airdropDecoded.warnings.length > 0 ? (
-                    <FormNotice variant="warning" role="alert" lines={airdropDecoded.warnings} />
-                ) : null}
-                {/* The chain kept fewer items than the wallet published.
-                    Say so here, on the screen that prices step 2, because the
-                    LIST was already paid for at the larger count and the AIRDROP
-                    will only pay (and only be charged for) what survived. */}
-                {reconcilePending ? (
-                    <FormNotice variant="info" role="status">
-                        {'Checking the published list against the addresses you submitted before you can sign.'}
-                    </FormNotice>
-                ) : null}
-                {listReconcile && listReconcile.missing.length > 0 ? (
-                    <FormNotice variant="warning" role="alert">
-                        {`The published list holds ${listReconcile.storedCount} of the ${listReconcile.expectedCount} addresses you submitted: `
-                            + `${listReconcile.missing.length} ${listReconcile.missing.length === 1 ? 'was' : 'were'} rejected by the network, most often because `
-                            + `${listReconcile.missing.length === 1 ? 'it does' : 'they do'} not belong to the active network. This airdrop pays `
-                            + `${recipientPreview.count ?? listReconcile.storedCount}. The rejected ${listReconcile.missing.length === 1 ? 'address' : 'addresses'}: `
-                            + `${listReconcile.missing.join(', ')}.`}
-                    </FormNotice>
-                ) : null}
-                {accessListNotice ? (
-                    <FormNotice variant="warning" role="alert">{accessListNotice}</FormNotice>
-                ) : null}
-                {/* PC-11 holder-snapshot honesty: a TICK list's holder set
-                    binds at AIRDROP execution (when it confirms on-chain),
-                    not at this review screen, so the count above is only
-                    ever a preview and can be inflated between now and
-                    settlement (e.g. by splitting a balance across more
-                    addresses to collect more than one payout). */}
-                {recipientPreview.volatile ? (
-                    <FormNotice variant="warning" role="alert">
-                            This airdrop pays every current holder of the underlying
-                            token(s), not a fixed list of addresses. That holder set is
-                            only locked in when the airdrop transaction confirms
-                            on-chain; the count above is a snapshot taken now and can
-                            change (and be inflated) before then. It is an estimate, not
-                            a guarantee of who gets paid or the final cost.
-                    </FormNotice>
-                ) : null}
-                <p className={styles.hint}>
-                    Airdrops have a protocol fee that grows with the number of
-                    recipients, and the network sets the exact amount when the
-                    airdrop confirms. Make sure the source address holds enough
-                    {' '}{token.trim() || 'of the token'} for the full
-                    distribution, plus enough to pay the protocol fee.
-                </p>
-                {/* Credentials live on the confirm page for leg 2 too. */}
-                {singleEncode ? null : (
-                    <SignCredentials
-                        unlocked={signerReady}
-                        fromAddress={fromAddress}
-                        chainId={chainId}
-                        password={password}
-                        onPasswordChange={(v) => {
-                            setPassword(v);
-                            if (submitError) setSubmitError(null);
-                        }}
-                        onStatusChange={onHwStatusChange}
-                        passwordRef={passwordRef}
-                        submitError={submitError}
-                        disabled={submitting}
-                        getSignerStatus={messaging.getSignerStatus}
-                    />
-                )}
-            </FormPage>,
+        const airdropTick = String(airdropParams.TICK || '').toUpperCase();
+        return (
+            <ConfirmActionModal
+                phase={submitting || actionConfirm.composing ? 'signing' : 'ready'}
+                composed={airdropLegacyComposed}
+                report={null}
+                reportLoading={false}
+                acknowledged={NO_ACKNOWLEDGMENTS}
+                onAcknowledge={() => {}}
+                canApprove={Boolean(listActionIndex) && !reconcilePending && !submitting && !actionConfirm.composing
+                    && !(sourceMode === 'existing' && existingListDetail?.unsupported)}
+                onApprove={() => handleSignAirdrop({ preventDefault() {} })}
+                onReject={headerBack}
+                decoded={airdropReviewDecoded}
+                chainLabel={descriptor?.displayName || chainId}
+                screenVariant={variant}
+                error={submitError}
+                sourceAddress={fromAddress?.address}
+                nativeTicker={coinTicker}
+                credentialsReady
+                summary={{
+                    verb: t('airdrop.section.airdrop'),
+                    ...(airdropTick ? { ticker: airdropTick } : {}),
+                    ...(airdropTick && totalDistribution ? { amount: String(totalDistribution) } : {}),
+                    direction: 'out',
+                    chainId,
+                    address: fromAddress?.address,
+                    facts: [
+                        {
+                            label: recipientPreview.kind === 'tick' ? 'Holders (current, not final)' : 'Recipients',
+                            value: recipientPreview.loading
+                                ? 'Counting…'
+                                : recipientPreview.error
+                                    ? `Unknown (${recipientPreview.error})`
+                                    : recipientPreview.count != null
+                                        ? formatWithThousands(recipientPreview.count)
+                                        : 'Unknown',
+                        },
+                        ...(roundingRemainder !== null ? [{
+                            label: 'Rounding remainder',
+                            value: `${formatWithThousands(roundingRemainder)} ${token.trim()} stays at the source address`,
+                        }] : []),
+                    ],
+                }}
+                networkFee={feeEstimate?.coinAmount ? {
+                    amount: String(feeEstimate.coinAmount), ticker: coinTicker, estimate: true,
+                } : null}
+            />
         );
     }
 
@@ -1900,7 +1869,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title={t('send.fromAddress')}
                 walletId={walletId}
                 chainId={chainId}
                 onChainChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
@@ -1918,7 +1887,10 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             <TokenPicker
                 purpose="send"
                 walletId={walletId}
-                title="Select token"
+                // AIRDROP moves token supply; the network coin is not a token.
+                kindFilter="tokens"
+                kindLocked
+                title={t('airdrop.picker.selectToken')}
                 onSelect={(sel) => {
                     setToken(String(sel.tick || ''));
                     // Picking a token on ANOTHER chain re-targets the whole
@@ -1927,7 +1899,9 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     // fromAddressId is set, so a stale id from the old chain
                     // survives and resolves to nothing on the new one. See the
                     // NetworkField below for what that looks like on screen.
-                    if (!lockedToken && sel.chainId) {
+                    // The Token field is live with a preset token
+                    // too, so a pick on another chain re-targets the form.
+                    if (sel.chainId) {
                         if (sel.chainId !== chainId) setFromAddressId(null);
                         setChainId(sel.chainId);
                     }
@@ -1943,7 +1917,10 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             <TokenPicker
                 purpose="receive"
                 walletId={walletId}
-                title="Add a token"
+                // A holder list names tokens; nobody holds the network coin on the token ledger.
+                kindFilter="tokens"
+                kindLocked
+                title={t('airdrop.picker.addToken')}
                 onSelect={(sel) => {
                     const t = String(sel.tick || '');
                     if (t) setTicksText((prev) => (prev.trim() ? `${prev}\n${t}` : t));
@@ -1972,65 +1949,102 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     }
 
     // stage === 'compose'
+    // A section holding the last refusal gets a key that changes on
+    // every attempt, so it reopens even after being closed.
+    const sectionErrorKey = (id) => (errorSection === id && formError ? reviewAttempt : 0);
+    const recipientsSummary = sourceMode === 'existing'
+        ? (listActionIndex ? t('airdrop.summary.existingList') : null)
+        : sourceMode === 'holders'
+            ? (memberTicks.length ? t('airdrop.summary.holders', { count: memberTicks.length }) : null)
+            : (recipients.valid.length ? t('airdrop.summary.addresses', { count: recipients.valid.length }) : null);
+    const airdropSummary = joinSummary(
+        amountPer && token ? t('airdrop.summary.each', { amount: amountPer, tick: token.trim() }) : (token.trim() || null),
+        recipientsSummary,
+    );
+    const fundingAddresses = (addressesByChain[chainId] || []).filter((a) => a.role !== 'dispenser');
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label="Token airdrop"
             onSubmit={handleComposeSubmit}
+            errors={formErrors}
             status={formError ? (
                 <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="success"
+            action={(
+                <FormAction
                     icon={<Icon.UsersIcon />}
-                    disabled={Boolean(amountValidationError)
-                        || (sourceMode === 'paste' && (recipientsPending || listFit !== null))}
                 >
-                    {sourceMode === 'existing' ? 'Review airdrop' : 'Review recipients'}
-                </Button>
+                    {sourceMode === 'existing' ? t('airdrop.reviewAirdrop') : t('airdrop.action.reviewRecipients')}
+                </FormAction>
+            )}
+            /* The standard order: From (closed), Airdrop (open: token, amount,
+               recipients), Memo (closed), then the Network fee row. A picked
+               token decides the network; a pick on another chain moves the form. */
+            from={(
+                <FromSection
+                    {...formSections.bind('from')}
+                    chainId={chainId}
+                    chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])}
+                    chainRegistry={chainRegistry}
+                    // Clearing the source address with the chain is load-
+                    // bearing, not tidiness: the default effect above returns
+                    // early while fromAddressId is set (so an explicit pick is
+                    // not clobbered by an unrelated address refresh), which
+                    // means a chain switch leaves an id belonging to the OLD
+                    // chain. It resolves to nothing on the new one, and the
+                    // form then renders "No address on this chain. Use Receive
+                    // to generate one first." over a wallet that has plenty.
+                    // Same shape as ListCreateForm / ControllerBindForm, which
+                    // have always reset here.
+                    onNetworkChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
+                    lockNetwork={Boolean(token.trim())}
+                    networkHelp={t('airdrop.from.networkHelp')}
+                    address={fromAddress?.address || null}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel={t('send.source.choose')}
+                    addressHelp={t('airdrop.from.addressHelp')}
+                    revealKey={sectionErrorKey('from')}
+                    // Only when this network truly has no funding address: the
+                    // default source resolves in an effect after the list lands.
+                    missing={fundingAddresses.length === 0 ? (
+                        <FormNotice variant="error">
+                            {t('send.source.noAddress')}
+                        </FormNotice>
+                    ) : null}
+                />
+            )}
+            fee={(
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeCustomEstimate}
+                    revealKey={sectionErrorKey('fee')}
+                    fees={{
+                        quote: protocolFeeQuote,
+                        pending: protocolFeePending,
+                        nativeFeeProps: nativeFee.toggleProps,
+                    }}
+                />
             )}
         >
-            {lockedToken && chainId ? (
-                <LockedTokenContext chainId={chainId} tick={token} label="Token to drop" />
-            ) : (
-                <>
-                    {/* Clearing the source address with the chain is load-
-                        bearing, not tidiness: the default effect above returns
-                        early while fromAddressId is set (so an explicit pick is
-                        not clobbered by an unrelated address refresh), which
-                        means a chain switch leaves an id belonging to the OLD
-                        chain. It resolves to nothing on the new one, and the
-                        form then renders "No address on this chain. Use Receive
-                        to generate one first." over a wallet that has plenty -
-                        with no source picker on screen to fix it with, because
-                        that control only renders when an address IS resolved.
-                        Same shape as ListCreateForm / ControllerBindForm, which
-                        have always reset here. */}
-                    <NetworkField label="Network" help="The chain the airdrop is recorded on. Your From address, token, recipients, and fees are on this network." value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-                </>
-            )}
-
-            {fromAddress ? (
-                <AddressField
-                    label="From"
-                    help="The address that sends the airdrop. It must hold the token and pays the fees."
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
-                />
-            ) : (
-                <FormNotice variant="error">
-                    {t('send.source.noAddress')}
-                </FormNotice>
-            )}
-
-            {lockedToken ? null : (
+            <FormSection
+                id="airdrop"
+                title={t('airdrop.section.airdrop')}
+                icon={Icon.UsersIcon}
+                {...formSections.bind('airdrop')}
+                revealKey={sectionErrorKey('airdrop')}
+                summary={airdropSummary || null}
+            >
+            {/* Always the standard Token field, even when the token arrives
+                already chosen; the preset token simply fills it. */}
+            {(
                 <TokenField
+                    id="airdrop-token"
                     label="Token to drop"
                     help="The token sent to every recipient. Only tokens available to send from this wallet are listed."
                     value={token && chainId ? { chainId, tick: token } : null}
@@ -2043,6 +2057,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 </FormNotice>
             ) : null}
             <AmountField
+                id="airdrop-amount"
                 label="Per-recipient amount"
                 help="Amount sent to each address (or, for a token-holder list, each holder)."
                 amount={amountPer}
@@ -2078,12 +2093,12 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 help={sourceMode === 'paste'
                     ? 'Enter or upload addresses; publishes a new address list, then airdrops to it.'
                     : sourceMode === 'existing'
-                        ? "Pick a list you've already published (address or token) and airdrop straight to it; no new list gets created."
+                        ? "Pick a list you've already published (address or token) and airdrop straight to it; no new list gets created. A token list pays every current holder of each listed token; the holder set is only fixed when the airdrop confirms on-chain, so its count is an estimate."
                         : 'Pick one or more tokens; publishes a new token list, then airdrops to every current holder of those tokens.'}
             >
-                <option value="paste">Addresses</option>
-                <option value="existing">Existing list</option>
-                <option value="holders">Token holders</option>
+                <Select.Option value="paste" icon={<Icon.AddressIcon />}>Addresses</Select.Option>
+                <Select.Option value="existing" icon={<Icon.ListIcon />}>Existing list</Select.Option>
+                <Select.Option value="holders" icon={<Icon.UsersIcon />}>Token holders</Select.Option>
             </Select>
             {roundingRemainder !== null ? (
                 <p className={styles.hint}>
@@ -2101,6 +2116,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         data-drop-active={recipientsDrop.isDragOver ? 'true' : 'false'}
                     >
                         <Textarea
+                            id="airdrop-recipients"
                             label="Recipients"
                             help="Enter or upload the recipient addresses for this airdrop. A new address list is published first, then the airdrop is sent to that list."
                             value={pasteText}
@@ -2118,24 +2134,18 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             autoComplete="off"
                         />
                     </div>
-                    {/* The browser's own file control sat in a grey box of
-                        its own; it now opens from an outlined button, the
-                        same pattern Publish file uses. */}
-                    <div>
-                        <Input
-                            {...recipientsDrop.pickerProps}
-                            aria-label="Upload CSV of addresses"
-                            autoComplete="off"
-                        />
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            onClick={recipientsDrop.openFilePicker}
-                        >
-                            Upload a CSV or text file
-                        </Button>
-                    </div>
+                    {/* The standard file field; the drop-zone hook keeps its
+                        size cap, type check and read for both the dialog and
+                        a drop on the field. */}
+                    <FileField
+                        label={t('airdrop.file.label')}
+                        help={t('airdrop.file.help')}
+                        optional
+                        inputLabel={t('airdrop.file.inputLabel')}
+                        fileName={recipientsFileName}
+                        drop={recipientsDrop}
+                        onClear={clearRecipientsFile}
+                    />
 
                     {pasteText.trim() ? (
                         <p className={styles.hint}>
@@ -2261,16 +2271,41 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         label="Tokens (one per line)"
                         help="Enter one token ticker per line. A new token list is published first, then the airdrop is sent to every current holder of those tokens. A wallet holding more than one listed token can receive more than one payout. The holder set is fixed only when the airdrop confirms, so the count is a preview."
                         value={ticksText}
-                        onChange={(e) => setTicksText(e.target.value)}
+                        onChange={(e) => {
+                            setTicksText(e.target.value);
+                            setTicksFileBadLines([]);
+                        }}
                         rows={6}
                         spellCheck={false}
                         autoCapitalize="off"
                         placeholder="TICK1&#10;TICK2"
                     />
-                    <div className={styles.fromLine}>
+                    <FileField
+                        label={t('airdrop.ticksFile.label')}
+                        help={t('airdrop.ticksFile.help')}
+                        optional
+                        inputLabel={t('airdrop.ticksFile.inputLabel')}
+                        fileName={ticksFileName}
+                        drop={ticksDrop}
+                        onClear={clearTicksFile}
+                    />
+                    {ticksFileBadLines.length > 0 ? (
+                        <div className={styles.hint} data-testid="airdrop-ticks-file-bad-lines">
+                            {t('airdrop.ticksFile.badLines', { count: ticksFileBadLines.length })}
+                            <ul>
+                                {ticksFileBadLines.map(({ value, line }) => (
+                                    <li key={`${line}:${value}`}>
+                                        {t('airdrop.ticksFile.badLine', { line })} <code>{value}</code>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    ) : null}
+                    <div className={styles.tokenPickerRow}>
                         <Button
                             type="button"
                             variant="ghost"
+                            block
                             icon={<Icon.PlusIcon />}
                             onClick={() => setHolderTicksPickerOpen(true)}
                         >
@@ -2298,36 +2333,33 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
 
             {sourceMode === 'existing' ? (
                 <>
-                    <div className={styles.fromLine}>
-                        <span className={styles.hint}>
-                            {listActionIndex
-                                ? existingListRowText(existingListDetail && !existingListDetail.loading && !existingListDetail.error
-                                    ? existingListDetail
-                                    : selectedListRow)
-                                : 'No list chosen yet.'}
-                        </span>
-                        <Button type="button" variant="ghost" onClick={() => setListPickerOpen(true)}>
-                            {listActionIndex ? 'Change list' : 'Choose list'}
-                        </Button>
-                    </div>
+                    <ListField
+                        label="List"
+                        help="The published list to airdrop to. Pick one in the list picker."
+                        placeholder="None set"
+                        valueText={pickedListText(listActionIndex, {
+                            index: String(listActionIndex ?? ''),
+                            name: existingListDetail?.label || existingListDetail?.name
+                                || selectedListRow?.label || selectedListRow?.name || null,
+                        })}
+                        onOpenPicker={() => setListPickerOpen(true)}
+                    />
                     {existingListDetail?.unsupported ? (
                         <p className={styles.hint}>{existingListDetail.error}</p>
                     ) : existingListDetail?.error ? (
                         <p className={styles.hint}>Couldn't load this list: {existingListDetail.error}</p>
                     ) : existingListDetail?.kind === 'tick' ? (
+                        // Live values only (U57); what a token list pays and why
+                        // the count is an estimate is the Airdrop to tip.
                         <p className={styles.hint}>
-                            This is a token list: the airdrop pays every current holder of
-                            {existingListDetail.items.length === 1 ? ' the listed token' : ' each listed token'}
-                            {' '}({existingListDetail.items.join(', ')}).
-                            {' '}{holderPreview.loading
-                                ? 'Counting holders…'
+                            Token list: {existingListDetail.items.join(', ')}
+                            {' · '}{holderPreview.loading
+                                ? 'counting holders…'
                                 : holderPreview.error
-                                    ? `${holderPreview.error}.`
+                                    ? holderPreview.error
                                     : holderPreview.total != null
-                                        ? `~${formatWithThousands(holderPreview.total)} holder${holderPreview.total === '1' ? '' : 's'} right now.`
+                                        ? `~${formatWithThousands(holderPreview.total)} holder${holderPreview.total === '1' ? '' : 's'} right now`
                                         : ''}
-                            {' '}The holder set is only fixed when the airdrop transaction
-                            confirms on-chain, not now; treat this as an estimate.
                         </p>
                     ) : existingListDetail?.kind === 'address' ? (
                         <p className={styles.hint}>
@@ -2352,37 +2384,18 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     Retry holder counts
                 </Button>
             ) : null}
+            </FormSection>
 
-            <Input
-                label="Memo"
-                optional
+            {/* Memo is its own optional section, closed, holding only the
+                memo: the section title names the field and carries its count. */}
+            <MemoSection
+                {...formSections.bind('memo')}
+                revealKey={sectionErrorKey('memo')}
                 maxLength={MAX_MEMO_LENGTH}
-                help={MEMO_HINT}
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
-                autoComplete="off"
             />
-
-            <FeesCard
-                chainId={chainId}
-                quote={protocolFeeQuote}
-                pending={protocolFeePending}
-                feeSelector={feeTiers ? (
-                <FeeSelector
-                    chainId={chainId}
-                    label="Network fee"
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
-                ) : null}
-            >
-                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
-            </FeesCard>
-
-        </FormPage>,
+        </FormFrame>,
     );
 }
 
@@ -2402,15 +2415,6 @@ function listTooLargeMessage({ fits, total, batches }, mode) {
         : ' Split it into several smaller airdrops.';
     return `This airdrop lists ${count(total)}, more than this wallet can verify in one airdrop: `
         + `up to ${formatWithThousands(String(fits))} of these fit.${split}`;
-}
-
-function DetailRow({ label, value }) {
-    return (
-        <>
-            <dt className={styles.detailsLabel}>{label}</dt>
-            <dd className={styles.detailsValue}>{value}</dd>
-        </>
-    );
 }
 
 // Resolve the ACTION_INDEX from whatever shape the explorer returns.
@@ -2526,7 +2530,8 @@ function ExistingListPickerScreen({ variant, messaging, chainId, addresses, onSe
         return () => clearTimeout(timer);
     }, [rows, loadAttempt]);
 
-    const header = <PageHeader onBack={onBack} title="Choose a list" />;
+    // A picker inside the Airdrop form: Back closes it in place.
+    const header = <PageHeader nested onBack={onBack} title={t('airdrop.picker.chooseList')} />;
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
             <ListPage>{children}</ListPage>

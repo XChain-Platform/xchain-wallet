@@ -149,9 +149,15 @@ assert.ok(
     /messaging\.importBackupRequest\(\{[\s\S]*mode,[\s\S]*\}\)/.test(iw),
     'ImportWallet forwards mode prop into importBackupRequest',
 );
-assert.ok(/label=\{restoreDeviceLabel\(mode\)\}/.test(iw),
-    'backup restore keeps mode-specific device-password guidance on the field');
-assert.ok(/help=\{restoreDeviceHint\(mode\)\}/.test(iw),
-    'backup restore keeps the mode-specific explanation in its field help tip');
+// One password is tried in every role; an add asks for this device's own
+// password only after the open vault refuses it, and never on a fresh install.
+assert.ok(/if \(mode === 'add'\) \{\s*devicePassword = backupNeedsDevicePassword \? backupDevicePassword : backupPassword;/.test(iw),
+    'an add offers the vault the main password, or the device field once the vault asked for one');
+assert.ok(/case 'device-password':[\s\S]{0,200}setBackupNeedsDevicePassword\(true\)/.test(iw),
+    'backup restore shows the device field when the open vault refuses the password');
+assert.ok(/label="Your password on this device"/.test(iw),
+    'backup restore labels the device field for a vault that already exists');
+assert.ok(/onConflict: 'preserve'/.test(iw),
+    'an add keeps the records this device already has instead of refusing the restore');
 
 console.log('backup-add-mode smoke OK');

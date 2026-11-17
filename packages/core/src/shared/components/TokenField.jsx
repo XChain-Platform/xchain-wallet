@@ -15,6 +15,7 @@ import { TokenListIcon } from '../../ui/icons/index.jsx';
 import { OptionalPill } from '../../ui/OptionalPill.jsx';
 import { fieldHelpName, resolveFieldRequirement } from '../../ui/fieldRequirement.js';
 import { InfoTip } from '../../ui/InfoTip.jsx';
+import { usePickedFieldError } from '../../ui/formErrors.js';
 // Ahead of the field's own sheet, so the shared button base loads first and the
 // control's rules follow it; a CSS-file composes would inline a second copy of
 // Button.module.css that re-applies .btn over other buttons.
@@ -49,8 +50,9 @@ import '../../i18n/locales/en/ui.js';
  * @param {() => void} props.onOpenPicker                     called on click; host opens TokenPicker and writes the selection back to `value`
  * @param {string} [props.placeholder]                        empty-state text (default 'Select a token')
  * @param {boolean} [props.disabled]
- * @param {string} [props.error]                              error message shown below the control
- * @param {string} [props.id]
+ * @param {string} [props.error]                              error message shown below the control; wins over the form's entry
+ * @param {string} [props.id]                                 with a form on the form error standard (useFormErrors), the field reads its entry by this id, outlines red with its line under it, and drops it when a new token is picked
+ * @param {string} [props.formErrorKey]                      read this entry of the form's map instead of `id` (a form-level key, listed as a plain line)
  * @param {boolean} [props.optional]                         shows the shared Optional pill on the field label
  * @param {import('react').ReactNode} [props.help]             help for this field on this form, shown from the label-row InfoTip as Input and Select do
  */
@@ -61,21 +63,26 @@ export function TokenField({
     onOpenPicker,
     placeholder = t('components.tokenField.selectAToken'),
     disabled = false,
-    error,
+    error: errorProp,
     id,
+    formErrorKey,
     optional = false,
     help,
 }) {
     const autoId = useId();
     const controlId = id || autoId;
+    const chainId = value?.chainId;
+    const tick = value?.tick;
+    const hasValue = Boolean(chainId && tick);
+    // The host writes a pick back as a new value, so the form's entry for
+    // this field leaves the map when the token changes.
+    const formField = usePickedFieldError(formErrorKey ?? id, `${chainId || ''}|${tick || ''}`);
+    const error = errorProp || formField.error;
     const errorId = error ? `${controlId}-error` : undefined;
     const requirement = resolveFieldRequirement({ label, optional });
     const optionalPillId = requirement.isOptional ? `${controlId}-optional` : undefined;
     const hasHelp = Boolean(label && help);
 
-    const chainId = value?.chainId;
-    const tick = value?.tick;
-    const hasValue = Boolean(chainId && tick);
     const iconSize = size === 'lg' ? 24 : 20;
 
     // Accessible name carries the field label + current selection (or the
@@ -107,7 +114,8 @@ export function TokenField({
             <button
                 type="button"
                 id={controlId}
-                className={`${buttonStyles.btn} ${styles.control} ${error ? styles.invalid : ''}`.trim()}
+                // G112: leadIcon puts the token icon in its square slot.
+                className={[buttonStyles.btn, styles.control, hasValue ? styles.leadIcon : '', error ? styles.invalid : ''].filter(Boolean).join(' ')}
                 onClick={onOpenPicker}
                 disabled={disabled}
                 aria-invalid={error ? 'true' : undefined}

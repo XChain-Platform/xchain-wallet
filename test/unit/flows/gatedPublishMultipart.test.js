@@ -173,8 +173,7 @@ describe('gated publish form multipart wiring', () => {
             target: { files: [new File([bytes], META.name, { type: META.type })] },
         });
         await screen.findByText((text) => text.startsWith(META.name));
-        fireEvent.click(screen.getByRole('checkbox', { name: /forever|permanent/i }));
-        fireEvent.click(screen.getByRole('button', { name: 'Publish file' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish File' }));
 
         await waitFor(() => expect(formHooks.start).toHaveBeenCalledOnce());
         const [request, match] = formHooks.start.mock.calls[0];

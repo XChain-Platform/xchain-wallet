@@ -35,7 +35,18 @@ vi.mock('@xchain-wallet/core/ui', async (importOriginal) => {
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
-import { SendPicker } from '../../../packages/core/src/shared/routes/SendPicker.jsx';
+
+// The Asset field opens the token picker page inside Send; a stub with a
+// Dogecoin choice keeps this case about the balance gate, not the picker.
+vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
+    TokenPicker: ({ title, onSelect, onBack }) => (
+        <section aria-label={title}>
+            <h2>{title}</h2>
+            <button type="button" onClick={() => onSelect({ chainId: 'dogecoin-mainnet', tick: 'DOGE' })}>Select Dogecoin</button>
+            <button type="button" onClick={onBack}>Back</button>
+        </section>
+    ),
+}));
 
 const BTC = 'bitcoin-mainnet';
 const DOGE = 'dogecoin-mainnet';
@@ -49,26 +60,13 @@ const balance = (tick, quantity) => ({
 });
 
 function ChainPickerHarness({ messaging }) {
-    const [prefill, setPrefill] = React.useState({ chainId: BTC, tick: 'BTC' });
-    const [pickerOpen, setPickerOpen] = React.useState(false);
     return (
         <MessagingProvider shell="web" messaging={messaging}>
             <Send
                 walletId="w"
-                prefill={prefill}
+                prefill={{ chainId: BTC, tick: 'BTC' }}
                 onBack={() => {}}
-                onChangeAsset={() => setPickerOpen(true)}
             />
-            {pickerOpen ? (
-                <SendPicker
-                    walletId="w"
-                    onBack={() => setPickerOpen(false)}
-                    onSelect={(selection) => {
-                        setPrefill({ chainId: selection.chainId, tick: selection.tick });
-                        setPickerOpen(false);
-                    }}
-                />
-            ) : null}
         </MessagingProvider>
     );
 }
@@ -136,20 +134,22 @@ afterEach(() => {
 });
 
 describe('Send balance gate during a chain switch', () => {
-    it('keeps the form mounted and never flashes the empty state while the next balance read hangs', async () => {
+    // The token picker takes the form's place while it is open, so the form
+    // element is rebuilt on return; the form must still come straight back
+    // (never the empty state) while the next balance read hangs.
+    it('returns to the form and never flashes the empty state while the next balance read hangs', async () => {
         const { messaging, sendWalletBalances, finishDogeAddressRead } = mount();
-        const form = await screen.findByRole('form', { name: 'Send' });
+        await screen.findByRole('form', { name: 'Send' });
         await screen.findByText('1 BTC available');
         emptyStateTitles.length = 0;
 
-        fireEvent.click(screen.getByRole('button', { name: /Change asset/ }));
-        expect(screen.getByRole('form', { name: 'Send' })).toBe(form);
+        fireEvent.click(screen.getByRole('button', { name: /^Asset: BTC/ }));
         fireEvent.click(await screen.findByRole('button', { name: /^Select Dogecoin\b/ }));
 
-        expect(screen.getByRole('form', { name: 'Send' })).toBe(form);
+        expect(await screen.findByRole('form', { name: 'Send' })).toBeInTheDocument();
         await waitFor(() => expect(sendWalletBalances).toHaveBeenCalledTimes(2));
         expect(messaging.getAddressBalances).toHaveBeenCalledWith(DOGE, DOGE_FROM);
-        expect(screen.getByRole('form', { name: 'Send' })).toBe(form);
+        expect(screen.getByRole('form', { name: 'Send' })).toBeInTheDocument();
         expect(screen.queryByText(EMPTY_TITLE)).toBeNull();
         expect(emptyStateTitles).not.toContain(EMPTY_TITLE);
         expect(await screen.findByText('Balance unavailable')).toBeInTheDocument();
@@ -157,7 +157,7 @@ describe('Send balance gate during a chain switch', () => {
         await act(async () => { finishDogeAddressRead(); });
         await waitFor(() => expect(screen.getByText('2 DOGE available')).toBeInTheDocument());
         expect(screen.queryByText('Balance unavailable')).toBeNull();
-        expect(screen.getByRole('form', { name: 'Send' })).toBe(form);
+        expect(screen.getByRole('form', { name: 'Send' })).toBeInTheDocument();
         expect(emptyStateTitles).not.toContain(EMPTY_TITLE);
     });
 });

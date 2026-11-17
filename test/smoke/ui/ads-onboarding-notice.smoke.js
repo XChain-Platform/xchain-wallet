@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §36.1: the Automatic Donation System notice at the end of
+// Smoke for §36.1: the Automatic Donations notice at the end of
 // onboarding.
 //
 // Source-level. The notice is one shared component, AdsNotice.jsx, and
@@ -19,9 +19,9 @@
 // and a backup-pointer restore, in both 'fresh' and 'add' modes. The notice
 // informs and does not ask (operator ruling 2026-10-12, modelled on
 // FreeWallet desktop): one Continue button, no decline button, no
-// per-chain amounts, and no settings write, because ADS_DEFAULT_ENABLED
-// already holds and every preference lives in Settings -> Automatic
-// Donation System.
+// per-chain amounts, and no settings write, because the default donation
+// settings already hold and every preference lives in Settings ->
+// Automatic Donations (one wallet-wide fiat queue, ruling 2026-11-14).
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -58,16 +58,24 @@ for (const [name, src] of [['notice', notice], ['create', create], ['import', im
     );
 }
 
-// It is a notice: names the system, says it is on by default, says
+// It is a notice: names the feature, says it is on by default, says
 // donating is not required, and points at Settings for every preference.
-assert.equal(en['adsNotice.title'], 'Automatic Donation System', 'names the system');
-assert.match(en['adsNotice.defaultBehavior'], /on by default/, 'says ADS is on by default');
+// The feature is "Automatic Donations" in a title and "automatic donations"
+// in a sentence; the old "Automatic Donation System (ADS)" name is gone.
+assert.equal(en['adsNotice.title'], 'Automatic Donations', 'names the feature');
+assert.match(en['adsNotice.defaultBehavior'], /^Automatic donations are on by default/, 'says automatic donations are on by default');
 assert.match(en['adsNotice.optional'], /don't need to donate/, 'says donating is not required');
-assert.match(en['adsNotice.settings'], /Settings → Automatic Donation System/, 'points at the settings section');
-assert.match(en['adsNotice.settings'], /turned off entirely/, 'says where it can be turned off');
+assert.match(en['adsNotice.settings'], /Settings → Automatic Donations/, 'points at the settings page by its title');
+assert.match(en['adsNotice.settings'], /Choose None to turn automatic donations off/, 'says where it can be turned off');
+for (const key of ['adsNotice.title', 'adsNotice.subtitle', 'adsNotice.defaultBehavior', 'adsNotice.settings']) {
+    assert.doesNotMatch(en[key], /Donation System|\bADS\b/, `${key} uses the Automatic Donations name`);
+}
+assert.match(en['adsNotice.defaultBehavior'], /mainnet transaction/, 'says only mainnet transactions add to the queue');
+assert.match(en['adsNotice.defaultBehavior'], /\{perTransaction\}[\s\S]*\{sendAt\}/, 'states the default amounts from the code defaults');
+assert.match(notice, /ADS_DEFAULT_PER_TRANSACTION[\s\S]*ADS_DEFAULT_SEND_AT/, 'fills them from the schema defaults');
 
-// No amounts on this screen: release defaults are shown and tuned in
-// Settings (§36.6), so a retune never leaves stale numbers here.
+// No fixed amounts in this copy: the defaults are filled in from the schema,
+// so a retune never leaves stale numbers here.
 const noticeCopy = Object.entries(en)
     .filter(([key]) => key.startsWith('adsNotice.'))
     .map(([, value]) => value)

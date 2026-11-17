@@ -76,7 +76,7 @@ describe('Android runtime permission denials', () => {
         });
 
         const view = render(<QrScanner onFrame={() => {}} />);
-        fireEvent.click(screen.getByRole('button', { name: 'Continue to camera' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Continue to Camera' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'Camera access is turned off for XChain Wallet.',
@@ -97,7 +97,7 @@ describe('Android runtime permission denials', () => {
         globalThis.Notification = { permission: 'default', requestPermission };
         render(<NotificationsSection />);
 
-        const button = screen.getByRole('button', { name: 'Request permission' });
+        const button = screen.getByRole('button', { name: 'Request Permission' });
         fireEvent.click(button);
         fireEvent.click(button);
         expect(requestPermission).toHaveBeenCalledTimes(1);
@@ -106,7 +106,7 @@ describe('Android runtime permission denials', () => {
         await waitFor(() => expect(screen.getByText(/Notifications are blocked/)).toHaveTextContent(
             'Open your browser or system settings, find XChain Wallet, and allow notifications.',
         ));
-        expect(screen.queryByRole('button', { name: 'Request permission' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Request Permission' })).toBeNull();
         expect(screen.getAllByText(/Notifications are blocked/)).toHaveLength(1);
     });
 });

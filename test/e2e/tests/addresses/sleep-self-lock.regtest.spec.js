@@ -60,14 +60,17 @@ test.describe(`SLEEP v0 address self-lock on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(page.getByRole('banner').getByRole('heading', { name: 'Lock address' }))
                 .toBeVisible({ timeout: 30_000 });
             await expect(main.getByLabel('Address to lock')).toHaveValue(source);
-            const endLine = main.getByText(/^Ends at block /);
-            await expect(endLine).toBeVisible({ timeout: 30_000 });
-            resumeBlock = Number((await endLine.innerText()).match(/block ([\d,]+)/)?.[1]?.replace(/,/g, ''));
-            expect(Number.isFinite(resumeBlock) && resumeBlock > 0, 'the duration has no readable end block').toBe(true);
             await main.getByLabel('Memo', { exact: true }).fill(MEMO);
             await main.getByRole('button', { name: 'Lock address', exact: true }).click();
 
-            await expect(main).toContainText('This pauses XChain actions from your address.');
+            // The form no longer shows an end line; the review's wake condition names the block.
+            const wakeLine = main.getByText(/Automatically at block [\d,]+/);
+            await expect(wakeLine).toBeVisible({ timeout: 30_000 });
+            resumeBlock = Number((await wakeLine.first().innerText()).match(/at block ([\d,]+)/)?.[1]?.replace(/,/g, ''));
+            expect(Number.isFinite(resumeBlock) && resumeBlock > 0, 'the review has no readable wake block').toBe(true);
+
+            await expect(main.getByTestId('confirm-action-warnings'))
+                .toContainText("While locked, this address can't create any XChain action");
             await main.getByLabel('Type LOCK to confirm').fill('LOCK');
             const approve = main.getByRole('button', {
                 name: 'Lock address',

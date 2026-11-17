@@ -39,7 +39,7 @@ const SIGNER_SUBJECT = Object.freeze({
     ledger: 'A Ledger',
     trezor: 'A Trezor',
     multisig: 'A multisig signer',
-    airgap: 'An air-gapped signer',
+    airgap: 'A wallet that signs on another phone',
 });
 
 /**

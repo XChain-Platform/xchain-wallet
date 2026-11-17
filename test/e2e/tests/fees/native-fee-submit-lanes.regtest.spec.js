@@ -49,11 +49,15 @@
 // the §3.2 recipe for a clock-frozen chain, measured safe on Bitcoin in
 // session 22. for why the spec cannot do this itself yet.
 
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import {
+    addWalletFromPhrase, createWallet, expect, openIssueSection, openPaletteCommand, test,
+} from '../../fixtures/wallet.js';
+import { pickOption } from '../../fixtures/pickOption.js';
 import {
     expectConfirmModal,
     fundAddress,
     mintXchain,
+    readIssueSource,
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
@@ -90,18 +94,6 @@ async function feeQuote(action, params, source) {
     return warmFeeQuote({ action, params, source });
 }
 
-async function setWalletMode(page, mode) {
-    const label = mode === 'watcher' ? /^Watcher/ : /^Normal/;
-    await openPaletteCommand(page, 'Settings');
-    await page.getByRole('main').getByRole('button', { name: /^Wallet mode/ }).click();
-    const radio = page.getByRole('radio', { name: label });
-    await expect(radio).toBeVisible({ timeout: 30_000 });
-    await radio.click();
-    // A mode change asks first, because it decides whether this device signs.
-    await page.getByRole('button', { name: 'Confirm mode change', exact: true }).click();
-    await expect(radio, `the wallet did not switch to ${mode} mode`).toBeChecked({ timeout: 30_000 });
-}
-
 /** The native-fee opt-in, which on Bitcoin is a real control. */
 function feeToggle(scope) {
     const name = /^Pay protocol fee in .* instead of XCHAIN/;
@@ -109,6 +101,8 @@ function feeToggle(scope) {
 }
 
 async function setNativeFee(scope, enabled = true) {
+    // The switch sits in the Fees section, closed until opened.
+    await openIssueSection(scope, 'Speed and Fees');
     const toggle = feeToggle(scope);
     if (REGTEST_COIN === 'RBTC') {
         await expect(toggle, 'Bitcoin did not offer its native-fee choice')
@@ -134,10 +128,11 @@ async function fillIssueForm(page, tick, { nativeFee, initialMint = null }) {
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(main);
+    await readIssueSource(main);
     await main.getByLabel('Ticker').fill(tick);
-    await main.getByLabel('Supply', { exact: true }).fill(SUPPLY);
+    await main.getByLabel('Max supply', { exact: true }).fill(SUPPLY);
     if (initialMint !== null) {
+        await openIssueSection(main, 'Initial mint');
         await main.getByLabel('Initial mint', { exact: true }).fill(String(initialMint));
     }
     await setNativeFee(main, nativeFee);
@@ -176,8 +171,7 @@ async function setupFundedWallet(page, name) {
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(main);
-    const source = await main.getByLabel('From').inputValue();
+    const source = await readIssueSource(main);
     expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
         .toMatch(REGTEST_ADDRESS_RE);
 
@@ -193,7 +187,7 @@ async function setupFundedWallet(page, name) {
 
 async function issueToken(page, tick, { initialMint = null } = {}) {
     const main = await fillIssueForm(page, tick, { nativeFee: true, initialMint });
-    const submit = main.getByRole('button', { name: 'Issue token', exact: true });
+    const submit = main.getByRole('button', { name: 'Issue Token', exact: true });
     await submit.click();
     await expectConfirmModal(page, `the ISSUE of ${tick}`, 120_000);
     const action = await waitForValidAction(await approveAndGetTxid(page), 1_200_000);
@@ -226,16 +220,16 @@ test.describe(`the native-fee flag on each submit lane on ${REGTEST_CHAIN_LABEL}
     test('the flag reaches the wire on the confirm path and on the watcher build', async ({ page }) => {
         let source;
         let quotedSats;
+        let phrase;
 
         await test.step(`onboard and fund on ${REGTEST_CHAIN_LABEL}`, async () => {
-            await createWallet(page, { password: PASSWORD, name: 'Fee Lane Wallet' });
+            phrase = await createWallet(page, { password: PASSWORD, name: 'Fee Lane Wallet' });
             await switchToRegtest(page, PASSWORD);
 
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(main);
-            source = await main.getByLabel('From').inputValue();
+            source = await readIssueSource(main);
             expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
 
@@ -267,7 +261,7 @@ test.describe(`the native-fee flag on each submit lane on ${REGTEST_CHAIN_LABEL}
             // In full mode this form is SINGLE-ENCODE: the form button
             // composes and opens the confirm screen directly, with no review
             // stage in between. Watcher mode uses the same named action.
-            await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+            await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
 
             await expectConfirmModal(page, 'this action', 60_000);
             const action = await waitForValidAction(await approveAndGetTxid(page), 1_200_000);
@@ -293,12 +287,16 @@ test.describe(`the native-fee flag on each submit lane on ${REGTEST_CHAIN_LABEL}
         });
 
         await test.step('LANE 2: the watcher build changes when the flag is set', async () => {
-            await setWalletMode(page, 'watcher');
+            // A wallet's mode is fixed at setup, so the watcher lane mirrors
+            // the funded wallet's addresses as a second, watch-only wallet.
+            await addWalletFromPhrase(page, phrase, {
+                password: PASSWORD, name: 'Fee Lane Watcher', walletMode: 'watcher',
+            });
 
             const build = async (tick, nativeFee) => {
                 const main = await fillIssueForm(page, tick, { nativeFee });
-                await main.getByRole('button', { name: 'Issue token', exact: true }).click();
-                await main.getByRole('button', { name: 'Create transaction for signing', exact: true }).click();
+                await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
+                await main.getByRole('button', { name: 'Create Transaction for Signing', exact: true }).click();
                 // By ROLE: the panel also carries a "Copy unsigned transaction
                 // hex" button, so the label alone matches two elements.
                 const hex = page.getByRole('textbox', { name: 'Unsigned transaction code' });
@@ -333,7 +331,7 @@ test.describe(`the native-fee flag on each submit lane on ${REGTEST_CHAIN_LABEL}
             // starts. Same shape as D-117 on the betting hub - a command for the
             // route you are already on is a no-op - and here the wallet offers
             // "Build another" precisely for this.
-            await page.getByRole('button', { name: 'Build another', exact: true }).click();
+            await page.getByRole('button', { name: 'Build Another', exact: true }).click();
             const on = await build(`${ISSUE_TICK}B`, true);
 
             // Differential, so no transaction parsing is needed: a dropped flag
@@ -365,14 +363,14 @@ test.describe(`the native-fee flag on each submit lane on ${REGTEST_CHAIN_LABEL}
         const main = page.getByRole('main');
         await expect(main.getByLabel('Action', { exact: true })).toBeVisible({ timeout: 30_000 });
         await selectVenueChain(main);
-        await main.getByLabel('Action', { exact: true }).selectOption('SEND');
+        await pickOption(main.getByLabel('Action', { exact: true }), 'SEND');
         await main.getByRole('textbox', { name: 'TICK', exact: true }).fill(SEND_TICK);
         await main.getByRole('textbox', { name: 'AMOUNT', exact: true })
             .fill(String(SEND_AMOUNT));
         await main.getByRole('textbox', { name: 'DESTINATION', exact: true })
             .fill(REGTEST_DESTINATION);
         await expect(feeToggle(main), 'SEND exposes a protocol-fee switch').toHaveCount(0);
-        await main.getByRole('button', { name: 'Sign action', exact: true }).click();
+        await main.getByRole('button', { name: 'Sign Action', exact: true }).click();
 
         await expectConfirmModal(page, 'the SEND', 120_000);
         const action = await waitForValidAction(await approveAndGetTxid(page), 1_200_000);

@@ -12,7 +12,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { ed25519 } from '@noble/curves/ed25519';
 import { bytesToHex } from '@noble/hashes/utils';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { DelegationActionForm } from '../../../packages/core/src/shared/routes/DelegationActionForm.jsx';
+// The staking-delegate and staking-revoke routes: the one Staking form on the network.
+import { NetworkDelegationRoute as DelegationActionForm } from '../../helpers/stakingFormRoutes.jsx';
 import { signingKeyRefusal } from '../../../packages/core/src/flows/signingKeyCheck.js';
 
 vi.mock('../../../packages/core/src/flows/submitAction.js', () => ({

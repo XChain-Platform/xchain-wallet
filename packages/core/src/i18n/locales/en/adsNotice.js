@@ -16,15 +16,15 @@ import { addEnglish } from '../../store.js';
 
 const messages = {
     // --- shared components ---------------------------------------
-    'adsNotice.title': 'Automatic Donation System',
+    'adsNotice.title': 'Automatic Donations',
     'adsNotice.subtitle':
-        'XChain Platform includes an Automatic Donation System (ADS) that supports continued development.',
+        'XChain Platform includes automatic donations that support continued development.',
     'adsNotice.defaultBehavior':
-        'ADS is on by default. It sets aside a small amount when you send a transaction and sends it as one donation once it adds up.',
+        'Automatic donations are on by default. Each mainnet transaction you send adds {perTransaction} to one queue, and when the queue reaches {sendAt} it goes out as one donation with your next mainnet send that can cover it. At the defaults, that is about 100 transactions. The review screen shows the donation before you approve.',
     'adsNotice.optional':
         "You don't need to donate to use XChain Platform.",
     'adsNotice.settings':
-        'Choose the amount and frequency under Settings → Automatic Donation System. ADS can also be turned off entirely there.',
+        'Choose the amount, when it goes out and who receives it under Settings → Automatic Donations. Choose None to turn automatic donations off.',
 };
 
 addEnglish(messages);

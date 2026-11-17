@@ -57,13 +57,21 @@ describe('BetFeedsList market rows', () => {
         const source = readFileSync(resolve(process.cwd(), 'packages/core/src/shared/routes/BetFeedsList.jsx'), 'utf8');
         const css = readFileSync(resolve(process.cwd(), 'packages/core/src/shared/routes/BetFeedsList.module.css'), 'utf8');
         expect(source.length).toBeGreaterThan(1000);
-        expect(source).toMatch(/<ListRow\s+type="button"\s+onClick=\{\(\) => onOpenMarket\(chainId, id\)\}\s+className=\{local\.marketCard\}/);
-        expect(css).toMatch(/\.marketCard \{[^}]*composes: card from '\.\.\/\.\.\/ui\/Card\.module\.css';/s);
+        // Each market is a BetMarketCard, a plain button drawn on the shared
+        // Card surface, and it is the only card: All, My bets and My markets
+        // draw the same one (ruling 2026-11-13).
+        expect(source).toMatch(/<BetMarketCard\s+market=\{m\}/);
+        expect(source).toMatch(/if \(!twoPanel\) \{\s*onOpenMarket\(chainId, m\.action_index\);/);
+        expect(source.match(/<BetMarketCard\b/g)).toHaveLength(1);
+        const cardCss = readFileSync(resolve(process.cwd(), 'packages/core/src/shared/components/BetMarketCard.module.css'), 'utf8');
+        expect(cardCss).toMatch(/\.card \{[^}]*composes: card from '\.\.\/\.\.\/ui\/Card\.module\.css';/s);
     });
 
     it('lets the phone tab underline span the full toolbar row', () => {
         const css = readFileSync(resolve(process.cwd(), 'packages/core/src/shared/routes/BetFeedsList.module.css'), 'utf8');
 
-        expect(css).toMatch(/@media \(max-width: 420px\) \{[\s\S]*?\.toolbarActions \{[^}]*flex: 1 1 100%;[^}]*width: 100%;[^}]*\}/);
+        // The tabs fill the toolbar row at every width, so no phone-only override is needed.
+        expect(css).toMatch(/\.toolbarRow \{[^}]*display: flex;[^}]*width: 100%;[^}]*\}/);
+        expect(css).toMatch(/\.toolbarActions > \* \{[^}]*flex: 1 1 auto;[^}]*width: 100%;[^}]*\}/);
     });
 });

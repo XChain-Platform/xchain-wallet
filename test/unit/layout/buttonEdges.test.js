@@ -54,6 +54,9 @@ describe('the balance hero menu trigger', () => {
 
     it('leaves the token hero with no loose swap or eye controls of its own', () => {
         expect(tokenCss).not.toMatch(/\.balanceHero(?:Swap|Eye|Controls)\b/);
-        expect(tokenCss).toMatch(/\.balanceHeroMenu\s*\{[^}]*grid-area:\s*controls/);
+        // The token hero draws its swap and eye with the shared balance card's own
+        // classes, so TokenDetail's stylesheet carries no hero menu of its own.
+        expect(tokenCss).not.toMatch(/\.balanceHeroMenu\b/);
+        expect(heroCss).toMatch(/\.inlineActions\b/);
     });
 });

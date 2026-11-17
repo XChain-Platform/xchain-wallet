@@ -115,7 +115,7 @@ describe('previewCoSignRequest', () => {
     it('throws for an unknown account and bad input', async () => {
         const { sdkRegistry } = mkSdkRegistry({ decoded: { ok: true, action: 'SEND', params: {} }, verdict: { ok: true, evaluation: {} } });
         await expect(previewCoSignRequest({ vault, sdkRegistry, accountId: 'nope', request: { psbt: 'aa' } }))
-            .rejects.toThrow(/no co-signer account/);
+            .rejects.toThrow(/no cosigner account/);
         await expect(previewCoSignRequest({ vault, sdkRegistry, accountId: account.id, request: {} }))
             .rejects.toThrow(/psbt/);
     });

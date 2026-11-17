@@ -8,15 +8,18 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Races around the wizard's review and sign steps. The review shows a
-// decode of the form values, the host composes those values, and the confirm
-// page signs what the host composed; every test here checks the three agree.
+// Races around the Issue Token form's compose and sign. The form holds the
+// values, the host composes those values, and the confirm page signs what the
+// host composed; every test here checks the three agree, and that a subtoken
+// parent answer about values no longer on screen never composes.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+// The Create a token route: TokenWizard renders the one Issue Token form.
 import { TokenWizard } from '../../../packages/core/src/shared/routes/TokenWizard.jsx';
+import { ownedTokensFor, pickParentToken } from '../../helpers/issueParentPicker.js';
 
 const ADDRESSES = {
     'bitcoin-regtest': [{
@@ -46,6 +49,8 @@ function mountWizard(overrides = {}) {
         releaseReservation: vi.fn().mockResolvedValue({}),
         releaseEncoderInputs: vi.fn().mockResolvedValue({}),
         issueToken: vi.fn().mockResolvedValue({ txid: 'cd'.repeat(32) }),
+        // The Parent token picker's list of owned tokens.
+        getOwnedTokens: ownedTokensFor(vi.fn, ADDRESSES['bitcoin-regtest'][0].address, ['MINE', 'PARENT', 'THEIRS']),
         ...overrides,
     };
     render(React.createElement(
@@ -56,15 +61,16 @@ function mountWizard(overrides = {}) {
     return messaging;
 }
 
-async function reachReview({ template = 'Utility token', name = 'RACE', supply = '100' } = {}) {
-    fireEvent.click(await screen.findByText(template));
-    await screen.findByLabelText('Fee paid by');
-    fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
-    fireEvent.change(screen.getByLabelText('Token name (ticker)'), { target: { value: name } });
-    fireEvent.change(screen.getByLabelText('Supply'), { target: { value: supply } });
-    fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
-    await screen.findByText('Step 4 of 4: Review');
+// Fill the form (optionally on a template); the caller submits it.
+async function fillForm({ template = 'Utility token', name = 'RACE', supply = '100' } = {}) {
+    await screen.findByLabelText('Ticker');
+    fireEvent.click(screen.getByRole('button', { name: /^Select template/ }));
+    fireEvent.click(screen.getByRole('option', { name: new RegExp(template) }));
+    fireEvent.change(screen.getByRole('textbox', { name: /^(Ticker|Subtoken name)$/ }), { target: { value: name } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: supply } });
 }
+
+const issueForm = () => screen.getByRole('form', { name: 'Issue Token' });
 
 function deferred() {
     let resolve;
@@ -74,12 +80,12 @@ function deferred() {
 
 afterEach(() => cleanup());
 
-describe('TokenWizard review and sign races', () => {
-    it('composes once for a double submit at Review', async () => {
+describe('Issue Token compose and sign races', () => {
+    it('composes once for a triple submit', async () => {
         const gate = deferred();
         const messaging = mountWizard({ composeForConfirm: vi.fn(() => gate.promise) });
-        await reachReview();
-        const form = screen.getByRole('form', { name: 'Review token issuance' });
+        await fillForm();
+        const form = issueForm();
         fireEvent.submit(form);
         fireEvent.submit(form);
         fireEvent.submit(form);
@@ -90,8 +96,8 @@ describe('TokenWizard review and sign races', () => {
 
     it('signs once for a double Approve', async () => {
         const messaging = mountWizard();
-        await reachReview();
-        fireEvent.submit(screen.getByRole('form', { name: 'Review token issuance' }));
+        await fillForm();
+        fireEvent.submit(issueForm());
         const approve = await screen.findByTestId('confirm-approve');
         await waitFor(() => expect(approve).toBeEnabled());
         fireEvent.click(approve);
@@ -100,20 +106,19 @@ describe('TokenWizard review and sign races', () => {
         expect(messaging.issueToken).toHaveBeenCalledTimes(1);
     });
 
-    it('keeps the review on screen while the host composes it', async () => {
+    it('holds the form still while the host composes it', async () => {
         const gate = deferred();
         const messaging = mountWizard({ composeForConfirm: vi.fn(() => gate.promise) });
-        await reachReview({ supply: '100' });
-        fireEvent.submit(screen.getByRole('form', { name: 'Review token issuance' }));
+        await fillForm({ supply: '100' });
+        fireEvent.submit(issueForm());
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
 
-        // Back while the compose of supply 100 is in flight, then a new supply.
+        // Back and the fields are held while the compose of supply 100 is in
+        // flight, so no other supply can be on screen when it confirms.
         const back = screen.getByRole('button', { name: 'Back to previous screen' });
         expect(back).toBeDisabled();
-        fireEvent.click(back);
-        fireEvent.keyDown(document, { key: 'Escape' });
-        const supplyField = screen.queryByLabelText('Supply');
-        if (supplyField) fireEvent.change(supplyField, { target: { value: '999' } });
+        const supplyField = screen.getByRole('textbox', { name: 'Max supply' });
+        expect(supplyField).toBeDisabled();
 
         await act(async () => { gate.resolve(COMPOSED); });
         const approve = await screen.findByTestId('confirm-approve');
@@ -121,60 +126,51 @@ describe('TokenWizard review and sign races', () => {
         fireEvent.click(approve);
         await waitFor(() => expect(messaging.issueToken).toHaveBeenCalledTimes(1));
 
-        // What was composed is what is signed, and the user never saw a
-        // different supply on screen while it was being composed.
+        // What was composed is what is signed.
         const composedParams = messaging.composeForConfirm.mock.calls[0][0].actionData.params;
         const signedParams = messaging.issueToken.mock.calls[0][0].params;
+        expect(composedParams.MAX_SUPPLY).toBe('100');
         expect(signedParams).toEqual(composedParams);
-        expect(supplyField).toBeNull();
     });
 
-    it('does not jump to Review when the user leaves Details during the parent lookup', async () => {
+    it('does not compose when a field changes during the parent lookup', async () => {
         const lookup = deferred();
         // The PARENT.CHILD availability lookup answers 'not issued'; the
         // parent ownership lookup is the one held open.
         const getTokenInfo = vi.fn(({ tick }) => (tick === 'PARENT' ? lookup.promise : Promise.resolve({})));
-        mountWizard({ getTokenInfo });
-        fireEvent.click(await screen.findByText('Subtoken'));
-        await screen.findByLabelText('Fee paid by');
-        fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
-        fireEvent.change(screen.getByLabelText('Parent ticker'), { target: { value: 'PARENT' } });
-        fireEvent.change(screen.getByLabelText('Subtoken name'), { target: { value: 'CHILD' } });
-        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '100' } });
-        fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
+        const messaging = mountWizard({ getTokenInfo });
+        await fillForm({ template: 'Subtoken', name: 'CHILD' });
+        await pickParentToken('PARENT');
+        fireEvent.submit(issueForm());
         await waitFor(() => expect(getTokenInfo).toHaveBeenCalledWith(expect.objectContaining({ tick: 'PARENT' })));
 
-        // Back to Network while the parent is still being looked up.
-        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+        // A new supply while the parent is still being looked up.
+        fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '999' } });
         await act(async () => {
             lookup.resolve({ creator: ADDRESSES['bitcoin-regtest'][0].address });
         });
 
-        expect(screen.queryByText('Step 4 of 4: Review')).toBeNull();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+        expect(screen.queryByTestId('confirm-approve')).toBeNull();
     });
 
-    it('does not review a parent typed after the lookup started', async () => {
+    it('does not compose a parent picked after the lookup started', async () => {
         const lookup = deferred();
         const getTokenInfo = vi.fn(({ tick }) => (tick === 'MINE' ? lookup.promise : Promise.resolve({})));
-        mountWizard({ getTokenInfo });
-        fireEvent.click(await screen.findByText('Subtoken'));
-        await screen.findByLabelText('Fee paid by');
-        fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
-        fireEvent.change(screen.getByLabelText('Parent ticker'), { target: { value: 'MINE' } });
-        fireEvent.change(screen.getByLabelText('Subtoken name'), { target: { value: 'CHILD' } });
-        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '100' } });
-        fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
+        const messaging = mountWizard({ getTokenInfo });
+        await fillForm({ template: 'Subtoken', name: 'CHILD' });
+        await pickParentToken('MINE');
+        fireEvent.submit(issueForm());
         await waitFor(() => expect(getTokenInfo).toHaveBeenCalledWith(expect.objectContaining({ tick: 'MINE' })));
 
-        fireEvent.change(screen.getByLabelText('Parent ticker'), { target: { value: 'THEIRS' } });
+        await pickParentToken('THEIRS');
         await act(async () => {
             lookup.resolve({ creator: ADDRESSES['bitcoin-regtest'][0].address });
         });
 
-        expect(screen.queryByText('Step 4 of 4: Review')).toBeNull();
-        expect(screen.queryByText('THEIRS.CHILD')).toBeNull();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
         // A fresh submit looks the new parent up.
-        fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
+        fireEvent.submit(issueForm());
         await waitFor(() => expect(getTokenInfo).toHaveBeenCalledWith(expect.objectContaining({ tick: 'THEIRS' })));
     });
 });

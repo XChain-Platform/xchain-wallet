@@ -26,6 +26,7 @@ import { render, act as domAct, fireEvent, cleanup } from '@testing-library/reac
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispenserForm } from '../../../packages/core/src/shared/routes/DispenserForm.jsx';
+import { selectOption } from '../../helpers/selectOption.js';
 
 const CHAIN = 'bitcoin-mainnet';
 
@@ -131,10 +132,24 @@ async function mountReopen(reopen) {
     return { utils, calls };
 }
 
+/**
+ * The expiration and oracle controls sit in the closed Dispenser Terms
+ * section, the allow and block lists in the closed Lists section.
+ */
+async function openTerms(utils, title = 'Dispenser Terms') {
+    const header = utils.getByRole('button', { name: new RegExp(`^${title}`) });
+    // A reopened form can already show the section (an invalid field opens it).
+    if (header.getAttribute('aria-expanded') === 'true') return;
+    await domAct(async () => {
+        fireEvent.click(header);
+        await drainMicrotasks();
+    });
+}
+
 /** Press Create untouched, then Approve; return what was composed and signed. */
 async function createAsIs(utils, calls) {
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('button', { name: 'Create dispenser' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Create Dispenser' }));
         await drainMicrotasks();
     });
     await domAct(async () => {
@@ -158,8 +173,13 @@ describe('DispenserForm opened again from a finished dispenser', () => {
         expect(utils.getByLabelText(/^Escrow amount/).value).toBe('100');
         expect(utils.getByLabelText(/^Trigger price/).value).toBe('0.001');
         expect(utils.getByLabelText('Dispenser address').value).toBe(PLAIN_HOST.address);
-        expect(utils.getByLabelText('From').value).toBe(CREATOR.address);
-        expect(utils.getByRole('button', { name: 'Allow-list #77' })).toBeTruthy();
+        expect(utils.getByLabelText('From address').value).toBe(CREATOR.address);
+        // The lists live in their own Lists section (operator 2026-11-13).
+        await openTerms(utils, 'Lists');
+        // The allow list is a picker field like Token (the order and swap forms' pattern).
+        expect(utils.getByRole('button', { name: 'Allow list: List #77' })).toBeTruthy();
+        expect(utils.queryByRole('button', { name: 'Set Block-List' })).toBeNull();
+        expect(utils.getByRole('button', { name: 'Block list: None set' })).toBeTruthy();
     });
 
     it('composes the same dispenser from the creator onto the same (non-dispenser-role) address', async () => {
@@ -197,7 +217,7 @@ describe('DispenserForm opened again from a finished dispenser', () => {
         expect(compose.args.from.address).toBe(CREATOR.address);
     });
 
-    it('carries oracle pricing and starts on the default window despite a future expiration', async () => {
+    it('carries oracle pricing and starts on 3 months despite a future expiration', async () => {
         // A whole minute, since the Expires input has minute resolution.
         const expiration = 4102444800;
         const { utils, calls } = await mountReopen({
@@ -208,27 +228,54 @@ describe('DispenserForm opened again from a finished dispenser', () => {
             oracleAddress: '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2',
             expiration,
         });
-        expect(utils.queryByLabelText(/^Trigger price/), 'oracle pricing hides the coin trigger').toBeNull();
+        // Quick keeps the Get card but holds the native price: empty and disabled.
+        const trigger = utils.queryByLabelText(/^Trigger price/);
+        expect(trigger === null || (trigger.disabled && trigger.value === ''), 'oracle pricing holds the coin trigger').toBe(true);
+        await openTerms(utils);
         expect(utils.getByLabelText(/^Oracle address/).value).toBe('1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2');
-        expect(utils.getByRole('radio', { name: /Default window/ }).checked).toBe(true);
+        // G44: Expiration is the icon dropdown, not radio buttons.
+        expect(utils.queryByRole('radio', { name: /Default window/ })).toBeNull();
+        expect(utils.getByRole('combobox', { name: /Expiration/ }).textContent).toContain('3 months');
         const { compose } = await createAsIs(utils, calls);
         expect(compose.args.actionData.params).toMatchObject({
             GET_AMOUNT: '0',
             ORACLE_ADDRESS: '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2',
             FIAT_CODE: 'USD',
         });
-        expect(compose.args.actionData.params, 'the default window omits EXPIRATION').not.toHaveProperty('EXPIRATION');
+        expect(compose.args.actionData.params, '3 months omits EXPIRATION').not.toHaveProperty('EXPIRATION');
     });
 
-    it('offers the old expiration when a specific time is chosen', async () => {
+    it('sends the shown Expires when a specific time is chosen, not the old expiration', async () => {
+        // Expires always shows and follows the Expiration choice; the specific
+        // time starts from the Expires shown (3 months out), so the old
+        // dispenser's leftover deadline does not come back (operator 2026-11-13).
         const expiration = 4102444800;
         const { utils, calls } = await mountReopen({ ...TERMS, expiration });
+        await openTerms(utils);
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('radio', { name: /Expire at a specific time/ }));
+            selectOption(utils.getByRole('combobox', { name: /Expiration/ }), 'custom');
             await drainMicrotasks();
         });
+        const before = Math.floor(Date.now() / 1000);
         const { compose } = await createAsIs(utils, calls);
-        expect(compose.args.actionData.params.EXPIRATION).toBe(String(expiration));
+        const sent = Number(compose.args.actionData.params.EXPIRATION);
+        expect(sent).not.toBe(expiration);
+        // Minute resolution: within a minute of 90 days from now.
+        expect(Math.abs(sent - (before + 90 * 86400))).toBeLessThanOrEqual(120);
+    });
+
+    it('sends a preset term as EXPIRATION', async () => {
+        const { utils, calls } = await mountReopen(TERMS);
+        await openTerms(utils);
+        await domAct(async () => {
+            selectOption(utils.getByRole('combobox', { name: /Expiration/ }), '6m');
+            await drainMicrotasks();
+        });
+        expect(utils.getByLabelText('Expires').value).not.toBe('');
+        const before = Math.floor(Date.now() / 1000);
+        const { compose } = await createAsIs(utils, calls);
+        const sent = Number(compose.args.actionData.params.EXPIRATION);
+        expect(Math.abs(sent - (before + 180 * 86400))).toBeLessThanOrEqual(120);
     });
 
     it('carries token pricing', async () => {

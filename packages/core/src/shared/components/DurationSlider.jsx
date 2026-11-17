@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, InfoTip, Input } from '@xchain-wallet/core/ui';
 import { targetBlockSecondsForCoin } from '../utils/blockDateEstimate.js';
+import { shortDuration } from '../utils/shortDuration.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/settings.js';
@@ -95,6 +96,10 @@ export function DurationSlider({
     const span = Number.isSafeInteger(positiveBlocks)
         ? humanSpan(positiveBlocks * blockMinutes)
         : null;
+    // The header pill follows the chosen stop or the custom count, in the short style.
+    const pillSpan = Number.isSafeInteger(positiveBlocks)
+        ? shortDuration(positiveBlocks * blockSeconds)
+        : null;
     const perBlock = humanSpan(blockMinutes);
     const activePreset = PRESETS[stopIndex];
 
@@ -113,7 +118,7 @@ export function DurationSlider({
                         label={t('components.durationSlider.durationInfo', { perBlock })}
                     />
                 </span>
-                {span ? <span className={styles.durationPill}>~{span}</span> : null}
+                {pillSpan ? <span className={styles.durationPill}>~{pillSpan}</span> : null}
             </div>
             <div className={styles.sliderBlock}>
                 <input

@@ -14,8 +14,7 @@
 // flags is the user *preference*; delivery is the §46 NotificationService
 // (`packages/core/src/notifications/`), hosted per-shell (extension SW,
 // web in-page host, Electron main) and gated by exactly these flags. Below
-// the flag list sit a quiet-hours (do-not-disturb) row, the price-alert
-// manager under the priceAlerts toggle, and the M4 sounds block.
+// the flag list sit a quiet-hours (do-not-disturb) row and the M4 sounds block.
 //
 // The permission row owns the one piece of delivery the user must grant:
 // browser/OS notification permission on web and desktop, or the optional
@@ -25,40 +24,82 @@
 // The sounds block is a separate, top-level preference: `settings.sounds`
 // (never nested under `notifications`, so a single family pick doesn't
 // freeze the whole flag block under the sparse-merge rule). It has its own
-// master switch, off by default, and while on, one sound picker per
-// notification family plus a Preview button. Preview is gated on the web
-// shell (`shell === 'web'`) because that is the only host with the
-// delivery seam to actually play a sound (ruling I-34b); it dispatches
-// SOUND_PREVIEW_EVENT for the shell's notify adapter to pick up.
+// master switch, off by default, and one sound field per notification
+// family, always visible in three groups. Each field is the standard picker
+// field and opens the Choose Sound page (operator 2026-11-15); tapping a row
+// there previews it when the platform exposes sound playback, then dispatches
+// SOUND_PREVIEW_EVENT for that platform's notify adapter.
 
-import { useEffect, useRef, useState } from 'react';
-import { Button, EmptyState, Icon, InfoTip, Input, Select, StatusMessage, Switch } from '@xchain-wallet/core/ui';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { Button, FormPage, Icon, Input, StatusMessage, Switch, useFormErrors } from '@xchain-wallet/core/ui';
+import { ListField } from '../ListField.jsx';
+import { FileField } from '../FileField.jsx';
+import { ChoiceList, RowIcon } from './AppearancePages.jsx';
+import styles from './NotificationsSection.module.css';
 import { useSettings } from '../../hooks/useSettings.js';
-import { usePriceAlerts } from '../../hooks/usePriceAlerts.js';
-import { useConfirmModal } from '../../hooks/useConfirmModal.js';
 import { useMessaging } from '../../useMessaging.js';
-import { ConfirmModal } from '../ConfirmModal.jsx';
-import { PriceAlertForm, coinLabelForChain } from '../PriceAlertForm.jsx';
-import { RelativeTime } from '../RelativeTime.jsx';
-import { expandDecimalNotation } from '../../utils/amountFormat.js';
 import { QUIET_HOURS_DEFAULT } from '../../../schemas/settings.js';
+import {
+    MINUTES_PER_DAY,
+    STEP_MINUTES,
+    formatClock,
+    formatHourLabel,
+    parseClock,
+    quietSegments,
+    snapMinutes,
+    toClock,
+    uses24HourClock,
+} from '../../../notifications/quietHoursTime.js';
 import {
     SOUND_FAMILIES,
     SOUND_NONE,
+    SOUND_NONE_OPTION,
     SOUND_PALETTE,
     SOUND_PREVIEW_EVENT,
     pickedSoundForFamily,
 } from '../../../notifications/notificationSounds.js';
+import {
+    CUSTOM_SOUND_ACCEPT,
+    deleteCustomSound,
+    isCustomSoundId,
+    listCustomSounds,
+    playCustomSound,
+    saveCustomSound,
+    validateCustomSoundFile,
+} from '../../../notifications/customSounds.js';
 import { ROW, ROW_HINT, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
-import '../../../i18n/locales/en/send.js';
 import '../../../i18n/locales/en/settings.js';
+import '../../../i18n/locales/en/alerts.js';
+
+const LazyCustomSoundIconField = lazy(() => import('./CustomSoundIconField.jsx').then((module) => ({
+    default: module.CustomSoundIconField,
+})));
+const LazyCustomSoundIconPickerScreen = lazy(() => import('./CustomSoundIconField.jsx').then((module) => ({
+    default: module.CustomSoundIconPickerScreen,
+})));
+const DEFAULT_CUSTOM_SOUND_ICON = 'lucide:alarm-clock';
+
+/** The permission state before the first live read. */
+export function initialNotificationPermission() {
+    const chromePermissions = globalThis.chrome?.permissions;
+    const extensionSupported = typeof chromePermissions?.contains === 'function'
+        && typeof chromePermissions?.request === 'function'
+        && typeof chromePermissions?.remove === 'function';
+    if (extensionSupported) return 'checking';
+    return typeof Notification !== 'undefined' ? Notification.permission : 'unsupported';
+}
 
 /**
- * Browser/OS notification-permission affordance. The extension requests and
- * removes its optional Chrome permission here, under a direct user gesture.
+ * Browser/OS notification permission: refreshes the live state without
+ * prompting (on mount, focus and visibility), and requests or, in the
+ * extension, revokes it under a direct user gesture. Shared by this section
+ * and the Notifications page's inline Desktop notifications row.
+ *
+ * @param {string} permission
+ * @param {(next: string) => void} setPermission
  */
-function PermissionRow({ permission, setPermission }) {
+export function useNotificationPermissionAccess(permission, setPermission) {
     const chromePermissions = globalThis.chrome?.permissions;
     const extensionSupported = typeof chromePermissions?.contains === 'function'
         && typeof chromePermissions?.request === 'function'
@@ -102,23 +143,24 @@ function PermissionRow({ permission, setPermission }) {
         };
     }, [chromePermissions, extensionSupported, setPermission, webSupported]);
 
-    if (!extensionSupported && !webSupported) return null;
-
     const request = async () => {
-        if (requestInFlight.current) return;
+        if (requestInFlight.current) return null;
         requestInFlight.current = true;
         setRequesting(true);
         setRequestError(null);
         try {
             if (extensionSupported) {
                 const granted = await chromePermissions.request({ permissions: ['notifications'] });
-                setPermission(granted ? 'granted' : 'default');
-            } else {
-                const result = await Notification.requestPermission();
-                setPermission(result);
+                const next = granted ? 'granted' : 'default';
+                setPermission(next);
+                return next;
             }
+            const result = await Notification.requestPermission();
+            setPermission(result);
+            return result;
         } catch {
             setRequestError('Could not request notification permission. Check this app in your browser or system settings.');
+            return null;
         } finally {
             requestInFlight.current = false;
             setRequesting(false);
@@ -126,7 +168,7 @@ function PermissionRow({ permission, setPermission }) {
     };
 
     const revoke = async () => {
-        if (requestInFlight.current || !extensionSupported) return;
+        if (requestInFlight.current || !extensionSupported) return false;
         requestInFlight.current = true;
         setRequesting(true);
         setRequestError(null);
@@ -134,13 +176,34 @@ function PermissionRow({ permission, setPermission }) {
             const removed = await chromePermissions.remove({ permissions: ['notifications'] });
             if (removed) setPermission('default');
             else setRequestError('Could not revoke notification permission. Try again.');
+            return Boolean(removed);
         } catch {
             setRequestError('Could not revoke notification permission. Try again.');
+            return false;
         } finally {
             requestInFlight.current = false;
             setRequesting(false);
         }
     };
+
+    return {
+        supported: extensionSupported || webSupported,
+        extensionSupported,
+        permission,
+        requestError,
+        requesting,
+        request,
+        revoke,
+    };
+}
+
+/**
+ * Browser/OS notification-permission affordance. The extension requests and
+ * removes its optional Chrome permission here, under a direct user gesture.
+ */
+function PermissionRow({ access }) {
+    const { supported, extensionSupported, permission, requestError, requesting, request, revoke } = access;
+    if (!supported) return null;
 
     let hint = extensionSupported
         ? 'Optional. Allows XChain Wallet to show the transaction, payment, market, and governance alerts you select. You can revoke access here at any time.'
@@ -178,7 +241,7 @@ function PermissionRow({ permission, setPermission }) {
     );
 }
 
-const NOTIFICATION_FLAGS = /** @type {const} */ ([
+export const NOTIFICATION_FLAGS = /** @type {const} */ ([
     {
         key: 'txConfirmations',
         get label() { return t('settings.notifications.transactionConfirmations'); },
@@ -239,19 +302,17 @@ const NOTIFICATION_FLAGS = /** @type {const} */ ([
 
 /**
  * @param {object} props
- * @param {string | null | undefined} [props.walletId]  active wallet; scopes the price-alert manager
- * @param {(screen: import('react').ReactNode | null) => void} [props.onTokenPickerScreenChange]
+ * @param {'quiet' | 'sounds' | 'priceAlerts' | null} [props.only]
  */
-export function NotificationsSection({ walletId, onTokenPickerScreenChange } = {}) {
+// `only` renders one part on its own page (2026-11-13): 'quiet' (Quiet
+// hours), 'sounds' (Notification sounds) or 'priceAlerts' (its switch only;
+// the alert list is PriceAlertsSection); with no `only` the whole panel renders.
+// The shell passes walletId and a picker callback it no longer needs here.
+// `onOpenPage` opens a Settings page (a sound field's Choose Sound page).
+export function NotificationsSection({ only = null, onOpenPage = null } = {}) {
     const { settings, loading, error, update } = useSettings({ reportsOwnError: true });
-    const chromePermissions = globalThis.chrome?.permissions;
-    const extensionSupported = typeof chromePermissions?.contains === 'function'
-        && typeof chromePermissions?.request === 'function'
-        && typeof chromePermissions?.remove === 'function';
-    const webSupported = typeof Notification !== 'undefined';
-    const [permission, setPermission] = useState(extensionSupported
-        ? 'checking'
-        : (webSupported ? Notification.permission : 'unsupported'));
+    const [permission, setPermission] = useState(initialNotificationPermission);
+    const access = useNotificationPermissionAccess(permission, setPermission);
     const [pendingKey, setPendingKey] = useState(/** @type {string | null} */ (null));
     const [toggleError, setToggleError] = useState(/** @type {{ key: string, message: string } | null} */ (null));
 
@@ -281,7 +342,7 @@ export function NotificationsSection({ walletId, onTokenPickerScreenChange } = {
             <div style={ROW}>
                 <Switch
                     label={f.label}
-                    description={f.hint}
+                    help={f.hint}
                     checked={!permissionBlocksDelivery
                         && (f.defaultOn ? notificationFlags[f.key] !== false : Boolean(notificationFlags[f.key]))}
                     disabled={permissionBlocksDelivery || pendingKey !== null}
@@ -289,26 +350,23 @@ export function NotificationsSection({ walletId, onTokenPickerScreenChange } = {
                 />
             </div>
             <NotificationSaveError message={toggleError?.key === f.key ? toggleError.message : null} />
-            {f.key === 'priceAlerts' ? (
-                <PriceAlertsManager
-                    walletId={walletId}
-                    settings={settings}
-                    enabled={!permissionBlocksDelivery && Boolean(notificationFlags.priceAlerts)}
-                    onTokenPickerScreenChange={onTokenPickerScreenChange}
-                />
-            ) : null}
         </div>
     );
 
-    // Price alerts render last: their manager (list plus add form) is the
-    // tallest block, so the short Quiet hours and Sounds switches sit above it
-    // instead of below a list that grows with every saved alert.
+    if (only === 'quiet') return <QuietHoursRow settings={settings} update={update} />;
+    if (only === 'sounds') return <SoundsBlock settings={settings} update={update} onOpenPage={onOpenPage} />;
+    if (only === 'priceAlerts') {
+        return <div style={STACK}>{NOTIFICATION_FLAGS.filter((f) => f.key === 'priceAlerts').map(renderFlag)}</div>;
+    }
+
+    // The Price alerts switch stays last; the alert list is its own page
+    // (PriceAlertsSection), opened from the Notifications group page.
     return (
         <div style={STACK}>
-            <PermissionRow permission={permission} setPermission={setPermission} />
+            <PermissionRow access={access} />
             {NOTIFICATION_FLAGS.filter((f) => f.key !== 'priceAlerts').map(renderFlag)}
             <QuietHoursRow settings={settings} update={update} />
-            <SoundsBlock settings={settings} update={update} />
+            <SoundsBlock settings={settings} update={update} onOpenPage={onOpenPage} />
             {NOTIFICATION_FLAGS.filter((f) => f.key === 'priceAlerts').map(renderFlag)}
         </div>
     );
@@ -320,30 +378,410 @@ function NotificationSaveError({ message }) {
     ) : null;
 }
 
+/** The Choose Sound page for one family: `notifications-sound:<family key>`. */
+export const SOUND_PICKER_PAGE_PREFIX = 'notifications-sound:';
+export const ADD_SOUND_PAGE_PREFIX = 'notifications-add-sound:';
+
 /**
- * Event sounds (§6 M4.2). A master toggle, off by default, and while it is
- * on one picker per notification family plus a Preview button.
+ * The Settings page a sound field opens, or null when `pageId` is not one.
+ * Settings resolves ids it does not list itself here, like a coin's fee page.
  *
- * The pickers stay collapsed behind the master the way quiet hours and the
- * price-alert manager collapse behind theirs: ten always-visible selects
- * would double the panel's height for a feature that ships off.
+ * @param {string | null} pageId
+ */
+export function soundPickerSectionFor(pageId, navigation = {}) {
+    if (typeof pageId !== 'string') return null;
+    const picker = pageId.startsWith(SOUND_PICKER_PAGE_PREFIX);
+    const add = pageId.startsWith(ADD_SOUND_PAGE_PREFIX);
+    if (!picker && !add) return null;
+    const familyKey = pageId.slice((picker ? SOUND_PICKER_PAGE_PREFIX : ADD_SOUND_PAGE_PREFIX).length);
+    if (!SOUND_FAMILIES.some((f) => f.key === familyKey)) return null;
+    if (add) {
+        return {
+            id: pageId,
+            kind: 'internal-drill',
+            title: 'Add Sound',
+            flat: true,
+            Component: AddSoundPage,
+            props: {
+                familyKey,
+                variant: navigation.variant,
+                onPickerScreenChange: navigation.onPickerScreenChange,
+                ...(navigation.onReturnTo ? {
+                    onAdded: () => navigation.onReturnTo(`${SOUND_PICKER_PAGE_PREFIX}${familyKey}`),
+                } : {}),
+            },
+        };
+    }
+    return {
+        id: pageId,
+        kind: 'internal-drill',
+        title: t('settings.notifications.chooseSound'),
+        // One list card of sounds; the list draws its own card (G07).
+        flat: true,
+        Component: SoundPickerPage,
+        props: { familyKey },
+        trailing: navigation.onOpen ? (
+            <Button
+                variant="secondary"
+                size="sm"
+                icon={<Icon.PlusIcon />}
+                aria-label={t('settings.notifications.addSound')}
+                title={t('settings.notifications.addSound')}
+                onClick={() => navigation.onOpen(`${ADD_SOUND_PAGE_PREFIX}${familyKey}`)}
+            />
+        ) : null,
+    };
+}
+
+/** The sound rows the Choose Sound page lists: the palette, then No sound. */
+export function soundChoices(customSounds = [], onDelete = null) {
+    return [
+        ...SOUND_PALETTE.map((sound) => {
+            const SoundIcon = soundIconFor(sound);
+            return {
+                value: sound.id,
+                title: sound.label,
+                glyph: SoundIcon,
+                leading: <RowIcon icon={SoundIcon} />,
+            };
+        }),
+        ...customSounds.map((sound) => {
+            const SoundIcon = soundIconFor(sound);
+            return {
+                value: sound.id,
+                title: sound.name,
+                glyph: SoundIcon,
+                leading: <RowIcon icon={SoundIcon || Icon.MusicIcon} />,
+                ...(onDelete ? {
+                    onDelete: () => onDelete(sound),
+                    deleteLabel: `Delete ${sound.name}`,
+                } : {}),
+            };
+        }),
+        {
+            value: SOUND_NONE,
+            title: t('settings.notifications.noSound'),
+            glyph: soundIconFor(SOUND_NONE_OPTION),
+            leading: <RowIcon icon={soundIconFor(SOUND_NONE_OPTION)} />,
+        },
+    ];
+}
+
+function soundIconFor(option) {
+    const SoundIcon = option ? Icon[option.icon] : null;
+    return typeof SoundIcon === 'function' ? SoundIcon : null;
+}
+
+function soundOptionForId(soundId, customSounds = []) {
+    return soundId === SOUND_NONE
+        ? SOUND_NONE_OPTION
+        : SOUND_PALETTE.find((sound) => sound.id === soundId)
+            || customSounds.find((sound) => sound.id === soundId)
+            || null;
+}
+
+function useCustomSounds() {
+    const [customSounds, setCustomSounds] = useState([]);
+    const [customSoundsError, setCustomSoundsError] = useState(null);
+    const refresh = async () => {
+        try {
+            setCustomSounds(await listCustomSounds());
+            setCustomSoundsError(null);
+        } catch (error) {
+            setCustomSounds([]);
+            setCustomSoundsError(error?.message || 'Could not load custom sounds.');
+        }
+    };
+    useEffect(() => { void refresh(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    return { customSounds, customSoundsError, refresh };
+}
+
+/**
+ * Play a palette sound once as a preview when the active platform has the
+ * same playback capability used by delivered notifications. The web host
+ * listens for SOUND_PREVIEW_EVENT and plays through its notify adapter's
+ * playSound, which swallows a refused autoplay or a missing file. No sound
+ * plays nothing.
  *
- * Preview is rendered only where the shell can actually make a noise: the
- * web shell (which the mobile wrapper shares), whose host listens for
- * SOUND_PREVIEW_EVENT and plays through its notify adapter. Desktop and the
- * extension lack the delivery seam (ruling I-34b), and a button that does
- * nothing is worse than no button, so it is gated on the shell rather than
- * routed through a messaging helper the parity gate would demand of all three.
+ * @param {boolean} canPreview
+ * @param {string} soundId
+ */
+function previewSound(canPreview, soundId) {
+    if (soundId === SOUND_NONE) return;
+    if (isCustomSoundId(soundId)) {
+        void playCustomSound(soundId);
+        return;
+    }
+    if (!canPreview) return;
+    try {
+        window.dispatchEvent(new CustomEvent(SOUND_PREVIEW_EVENT, { detail: { soundId } }));
+    } catch {
+        // No window (a non-DOM render): the user just hears nothing, which
+        // is not worth an error surface.
+    }
+}
+
+/**
+ * Settings > Notifications > Notification Sounds > Choose Sound: one list
+ * card of every sound plus No sound, the family's current sound ticked.
+ * Tapping a row plays it once (the master switch does not gate a preview the
+ * user asked for) and saves it as that family's sound at once; Back returns
+ * to Notification Sounds, whose field then shows the pick.
+ *
+ * @param {object} props
+ * @param {string} props.familyKey  a SOUND_FAMILIES key
+ */
+export function SoundPickerPage({ familyKey }) {
+    const { settings, error, update } = useSettings({ reportsOwnError: true });
+    const { messaging } = useMessaging();
+    const { supportsNotificationSoundPlayback = false } = messaging || {};
+    const canPreview = supportsNotificationSoundPlayback === true;
+    // The tapped row is ticked at once; the saved settings take over after.
+    const [chosen, setChosen] = useState(/** @type {string | null} */ (null));
+    const [saveError, setSaveError] = useState(false);
+    const { customSounds, customSoundsError, refresh } = useCustomSounds();
+    if (error) return <SettingsLoadError error={error} />;
+    if (!settings) return <Status text={t('common.loading')} />;
+    const family = SOUND_FAMILIES.find((f) => f.key === familyKey);
+    const current = chosen ?? pickedSoundForFamily(settings, familyKey);
+
+    const onSelect = async (soundId) => {
+        setSaveError(false);
+        previewSound(canPreview, soundId);
+        if (soundId === current) return;
+        const before = chosen;
+        setChosen(soundId);
+        try {
+            // One family's patch, never the whole map (the merge recurses).
+            await update({ sounds: { perKind: { [familyKey]: soundId } } });
+        } catch (err) {
+            setChosen(before);
+            setSaveError(true);
+            // eslint-disable-next-line no-console
+            console.error(`notifications.sounds.${familyKey} update failed:`, err);
+        }
+    };
+
+    const onDelete = async (sound) => {
+        setSaveError(false);
+        try {
+            await deleteCustomSound(sound.id);
+            if (current === sound.id) {
+                const fallback = family?.defaultSound || SOUND_NONE;
+                setChosen(fallback);
+                await update({ sounds: { perKind: { [familyKey]: fallback } } });
+            }
+            await refresh();
+        } catch (err) {
+            setSaveError(true);
+            console.error(`notifications.sounds.${familyKey} delete failed:`, err); // eslint-disable-line no-console
+        }
+    };
+
+    return (
+        <div style={STACK} data-sound-picker={familyKey}>
+            {saveError ? <Status text={t('settings.notifications.couldNotSaveThisNotification')} tone="error" /> : null}
+            {customSoundsError ? <Status text={customSoundsError} tone="error" /> : null}
+            <ChoiceList
+                label={family ? t('settings.notifications.sound', { label: family.label }) : t('settings.notifications.chooseSound')}
+                choices={soundChoices(customSounds, onDelete)}
+                value={current}
+                onSelect={onSelect}
+            />
+        </div>
+    );
+}
+
+const CUSTOM_SOUND_FILE_HELP = 'Choose a WAV, MP3, OGG, M4A or AAC audio file, up to 30 seconds.';
+
+export function AddSoundPage({
+    onAdded = null,
+    currentIcon = null,
+    onPickerScreenChange = null,
+    variant = 'full',
+}) {
+    const errors = useFormErrors();
+    const [name, setName] = useState('');
+    const [icon, setIcon] = useState(currentIcon || DEFAULT_CUSTOM_SOUND_ICON);
+    const [fileName, setFileName] = useState('');
+    const [audio, setAudio] = useState(null);
+    const [fileError, setFileError] = useState(null);
+    const [checking, setChecking] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [knownSounds, setKnownSounds] = useState([]);
+    const [iconPickerOpen, setIconPickerOpen] = useState(false);
+
+    useEffect(() => {
+        listCustomSounds()
+            .then(setKnownSounds)
+            .catch(() => setKnownSounds([]));
+    }, []);
+
+    const pickFile = async (file) => {
+        setFileName(file?.name || '');
+        setAudio(null);
+        setFileError(null);
+        setChecking(true);
+        try {
+            setAudio(await validateCustomSoundFile(file));
+        } catch (error) {
+            setFileError(error?.message || 'Could not read this audio file.');
+        } finally {
+            setChecking(false);
+        }
+    };
+
+    const clearFile = () => {
+        setFileName('');
+        setAudio(null);
+        setFileError(null);
+    };
+
+    const onPreview = async () => {
+        if (!audio) {
+            setFileError((current) => current || 'Choose a valid sound file before previewing.');
+            return;
+        }
+        const url = globalThis.URL?.createObjectURL?.(new Blob([audio.bytes], { type: audio.mimeType }));
+        if (!url || typeof globalThis.Audio !== 'function') return;
+        try {
+            const player = new Audio(url);
+            player.addEventListener?.('ended', () => URL.revokeObjectURL(url), { once: true });
+            const playing = player.play();
+            playing?.catch?.(() => URL.revokeObjectURL(url));
+        } catch {
+            URL.revokeObjectURL(url);
+        }
+    };
+
+    const submit = async (event) => {
+        event.preventDefault();
+        const cleanName = name.trim();
+        const duplicate = knownSounds.some((sound) => sound.name.toLowerCase() === cleanName.toLowerCase());
+        const otherFieldsValid = errors.validate({
+            soundName: !cleanName ? 'Enter a name.'
+                : cleanName.length > 32 ? 'Name must be 32 characters or fewer.'
+                    : duplicate ? 'A sound with this name already exists.' : null,
+            soundIcon: icon ? null : 'Choose an icon.',
+        });
+        if (!audio) setFileError((current) => current || 'Choose a valid sound file.');
+        if (!audio || !otherFieldsValid) return;
+        setSaving(true);
+        try {
+            const saved = await saveCustomSound({ name: cleanName, icon, ...audio });
+            onAdded?.(saved);
+        } catch (error) {
+            errors.fail(error?.code === 'duplicate-name'
+                ? 'A sound with this name already exists.'
+                : (error?.message || 'Could not save this sound.'), error?.code === 'duplicate-name' ? 'soundName' : 'form');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const closeIconPicker = () => {
+        setIconPickerOpen(false);
+        onPickerScreenChange?.(null);
+    };
+    const chooseIcon = (nextIcon) => {
+        setIcon(nextIcon);
+        closeIconPicker();
+    };
+    const usedIcons = [
+        ...SOUND_PALETTE.map((sound) => sound.icon),
+        ...knownSounds.map((sound) => sound.icon),
+    ];
+    const iconPickerScreen = (
+        <Suspense fallback={<div role="status" aria-label={t('settings.notifications.loadingIcons')} />}>
+            <LazyCustomSoundIconPickerScreen
+                value={icon}
+                usedIcons={usedIcons}
+                currentIcon={currentIcon}
+                onSelect={chooseIcon}
+                onBack={closeIconPicker}
+                variant={variant}
+            />
+        </Suspense>
+    );
+
+    useEffect(() => {
+        if (iconPickerOpen && onPickerScreenChange) onPickerScreenChange(iconPickerScreen);
+        // Refresh an externally hosted picker if the device's used-icon list
+        // arrives after the field was tapped.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentIcon, icon, iconPickerOpen, knownSounds, onPickerScreenChange, variant]);
+
+    // Settings hosts picker screens above the still-mounted form so an audio
+    // file and name survive the trip. A standalone render returns the same
+    // full-page picker directly.
+    if (iconPickerOpen && !onPickerScreenChange) return iconPickerScreen;
+
+    return (
+        <FormPage
+            label={t('settings.notifications.addSound')}
+            onSubmit={submit}
+            errors={errors}
+            status={(
+                <StatusMessage variant="info" title={t('settings.notifications.customSound')}>
+                    {t('settings.notifications.customSoundDescription')}
+                </StatusMessage>
+            )}
+            actions={(
+                <>
+                    <Button type="button" variant="secondary" icon={<Icon.PlayIcon />} onClick={onPreview} disabled={checking || saving}>{t('settings.notifications.playPreview')}</Button>
+                    <Button type="submit" variant="success" icon={<Icon.SaveIcon />} loading={saving}>{t('settings.notifications.saveSound')}</Button>
+                </>
+            )}
+        >
+            <FileField
+                id="soundFile"
+                label={t('settings.notifications.soundFile')}
+                help={t('settings.notifications.soundFileHelp')}
+                hint={CUSTOM_SOUND_FILE_HELP}
+                fileName={fileName}
+                placeholder={t('settings.notifications.chooseAudioFile')}
+                accept={CUSTOM_SOUND_ACCEPT}
+                onFile={pickFile}
+                onClear={clearFile}
+                disabled={checking || saving}
+                error={fileError}
+            />
+            <Input id="soundName" label={t('settings.notifications.soundName')} help={t('settings.notifications.soundNameHelp')} value={name} maxLength={32} onChange={(event) => setName(event.target.value)} disabled={saving} />
+            <Suspense fallback={<div role="status" aria-label={t('settings.notifications.loadingIcons')} />}>
+                <LazyCustomSoundIconField
+                    value={icon}
+                    onChange={setIcon}
+                    usedIcons={usedIcons}
+                    currentIcon={currentIcon}
+                    disabled={saving}
+                    onOpenPicker={() => {
+                        setIconPickerOpen(true);
+                        onPickerScreenChange?.(iconPickerScreen);
+                    }}
+                />
+            </Suspense>
+        </FormPage>
+    );
+}
+
+/**
+ * Event sounds (§6 M4.2). A master toggle, off by default, and one sound
+ * field per notification family in three titled groups.
+ *
+ * Every field remains visible when the master is off, so changing the switch
+ * never changes the page structure. A field is the standard picker field
+ * (ListField) showing the family's sound; it opens that family's Choose Sound
+ * page, where a tap previews and saves (SoundPickerPage).
  *
  * @param {object} props
  * @param {import('../../../schemas/settings.js').Settings} props.settings
  * @param {(patch: Record<string, unknown>) => Promise<unknown>} props.update
+ * @param {((pageId: string) => void) | null} [props.onOpenPage]
  */
-function SoundsBlock({ settings, update }) {
-    const { shell } = useMessaging();
-    const canPreview = shell === 'web';
+function SoundsBlock({ settings, update, onOpenPage = null }) {
     const enabled = settings.sounds?.enabled === true;
     const [saveError, setSaveError] = useState(/** @type {string | null} */ (null));
+    const { customSounds } = useCustomSounds();
 
     const onToggle = async (next) => {
         setSaveError(null);
@@ -355,33 +793,23 @@ function SoundsBlock({ settings, update }) {
             console.error('notifications.sounds update failed:', err);
         }
     };
-    // One family's patch, not the whole map: the settings merge recurses,
-    // so writing a single key leaves every sibling family untouched.
-    const onPick = async (familyKey, soundId) => {
-        setSaveError(null);
-        try {
-            await update({ sounds: { perKind: { [familyKey]: soundId } } });
-        } catch (err) {
-            setSaveError(familyKey);
-            // eslint-disable-next-line no-console
-            console.error(`notifications.sounds.${familyKey} update failed:`, err);
-        }
-    };
-    const onPreview = (soundId) => {
-        try {
-            window.dispatchEvent(new CustomEvent(SOUND_PREVIEW_EVENT, { detail: { soundId } }));
-        } catch {
-            // No window (a non-DOM render): the user just hears nothing, which
-            // is not worth an error surface.
-        }
-    };
+    const soundLabel = (soundId) => (soundId === SOUND_NONE
+        ? t('settings.notifications.noSound')
+        : SOUND_PALETTE.find((s) => s.id === soundId)?.label
+            ?? customSounds.find((s) => s.id === soundId)?.name
+            ?? (isCustomSoundId(soundId) ? 'Custom sound' : soundId));
 
+    // The notice, the master switch, then the titled groups of sound fields,
+    // with no divider lines (operator 2026-11-15).
     return (
-        <div style={STACK}>
-            <div style={ROW}>
+        <div className={styles.form} data-sounds-form="">
+            <StatusMessage variant="info">
+                {t('settings.notifications.soundsNotice')}
+            </StatusMessage>
+            <div className={styles.field} data-sounds-field="master">
                 <Switch
-                    label={t('settings.notifications.notificationSounds')}
-                    description={t('settings.notifications.playASoundWithEach')}
+                    label={t('settings.notifications.playNotificationSounds')}
+                    help={t('settings.notifications.playASoundWithEach')}
                     checked={enabled}
                     onChange={(event) => onToggle(event.target.checked)}
                 />
@@ -389,61 +817,45 @@ function SoundsBlock({ settings, update }) {
             <NotificationSaveError
                 message={saveError === 'enabled' ? t('settings.notifications.couldNotSaveTheNotification') : null}
             />
-            {enabled ? (
-                <div style={MANAGER}>
-                    {SOUND_FAMILIES.map((family) => {
-                        const picked = pickedSoundForFamily(settings, family.key);
-                        return (
-                            <div key={family.key} style={STACK}>
-                                <div style={ALERT_ROW}>
-                                    <span>
-                                        {family.label}{' '}
-                                        <InfoTip
-                                            aria={t('settings.help.notifications.soundHelpLabel', { label: family.label })}
-                                            label={t('settings.help.notifications.soundHelp', { label: family.label })}
-                                        />
-                                    </span>
-                                    <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)' }}>
-                                        <Select
-                                            aria-label={t('settings.notifications.sound', { label: family.label })}
-                                            value={picked}
-                                            onChange={(e) => onPick(family.key, e.target.value)}
-                                        >
-                                            {/* Native options are the children required by the style-guide Select. */}
-                                            {SOUND_PALETTE.map((s) => (
-                                                <option key={s.id} value={s.id}>{s.label}</option>
-                                            ))}
-                                            <option value={SOUND_NONE}>{t('settings.notifications.noSound')}</option>
-                                        </Select>
-                                        {canPreview ? (
-                                            <Button
-                                                type="button"
-                                                size="sm"
-                                                variant="ghost"
-                                                icon={<Icon.PlayIcon />}
-                                                aria-label={t('settings.notifications.previewSound', { label: family.label })}
-                                                disabled={picked === SOUND_NONE}
-                                                onClick={() => onPreview(picked)}
-                                            >
-                                                {t('common.preview')}
-                                            </Button>
-                                        ) : null}
-                                    </span>
+            {/* The master switch changes state only: every group and event row
+                is always on the page, never hidden or dimmed. */}
+            <div className={styles.soundGroups} data-options-active={enabled ? 'true' : 'false'}>
+                {SOUND_GROUPS.map((group) => (
+                    <div key={group.id} className={styles.soundGroup} role="group" aria-labelledby={`sound-group-${group.id}`}>
+                        <span id={`sound-group-${group.id}`} className={styles.groupLabel}>{t(group.labelKey)}</span>
+                        {group.families.map((familyKey) => {
+                            const family = SOUND_FAMILIES.find((f) => f.key === familyKey);
+                            if (!family) return null;
+                            const picked = pickedSoundForFamily(settings, family.key);
+                            const SoundIcon = soundIconFor(soundOptionForId(picked, customSounds));
+                            return (
+                                <div key={family.key} data-sound-row={family.key}>
+                                    <ListField
+                                        id={`notification-sound-${family.key}`}
+                                        label={t('settings.notifications.sound', { label: family.label })}
+                                        help={t('settings.help.notifications.soundHelp', { label: family.label })}
+                                        valueText={soundLabel(picked)}
+                                        icon={SoundIcon ? <SoundIcon /> : null}
+                                        placeholder={t('settings.notifications.noSound')}
+                                        disabled={typeof onOpenPage !== 'function'}
+                                        onOpenPicker={() => onOpenPage?.(`${SOUND_PICKER_PAGE_PREFIX}${family.key}`)}
+                                    />
                                 </div>
-                                <NotificationSaveError
-                                    message={saveError === family.key ? t('settings.notifications.couldNotSaveThisNotification') : null}
-                                />
-                            </div>
-                        );
-                    })}
-                    <span style={ROW_HINT}>
-                        {t('settings.notifications.soundsNeverArriveOnTheir')}
-                    </span>
-                </div>
-            ) : null}
+                            );
+                        })}
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }
+
+// Layout 1's grouping on layout 2's master-switch page.
+const SOUND_GROUPS = Object.freeze([
+    { id: 'payments', labelKey: 'alerts.type.payments', families: ['txConfirmations', 'incomingReceipts', 'incomingPending'] },
+    { id: 'messages', labelKey: 'settings.notifications.soundGroupMessages', families: ['messages', 'governancePolls', 'deadlines'] },
+    { id: 'trading', labelKey: 'settings.notifications.soundGroupTrading', families: ['dispenserEscrow', 'dispenserFills', 'orderFills', 'priceAlerts'] },
+]);
 
 /**
  * Do-not-disturb window. When on, every notification kind
@@ -454,6 +866,9 @@ function SoundsBlock({ settings, update }) {
 function QuietHoursRow({ settings, update }) {
     const qh = settings.quietHours || QUIET_HOURS_DEFAULT;
     const [saveError, setSaveError] = useState(/** @type {string | null} */ (null));
+    const [drag, setDrag] = useState(/** @type {{ field: string, minutes: number } | null} */ (null));
+    const dragRef = useRef(/** @type {{ field: string, minutes: number } | null} */ (null));
+    const trackRef = useRef(/** @type {HTMLDivElement | null} */ (null));
 
     const onToggle = async (enabled) => {
         setSaveError(null);
@@ -477,273 +892,167 @@ function QuietHoursRow({ settings, update }) {
         }
     };
 
+    const enabled = qh.enabled === true;
+    const use24 = uses24HourClock(settings);
+    const storedStart = parseClock(qh.start) ?? parseClock(QUIET_HOURS_DEFAULT.start);
+    const storedEnd = parseClock(qh.end) ?? parseClock(QUIET_HOURS_DEFAULT.end);
+    // While a handle is dragged the bar and the rows show the live value; the
+    // change is saved once, when the handle is let go.
+    const startMin = drag?.field === 'start' ? drag.minutes : storedStart;
+    const endMin = drag?.field === 'end' ? drag.minutes : storedEnd;
+    const startLabel = formatClock(startMin, use24);
+    const endLabel = formatClock(endMin, use24);
+
+    const minutesFromPointer = (clientX) => {
+        const rect = trackRef.current?.getBoundingClientRect?.();
+        if (!rect || !(rect.width > 0) || !Number.isFinite(clientX)) return null;
+        const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+        return snapMinutes(ratio * MINUTES_PER_DAY);
+    };
+    const beginDrag = (field) => (event) => {
+        try { event.currentTarget.setPointerCapture?.(event.pointerId); } catch { /* capture is a nicety */ }
+        const minutes = field === 'start' ? storedStart : storedEnd;
+        dragRef.current = { field, minutes };
+        setDrag({ field, minutes });
+    };
+    const moveDrag = (event) => {
+        const current = dragRef.current;
+        if (!current) return;
+        const minutes = minutesFromPointer(event.clientX);
+        if (minutes === null || minutes === current.minutes) return;
+        dragRef.current = { field: current.field, minutes };
+        setDrag(dragRef.current);
+    };
+    const endDrag = (event) => {
+        const current = dragRef.current;
+        dragRef.current = null;
+        setDrag(null);
+        if (!current || event.type === 'pointercancel') return;
+        const stored = current.field === 'start' ? storedStart : storedEnd;
+        if (current.minutes !== stored) onTimeChange(current.field, toClock(current.minutes));
+    };
+    const onHandleKeyDown = (field) => (event) => {
+        const stored = field === 'start' ? storedStart : storedEnd;
+        let delta = 0;
+        if (event.key === 'ArrowRight' || event.key === 'ArrowUp') delta = STEP_MINUTES;
+        else if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') delta = -STEP_MINUTES;
+        else if (event.key === 'PageUp') delta = 60;
+        else if (event.key === 'PageDown') delta = -60;
+        else return;
+        event.preventDefault();
+        onTimeChange(field, toClock(snapMinutes(stored + delta)));
+    };
+
+    const segments = quietSegments(startMin, endMin);
+    const fillClass = `${styles.fill} ${enabled ? styles.fillOn : styles.fillOff}`;
+    const axis = [0, 6, 12, 18, 24];
+    // A thumb is the Network fee slider's dot inside a tap-size hit box.
+    const handle = (field, minutes, label) => (
+        <div
+            role="slider"
+            tabIndex={0}
+            aria-label={label}
+            aria-orientation="horizontal"
+            aria-valuemin={0}
+            aria-valuemax={MINUTES_PER_DAY - STEP_MINUTES}
+            aria-valuenow={minutes}
+            aria-valuetext={formatClock(minutes, use24)}
+            data-handle={field}
+            className={styles.handle}
+            style={{ left: `${(minutes / MINUTES_PER_DAY) * 100}%` }}
+            onKeyDown={onHandleKeyDown(field)}
+            onPointerDown={beginDrag(field)}
+            onPointerMove={moveDrag}
+            onPointerUp={endDrag}
+            onPointerCancel={endDrag}
+        >
+            <span className={styles.dot} data-quiet-dot="" aria-hidden="true" />
+        </div>
+    );
+
+    // The notice, then the fields at the form gap: no divider lines between
+    // Pause notifications, the slider, Starts and Ends (operator 2026-11-15).
     return (
-        <div style={STACK}>
-            <div style={ROW}>
+        <div className={styles.form} data-options-active={enabled ? 'true' : 'false'}>
+            <StatusMessage variant="info">
+                {t('settings.notifications.quietNotice')}
+            </StatusMessage>
+            <div className={styles.field} data-quiet-row="switch">
                 <Switch
-                    label={t('settings.notifications.quietHours')}
-                    description={t('settings.notifications.pauseAllNotificationsIncludingPrice')}
-                    checked={qh.enabled === true}
+                    label={t('settings.notifications.pauseNotifications')}
+                    help={t('settings.notifications.pauseAllNotificationsIncludingPrice')}
+                    checked={enabled}
                     onChange={(event) => onToggle(event.target.checked)}
                 />
+                <span style={ROW_HINT} role="status" data-quiet-status>
+                    {enabled
+                        ? t('settings.notifications.quietStatusOn', { start: startLabel, end: endLabel })
+                        : t('settings.notifications.quietStatusOff')}
+                </span>
             </div>
             <NotificationSaveError
                 message={saveError === 'enabled' ? t('settings.notifications.couldNotSaveQuietHours') : null}
             />
-            {qh.enabled ? (
-                <div style={MANAGER}>
-                    <div style={ALERT_ROW}>
-                        <Input
-                            id="quiet-hours-start"
-                            label={t('send.fields.from')}
-                            type="time"
-                            help={t('settings.help.notifications.quietStart')}
-                            value={qh.start}
-                            onChange={(e) => onTimeChange('start', e.target.value)}
-                        />
-                        <Input
-                            id="quiet-hours-end"
-                            label={t('send.fields.to')}
-                            type="time"
-                            help={t('settings.help.notifications.quietEnd')}
-                            value={qh.end}
-                            onChange={(e) => onTimeChange('end', e.target.value)}
-                        />
+            <>
+                <div className={styles.field} data-quiet-row="bar">
+                    <div
+                        className={styles.track}
+                        ref={trackRef}
+                        role="group"
+                        aria-label={t('settings.notifications.quietBarLabel')}
+                        data-quiet-bar={enabled ? 'on' : 'off'}
+                    >
+                        <div className={styles.line} data-quiet-line="">
+                            {segments.map((s) => (
+                                <div
+                                    key={`${s.from}-${s.to}`}
+                                    data-quiet-segment={enabled ? 'on' : 'off'}
+                                    className={fillClass}
+                                    style={{
+                                        left: `${(s.from / MINUTES_PER_DAY) * 100}%`,
+                                        width: `${((s.to - s.from) / MINUTES_PER_DAY) * 100}%`,
+                                    }}
+                                />
+                            ))}
+                        </div>
+                        {handle('start', startMin, t('settings.notifications.quietStartHandle'))}
+                        {handle('end', endMin, t('settings.notifications.quietEndHandle'))}
                     </div>
-                    <span style={ROW_HINT}>
-                        {qh.start} {t('settings.notifications.to2')} {qh.end} {t('settings.notifications.yourDeviceSLocalTime')}
-                    </span>
-                    <NotificationSaveError
-                        message={saveError === 'start' || saveError === 'end' ? t('settings.notifications.couldNotSaveQuietHours') : null}
+                    <div className={styles.axis} aria-hidden="true">
+                        {axis.map((hour, i) => (
+                            <span key={`${hour}-${i}`}>{formatHourLabel(hour, use24)}</span>
+                        ))}
+                    </div>
+                </div>
+                <div className={styles.field} data-quiet-row="start">
+                    <Input
+                        id="quiet-hours-start"
+                        label={t('settings.notifications.quietStarts')}
+                        type="time"
+                        step={STEP_MINUTES * 60}
+                        help={t('settings.help.notifications.quietStart')}
+                        value={toClock(startMin)}
+                        onChange={(e) => onTimeChange('start', e.target.value)}
                     />
                 </div>
-            ) : null}
+                <div className={styles.field} data-quiet-row="end">
+                    <Input
+                        id="quiet-hours-end"
+                        label={t('settings.notifications.quietEnds')}
+                        type="time"
+                        step={STEP_MINUTES * 60}
+                        help={t('settings.help.notifications.quietEnd')}
+                        value={toClock(endMin)}
+                        onChange={(e) => onTimeChange('end', e.target.value)}
+                    />
+                </div>
+            </>
+            <NotificationSaveError
+                message={saveError === 'start' || saveError === 'end' ? t('settings.notifications.couldNotSaveQuietHours') : null}
+            />
         </div>
     );
 }
 
-const MANAGER = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 'var(--xc-space-2)',
-    padding: 'var(--xc-space-2) var(--xc-space-3)',
-    marginLeft: 'var(--xc-space-3)',
-    borderLeft: '2px solid var(--xc-border)',
-};
-const ALERT_ROW = {
-    display: 'flex',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 'var(--xc-space-2)',
-    fontSize: 'var(--xc-text-sm)',
-};
-/**
- * Price-alert manager rendered under the priceAlerts toggle: the saved
- * alerts + an inline add form. Surfaces the two dependencies that keep an
- * alert from firing: the toggle being off, and (the key one) the privacy
- * opt-out for native-coin price data, which the watcher hard-gates on.
- *
- * @param {object} props
- * @param {string | null | undefined} props.walletId
- * @param {import('../../../schemas/settings.js').Settings} props.settings
- * @param {boolean} props.enabled
- * @param {(screen: import('react').ReactNode | null) => void} [props.onTokenPickerScreenChange]
- */
-function PriceAlertsManager({ walletId, settings, enabled, onTokenPickerScreenChange }) {
-    const {
-        alerts,
-        loading,
-        supported,
-        error,
-        addAlert,
-        updateAlert,
-        removeAlert,
-        rearm,
-        reload,
-    } = usePriceAlerts(walletId);
-    const [editingId, setEditingId] = useState(/** @type {string | null} */ (null));
-    const [actionError, setActionError] = useState(/** @type {string | null} */ (null));
-    const [busyId, setBusyId] = useState(/** @type {string | null} */ (null));
-    // Delete asks first: one stray tap on a small control never drops an alert.
-    const confirmDialog = useConfirmModal();
-    const priceDataOff = settings?.privacy?.priceDataEnabled === false;
-    const fiatCurrency = (typeof settings?.fiatCurrency === 'string' && settings.fiatCurrency) || 'usd';
-    const editingAlert = alerts.find((alert) => alert.id === editingId) || null;
-    const hasOriginalCurrencyAlert = alerts.some((alert) =>
-        String(alert.fiatCurrency || 'usd').toLowerCase() !== fiatCurrency.toLowerCase());
-
-    if (!walletId) {
-        return (
-            <div style={MANAGER}>
-                <span style={ROW_HINT}>
-                    <strong>{t('settings.notifications.noWalletSelected')}.</strong>{' '}
-                    {t('settings.notifications.chooseAWalletToManage')}
-                </span>
-            </div>
-        );
-    }
-
-    if (!supported) {
-        return (
-            <div style={MANAGER}>
-                <EmptyState
-                    title={t('settings.notifications.priceAlertsUnavailable')}
-                    titleAs="p"
-                    body={t('settings.notifications.priceAlertsAreNotSupported')}
-                />
-            </div>
-        );
-    }
-
-    return (
-        <div style={MANAGER}>
-            {priceDataOff ? (
-                <span style={ROW_HINT}>
-                    {t('settings.notifications.priceAlertsNeed')} <strong>{t('settings.notifications.nativeCoinPriceData')}</strong>{t('settings.notifications.whichIsOffTurnIt')}
-                </span>
-            ) : !enabled ? (
-                <span style={ROW_HINT}>{t('settings.notifications.turnOnPriceAlertsAbove')}</span>
-            ) : null}
-
-            {hasOriginalCurrencyAlert ? (
-                <span style={ROW_HINT}>
-                    {t('settings.notifications.savedPriceAlertsKeepThe')}
-                </span>
-            ) : null}
-
-            {loading ? (
-                <span role="status" style={ROW_HINT}>{t('settings.notifications.loadingPriceAlerts')}</span>
-            ) : error ? (
-                <StatusMessage variant="error" recovery={{ label: t('common.tryAgain'), onAction: reload }}>
-                    {t('settings.notifications.couldNotLoadPriceAlerts')}
-                </StatusMessage>
-            ) : alerts.length === 0 ? (
-                // The hint above already says why nothing fires while alerts are off, so
-                // "No price alerts yet" would be a second message for the same state.
-                enabled && !priceDataOff
-                    ? <EmptyState title={t('settings.notifications.noPriceAlertsYet')} titleAs="p" body={t('settings.notifications.addOneBelow')} />
-                    : null
-            ) : (
-                alerts.map((a) => (
-                    <div key={a.id} style={ALERT_ROW}>
-                        <span>
-                            {a.tick || coinLabelForChain(a.chainId)}{' '}
-                            {a.direction === 'above' ? t('settings.notifications.risesAbove') : t('settings.notifications.fallsBelow')}{' '}
-                            {formatThreshold(a.targetFiat, a.fiatCurrency)}
-                            {a.status === 'triggered' ? (
-                                <span style={ROW_HINT}>
-                                    {t('settings.notifications.triggered')}
-                                    {a.triggeredAt ? (
-                                        <RelativeTime timestamp={a.triggeredAt}>
-                                            {(when) => ` ${when}`}
-                                        </RelativeTime>
-                                    ) : null}
-                                </span>
-                            ) : null}
-                        </span>
-                        <span style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
-                            {a.status === 'triggered' ? (
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    icon={<Icon.RefreshIcon />}
-                                    disabled={busyId !== null}
-                                    onClick={() => runAlertAction(a.id, () => rearm(a.id), setBusyId, setActionError)}
-                                >
-                                    {t('settings.notifications.reArm')}
-                                </Button>
-                            ) : null}
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                icon={<Icon.PencilIcon />}
-                                disabled={busyId !== null}
-                                aria-label={t('settings.notifications.editPriceAlert', { coinLabelForChainValue: a.tick || coinLabelForChain(a.chainId) })}
-                                onClick={() => { setEditingId(a.id); setActionError(null); }}
-                            >
-                                {t('common.edit')}
-                            </Button>
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="danger"
-                                icon={<Icon.XIcon />}
-                                disabled={busyId !== null}
-                                aria-label={t('settings.notifications.removePriceAlert', { coinLabelForChainValue: a.tick || coinLabelForChain(a.chainId) })}
-                                onClick={async () => {
-                                    const confirmed = await confirmDialog.confirm({
-                                        title: `${t('settings.notifications.deletePriceAlert', { coinLabelForChainValue: a.tick || coinLabelForChain(a.chainId) })}?`,
-                                        confirmLabel: t('settings.notifications.delete'),
-                                        danger: true,
-                                    });
-                                    if (!confirmed) return;
-                                    await runAlertAction(a.id, async () => {
-                                        await removeAlert(a.id);
-                                        if (editingId === a.id) setEditingId(null);
-                                    }, setBusyId, setActionError);
-                                }}
-                            />
-                        </span>
-                    </div>
-                ))
-            )}
-
-            {actionError ? <Status text={actionError} tone="error" /> : null}
-            {!loading && !error ? (
-                <PriceAlertForm
-                    key={editingAlert?.id || 'new'}
-                    walletId={walletId}
-                    allowCoingeckoFallback={settings?.privacy?.priceDataEnabled !== false}
-                    onCreate={editingAlert ? async (input) => {
-                        await updateAlert(editingAlert.id, input);
-                        setEditingId(null);
-                    } : addAlert}
-                    fiatCurrency={editingAlert?.fiatCurrency || fiatCurrency}
-                    initialAlert={editingAlert || undefined}
-                    onCancel={editingAlert ? () => setEditingId(null) : undefined}
-                    onTokenPickerScreenChange={onTokenPickerScreenChange}
-                />
-            ) : null}
-            {confirmDialog.request ? (
-                <ConfirmModal
-                    {...confirmDialog.request}
-                    onConfirm={confirmDialog.onConfirm}
-                    onCancel={confirmDialog.onCancel}
-                />
-            ) : null}
-        </div>
-    );
-}
-
-async function runAlertAction(id, action, setBusyId, setActionError) {
-    setBusyId(id);
-    setActionError(null);
-    try {
-        await action();
-    } catch {
-        setActionError('Could not update the price alert. Try again.');
-    } finally {
-        setBusyId(null);
-    }
-}
-
-/**
- * Compact, locale-free threshold label, e.g. 70000/usd → "$70,000". Only the
- * whole-number part takes thousands separators; the fraction and any
- * exponent form print as plain digits so "0.1234" never reads "0.1,234".
- */
-export function formatThreshold(value, fiatCurrency) {
-    const cur = String(fiatCurrency || 'usd').toLowerCase();
-    const n = Number(value);
-    let body = String(value);
-    if (Number.isFinite(n)) {
-        const plain = expandDecimalNotation(String(Math.abs(n))) || String(Math.abs(n));
-        const [whole, fraction] = plain.split('.');
-        const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-        body = (n < 0 ? '-' : '') + (fraction ? `${grouped}.${fraction}` : grouped);
-    }
-    return cur === 'usd' ? `$${body}` : `${body} ${cur.toUpperCase()}`;
-}
+// The price-alert list, the Price Alert page and the Add and Edit pages live in
+// PriceAlertsSection.jsx (2026-11-14); this panel keeps only the master switch.

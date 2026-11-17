@@ -29,8 +29,8 @@ const messages = {
     'desktopUpdate.installError':
         "This update couldn't be downloaded or verified, so it wasn't installed. "
         + 'Your wallet is untouched. See docs.xchain.io for steps to verify a release.',
-    'desktopUpdate.download': 'Download update',
-    'desktopUpdate.restart': 'Restart to update',
+    'desktopUpdate.download': 'Download Update',
+    'desktopUpdate.restart': 'Restart to Update',
     'desktopUpdate.retry': 'Retry',
     'desktopUpdate.dismissLabel': 'Dismiss update notice',
     'desktopUpdate.dismiss': 'Dismiss',

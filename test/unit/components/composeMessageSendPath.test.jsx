@@ -27,6 +27,7 @@ import { render, act as domAct, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ComposeMessage } from '../../../packages/core/src/shared/routes/ComposeMessage.jsx';
+import { typeCustomRate } from '../../helpers/customNetworkFee.js';
 
 const CHAIN = 'bitcoin-mainnet';
 // Listed FIRST on the chain: the address the broken build always funded from.
@@ -142,6 +143,11 @@ function sendButton(utils) {
     return utils.getByRole('button', { name: /Send message/i });
 }
 
+// Opens a closed standard section (From, Network fee) by its title.
+function openSection(utils, title) {
+    fireEvent.click(utils.getByRole('button', { name: new RegExp(`^${title}\\b`), expanded: false }));
+}
+
 async function pressSend(utils) {
     // A disabled button would make every assertion below vacuous: nothing
     // pressed, nothing composed, no error to show or not show.
@@ -193,25 +199,24 @@ describe('message validation is visible from the primary action', () => {
         });
 
         expect(utils.getByText('Message cannot contain text-direction control characters.')).toBeTruthy();
-        expect(sendButton(utils)).toBeDisabled();
+        expect(sendButton(utils)).toBeEnabled();
+        fireEvent.click(sendButton(utils));
+        expect(alertText(utils)).toMatch(/Message cannot contain text-direction control characters/);
         expect(messaging.composeMessageForConfirm).not.toHaveBeenCalled();
     });
 
+    // Typed into the one custom fee editor, the Network fee line (G113); a
+    // rate of more than 8 decimals cannot be typed there any more.
     it.each([
-        ['', /enter a custom fee rate\./i],
-        ['0', /greater than zero/i],
-        ['-1', /greater than zero/i],
-        ['1.123456789', /at most 8 decimal places/i],
-    ])('rejects custom fee rate %j before review', async (rate, expected) => {
+        ['', /choose a valid network fee/i],
+        ['0', /choose a valid network fee/i],
+        ['-1', /choose a valid network fee/i],
+    ])('rejects custom fee %j before review', async (fee, expected) => {
         const messaging = stubMessaging();
         const utils = await openFilledForm(messaging);
 
-        fireEvent.change(utils.getByRole('slider', { name: 'Network fee' }), {
-            target: { value: '3' },
-        });
-        fireEvent.change(utils.getByLabelText(/Custom fee rate/), {
-            target: { value: rate },
-        });
+        openSection(utils, 'Speed and Fees');
+        await typeCustomRate(fee, { chainId: CHAIN, queries: utils });
         fireEvent.click(sendButton(utils));
 
         expect(alertText(utils)).toMatch(expected);
@@ -256,8 +261,10 @@ describe('message validation is visible from the primary action', () => {
 
         await pressSend(utils);
         expect(utils.getByTestId('confirm-modal')).toBeTruthy();
-        expect(utils.container.textContent).toContain(RECIPIENT);
-        expect(utils.container.textContent).toContain('Network fee: 0.00000321 BTC');
+        // The recipient is the page's one address line (cut in the middle in
+        // jsdom, whole in its title); the fee is a facts card row.
+        expect(utils.getByTestId('confirm-address').querySelector(`[title="${RECIPIENT}"]`)).not.toBeNull();
+        expect(utils.getByTestId('confirm-fee-network')).toHaveTextContent('0.00000321 BTC');
 
         await domAct(async () => {
             fireEvent.click(utils.getByTestId('confirm-reject'));
@@ -374,8 +381,13 @@ describe('the message is funded from the active address (issue #11)', () => {
         });
         const utils = await openFilledForm(messaging);
 
-        // Network is the standard field (U59): it opens the network picker
+        // Network is the standard field: it opens the network picker
         // screen, whose rows are buttons named "Select <network>".
+        // Network sits in the standard From section, closed on load.
+        await domAct(async () => {
+            openSection(utils, 'From');
+            await drainMicrotasks();
+        });
         await domAct(async () => {
             fireEvent.click(utils.getByRole('button', { name: /^Network:/ }));
             await drainMicrotasks();
@@ -417,8 +429,10 @@ describe('the compose form starts with Network, then From (U59, U60)', () => {
     it('shows the network field, then the funding address, then the recipient, each with a help tip', async () => {
         const utils = await openFilledForm(stubMessaging());
         const form = utils.container.querySelector('form');
-        const network = utils.getByRole('button', { name: /^Network:/ });
-        const from = utils.getByLabelText('From');
+        // Network and From sit in the standard From section (first,
+        // closed on load); the field is labelled "From address".
+        const network = utils.getByRole('button', { name: /^Network:/, hidden: true });
+        const from = utils.getByLabelText('From address');
         const recipient = utils.getByLabelText('Address');
         expect(from).toHaveValue(ACTIVE_ADDRESS.address);
         expect(network.compareDocumentPosition(from) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -429,16 +443,21 @@ describe('the compose form starts with Network, then From (U59, U60)', () => {
         expect(tips.some((text) => /sends this message and pays its network fee/.test(text))).toBe(true);
         expect(tips.some((text) => /receives the message/.test(text))).toBe(true);
         expect(tips.some((text) => /The text to send/.test(text))).toBe(true);
-        expect(tips.some((text) => /PNG, JPEG, GIF, WebP, PDF or plain-text file/.test(text))).toBe(true);
+        expect(tips.some((text) => /PNG, JPEG, GIF, WebP, PDF or plain-text file/.test(text))).toBe(false);
     });
 
     it('opens the own-address picker from the From field', async () => {
         const utils = await openFilledForm(stubMessaging());
         await domAct(async () => {
+            openSection(utils, 'From');
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
             fireEvent.click(utils.getByRole('button', { name: 'Choose source address' }));
             await drainMicrotasks();
         });
-        expect(utils.getByText('From address')).toBeTruthy();
+        // The picker page title is Title Case.
+        expect(utils.getByText('From Address')).toBeTruthy();
         expect(utils.queryByLabelText('Message')).toBeNull();
     });
 });

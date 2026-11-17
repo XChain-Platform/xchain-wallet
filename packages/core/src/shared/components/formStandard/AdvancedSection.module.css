@@ -1,0 +1,142 @@
+/*
+ * Copyright © 2025–2026 Dankest, LLC
+ * Based on XChain Platform by Dankest, LLC – https://dankest.llc
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * This file is part of XChain Platform. Licensed under the GNU Affero
+ * General Public License v3.0 or later; see LICENSE.md. A commercial
+ * license (without AGPL source-disclosure terms) is available -
+ * contact legal@dankest.llc.
+ */
+
+/* The Advanced section's coin control list, moved here from Send so every
+   form with Speed and Fees draws the same one. */
+
+/* The own-address picker page, laid over the form's screen (the same area a
+   picker page returned in place of the form fills). */
+.pickerPage {
+    position: fixed;
+    inset: 0;
+    z-index: var(--xc-z-modal);
+    display: flex;
+    flex-direction: column;
+    /* With no screen to lay over, the page fills the viewport, which does
+       not inherit the body's safe-area padding, so it keeps clear of the
+       notch and home bar itself (.inScreen drops this when it sits on a
+       screen that is already inside that padding). */
+    padding-block: env(safe-area-inset-top, 0) env(safe-area-inset-bottom, 0);
+    padding-inline: max(env(safe-area-inset-left, 0), env(safe-area-inset-right, 0));
+    box-sizing: border-box;
+    background: var(--xc-bg);
+    overflow: hidden;
+}
+
+.inScreen {
+    padding: 0;
+}
+
+.coinControlList {
+    composes: card from '../../../ui/Card.module.css';
+    margin: 0;
+    box-sizing: border-box;
+    min-inline-size: 0;
+    width: 100%;
+}
+
+.coinControlToolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+}
+
+.coinControlActions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+}
+
+.coinControlRows {
+    composes: scrollArea from '../../../ui/Screen.module.css';
+    max-height: 18rem;
+    margin-top: var(--xc-space-2);
+    overflow-y: auto;
+}
+
+.coinControlRow {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-2) 0;
+    font-family: var(--xc-font-mono);
+    font-size: var(--xc-text-sm);
+    min-width: 0;
+}
+
+.coinControlRow > input {
+    flex: 0 0 auto;
+}
+
+.coinControlValue,
+.coinControlSummary dd {
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+.coinControlValue {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.coinControlValue,
+.coinControlRow small {
+    display: block;
+}
+
+.coinControlRow small {
+    color: var(--xc-text-muted);
+}
+
+.coinControlDust {
+    display: inline-block;
+    margin-inline-start: var(--xc-space-2);
+    /* The compact badge keeps a 1px block inset below the spacing scale. */
+    padding: calc(var(--xc-space-1) / 4) var(--xc-space-1);
+    border: 1px solid color-mix(in srgb, var(--xc-warning, #B07A00) 55%, transparent);
+    border-radius: var(--xc-radius-sm);
+    color: var(--xc-warning, #B07A00);
+    font-family: var(--xc-font-sans);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+}
+
+.coinControlSummary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--xc-space-2);
+    margin: var(--xc-space-2) 0 0;
+    padding-top: var(--xc-space-2);
+    border-top: 1px solid var(--xc-border);
+}
+
+.coinControlSummary div {
+    min-width: 0;
+}
+
+.coinControlSummary dt {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+}
+
+.coinControlSummary dd {
+    /* The value needs a 2px offset below the spacing scale. */
+    margin: calc(var(--xc-space-1) / 2) 0 0;
+    color: var(--xc-text);
+    font-family: var(--xc-font-mono);
+    font-size: var(--xc-text-sm);
+    overflow-wrap: anywhere;
+}

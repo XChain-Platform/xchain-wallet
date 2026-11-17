@@ -41,21 +41,6 @@ async function gotoPalette(page, title) {
     await expect(palette).toBeHidden();
 }
 
-async function useWatcherReviews(page) {
-    await gotoPalette(page, 'Settings');
-    await page.getByRole('button', { name: /^Wallet mode/ }).click();
-
-    const watcher = page.getByRole('radio', { name: /^Watcher/ });
-    await expect(watcher).toBeVisible();
-    await watcher.click();
-
-    const confirmation = page.getByRole('dialog', { name: /Switch to Watcher/ });
-    await expect(confirmation).toBeVisible();
-    await confirmation.getByRole('button', { name: 'Confirm mode change' }).click();
-    await expect(confirmation).toBeHidden();
-    await expect(watcher).toBeChecked();
-}
-
 async function expectAlignedControlRows(page, label) {
     const mismatches = await page.getByRole('main').evaluate((main) => {
         const selector = [
@@ -202,9 +187,9 @@ async function openManagedToken(page) {
 for (const viewport of VIEWPORTS) {
     test(`token administration reaches every review at ${viewport.width}x${viewport.height}`, async ({ page }) => {
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
-        // Demo wallets hide the create commands, so this walk uses a real dev wallet.
-        await createWallet(page);
-        await useWatcherReviews(page);
+        // Demo wallets hide the create commands, so this walk uses a real dev
+        // wallet, created in watch-only mode (the mode is chosen at create).
+        await createWallet(page, { walletMode: 'watcher' });
 
         const run = `${viewport.width}${viewport.height}`;
         const issueTick = `FLOW${run}`;
@@ -240,7 +225,7 @@ for (const viewport of VIEWPORTS) {
             await page.waitForTimeout(450);
             await scrollFormToBottom(page);
             // With a supply set the main button reads Issue token (ruling U80).
-            await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+            await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
 
             await expectReview(page, {
                 heading: 'Review issue',
@@ -294,7 +279,7 @@ for (const viewport of VIEWPORTS) {
             const main = page.getByRole('main');
             await main.getByRole('textbox', { name: /^Per-unit amount/ }).fill('0.0001');
             await main.getByLabel('Memo', { exact: true }).fill('Quarterly payout');
-            const preview = main.getByRole('button', { name: 'Pay dividend', exact: true });
+            const preview = main.getByRole('button', { name: 'Pay Dividend', exact: true });
             await expect(preview).toBeEnabled();
             await scrollFormToBottom(page);
             await preview.click();

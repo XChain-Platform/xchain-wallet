@@ -26,9 +26,11 @@
 //      problem: a create whose params drift is signed rather than caught.
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, act as domAct, fireEvent } from '@testing-library/react';
+import { render, act as domAct, fireEvent, within } from '@testing-library/react';
+import { selectOption } from '../../helpers/selectOption.js';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { CreateBetFeedForm } from '../../../packages/core/src/shared/routes/CreateBetFeedForm.jsx';
 import { BetFeedDetail } from '../../../packages/core/src/shared/routes/BetFeedDetail.jsx';
 import { OracleConsole } from '../../../packages/core/src/shared/routes/OracleConsole.jsx';
@@ -133,15 +135,22 @@ const OWN_CLOSED_FEED = Object.freeze({
 });
 
 beforeEach(() => {
+    resetWalletModes();
     vi.useRealTimers();
+    // The Quick | Full choice is remembered per browser; every test starts on Quick.
+    localStorage.clear();
 });
 
-function harness(overrides = {}) {
+// `walletMode` among the overrides is the mode of wallet `w`, published the way
+// the shell does from the wallet list; every other override is a messaging method.
+function harness({ walletMode = 'full', ...overrides } = {}) {
     const calls = [];
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const target = {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [HD_ADDRESS] }),
         getActiveAddresses: () => Promise.resolve({}),
-        getSettings: () => Promise.resolve({ walletMode: 'full' }),
+        getSettings: () => Promise.resolve({}),
+        listWallets: () => Promise.resolve([{ id: 'w', name: 'W', walletMode }]),
         signerReady: () => Promise.resolve({ ready: false }),
         getSignerStatus: () => Promise.resolve({ status: 'locked' }),
         preflight: () => Promise.resolve({ verdict: 'pass', findings: [], unverified: [] }),
@@ -230,18 +239,46 @@ function button(utils, re) {
         .find((b) => re.test(b.textContent || ''));
 }
 
+// The market page opens on its Details tab and only the chosen tab renders, so
+// the bet form is behind the Bet tab.
+async function openBetTab(utils) {
+    await domAct(async () => {
+        fireEvent.click(utils.getByRole('tab', { name: /^Bet$/ }));
+        await drain();
+    });
+}
+
+// The Bet tab lists every outcome as one row button ("Bet on Home, ...");
+// tapping one opens the Place Bet step with it chosen, where the stake and
+// Place Bet are. Already on Place Bet, its own outcome picker is used.
+async function openPlaceBet(utils, outcomeLabel) {
+    await domAct(async () => {
+        const list = utils.queryByRole('list', { name: 'Outcome to back' });
+        if (list) {
+            const rows = within(list).getAllByRole('button');
+            fireEvent.click(rows.find((row) => row.getAttribute('aria-label').startsWith(`Bet on ${outcomeLabel},`)));
+        } else {
+            selectOption(utils.getByRole('button', { name: /^Outcome: / }), { label: new RegExp(`^${outcomeLabel}`) });
+        }
+        await drain();
+    });
+}
+
 const typeIn = (utils, label, value) => {
-    fireEvent.change(utils.getByLabelText(label), { target: { value } });
+    const control = utils.getByLabelText(label);
+    // Dropdowns are the themed Select: pick the option rather than typing a value.
+    if (control.hasAttribute('data-xc-select')) selectOption(control, value);
+    else fireEvent.change(control, { target: { value } });
 };
 
 // Fill the minimum a valid market needs. The token field is a picker, so the
 // tick is seeded through the prop the shells pass.
 async function fillMarket(utils, { outcomes = ['Home', 'Away'] } = {}) {
     await domAct(async () => {
-        typeIn(utils, 'What is being bet on', 'Who wins the final?');
-        typeIn(utils, 'Outcome 0', outcomes[0]);
-        typeIn(utils, 'Outcome 1', outcomes[1]);
-        typeIn(utils, 'Betting closes', DEADLINE_LOCAL);
+        typeIn(utils, 'Question', 'Who wins the final?');
+        typeIn(utils, 'Outcome 1', outcomes[0]);
+        typeIn(utils, 'Outcome 2', outcomes[1]);
+        typeIn(utils, 'Closes', DEADLINE_LOCAL);
         await drain();
     });
 }
@@ -266,9 +303,7 @@ describe('CreateBetFeedForm: the live market-cost quote', () => {
         // the case the display exists for: the user changed a safety margin, not
         // a price, and the price moved.
         await domAct(async () => {
-            fireEvent.change(utils.getByLabelText('Time to publish the result'), {
-                target: { value: String(YEAR_WINDOW) },
-            });
+            selectOption(utils.getByLabelText('Time to Publish the Result'), String(YEAR_WINDOW));
             await drain();
         });
         const second = calls.filter((c) => c.method === 'betProjectFeedCreateFee').pop();
@@ -297,8 +332,8 @@ describe('CreateBetFeedForm: the live market-cost quote', () => {
 
 describe('CreateBetFeedForm: compose and submit', () => {
     it.each([
-        ['What is being bet on', 'safe\u202eunsafe', /Title cannot contain text-direction/],
-        ['Outcome 0', 'safe\u200bunsafe', /Outcome cannot contain zero-width/],
+        ['Question', 'safe\u202eunsafe', /Title cannot contain text-direction/],
+        ['Outcome 1', 'safe\u200bunsafe', /Outcome cannot contain zero-width/],
     ])('refuses hostile %s text before compose', async (label, value, message) => {
         const { messaging, calls } = harness();
         let utils;
@@ -309,7 +344,7 @@ describe('CreateBetFeedForm: compose and submit', () => {
         await fillMarket(utils);
         await domAct(async () => {
             typeIn(utils, label, value);
-            fireEvent.click(button(utils, /Open market/i));
+            fireEvent.click(button(utils, /Open Market/));
             await drain();
         });
 
@@ -332,8 +367,8 @@ describe('CreateBetFeedForm: compose and submit', () => {
         });
         await fillMarket(utils);
         await domAct(async () => {
-            typeIn(utils, 'Your fee', pasted);
-            fireEvent.click(button(utils, /Open market/i));
+            typeIn(utils, 'Your Fee', pasted);
+            fireEvent.click(button(utils, /Open Market/));
             await drain();
         });
 
@@ -343,7 +378,7 @@ describe('CreateBetFeedForm: compose and submit', () => {
 
     it('builds an unsigned market in watcher mode without asking for a password', async () => {
         const { messaging, calls } = harness({
-            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+            walletMode: 'watcher',
         });
         let utils;
         await domAct(async () => {
@@ -354,7 +389,7 @@ describe('CreateBetFeedForm: compose and submit', () => {
 
         expect(utils.queryByLabelText('Password')).toBeNull();
         await domAct(async () => {
-            fireEvent.click(button(utils, /Create unsigned transaction/i));
+            fireEvent.click(button(utils, /Create Unsigned Transaction/));
             await drain();
         });
 
@@ -378,7 +413,7 @@ describe('CreateBetFeedForm: compose and submit', () => {
         let resolveBuild;
         const build = vi.fn(() => new Promise((resolve) => { resolveBuild = resolve; }));
         const { messaging } = harness({
-            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+            walletMode: 'watcher',
             buildBetActionPsbtRequest: build,
         });
         let utils;
@@ -388,7 +423,7 @@ describe('CreateBetFeedForm: compose and submit', () => {
         });
         await fillMarket(utils);
 
-        const submit = button(utils, /Create unsigned transaction/i);
+        const submit = button(utils, /Create Unsigned Transaction/);
         await domAct(async () => {
             fireEvent.click(submit);
             fireEvent.click(submit);
@@ -412,7 +447,7 @@ describe('CreateBetFeedForm: compose and submit', () => {
         await fillMarket(utils);
 
         await domAct(async () => {
-            fireEvent.click(button(utils, /Open market/i));
+            fireEvent.click(button(utils, /Open Market/));
             await drain();
         });
 
@@ -429,7 +464,7 @@ describe('CreateBetFeedForm: compose and submit', () => {
         // Nothing is signed by opening the confirm page.
         expect(calls.some((c) => c.method === 'createMarketAction')).toBe(false);
         expect(utils.getByTestId('confirm-modal')).toBeTruthy();
-        expect(utils.getByTestId('confirm-fee')).toHaveTextContent('Network fee: 0.000015 BTC');
+        expect(utils.getByTestId('confirm-fee-network')).toHaveTextContent('0.000015 BTC');
 
         await domAct(async () => {
             typeIn(utils, 'Password', 'hunter2');
@@ -458,18 +493,19 @@ describe('CreateBetFeedForm: compose and submit', () => {
         // No description yet: a DETAILS blob holding only a copy of LABEL is
         // wire weight for nothing, and the whole action shares one size ceiling.
         await domAct(async () => {
-            fireEvent.click(button(utils, /Open market/i));
+            fireEvent.click(button(utils, /Open Market/));
             await drain();
         });
         expect(calls.find((c) => c.method === 'composeBetForConfirm').args.params.details).toBeUndefined();
 
-        // Reject, add a description, and it attaches with the title tied to the label.
+        // Reject, add a description in the Full view's Market section, and it
+        // attaches with the title tied to the label.
         await domAct(async () => {
             fireEvent.click(utils.getByTestId('confirm-reject'));
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(button(utils, /Add a description/i));
+            fireEvent.click(utils.getByRole('radio', { name: /Full/ }));
             await drain();
         });
         await domAct(async () => {
@@ -477,7 +513,7 @@ describe('CreateBetFeedForm: compose and submit', () => {
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(button(utils, /Open market/i));
+            fireEvent.click(button(utils, /Open Market/));
             await drain();
         });
         const last = calls.filter((c) => c.method === 'composeBetForConfirm').pop();
@@ -496,7 +532,7 @@ describe('CreateBetFeedForm: compose and submit', () => {
         });
         await fillMarket(utils, { outcomes: ['Home', 'Home'] });
         await domAct(async () => {
-            fireEvent.click(button(utils, /Open market/i));
+            fireEvent.click(button(utils, /Open Market/));
             await drain();
         });
         expect(calls.some((c) => c.method === 'composeBetForConfirm')).toBe(false);
@@ -512,7 +548,7 @@ describe('CreateBetFeedForm: compose and submit', () => {
         });
         await fillMarket(utils, { outcomes: ['Home, away or draw', 'Away'] });
         await domAct(async () => {
-            fireEvent.click(button(utils, /Open market/i));
+            fireEvent.click(button(utils, /Open Market/));
             await drain();
         });
         expect(calls.some((c) => c.method === 'composeBetForConfirm')).toBe(false);
@@ -528,11 +564,11 @@ describe('CreateBetFeedForm: compose and submit', () => {
         });
         await fillMarket(utils);
         await domAct(async () => {
-            fireEvent.click(button(utils, /Add outcome/i));
+            fireEvent.click(button(utils, /Add Outcome/));
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(button(utils, /Open market/i));
+            fireEvent.click(button(utils, /Open Market/));
             await drain();
         });
         expect(calls.some((c) => c.method === 'composeBetForConfirm')).toBe(false);
@@ -548,15 +584,15 @@ describe('CreateBetFeedForm: compose and submit', () => {
         });
         await fillMarket(utils);
         await domAct(async () => {
-            fireEvent.change(utils.getByLabelText('Time to publish the result'), { target: { value: 'custom' } });
+            selectOption(utils.getByLabelText('Time to Publish the Result'), 'custom');
             await drain();
         });
         await domAct(async () => {
-            typeIn(utils, 'Days to publish the result', '0.01');
+            typeIn(utils, 'Days to Publish the Result', '0.01');
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(button(utils, /Open market/i));
+            fireEvent.click(button(utils, /Open Market/));
             await drain();
         });
         expect(calls.some((c) => c.method === 'composeBetForConfirm')).toBe(false);
@@ -575,8 +611,8 @@ describe('CreateBetFeedForm: compose and submit', () => {
         });
         await fillMarket(utils);
         await domAct(async () => {
-            typeIn(utils, 'Smallest bet allowed', minimum);
-            fireEvent.click(button(utils, /Open market/i));
+            typeIn(utils, 'Smallest Bet Allowed', minimum);
+            fireEvent.click(button(utils, /Open Market/));
             await drain();
         });
         expect(calls.some((c) => c.method === 'composeBetForConfirm')).toBe(false);
@@ -592,7 +628,7 @@ describe('CreateBetFeedForm: compose and submit', () => {
         });
         await fillMarket(utils, { outcomes: ['Home team wins', 'Away team wins'] });
         await domAct(async () => {
-            fireEvent.click(button(utils, /Open market/i));
+            fireEvent.click(button(utils, /Open Market/));
             await drain();
         });
         const compose = calls.find((c) => c.method === 'composeBetForConfirm');
@@ -614,14 +650,12 @@ describe('BetFeedDetail states what a win would pay', () => {
             utils = mount(BetFeedDetail, messaging, { chainId: CHAIN, feedIndex });
             await drain();
         });
+        await openBetTab(utils);
         return utils;
     }
 
     async function stakeOn(utils, outcomeLabel, amount) {
-        await domAct(async () => {
-            fireEvent.click(button(utils, new RegExp(`^${outcomeLabel}$`)));
-            await drain();
-        });
+        await openPlaceBet(utils, outcomeLabel);
         await domAct(async () => {
             typeIn(utils, 'Stake (PEPECREATURE)', amount);
             await drain();
@@ -686,7 +720,7 @@ describe('BetFeedDetail states what a win would pay', () => {
         expect(utils.queryByTestId('bet-projection')).toBeNull();
 
         await domAct(async () => {
-            fireEvent.click(button(utils, /^Away$/));
+            fireEvent.click(utils.getByRole('button', { name: /^Bet on Away,/ }));
             await drain();
         });
         expect(utils.queryByTestId('bet-projection')).toBeNull();
@@ -728,13 +762,13 @@ describe('BetFeedDetail states what a win would pay', () => {
         let resolveBuild;
         const build = vi.fn(() => new Promise((resolve) => { resolveBuild = resolve; }));
         const { messaging } = harness({
-            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+            walletMode: 'watcher',
             buildBetActionPsbtRequest: build,
         });
         const utils = await openMarket(messaging);
         await stakeOn(utils, 'Away', '5');
 
-        const submit = button(utils, /Create unsigned transaction/i);
+        const submit = button(utils, /Create Unsigned Transaction/);
         await domAct(async () => {
             fireEvent.click(submit);
             fireEvent.click(submit);
@@ -823,10 +857,8 @@ describe('every BET surface renders the confirm page it opens', () => {
             utils = mount(BetFeedDetail, messaging, { chainId: CHAIN, feedIndex: '2308' });
             await drain();
         });
-        await domAct(async () => {
-            fireEvent.click(button(utils, /^Home$/));
-            await drain();
-        });
+        await openBetTab(utils);
+        await openPlaceBet(utils, 'Home');
         await domAct(async () => {
             typeIn(utils, 'Stake (PEPECREATURE)', '5');
             await drain();
@@ -865,7 +897,7 @@ describe('every BET surface renders the confirm page it opens', () => {
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(button(utils, /^Resolve$/));
+            fireEvent.click(button(utils, /^Resolve/));
             await drain();
         });
         await domAct(async () => {
@@ -873,7 +905,7 @@ describe('every BET surface renders the confirm page it opens', () => {
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(button(utils, /Publish result/i));
+            fireEvent.click(button(utils, /Publish Result/));
             await drain();
         });
         expect(calls.find((c) => c.method === 'composeBetForConfirm').args.builder).toBe('resolveMarketParams');
@@ -923,7 +955,8 @@ describe('BET carries the native-coin fee lane', () => {
         });
         await fillMarket(utils);
 
-        expect(utils.container.textContent).toContain('0 LTC');
+        // Inside the free days the Protocol fee line says Free (operator 2026-11-13).
+        expect(utils.container.querySelector('[data-fees-row="protocol"]').textContent).toContain('Free');
         const feeSwitch = utils.getByLabelText('Pay protocol fee in LTC');
         expect(feeSwitch.checked).toBe(true);
         expect(feeSwitch.disabled).toBe(true);
@@ -931,16 +964,14 @@ describe('BET carries the native-coin fee lane', () => {
         // Lengthen the publish window past the free days and the same row turns
         // definite, with the figure the quote returned.
         await domAct(async () => {
-            fireEvent.change(utils.getByLabelText('Time to publish the result'), {
-                target: { value: String(YEAR_WINDOW) },
-            });
+            selectOption(utils.getByLabelText('Time to Publish the Result'), String(YEAR_WINDOW));
             await drain();
         });
         expect(utils.container.textContent).toContain('Priced at review');
         expect(utils.container.textContent).not.toContain('0.165 LTC');
 
         await domAct(async () => {
-            fireEvent.click(button(utils, /Open market/i));
+            fireEvent.click(button(utils, /Open Market/));
             await drain();
         });
         const compose = calls.find((c) => c.method === 'composeBetForConfirm');
@@ -971,14 +1002,12 @@ describe('BET carries the native-coin fee lane', () => {
         // hides the switch when the quote prices the action at zero,
         // because both settings would then pay nothing.
         await domAct(async () => {
-            fireEvent.change(utils.getByLabelText('Time to publish the result'), {
-                target: { value: String(YEAR_WINDOW) },
-            });
+            selectOption(utils.getByLabelText('Time to Publish the Result'), String(YEAR_WINDOW));
             await drain();
         });
 
         await domAct(async () => {
-            fireEvent.click(button(utils, /Open market/i));
+            fireEvent.click(button(utils, /Open Market/));
             await drain();
         });
         // Bitcoin settles the fee from an XCHAIN balance unless asked otherwise,
@@ -995,7 +1024,7 @@ describe('BET carries the native-coin fee lane', () => {
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(button(utils, /Open market/i));
+            fireEvent.click(button(utils, /Open Market/));
             await drain();
         });
         expect(calls.filter((c) => c.method === 'composeBetForConfirm').pop().args.payFeeInNativeCoin)
@@ -1009,10 +1038,8 @@ describe('BET carries the native-coin fee lane', () => {
             utils = mount(BetFeedDetail, messaging, { chainId: LTC_CHAIN, feedIndex: '2308' });
             await drain();
         });
-        await domAct(async () => {
-            fireEvent.click(button(utils, /^Home$/));
-            await drain();
-        });
+        await openBetTab(utils);
+        await openPlaceBet(utils, 'Home');
         await domAct(async () => {
             typeIn(utils, 'Stake (PEPECREATURE)', '5');
             await drain();
@@ -1055,7 +1082,7 @@ describe('BET carries the native-coin fee lane', () => {
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(button(utils, /^Resolve$/));
+            fireEvent.click(button(utils, /^Resolve/));
             await drain();
         });
         await domAct(async () => {
@@ -1063,7 +1090,7 @@ describe('BET carries the native-coin fee lane', () => {
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(button(utils, /Publish result/i));
+            fireEvent.click(button(utils, /Publish Result/));
             await drain();
         });
         const compose = calls.find((c) => c.method === 'composeBetForConfirm');

@@ -121,8 +121,9 @@ async function shownAddress(messaging, walletId, chainId) {
             <Receive walletId={walletId} prefill={chainId ? { chainId } : null} />
         </MessagingProvider>,
     );
-    const node = await screen.findByText(ADDRESS_PATTERN);
-    const value = node.textContent;
+    // The address sits in Receive's read-only address field.
+    const node = await screen.findByDisplayValue(ADDRESS_PATTERN);
+    const value = node.value;
     view.unmount();
     return value;
 }

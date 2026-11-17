@@ -123,10 +123,12 @@ describe('demo wallet market lists', () => {
         markDemoWallet(WALLET);
         const { messaging, networkReads } = demoMessaging();
         render(provider(messaging, React.createElement(MyOrdersView, { walletId: WALLET, onBack: () => {} })));
-        const open = await screen.findByRole('list', { name: 'Open orders' });
+        const open = await screen.findByRole('list', { name: 'Orders' });
         expect(open.querySelectorAll('li').length).toBeGreaterThan(0);
         expect(screen.queryByText('No orders yet')).toBeNull();
-        expect(screen.getAllByTitle(OWNER.address).length).toBeGreaterThan(0);
+        // Each row says its trade in words (the ring layout), and each opens the demo order.
+        expect(open.textContent).toMatch(/(Sell|Buy) \d/);
+        expect(open.querySelectorAll('[data-order-row]').length).toBe(open.querySelectorAll('li').length);
         expect(networkReads).toEqual([]);
     });
 
@@ -134,7 +136,7 @@ describe('demo wallet market lists', () => {
         markDemoWallet(WALLET);
         const { messaging, networkReads } = demoMessaging();
         render(provider(messaging, React.createElement(MySwapsView, { walletId: WALLET, onBack: () => {} })));
-        const open = await screen.findByRole('list', { name: 'Open swaps' });
+        const open = await screen.findByRole('list', { name: 'Swaps' });
         expect(open.querySelectorAll('li').length).toBeGreaterThan(0);
         expect(screen.queryByText('No swaps yet')).toBeNull();
         expect(networkReads).toEqual([]);

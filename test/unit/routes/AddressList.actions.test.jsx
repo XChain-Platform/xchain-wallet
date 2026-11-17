@@ -45,6 +45,12 @@ function messagingWith(overrides = {}) {
     };
 }
 
+// Search, network and the address type picker sit behind the title-bar filter button (G04).
+async function openFilter() {
+    fireEvent.click(await screen.findByRole('button', { name: 'Filter addresses' }));
+    await screen.findByRole('dialog', { name: 'Filter addresses' });
+}
+
 function mount(messaging, props = {}) {
     render(
         <MessagingProvider shell="web" messaging={messaging}>
@@ -103,11 +109,12 @@ describe('Address detail actions', () => {
         mount(messagingWith());
         fireEvent.click(await screen.findByRole('button', { name: `View address ${ADDRESS}` }));
 
-        fireEvent.click(screen.getByRole('button', { name: 'Copy address' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Copy Address' }));
 
-        expect(await screen.findByRole('button', { name: 'Copied: address' })).toBeInTheDocument();
-        // The button announces its own result in a polite status region.
-        expect(screen.getAllByText('Copied: address')).toHaveLength(2);
+        // The copy icon (icon only) names itself Copied, and announces its
+        // result in a polite status region.
+        expect(await screen.findByRole('button', { name: 'Copied' })).toBeInTheDocument();
+        expect(screen.getAllByText('Copied: Address')).toHaveLength(1);
     });
 
     it('reports clipboard failure and does not switch the button to Copied', async () => {
@@ -118,12 +125,12 @@ describe('Address detail actions', () => {
         mount(messagingWith());
         fireEvent.click(await screen.findByRole('button', { name: `View address ${ADDRESS}` }));
 
-        fireEvent.click(screen.getByRole('button', { name: 'Copy address' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Copy Address' }));
 
         await waitFor(() => expect(
             screen.getByRole('alert'),
         ).toHaveTextContent('Copy failed: the clipboard is unavailable.'));
-        expect(screen.getByRole('button', { name: 'Copy address' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Copy Address' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Copied' })).toBeNull();
     });
 
@@ -141,54 +148,57 @@ describe('Address detail actions', () => {
         mount(messaging, { onShowPrivateKey: vi.fn(), onSelect: vi.fn() });
         fireEvent.click(await screen.findByRole('button', { name: `View address ${MULTISIG}` }));
 
-        expect(screen.queryByRole('button', { name: /^Use$/ })).toBeNull();
+        expect(screen.queryByRole('button', { name: /^Set active/ })).toBeNull();
         expect(screen.queryByRole('button', { name: /Secret/ })).toBeNull();
         expect(screen.queryByRole('button', { name: /Delete/ })).toBeNull();
-        expect(screen.getByRole('button', { name: 'XChain' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^Edit label/ })).toBeNull();
+        expect(screen.getByRole('button', { name: /^Explorer/ })).toBeInTheDocument();
         await waitFor(() => expect(messaging.listMultisigReceiveAddresses).toHaveBeenLastCalledWith({
             walletId: WALLET.id,
             chainId: CHAIN,
         }));
     });
 
-    it('renames an address and keeps the edited value in the detail view', async () => {
+    it('renames an address in the Edit label form and shows the new label as the card title', async () => {
         const messaging = messagingWith();
         mount(messaging);
         fireEvent.click(await screen.findByRole('button', { name: `View address ${ADDRESS}` }));
+        fireEvent.click(screen.getByRole('button', { name: /^Edit label/ }));
 
         fireEvent.change(screen.getByRole('textbox', { name: 'Address label' }), {
             target: { value: 'Savings' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Save label' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save Label' }));
 
         await waitFor(() => expect(messaging.setAddressLabel).toHaveBeenCalledWith('addr-1', 'Savings'));
-        expect(screen.getByRole('textbox', { name: 'Address label' })).toHaveValue('Savings');
+        expect(await screen.findByRole('heading', { level: 2, name: 'Savings' })).toBeInTheDocument();
+        expect(screen.queryByRole('textbox', { name: 'Address label' })).toBeNull();
         expect(screen.getByRole('status', { name: 'Notifications' })).toHaveTextContent('Address label saved.');
     });
 
-    it('gives the label form a named green Save label action with an icon and a help tip on Label', async () => {
+    it('gives the Edit label form one Save Label action with an icon, held while unchanged', async () => {
         mount(messagingWith());
         fireEvent.click(await screen.findByRole('button', { name: `View address ${ADDRESS}` }));
+        fireEvent.click(screen.getByRole('button', { name: /^Edit label/ }));
 
-        const save = screen.getByRole('button', { name: 'Save label' });
-        expect(save.className).toMatch(/success/);
+        const save = screen.getByRole('button', { name: 'Save Label' });
         expect(save.querySelector('svg')).not.toBeNull();
-        // Unchanged label: the action stays green while disabled.
         expect(save).toBeDisabled();
+        expect(screen.getByRole('textbox', { name: 'Address label' })).toHaveValue('BTC Address #1');
         expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
-        expect(screen.getByRole('button', { name: 'Label help' })).toBeInTheDocument();
     });
 
-    it('titles the detail card once, with no single-tab strip repeating it', async () => {
+    it('opens on an Actions | Details tab row with Actions chosen', async () => {
         mount(messagingWith());
         fireEvent.click(await screen.findByRole('button', { name: `View address ${ADDRESS}` }));
 
-        expect(await screen.findByRole('heading', { name: 'About' })).toBeInTheDocument();
-        expect(screen.queryByRole('tablist')).toBeNull();
-        expect(screen.queryByRole('tab', { name: 'About' })).toBeNull();
+        expect(screen.getByRole('tablist')).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: 'Actions' })).toHaveAttribute('aria-selected', 'true');
+        expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('aria-selected', 'false');
+        expect(screen.queryByRole('heading', { name: 'About' })).toBeNull();
     });
 
-    it('does not offer to activate the address that is already active', async () => {
+    it('does not offer to activate the address that is already active, and shows no pill', async () => {
         const messaging = messagingWith({
             getActiveAddresses: vi.fn().mockResolvedValue({
                 [CHAIN]: { id: 'addr-1', address: ADDRESS },
@@ -197,21 +207,21 @@ describe('Address detail actions', () => {
         mount(messaging);
         fireEvent.click(await screen.findByRole('button', { name: `View address ${ADDRESS}` }));
 
-        expect(screen.getByText('Active')).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Use' })).toBeNull();
+        expect(screen.queryByText('Active')).toBeNull();
+        expect(screen.queryByRole('button', { name: /^Set active/ })).toBeNull();
     });
 
     it('hides an address, then exposes it for unhide from the collapsed section', async () => {
         const messaging = messagingWith();
         mount(messaging);
         fireEvent.click(await screen.findByRole('button', { name: `View address ${ADDRESS}` }));
-        fireEvent.click(screen.getByRole('button', { name: 'Hide' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Hide/ }));
 
         await waitFor(() => expect(messaging.setAddressHidden).toHaveBeenCalledWith('addr-1', true));
         expect(screen.queryByRole('button', { name: `View address ${ADDRESS}` })).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Show 1 hidden address' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Show 1 Hidden Address' }));
         fireEvent.click(screen.getByRole('button', { name: `View address ${ADDRESS}` }));
-        fireEvent.click(screen.getByRole('button', { name: 'Unhide' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Unhide/ }));
 
         await waitFor(() => expect(messaging.setAddressHidden).toHaveBeenLastCalledWith('addr-1', false));
         expect(screen.getByRole('button', { name: `View address ${ADDRESS}` })).toBeInTheDocument();
@@ -233,10 +243,13 @@ describe('Address detail actions', () => {
             }),
         });
         mount(messaging);
-        fireEvent.click(await screen.findByRole('tab', { name: 'Misc' }));
+        await openFilter();
+        fireEvent.click(screen.getByRole('button', { name: /All addresses/ }));
+        fireEvent.click(screen.getByRole('option', { name: 'Misc' }));
 
         expect(screen.queryByRole('button', { name: `View address ${ADDRESS}` })).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: `View address ${CHANGE_ADDRESS}` }));
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
         expect(screen.getByTestId('address-detail-type')).toHaveTextContent('Change');
     });
 
@@ -249,8 +262,10 @@ describe('Address detail actions', () => {
         });
         mount(messaging);
         await screen.findByRole('button', { name: `View address ${ADDRESS}` });
+        await openFilter();
         fireEvent.click(screen.getByRole('button', { name: /^Filter by network/ }));
-        fireEvent.click(screen.getByRole('option', { name: 'Dogecoin' }));
+        // The network filter opens the full-screen network list.
+        fireEvent.click(screen.getByRole('button', { name: 'Select Dogecoin' }));
 
         expect(screen.queryByRole('button', { name: `View address ${ADDRESS}` })).toBeNull();
         expect(screen.getByRole('button', { name: `View address ${DOGE_ADDRESS}` })).toBeInTheDocument();
@@ -266,6 +281,7 @@ describe('Address detail actions', () => {
         mount(messaging, { pickerMode: true, onPick: vi.fn(), networkFilter: 'bitcoin', networkLocked: true });
 
         await screen.findByRole('button', { name: `View address ${ADDRESS}` });
+        await openFilter();
         expect(screen.queryByRole('button', { name: /Filter by network/ })).toBeNull();
         expect(screen.queryByRole('button', { name: `View address ${DOGE_ADDRESS}` })).toBeNull();
     });
@@ -274,6 +290,7 @@ describe('Address detail actions', () => {
         mount(messagingWith(), { pickerMode: true, onPick: vi.fn(), networkFilter: 'bitcoin' });
 
         await screen.findByRole('button', { name: `View address ${ADDRESS}` });
+        await openFilter();
         expect(screen.getByRole('button', { name: /Filter by network/ })).toBeInTheDocument();
     });
 
@@ -295,36 +312,67 @@ describe('Address detail actions', () => {
     it('keeps style-guide search and menu controls available by role', async () => {
         mount(messagingWith());
 
+        await openFilter();
         const search = await screen.findByRole('searchbox', { name: 'Search addresses' });
         expect(search).toHaveAttribute('type', 'search');
 
         fireEvent.click(screen.getByRole('button', { name: 'Add or import address' }));
         expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
-            'Add address',
-            'Generate at index (advanced)',
-            'Import address',
+            'Add Address',
+            'Import Address',
         ]);
     });
 
-    it('shows help for the advanced generation network', async () => {
+    it('gives the address rows the standard trailing chevron', async () => {
         mount(messagingWith());
 
-        await screen.findByRole('searchbox', { name: 'Search addresses' });
-        fireEvent.click(screen.getByRole('button', { name: 'Add or import address' }));
-        fireEvent.click(screen.getByRole('menuitem', { name: 'Generate at index (advanced)' }));
+        const row = await screen.findByRole('button', { name: `View address ${ADDRESS}` });
+        expect(row.querySelector(`.${listRowStyles.chevron}`)).not.toBeNull();
+    });
 
-        expect(screen.getByRole('button', { name: 'About Coin' })).toBeInTheDocument();
+    it('offers the optional address index inside the Add Address form', async () => {
+        mount(messagingWith());
+
+        await screen.findByRole('button', { name: 'Filter addresses' });
+        fireEvent.click(screen.getByRole('button', { name: 'Add or import address' }));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Add Address' }));
+
+        expect(await screen.findByTestId('add-address-index')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'About Address index' })).toBeInTheDocument();
     });
 
     it('shows help for the imported key network and recovery acknowledgement', async () => {
         mount(messagingWith());
 
-        await screen.findByRole('searchbox', { name: 'Search addresses' });
+        await screen.findByRole('button', { name: 'Filter addresses' });
         fireEvent.click(screen.getByRole('button', { name: 'Add or import address' }));
-        fireEvent.click(screen.getByRole('menuitem', { name: 'Import address' }));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Import Address' }));
 
         expect(screen.getByRole('button', { name: 'About Network' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /^About I understand this key/ })).toBeInTheDocument();
+    });
+
+    it('keeps Import enabled and reports missing WIF fields without importing', async () => {
+        const importWifRequest = vi.fn();
+        mount(messagingWith({
+            signerReady: vi.fn().mockResolvedValue({ ready: true }),
+            importWifRequest,
+        }));
+
+        await screen.findByRole('button', { name: 'Filter addresses' });
+        fireEvent.click(screen.getByRole('button', { name: 'Add or import address' }));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Import Address' }));
+
+        const submit = screen.getByRole('button', { name: 'Import' });
+        expect(submit).not.toBeDisabled();
+        fireEvent.click(submit);
+
+        await waitFor(() => expect(document.querySelector('[data-form-errors]'))
+            .toHaveTextContent('Paste a WIF private key.'));
+        expect(screen.getByLabelText('WIF private key')).toHaveAttribute('aria-invalid', 'true');
+        expect(screen.getByRole('checkbox', { name: /I understand this key/i }))
+            .toHaveAttribute('aria-invalid', 'true');
+        expect(importWifRequest).not.toHaveBeenCalled();
     });
 
     it('renders picker actions with shared list-row interaction styles', async () => {
@@ -334,13 +382,13 @@ describe('Address detail actions', () => {
             pickerActions: [{
                 key: 'new',
                 label: 'New dispenser address',
-                sublabel: 'Generate an address',
+                sublabel: 'Generate an Address',
                 onSelect,
             }],
         });
 
         const action = await screen.findByRole('button', {
-            name: 'New dispenser address Generate an address',
+            name: 'New dispenser address Generate an Address',
         });
         expect(action).toHaveClass(listRowStyles.row, listRowStyles.interactive);
         expect(action).toHaveAttribute('type', 'button');
@@ -369,11 +417,12 @@ describe('Address detail actions', () => {
 
         const scroller = document.querySelector('main');
         scroller.scrollTop = 173;
-        const showMore = screen.getByRole('button', { name: 'Show more addresses' });
+        const showMore = screen.getByRole('button', { name: 'Show More Addresses' });
         // Every button carries an icon (U63).
         expect(showMore.querySelector('svg')).not.toBeNull();
-        // Add or import address is the screen's one green main action (U63).
-        expect(screen.getByTestId('address-add-menu')).toHaveClass(buttonStyles.success);
+        // Add or import address is now the title bar's icon-only plus (G02), not a green action.
+        expect(screen.getByTestId('address-add-menu')).not.toHaveClass(buttonStyles.success);
+        expect(screen.getByTestId('address-add-menu').querySelector('svg')).not.toBeNull();
         showMore.focus();
         expect(document.activeElement).toBe(showMore);
         fireEvent.click(showMore);
@@ -381,11 +430,12 @@ describe('Address detail actions', () => {
         await waitFor(() => expect(list.querySelectorAll('li')).toHaveLength(200));
         expect(scroller.scrollTop).toBe(173);
 
+        await openFilter();
         fireEvent.change(screen.getByRole('searchbox', { name: 'Search addresses' }), {
             target: { value: 'Fixture 4999' },
         });
         await waitFor(() => expect(list.querySelectorAll('li')).toHaveLength(1));
-        expect(screen.queryByRole('button', { name: 'Show more addresses' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Show More Addresses' })).toBeNull();
     });
 
     it('uses chain icons without rendering coin or network-kind row text', async () => {

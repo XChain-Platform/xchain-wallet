@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { CoSignerProvision } from '../../../packages/core/src/shared/routes/CoSignerProvision.jsx';
+import { selectOption } from '../../helpers/selectOption.js';
 
 vi.mock('../../../packages/core/src/shared/components/OwnAddressPickerScreen.jsx', () => ({
     OwnAddressPickerScreen: ({ onPick }) => (
@@ -41,6 +42,13 @@ function valueFor(label) {
 
 afterEach(() => cleanup());
 
+// The optional policy groups open from their section headers.
+function openSection(title) {
+    const toggle = screen.getAllByRole('button')
+        .find((button) => button.hasAttribute('aria-expanded') && button.textContent.startsWith(title));
+    if (toggle.getAttribute('aria-expanded') === 'false') fireEvent.click(toggle);
+}
+
 describe('CoSignerProvision limit summaries', () => {
     it('shows readable limits beside their exact policy JSON', async () => {
         mount();
@@ -50,20 +58,23 @@ describe('CoSignerProvision limit summaries', () => {
         fireEvent.change(screen.getByLabelText('Agent public key'), { target: { value: AGENT_KEY } });
         fireEvent.click(screen.getByRole('checkbox', { name: 'Send' }));
 
-        fireEvent.click(screen.getByRole('button', { name: 'Add limit' }));
-        fireEvent.change(screen.getByLabelText('Action'), { target: { value: 'SEND' } });
+        openSection('Per-action amount limits');
+        fireEvent.click(screen.getByRole('button', { name: 'Add Limit' }));
+        selectOption(screen.getByLabelText('Action'), 'SEND');
         fireEvent.change(screen.getByLabelText('Token'), { target: { value: '*' } });
         fireEvent.change(screen.getByRole('textbox', { name: /^Max amount/ }), { target: { value: '100' } });
+        openSection('Rolling limit');
         fireEvent.click(screen.getByRole('switch', { name: 'Enforce a rolling limit' }));
         fireEvent.change(screen.getByLabelText('Window length (hours)'), { target: { value: '12' } });
         fireEvent.change(screen.getByLabelText('Max actions per window'), { target: { value: '4' } });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Add threshold' }));
+        openSection('Extra-confirmation threshold');
+        fireEvent.click(screen.getByRole('button', { name: 'Add Threshold' }));
         const tokenFields = screen.getAllByLabelText('Token');
         fireEvent.change(tokenFields.at(-1), { target: { value: 'BTC' } });
         fireEvent.change(screen.getByLabelText('Warn above'), { target: { value: '1.5' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Create agent account' }));
-        await screen.findByRole('heading', { name: 'Review agent account' });
+        fireEvent.click(screen.getByRole('button', { name: 'Create Agent Account' }));
+        await screen.findByRole('heading', { name: 'Review Agent Account' });
 
         expect(valueFor('Per-action limits')).toHaveTextContent('Send: up to 100 of any token per action');
         expect(valueFor('Per-action limits').querySelector('code')).toHaveTextContent('{"SEND":{"*":"100"}}');

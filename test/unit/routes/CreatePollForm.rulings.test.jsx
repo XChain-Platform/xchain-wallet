@@ -14,18 +14,27 @@ const source = readFileSync(resolve(
 
 describe('CreatePollForm UI rulings', () => {
     it('gives From and every poll option form-specific help', () => {
-        expect(source).toMatch(/label="From"[\s\S]*?help="The address that creates and pays for this poll\./);
-        expect(source).toMatch(/label=\{`Option \$\{i\}`\}[\s\S]*?help="A choice voters can select\. Option labels cannot contain commas\."/);
-        expect(source).toContain('label="Extra arguments" optional help=');
+        // From is the standard FromSection; its address help is addressHelp.
+        expect(source).toMatch(/<FromSection[\s\S]*?addressHelp="The address that creates and pays for this poll\./);
+        expect(source).toMatch(/label=\{`Option \$\{i \+ 1\}`\}[\s\S]*?help="A choice voters can select\. Option labels cannot contain commas\."/);
+        expect(source).toContain('label="Extra arguments" help=');
         expect(source).not.toContain('hint=\'A JSON list appended after the poll result');
         expect(source).not.toContain('A binding poll doesn&rsquo;t just record an opinion');
-        expect(source).toMatch(/label="Contract to call" optional[\s\S]*?help="The contract's number,[\s\S]*?leave it blank to keep the poll advisory\."/);
+        expect(source).toMatch(/label="Contract to call"\s+help="The contract's number,[\s\S]*?leave it blank to keep the poll advisory\."/);
     });
 
     it('uses Optional pills and the SDK question limit without label suffixes', () => {
         expect(source).not.toContain('(optional)');
+        // The Optional pill now sits on the closed section that holds these
+        // fields, so the fields drop their own tags; Question is required.
+        for (const [title, id] of [
+            ['Rules to Pass', 'rules'],
+            ['Deposit', 'deposit'],
+            ['Run a Contract When It Ends', 'contract'],
+        ]) {
+            expect(source).toMatch(new RegExp(`id="${id}"\\s+title="${title}"\\s+icon=\\{[^}]+\\}\\s+optional`));
+        }
         for (const label of [
-            'Question',
             'Quorum',
             'Minimum voters',
             'Minimum vote balance',
@@ -36,10 +45,18 @@ describe('CreatePollForm UI rulings', () => {
             'Escrow to fund the call',
             'Delay before the call runs',
         ]) {
-            expect(source).toMatch(new RegExp(`label="${label}"[^>]*optional`));
+            expect(source).toMatch(new RegExp(`label="${label}"`));
+            expect(source).not.toMatch(new RegExp(`label="${label}"[^>]*optional`));
         }
-        // The SDK's 1 MiB payload cap is not a form length limit, so Question shows no counter.
-        expect(source).not.toMatch(/label="Question"[^>]*maxLength/);
+        expect(source).not.toMatch(/label="Question"[^>]*optional/);
+    });
+
+    // The wallet caps Question at 250 and each option at 100, shown as a
+    // count on the label line; the protocol bounds QUESTION only by the
+    // message size limit and options not at all.
+    it('caps Question at 250 and each option at 100, with their counts', () => {
+        expect(source).toMatch(/label="Question"[\s\S]{0,200}maxLength=\{250\}/);
+        expect(source).toMatch(/label=\{`Option \$\{i \+ 1\}`\}[\s\S]{0,200}maxLength=\{100\}/);
     });
 
     it('uses shared XCHAIN AmountFields whose Max subtracts the other spend', () => {
@@ -52,9 +69,18 @@ describe('CreatePollForm UI rulings', () => {
     });
 
     it('pins the action names, icons, review navigation, and result action', () => {
-        expect(source).toContain('icon={showBinding ? <Icon.EyeOffIcon /> : <Icon.ContractIcon />}');
-        expect(source).toContain('<Button type="button" variant="ghost" onClick={addOption}>Add option</Button>');
-        expect(source).toContain('<Button type="button" variant="ghost" onClick={() => removeOption(i)}>Remove</Button>');
+        expect(source).toMatch(/<FormAction\s+icon=\{<Icon\.PlusIcon \/>\}[\s\S]*?Create Poll\s+<\/FormAction>/);
+        // Add Option is the standard secondary button with its icon, never a custom grey
+        // one, and Remove is red with the trash icon.
+        expect(source).toContain('<Button type="button" variant="secondary" icon={<Icon.PlusIcon />} onClick={addOption}>{t(\'governance.action.addOption\')}</Button>');
+        // Removal is the trash icon in the option's own trailing slot, never a Remove button.
+        expect(source).not.toContain('>Remove</Button>');
+        expect(source).toMatch(/fieldAction=\{\(\s*<FieldIconButton\s+icon=\{<Icon\.TrashIcon \/>\}\s+label=\{`Remove option \$\{i \+ 1\}`\}/);
+        // The binding-poll note is in the warning card, never a loose paragraph.
+        expect(source).toContain('<WarningCard data-poll-binding-note="">');
+        // A rule the poll still misses is one danger notice, never a critical line in the card.
+        expect(source).toContain('<Notice tone="danger" role="note" data-poll-binding-errors="">');
+        expect(source).not.toContain('WarningLine key={e} critical');
         expect(source).not.toContain("{singleEncode ? 'Create poll' : 'Preview'}");
         expect(source).not.toContain('>Back</Button>');
         expect(source).toContain('<Button variant="success" icon={<Icon.CheckIcon />} onClick={onCreated || onBack}>Done</Button>');

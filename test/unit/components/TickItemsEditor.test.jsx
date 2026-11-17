@@ -205,7 +205,7 @@ describe('TickItemsEditor', () => {
     it('opens the token picker from its button', () => {
         const onOpenPicker = vi.fn();
         render(<Harness initial="" messaging={fakeMessaging({})} onOpenPicker={onOpenPicker} />);
-        fireEvent.click(screen.getByRole('button', { name: 'Add from token picker' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add from Token Picker' }));
         expect(onOpenPicker).toHaveBeenCalledTimes(1);
     });
 

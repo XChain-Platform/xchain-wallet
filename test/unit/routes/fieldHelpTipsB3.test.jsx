@@ -45,23 +45,20 @@ function expectTip({ label, copy, fieldLabel = label, selector = 'input' }) {
 }
 
 describe('Route field help tips', () => {
-    it('puts signer label guidance in the label tip', async () => {
+    it('puts hardware wallet name guidance in the label tip', async () => {
         Object.defineProperty(navigator, 'hid', { configurable: true, value: {} });
         const pairingInfo = {
             vendor: 'trezor',
-            model: 'safe-3',
+            model: 'T2B1',
             deviceIdentifier: 'device-1',
-            firmwareVersion: '2.8.0',
+            firmwareVersion: '2.7.2',
         };
-        const messaging = {
-            listSigners: vi.fn().mockResolvedValue([]),
-            registerSigner: vi.fn(),
-        };
+        const signer = { getAddresses: vi.fn().mockResolvedValue([]) };
         render(
-            <MessagingProvider shell="web" messaging={messaging}>
+            <MessagingProvider shell="web" messaging={{}}>
                 <PairSignerForm
-                    walletId="wallet-1"
-                    pairTrezor={vi.fn().mockResolvedValue({ signer: {}, pairingInfo })}
+                    mode="add"
+                    pairTrezor={vi.fn().mockResolvedValue({ signer, pairingInfo })}
                     pairLedger={vi.fn()}
                     onBack={vi.fn()}
                 />
@@ -69,11 +66,12 @@ describe('Route field help tips', () => {
         );
 
         fireEvent.click(screen.getByRole('button', { name: /Trezor/ }));
-        await screen.findByLabelText('Label', { selector: 'input' });
+        fireEvent.click(await screen.findByRole('button', { name: 'Continue' }));
+        await screen.findByLabelText('Wallet name', { selector: 'input' });
 
         expectTip({
-            label: 'Label',
-            copy: 'Shows wherever this signer appears in the UI.',
+            label: 'Wallet name',
+            copy: 'Shows in your wallet list. You can change it later.',
         });
     });
 
@@ -121,11 +119,15 @@ describe('Route field help tips', () => {
             </MessagingProvider>,
         );
 
-        fireEvent.click(await screen.findByRole('radio', { name: 'Expire at a specific time' }));
+        // The expiration choice lives in the closed Swap Terms section.
+        fireEvent.click(await screen.findByRole('button', { name: /^Swap Terms\b/, expanded: false }));
+        fireEvent.click(await screen.findByRole('combobox', { name: /^Expiration/ }));
+        fireEvent.click(screen.getByRole('option', { name: 'Expire at a specific time' }));
 
+        // Expires always shows, set by the Expiration choice (operator 2026-11-13).
         expectTip({
             label: 'Expires',
-            copy: 'Wall-clock time the swap offer is valid until. Must be in the future.',
+            copy: 'When the swap offer stops being valid. Set by the Expiration choice, or pick a time to expire at a specific time.',
         });
     });
 });

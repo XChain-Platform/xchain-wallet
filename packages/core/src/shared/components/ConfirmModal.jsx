@@ -28,6 +28,7 @@ import { userFacingMessage } from '../utils/userFacingMessage.js';
  * @param {string} props.title
  * @param {string} [props.message]
  * @param {string} [props.confirmLabel]  defaults to "Confirm"
+ * @param {import('react').ReactNode} [props.confirmIcon] icon on the confirm button; left out, the label picks it
  * @param {string} [props.cancelLabel]   defaults to "Cancel"
  * @param {boolean} [props.danger]       style the confirm button as destructive
  * @param {boolean} [props.busy]         keep the dialog open and disable dismissal while confirming
@@ -39,6 +40,7 @@ export function ConfirmModal({
     title,
     message,
     confirmLabel = t('common.confirm'),
+    confirmIcon,
     cancelLabel = t('common.cancel'),
     danger = false,
     busy = false,
@@ -117,6 +119,7 @@ export function ConfirmModal({
                     <Button
                         variant={danger ? 'danger' : 'primary'}
                         block
+                        icon={confirmIcon}
                         onClick={confirm}
                         loading={busy}
                         disabled={busy}

@@ -26,23 +26,30 @@ const web = join(wsRoot, 'packages', 'web');
 const desktop = join(wsRoot, 'packages', 'desktop');
 const sharedRoutes = join(core, 'src', 'shared', 'routes');
 
-const formPath = join(sharedRoutes, 'DelegationActionForm.jsx');
-assert.ok(existsSync(formPath), 'DelegationActionForm.jsx exists');
+// Validator Delegate and Revoke are actions of the one Staking form
+// (StakingForm.jsx); the old DelegationActionForm.jsx is gone.
+const formPath = join(sharedRoutes, 'StakingForm.jsx');
+assert.ok(existsSync(formPath), 'StakingForm.jsx exists');
+assert.ok(!existsSync(join(sharedRoutes, 'DelegationActionForm.jsx')),
+    'DelegationActionForm.jsx is merged into StakingForm.jsx');
 const formSrc = readFileSync(formPath, 'utf8');
 
-assert.ok(/export function DelegationActionForm\b/.test(formSrc),
-    'DelegationActionForm is a named export');
-assert.equal(
-    (formSrc.match(/^export\s+(function|const|class)\b/gm) || []).length,
-    1,
-    'DelegationActionForm.jsx only exports the component',
-);
+assert.ok(/export function StakingForm\b/.test(formSrc),
+    'StakingForm is a named export');
+const actionRow = (key) => formSrc.split(`'${key}': {`)[1]?.split(/\n    '[a-z]+:[a-z-]+': \{/)[0] || '';
+const delegateRow = actionRow('network:delegate');
+const revokeRow = actionRow('network:revoke');
 
-// Mode prop + branching.
-assert.ok(/mode\s*===\s*['"]delegate['"]/.test(formSrc),
-    'DelegationActionForm branches on mode === delegate');
-assert.ok(/Delegate|Revoke/.test(formSrc),
-    'DelegationActionForm renders both verbs');
+// Action rows + branching.
+assert.ok(delegateRow && revokeRow, 'StakingForm has network delegate and revoke action rows');
+assert.ok(/currentAction\s*===\s*['"]delegate['"]/.test(formSrc),
+    'StakingForm branches on the delegate action');
+assert.ok(/verb:\s*'Delegate Signing Key'/.test(delegateRow) && /verb:\s*'Revoke Delegation'/.test(revokeRow),
+    'StakingForm names both verbs');
+assert.ok(/wire:\s*'DELEGATE'/.test(delegateRow) && /wire:\s*'DELEGATE'/.test(revokeRow),
+    'Delegate and Revoke share the DELEGATE wire action');
+assert.ok(/VERSION: '0', NEW_SIGNING_PUBKEY: pk/.test(formSrc) && /VERSION: '2', SIGNING_PUBKEY: pk/.test(formSrc),
+    'Delegate rotates with DELEGATE v0 and Revoke removes with DELEGATE v2');
 
 // 4-stage state machine.
 for (const stage of ['form', 'review', 'submitting', 'done']) {
@@ -59,15 +66,17 @@ assert.ok(/messaging\.getDelegationsForAddress/.test(formSrc),
     'DelegationActionForm queries getDelegationsForAddress in revoke mode for pre-fill');
 
 // Wiring of all four messaging helpers + shared chassis.
+assert.ok(/software:\s*'delegateAction'/.test(delegateRow) && /hardware:\s*'delegateActionHw'/.test(delegateRow),
+    'Delegate signs through delegateAction and delegateActionHw');
+assert.ok(/software:\s*'revokeDelegationAction'/.test(revokeRow) && /hardware:\s*'revokeDelegationActionHw'/.test(revokeRow),
+    'Revoke signs through revokeDelegationAction and revokeDelegationActionHw');
 for (const call of [
-    'messaging.delegateAction',
-    'messaging.delegateActionHw',
-    'messaging.revokeDelegationAction',
-    'messaging.revokeDelegationActionHw',
+    'messaging[cfg.software]',
+    'messaging[cfg.hardware]',
     'messaging.getAddressesByChain',
     'messaging.getSignerStatus',
 ]) {
-    assert.ok(formSrc.includes(call), `DelegationActionForm calls ${call}`);
+    assert.ok(formSrc.includes(call), `StakingForm calls ${call}`);
 }
 
 // Wrong-password handling.
@@ -145,8 +154,8 @@ for (const [shell, appPath] of [
     ['desktop', join(desktop, 'renderer', 'App.jsx')],
 ]) {
     const app = readFileSync(appPath, 'utf8');
-    assert.ok(app.includes('DelegationActionForm'),
-        `${shell} App.jsx imports DelegationActionForm`);
+    assert.ok(app.includes("import('@xchain-wallet/core/shared/routes/StakingForm.jsx')"),
+        `${shell} App.jsx loads StakingForm`);
     assert.ok(app.includes("'staking-delegate'"),
         `${shell} tracks staking-delegate sub-route`);
     assert.ok(app.includes("'staking-revoke'"),
@@ -157,12 +166,13 @@ for (const [shell, appPath] of [
         `${shell} wires StakeDetail.onDelegate (validator arm) → staking-delegate`);
     assert.ok(/onRevokeDelegation=\{\(\)\s*=>\s*setUnlockedView\('staking-revoke'\)\}/.test(app),
         `${shell} wires StakeDetail.onRevokeDelegation → staking-revoke`);
-    assert.ok(/mode="delegate"/.test(app),
-        `${shell} App.jsx passes mode="delegate" to DelegationActionForm for the delegate route`);
-    assert.ok(/mode="revoke"/.test(app),
-        `${shell} App.jsx passes mode="revoke" to DelegationActionForm for the revoke route`);
+    for (const [view, action] of [['staking-delegate', 'delegate'], ['staking-revoke', 'revoke']]) {
+        const block = app.split(`unlockedView === '${view}'`)[1]?.split('unlockedView ===')[0] || '';
+        assert.ok(new RegExp(`<StakingForm\\b[\\s\\S]*kind: 'network'[\\s\\S]*action="${action}"`).test(block),
+            `${shell} ${view} opens the Staking form on action="${action}"`);
+    }
 }
 
 console.log(
-    'OK: delegation action form smoke (DelegationActionForm mode=delegate|revoke + delegateAction/revokeDelegationAction flows with 64-hex Ed25519 validation + revoke auto-prefill via getDelegationsForAddress + bg handlers + 3-shell messaging + two App.jsx sub-routes wired from StakeDetail)',
+    'OK: delegation action form smoke (StakingForm delegate|revoke + delegateAction/revokeDelegationAction flows with 64-hex Ed25519 validation + revoke auto-prefill via getDelegationsForAddress + bg handlers + 3-shell messaging + two App.jsx sub-routes wired from StakeDetail)',
 );

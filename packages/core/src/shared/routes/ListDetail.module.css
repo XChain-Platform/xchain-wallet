@@ -1,18 +1,129 @@
-/* A list of members or edit items as one rounded card, a hairline between rows. */
+/* A list of members, edit items or detail facts as one rounded card, a hairline between rows. */
 .itemList {
     composes: flush from '../../ui/Card.module.css';
     list-style: none;
     margin: 0;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
 }
 
-.itemList li + li {
+.itemList > li + li {
     border-block-start: 1px solid var(--xc-border);
 }
 
 .itemRow {
+    min-width: 0;
     padding-block: var(--xc-space-2);
     padding-inline: var(--xc-space-3);
     overflow-wrap: anywhere;
+}
+
+/* The identity card (G16): an outlined card, the list's icon centred at 64px
+   with its network badge, the name in bold and the type line muted. */
+.identityCard {
+    composes: card from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--xc-space-2);
+    color: var(--xc-text);
+    text-align: center;
+}
+
+/* The icon is the look editor's button, as a wallet tile opens Edit wallet. */
+.lookButton {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    /* The 64px icon fills it; the floor holds if the icon fails to load. */
+    min-width: var(--xc-tap-min);
+    min-height: var(--xc-tap-min);
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    cursor: pointer;
+}
+
+.lookButton:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.avatar {
+    --xc-avatar-size-list: 64px;
+    --xc-avatar-initials-list: var(--xc-text-xl, 24px);
+    display: inline-flex;
+}
+
+/* The network badge in the icon's lower corner. */
+.networkPip {
+    position: absolute;
+    inset-block-end: -2px;
+    inset-inline-end: -2px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--xc-surface-raised);
+    box-shadow: 0 0 0 1.5px var(--xc-bg-muted);
+    object-fit: cover;
+    display: block;
+}
+
+.identityName {
+    margin: 0;
+    color: var(--xc-text);
+    font-size: var(--xc-text-lg);
+    font-weight: 800;
+    overflow-wrap: anywhere;
+}
+
+.identityLine {
+    margin: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+.detailValue {
+    min-width: 0;
+    font-weight: 600;
+    text-align: end;
+    overflow-wrap: anywhere;
+}
+
+/* A union source's name over its entries, or a label over a second card. */
+.unionGroup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.groupLabel {
+    --xc-icon-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    margin: 0;
+    min-width: 0;
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+}
+
+.groupName {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.groupMeta {
+    margin-inline-start: auto;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 500;
+    white-space: nowrap;
 }

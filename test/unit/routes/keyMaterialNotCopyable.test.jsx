@@ -64,16 +64,23 @@ function draw(messaging = makeMessaging(), props = {}) {
     return { ...result, messaging };
 }
 
-function continueToPassword() {
-    fireEvent.click(screen.getByRole('button', { name: /I understand, continue/i }));
-}
-
+// The warning and the wallet password share one form, and I understand
+// submits it; the key shows at once on success (no tap to reveal).
 async function confirmPassword() {
-    continueToPassword();
     fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: PASSWORD } });
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm password' }));
+    fireEvent.click(screen.getByRole('button', { name: 'I Understand' }));
     await act(async () => { await Promise.resolve(); });
 }
+
+// The key sits in a read-only field, so it is read by display value.
+const shownKey = () => screen.queryByDisplayValue(PRIVATE_KEY);
+// Back on the "Before you continue" form: its wallet password field is there
+// again and empty.
+const atWarningForm = () => {
+    const field = screen.getByLabelText('Wallet password');
+    expect(field).toHaveValue('');
+    return field;
+};
 
 afterEach(() => {
     cleanup();
@@ -89,33 +96,45 @@ describe('private-key reveal security', () => {
         const onBack = vi.fn();
         draw(makeMessaging(), { onBack });
         await confirmPassword();
-        fireEvent.click(screen.getByRole('button', { name: /Tap to reveal private key/i }));
-        expect(screen.getByText(PRIVATE_KEY)).toBeTruthy();
+        expect(shownKey()).toBeTruthy();
 
         act(() => dismissAllOverlays());
 
-        expect(screen.queryByText(PRIVATE_KEY)).toBeNull();
-        expect(screen.getByText('Before you continue')).toBeTruthy();
-        expect(onBack).not.toHaveBeenCalled();
+        expect(shownKey()).toBeNull();
+        expect(atWarningForm()).toBeTruthy();
+        // The key page's back handler runs for the native pause: it wipes the
+        // key and leaves the screen.
+        expect(onBack).toHaveBeenCalledTimes(1);
     });
 
-    it('warns before requesting a password and does not export early', () => {
+    it('warns and asks for the password on one form and does not export early', () => {
         const { messaging } = draw();
 
         expect(screen.getByText(/Never share this private key/)).toHaveTextContent(
             'Never share this private key. Anyone with it can spend funds from this address.',
         );
-        expect(screen.getByText(/screen-sharing or recording/i)).toBeTruthy();
-        expect(screen.queryByLabelText('Wallet password')).toBeNull();
-        expect(messaging.exportPrivateKey).not.toHaveBeenCalled();
-
-        continueToPassword();
+        expect(screen.queryByText(/screen-sharing or recording/i)).toBeNull();
+        // The password field sits under the warning, masked, with no key shown.
         expect(screen.getByLabelText('Wallet password')).toHaveAttribute('type', 'password');
+        expect(shownKey()).toBeNull();
         expect(messaging.exportPrivateKey).not.toHaveBeenCalled();
     });
 
-    it('requires password confirmation and keeps the exported key masked', async () => {
+    it('does not export on an empty password and marks the field', async () => {
         const { messaging } = draw();
+
+        fireEvent.click(screen.getByRole('button', { name: 'I Understand' }));
+        await act(async () => { await Promise.resolve(); });
+
+        expect(messaging.exportPrivateKey).not.toHaveBeenCalled();
+        expect(shownKey()).toBeNull();
+        expect(screen.getByRole('alert', { name: 'Form errors' }))
+            .toHaveTextContent('Enter your wallet password.');
+    });
+
+    it('requires password confirmation before the exported key shows', async () => {
+        const { messaging } = draw();
+        expect(shownKey()).toBeNull();
 
         await confirmPassword();
 
@@ -124,8 +143,7 @@ describe('private-key reveal security', () => {
             addressId: ADDRESS.id,
             password: PASSWORD,
         });
-        expect(screen.getByRole('button', { name: /Tap to reveal private key/i })).toBeTruthy();
-        expect(screen.queryByText(PRIVATE_KEY)).toBeNull();
+        expect(shownKey()).toBeTruthy();
     });
 
     it('shows a fixed password error without exposing the host error', async () => {
@@ -135,43 +153,43 @@ describe('private-key reveal security', () => {
 
         await confirmPassword();
 
-        expect(screen.getByText('Incorrect password. Try again.')).toBeTruthy();
+        expect(screen.getByRole('alert', { name: 'Form errors' }))
+            .toHaveTextContent('The wallet password is not right.');
         expect(screen.queryByText(/internal decrypt detail/i)).toBeNull();
         expect(screen.getByLabelText('Wallet password')).toBeTruthy();
+        expect(shownKey()).toBeNull();
     });
 
-    it('reveals only after a tap and automatically hides after 30 seconds', async () => {
+    // The key page has no Hide: the timeout wipes the key and returns to the form.
+    it('shows the key at once and wipes it after 30 seconds', async () => {
         vi.useFakeTimers();
         draw();
         await confirmPassword();
 
-        fireEvent.click(screen.getByRole('button', { name: /Tap to reveal private key/i }));
-        expect(screen.getByText(PRIVATE_KEY)).toBeTruthy();
+        expect(shownKey()).toBeTruthy();
 
         act(() => vi.advanceTimersByTime(29_999));
-        expect(screen.getByText(PRIVATE_KEY)).toBeTruthy();
+        expect(shownKey()).toBeTruthy();
         act(() => vi.advanceTimersByTime(1));
-        expect(screen.queryByText(PRIVATE_KEY)).toBeNull();
-        expect(screen.getByRole('button', { name: /Tap to reveal private key/i })).toBeTruthy();
+        expect(shownKey()).toBeNull();
+        expect(atWarningForm()).toBeTruthy();
     });
 
-    it('masks a revealed key when the desktop window is minimized or hidden', async () => {
+    it('wipes a revealed key when the desktop window is minimized or hidden', async () => {
         draw();
         await confirmPassword();
-        fireEvent.click(screen.getByRole('button', { name: /Tap to reveal private key/i }));
-        expect(screen.getByText(PRIVATE_KEY)).toBeTruthy();
+        expect(shownKey()).toBeTruthy();
 
         act(() => window.dispatchEvent(new CustomEvent('xc:window-hidden')));
 
-        expect(screen.queryByText(PRIVATE_KEY)).toBeNull();
-        expect(screen.getByRole('button', { name: /Tap to reveal private key/i })).toBeTruthy();
+        expect(shownKey()).toBeNull();
+        expect(atWarningForm()).toBeTruthy();
     });
 
     it('does not carry a revealed key into another address screen', async () => {
         const { messaging, rerender } = draw();
         await confirmPassword();
-        fireEvent.click(screen.getByRole('button', { name: /Tap to reveal private key/i }));
-        expect(screen.getByText(PRIVATE_KEY)).toBeTruthy();
+        expect(shownKey()).toBeTruthy();
 
         rerender(
             <MessagingProvider shell="web" messaging={messaging}>
@@ -183,45 +201,43 @@ describe('private-key reveal security', () => {
             </MessagingProvider>,
         );
 
-        expect(screen.queryByText(PRIVATE_KEY)).toBeNull();
-        await waitFor(() => expect(screen.getByText('Before you continue')).toBeTruthy());
+        expect(shownKey()).toBeNull();
+        await waitFor(() => expect(atWarningForm()).toBeTruthy());
     });
 
+    // The key page has no Done button: the title bar's Back leaves and wipes the key.
     it('clears the exported key before leaving the screen', async () => {
         const onBack = vi.fn();
         draw(makeMessaging(), { onBack });
         await confirmPassword();
-        fireEvent.click(screen.getByRole('button', { name: /Tap to reveal private key/i }));
-        expect(screen.getByText(PRIVATE_KEY)).toBeTruthy();
+        expect(shownKey()).toBeTruthy();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
 
         expect(onBack).toHaveBeenCalledTimes(1);
-        expect(screen.queryByText(PRIVATE_KEY)).toBeNull();
-        expect(screen.getByText('Before you continue')).toBeTruthy();
+        expect(shownKey()).toBeNull();
+        expect(atWarningForm()).toBeTruthy();
     });
 
     it('clears the reveal when a new unlocked session replaces a locked one', async () => {
         draw();
         await confirmPassword();
-        fireEvent.click(screen.getByRole('button', { name: /Tap to reveal private key/i }));
-        expect(screen.getByText(PRIVATE_KEY)).toBeTruthy();
+        expect(shownKey()).toBeTruthy();
 
         act(() => window.dispatchEvent(new CustomEvent('xc:session-changed')));
 
-        expect(screen.queryByText(PRIVATE_KEY)).toBeNull();
-        expect(screen.getByText('Before you continue')).toBeTruthy();
+        expect(shownKey()).toBeNull();
+        expect(atWarningForm()).toBeTruthy();
     });
 
     it('routes copy through the sensitive clipboard with the selected expiry', async () => {
         draw();
         await confirmPassword();
-        fireEvent.click(screen.getByRole('button', { name: /Tap to reveal private key/i }));
         await waitFor(() => expect(
             screen.getByText('Sensitive clipboard copies expire after 17 seconds.'),
         ).toBeTruthy());
 
-        fireEvent.click(screen.getByRole('button', { name: 'Copy private key' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Copy Private Key' }));
         await act(async () => { await Promise.resolve(); });
         expect(clipboard.copyText).toHaveBeenCalledWith(expect.any(String), { sensitive: true });
         expect(clipboard.clearClipboard).not.toHaveBeenCalled();

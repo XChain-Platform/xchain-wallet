@@ -8,6 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { isCustomSoundId } from './customSounds.js';
+
 // Event sounds (wallet-unconfirmed-and-sounds §6 M4.1): the seam between the
 // notification producers and the shell that can make a noise.
 //
@@ -24,10 +26,8 @@
 // producer. The wrapper re-reads settings per delivery, which is the
 // service's own rule: a toggle takes effect on the next event, no restart.
 //
-// A wrapped payload carries `sound: { id, file } | null`. Adapters that know
-// nothing about sounds (desktop, extension) ignore the extra field; only the
-// web adapter plays it, and only on its in-app path, so a sound never
-// arrives without the toast it belongs to (§6 M4.1: never the sole signal).
+// A wrapped payload carries a bundled file or a device-local custom id. Shell
+// adapters decide how to accompany their visible notification with that sound.
 
 /** The per-family value that mutes that family while the master stays on. */
 export const SOUND_NONE = 'none';
@@ -47,18 +47,20 @@ export const SOUND_PREVIEW_EVENT = 'xchain:sound-preview';
  * The bundled palette. `file` is relative to the shell's sound directory
  * (`/sounds/` on web). Kinds may share a file; every family is re-pickable.
  *
- * @type {ReadonlyArray<{ id: string, label: string, file: string }>}
+ * @type {ReadonlyArray<{ id: string, label: string, file: string, icon: string }>}
  */
 export const SOUND_PALETTE = Object.freeze([
-    Object.freeze({ id: 'chime', label: 'Chime', file: 'chime.mp3' }),
-    Object.freeze({ id: 'glass', label: 'Glass', file: 'glass.mp3' }),
-    Object.freeze({ id: 'bell', label: 'Bell', file: 'bell.mp3' }),
-    Object.freeze({ id: 'pluck', label: 'Pluck', file: 'pluck.mp3' }),
-    Object.freeze({ id: 'ping', label: 'Ping', file: 'ping.mp3' }),
-    Object.freeze({ id: 'alert', label: 'Alert', file: 'alert.mp3' }),
-    Object.freeze({ id: 'drop', label: 'Drop', file: 'drop.mp3' }),
-    Object.freeze({ id: 'bong', label: 'Bong', file: 'bong.mp3' }),
+    Object.freeze({ id: 'chime', label: 'Chime', file: 'chime.mp3', icon: 'MusicIcon' }),
+    Object.freeze({ id: 'glass', label: 'Glass', file: 'glass.mp3', icon: 'WineGlassIcon' }),
+    Object.freeze({ id: 'bell', label: 'Bell', file: 'bell.mp3', icon: 'BellIcon' }),
+    Object.freeze({ id: 'pluck', label: 'Pluck', file: 'pluck.mp3', icon: 'GuitarIcon' }),
+    Object.freeze({ id: 'ping', label: 'Ping', file: 'ping.mp3', icon: 'BroadcastIcon' }),
+    Object.freeze({ id: 'alert', label: 'Alert', file: 'alert.mp3', icon: 'AlertCircleIcon' }),
+    Object.freeze({ id: 'drop', label: 'Drop', file: 'drop.mp3', icon: 'DropletIcon' }),
+    Object.freeze({ id: 'bong', label: 'Bong', file: 'bong.mp3', icon: 'GongIcon' }),
 ]);
+
+export const SOUND_NONE_OPTION = Object.freeze({ id: SOUND_NONE, icon: 'MutedSpeakerIcon' });
 
 /**
  * The settings families, one per notification toggle, each with the kinds
@@ -94,7 +96,7 @@ const PALETTE_BY_ID = new Map(SOUND_PALETTE.map((s) => [s.id, s]));
  * The palette entry for an id, or null for `none`, an unknown id, or junk.
  *
  * @param {unknown} id
- * @returns {{ id: string, label: string, file: string } | null}
+ * @returns {{ id: string, label: string, file: string, icon: string } | null}
  */
 export function soundById(id) {
     if (typeof id !== 'string') return null;
@@ -131,7 +133,7 @@ export function pickedSoundForFamily(settings, familyKey) {
     const perKind = settings && settings.sounds && settings.sounds.perKind;
     const stored = perKind && typeof perKind === 'object' ? perKind[familyKey] : undefined;
     if (stored === SOUND_NONE) return SOUND_NONE;
-    if (soundById(stored)) return /** @type {string} */ (stored);
+    if (soundById(stored) || isCustomSoundId(stored)) return /** @type {string} */ (stored);
     return family.defaultSound;
 }
 
@@ -145,7 +147,7 @@ export function pickedSoundForFamily(settings, familyKey) {
  *
  * @param {import('../schemas/settings.js').Settings | null | undefined} settings
  * @param {unknown} kind
- * @returns {{ id: string, file: string } | null}
+ * @returns {{ id: string, file: string } | { id: string, custom: true } | null}
  */
 export function resolveNotificationSound(settings, kind) {
     const sounds = settings && settings.sounds;
@@ -154,7 +156,8 @@ export function resolveNotificationSound(settings, kind) {
     if (!family) return null;
     const picked = pickedSoundForFamily(settings, family.key);
     const entry = soundById(picked);
-    return entry ? { id: entry.id, file: entry.file } : null;
+    if (entry) return { id: entry.id, file: entry.file };
+    return isCustomSoundId(picked) ? { id: picked, custom: true } : null;
 }
 
 /**
@@ -164,7 +167,7 @@ export function resolveNotificationSound(settings, kind) {
  * the toast is the thing the user must not miss.
  *
  * @template {{ kind: string }} P
- * @param {(n: P & { sound: { id: string, file: string } | null }) => (void | Promise<void>)} notify
+ * @param {(n: P & { sound: ({ id: string, file: string } | { id: string, custom: true }) | null }) => (void | Promise<void>)} notify
  * @param {() => (import('../schemas/settings.js').Settings | Promise<import('../schemas/settings.js').Settings>)} getSettings
  * @returns {(n: P) => Promise<void>}
  */

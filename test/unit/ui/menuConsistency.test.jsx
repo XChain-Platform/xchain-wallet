@@ -39,7 +39,7 @@ describe('menu row contract', () => {
         expect(tokenCss).toMatch(/\[data-xc-menu-list="rows"\] > li \+ li[\s\S]*?border-top:\s*1px solid var\(--xc-border\)/);
     });
 
-    it('marks action pages with the shared item semantics', () => {
+    it('draws the action page as the shared ActionList rows (G101)', () => {
         render(withMessaging(
             <ActionsMenu
                 onBack={() => {}}
@@ -50,9 +50,12 @@ describe('menu row contract', () => {
             />,
         ));
 
-        expect(screen.getByRole('button', { name: 'Issue token' })).toHaveAttribute('data-xc-menu-item');
-        expect(screen.getByRole('button', { name: 'Destroy' })).not.toHaveAttribute('data-destructive');
-        expect(screen.getByRole('button', { name: 'Destroy' }).closest('ul'))
-            .toHaveAttribute('data-xc-menu-list', 'cards');
+        const issue = screen.getByRole('button', { name: /^Issue token/ });
+        const destroy = screen.getByRole('button', { name: /^Destroy/ });
+        expect(issue).not.toHaveAttribute('data-xc-menu-item');
+        // A catalogue entry opens its form; it is never drawn as a danger row.
+        expect(destroy).toHaveAttribute('data-tone', 'default');
+        expect(destroy.closest('ul')).toHaveAttribute('role', 'list');
+        expect(destroy.closest('ul')).not.toHaveAttribute('data-xc-menu-list');
     });
 });

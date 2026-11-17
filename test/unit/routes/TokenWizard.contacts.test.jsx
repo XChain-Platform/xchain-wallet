@@ -8,13 +8,15 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The wizard's two recipient fields open the address book exactly as the same
-// fields on Issue token do, and a picked entry fills the field that opened it.
+// The Issue Token form's two recipient fields (new owner, initial mint
+// destination) each open the address book, and a picked entry fills the field
+// that opened it, never the other one.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+// The Create a token route: TokenWizard renders the one Issue Token form.
 import { TokenWizard } from '../../../packages/core/src/shared/routes/TokenWizard.jsx';
 
 const OWNER = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
@@ -52,28 +54,28 @@ function mountWizard() {
     return messaging;
 }
 
-async function openCustomDetails() {
-    fireEvent.click(await screen.findByText('Custom'));
-    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-    await waitFor(() => expect(screen.getByLabelText('Token name (ticker)')).toBeTruthy());
+// The address book button of the field inside the section `title`, opening
+// that section first (closed sections hide their buttons).
+function addressBookIn(title) {
+    const header = screen.getByRole('button', { name: new RegExp(`^${title}`) });
+    if (header.getAttribute('aria-expanded') !== 'true') fireEvent.click(header);
+    const section = header.closest('[data-form-section]');
+    return within(section).getByRole('button', { name: 'Open address book' });
 }
 
-
-describe('TokenWizard recipient fields', () => {
+describe('Issue Token recipient fields', () => {
     it('fills each recipient field from the address book', async () => {
         const messaging = mountWizard();
-        await openCustomDetails();
+        await screen.findByLabelText('Ticker');
         await waitFor(() => expect(messaging.listContacts).toHaveBeenCalled());
 
-        expect(screen.getAllByRole('button', { name: 'Open address book' })).toHaveLength(2);
-
-        fireEvent.click(screen.getAllByRole('button', { name: 'Open address book' })[0]);
+        fireEvent.click(addressBookIn('Transfer ownership'));
         fireEvent.click(await screen.findByText('Alice'));
-        expect(await screen.findByLabelText('Transfer ownership to')).toHaveValue(OWNER);
+        expect(await screen.findByLabelText('New owner address')).toHaveValue(OWNER);
 
-        fireEvent.click(screen.getAllByRole('button', { name: 'Open address book' })[1]);
+        fireEvent.click(addressBookIn('Initial mint'));
         fireEvent.click(await screen.findByText('Bob'));
-        expect(await screen.findByLabelText('Send the initial mint to')).toHaveValue(HOLDER);
-        expect(screen.getByLabelText('Transfer ownership to')).toHaveValue(OWNER);
+        expect(await screen.findByLabelText('Send initial mint to')).toHaveValue(HOLDER);
+        expect(screen.getByLabelText('New owner address')).toHaveValue(OWNER);
     });
 });

@@ -76,7 +76,8 @@ describe('the Dividend holder-count hint on a failed holder read', () => {
     it('renders form-specific help for its network and both token fields', async () => {
         mountDividend(async () => ({ rows: [] }), null);
 
-        expect(await screen.findByRole('button', { name: 'About Network' })).toBeInTheDocument();
+        // Network sits in the closed standard From section (mounted, hidden).
+        expect(await screen.findByRole('button', { name: 'About Network', hidden: true })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'About Holder-of token' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'About Dividend token' })).toBeInTheDocument();
     });

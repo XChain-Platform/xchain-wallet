@@ -10,8 +10,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { act as domAct, cleanup, render } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { MyBets } from '../../../packages/core/src/shared/routes/MyBets.jsx';
+import { BetFeedsList } from '../../../packages/core/src/shared/routes/BetFeedsList.jsx';
 import { OracleConsole } from '../../../packages/core/src/shared/routes/OracleConsole.jsx';
+
+const MyBetsTab = (props) => <BetFeedsList {...props} view="bets" onOpenMarket={() => {}} />;
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = {
@@ -52,13 +54,15 @@ function baseMessaging(overrides) {
 }
 
 describe('betting history empty states', () => {
+    // My bets is a tab of Bet Markets (view 'bets').
     it('does not call a failed My bets read an empty history', async () => {
-        const utils = await mount(MyBets, baseMessaging({
+        const utils = await mount(MyBetsTab, baseMessaging({
+            betFeeds: () => Promise.resolve({ data: [] }),
             bets: () => Promise.reject(new Error('explorer unavailable')),
         }));
         const shown = utils.container.textContent || '';
         expect(shown).toMatch(/could not load bets for any of your addresses/i);
-        expect(shown).not.toMatch(/have not placed any bets yet/i);
+        expect(shown).not.toMatch(/no bets yet/i);
     });
 
     it('does not call a failed oracle market read an empty history', async () => {

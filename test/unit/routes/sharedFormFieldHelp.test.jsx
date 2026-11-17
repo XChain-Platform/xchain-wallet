@@ -18,11 +18,14 @@ import { BridgeMoveForm } from '../../../packages/core/src/shared/routes/BridgeM
 import { CreateBetFeedForm } from '../../../packages/core/src/shared/routes/CreateBetFeedForm.jsx';
 import { BatchComposerForm } from '../../../packages/core/src/shared/routes/BatchComposerForm.jsx';
 import { ContractFundsForm } from '../../../packages/core/src/shared/routes/ContractFundsForm.jsx';
-import { ContractStakeForm } from '../../../packages/core/src/shared/routes/ContractStakeForm.jsx';
 import { DeployContractForm } from '../../../packages/core/src/shared/routes/DeployContractForm.jsx';
-import { StakeForm } from '../../../packages/core/src/shared/routes/StakeForm.jsx';
-import { StakingActionForm } from '../../../packages/core/src/shared/routes/StakingActionForm.jsx';
-import { DelegationActionForm } from '../../../packages/core/src/shared/routes/DelegationActionForm.jsx';
+// The staking routes render the one Staking form on their target and action.
+import {
+    ContractStakeRoute as ContractStakeForm,
+    NetworkDelegationRoute as DelegationActionForm,
+    NetworkPositionRoute as StakingActionForm,
+    NetworkStakeRoute as StakeForm,
+} from '../../helpers/stakingFormRoutes.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 import { en } from '../../../packages/core/src/i18n/locales/en/index.js';
 
@@ -92,12 +95,26 @@ function mount(Component, props) {
 }
 
 afterEach(() => {
+    // The Quick | Full choice is remembered per form; start each test on Quick.
+    globalThis.localStorage?.clear();
     cleanup();
     __clearTokenInfoCache();
     vi.clearAllMocks();
 });
 
+// Every field's tip is checked, so the Full view of a Give/Get form is shown
+// and each closed standard section is opened before the tips are read.
+async function showEveryField() {
+    await screen.findAllByRole('button', { name: /^About / });
+    const full = screen.queryByRole('radio', { name: 'Full' });
+    if (full && !full.checked) fireEvent.click(full);
+    for (const toggle of document.querySelectorAll('[data-form-section-toggle][aria-expanded="false"]')) {
+        fireEvent.click(toggle);
+    }
+}
+
 async function expectTip(name, copy) {
+    await showEveryField();
     const button = (await screen.findAllByRole('button', { name }))[0];
     fireEvent.click(button);
     expect(screen.getAllByRole('tooltip').map((node) => node.textContent).join(' | ')).toContain(copy);
@@ -107,7 +124,7 @@ async function expectTip(name, copy) {
 describe('Network, Token and Checkbox field help on trading, contract and staking forms', () => {
     it('Swap: Network, Give token and Get token tips', async () => {
         mount(SwapForm, {});
-        await expectTip('About Network', 'The chain this swap offer is recorded on.');
+        await expectTip('About Network', 'A swap settles on one network.');
         await expectTip('About Give token', 'held in escrow until the offer is matched');
         await expectTip('About Get token', 'paid to your receive address');
         await expectTip(/^About Give this token's ownership/, 'single-fill swap');
@@ -115,22 +132,24 @@ describe('Network, Token and Checkbox field help on trading, contract and stakin
 
     it('Create order: Network tip carries the line that used to sit under the field', async () => {
         mount(CreateOrderForm, {});
-        await expectTip('About Network', 'to get a token on another chain, use Cross-chain order.');
+        await expectTip('About Network', 'Both sides of the order settle on this network. A picked token decides it.');
         expect(screen.queryByText(/^Both sides of this order settle on the same chain\./)).toBeNull();
-        await expectTip(/^About Trade ownership of this ticker/, 'no partial fills');
+        await expectTip(/^About Trade ownership of the give token/, 'no partial fills');
     });
 
-    it('Cross-chain order: Give and Get network tips', async () => {
+    it('Cross-chain order: one Network tip for the give side, the get network follows the get token', async () => {
         mount(CrossChainOrderForm, {});
-        await expectTip('About Give network', 'The chain you pay from.');
-        await expectTip('About Get network', 'The chain you want to be paid on.');
-        await expectTip(/^About Give this token's ownership/, 'moves as one piece');
+        await expectTip('About Network', 'The chain you pay from.');
+        expect(screen.queryByRole('button', { name: 'About Give network' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'About Get network' })).toBeNull();
+        await expectTip(/^About Give this token's ownership/, 'Offer control of the whole token instead of a quantity.');
     });
 
-    it('Cross-chain swap: network and token tips', async () => {
+    it('Cross-chain swap: one Network tip, then token tips', async () => {
         mount(CrossChainSwapForm, {});
-        await expectTip('About Give network', 'changing it clears the give token');
-        await expectTip('About Get network', 'changing it clears the get token');
+        await expectTip('About Network', 'changing it clears the give token');
+        expect(screen.queryByRole('button', { name: 'About Give network' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'About Get network' })).toBeNull();
         await expectTip('About Give token', 'held in escrow');
         await expectTip('About Get token', 'paid to your Receive at address');
         await expectTip(/^About Require the matcher/, "ownership record across chains");
@@ -138,19 +157,22 @@ describe('Network, Token and Checkbox field help on trading, contract and stakin
 
     it('Bridge move: Move from, Token and Move to tips', async () => {
         mount(BridgeMoveForm, {});
-        await expectTip('About Move from', 'The network the token leaves.');
+        await expectTip('About Network', 'The network the token leaves.');
         await expectTip('About Token', 'Only tokens with a bridge route');
     });
 
     it('Bet market: Network and Token tips', async () => {
         mount(CreateBetFeedForm, { chainId: CHAIN, presetTick: 'PEPECREATURE' });
         await expectTip('About Network', 'The chain the market is created on.');
-        await expectTip('About Token bets are placed in', 'Every bet and every payout is in this token.');
+        await expectTip('About Token', 'Every bet and every payout is in this token.');
     });
 
-    it('Batch composer: Network tip', async () => {
+    // Batch (layout 1) picks each transaction's network with its From on the
+    // own-address picker, so it has no Network field; its Action field keeps
+    // its tip.
+    it('Batch composer: Action tip', async () => {
         mount(BatchComposerForm, {});
-        await expectTip('About Network', 'The chain the whole batch is sent on.');
+        await expectTip('About Action', 'One sub-action included in this single BATCH transaction.');
     });
 
     it('Contract funds: Network and Token tips follow the mode', async () => {
@@ -187,5 +209,10 @@ describe('Network, Token and Checkbox field help on trading, contract and stakin
 
     it('Execute contract: the deposit token help is a dictionary key', () => {
         expect(en['execute.depositTokenHelp']).toMatch(/same transaction, before the method runs/);
+    });
+
+    it('Execute contract: the deposit token field is labelled Token inside the Deposit section', () => {
+        expect(en['execute.deposit']).toBe('Deposit');
+        expect(en['execute.tokenLabel']).toBe('Token');
     });
 });

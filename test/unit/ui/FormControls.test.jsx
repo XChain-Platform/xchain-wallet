@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { Select } from '../../../packages/core/src/ui/Select.jsx';
 import { Textarea } from '../../../packages/core/src/ui/Textarea.jsx';
+import { selectOption } from '../../helpers/selectOption.js';
 
 function expectSingleDescription(control, text) {
     const ids = control.getAttribute('aria-describedby').split(' ');
@@ -101,7 +102,7 @@ describe('<Textarea>', () => {
 });
 
 describe('<Select>', () => {
-    it('associates its label and hint and emits native changes', () => {
+    it('associates its label and hint and emits change events', () => {
         const onChange = vi.fn();
         render(
             <Select label="Priority" hint="Choose a speed" value="normal" onChange={onChange}>
@@ -112,8 +113,9 @@ describe('<Select>', () => {
         const control = screen.getByRole('combobox', { name: 'Priority' });
         expect(control).toHaveValue('normal');
         expectSingleDescription(control, 'Choose a speed');
-        fireEvent.change(control, { target: { value: 'fast' } });
+        selectOption(control, 'fast');
         expect(onChange).toHaveBeenCalledOnce();
+        expect(onChange.mock.calls[0][0].target.value).toBe('fast');
     });
 
     it('announces an error without referencing the hidden hint', () => {
