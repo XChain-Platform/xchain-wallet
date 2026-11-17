@@ -41,7 +41,7 @@ import {
     displayRateToPerByte,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
-import { customFeeReviewStop } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop, satsToCoinDecimal } from '../../flows/feeEstimate.js';
 import { multipartPairSizes, publicFileCompiledBytes } from '../../flows/uploadMethod.js';
 import { UploadMethodField, useUploadMethod } from '../components/UploadMethodField.jsx';
 import styles from './IssueTokenForm.module.css';
@@ -254,6 +254,9 @@ export function PublishFileForm({ walletId, onBack }) {
         /** @type {'compose' | 'review' | 'submitting' | 'done'} */ ('compose'),
     );
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
+    // The review stage approves a multi-part upload (Decision Q6: one approval
+    // covers every wave) when the file is over one transaction.
+    const [pendingMultipart, setPendingMultipart] = useState(false);
     const [password, setPassword] = useState('');
     const reviewErrors = useFormErrors();
     const [hwStatus, setHwStatus] = useState('idle');
@@ -593,9 +596,19 @@ export function PublishFileForm({ walletId, onBack }) {
                 }
             }
             if (singleEncode) { openConfirmScreen(picked); return; }
+            setPendingMultipart(false);
             setStage('review');
             return;
         }
+        setPendingMultipart(true);
+        setStage('review');
+    }
+
+    // Starts the approved multi-part upload back on the form, whose panel shows
+    // each part as it goes; a refusal stays there with its reason.
+    async function startMultipartPublish() {
+        setPendingMultipart(false);
+        setStage('compose');
         try {
             const started = await multipartUpload.startFile({
                 file: fileMeta.file,
@@ -610,11 +623,9 @@ export function PublishFileForm({ walletId, onBack }) {
             }
             if (started.path === 'refused') {
                 refuse('file', 'This account cannot publish a multi-part file with this upload method.');
-                return;
             }
         } catch (error) {
             refuse('file', submitFailureMessage(error, { fallback: t('publishFile.failed') }));
-            return;
         }
     }
 
@@ -628,6 +639,10 @@ export function PublishFileForm({ walletId, onBack }) {
         }
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
         reviewErrors.reset();
+        if (pendingMultipart) {
+            await startMultipartPublish();
+            return;
+        }
         // Sign only from the confirm screen, which signs the reviewed PSBT (a
         // review stage left open across a switch out of watcher mode lands here).
         if (!isWatcherMode) {
@@ -880,6 +895,12 @@ export function PublishFileForm({ walletId, onBack }) {
 
     if (stage === 'review' || stage === 'submitting') {
         const reviewPreviewUrl = imagePreviewDataUrl(fileMeta?.bytes);
+        const multipartQuote = pendingMultipart ? multipartMethod?.options?.[upload.method] : null;
+        const reviewFeeText = pendingMultipart
+            ? (Number.isFinite(multipartQuote?.fee)
+                ? `${satsToCoinDecimal(multipartQuote.fee)} ${coinTicker}`.trim()
+                : null)
+            : upload.feeText;
         return wrap(
             <FormPage
                 demoGuard={demoGuard}
@@ -952,11 +973,15 @@ export function PublishFileForm({ walletId, onBack }) {
                         {fromAddress ? <AddressText address={fromAddress.address} /> : null}
                     </dd>
                     <dt className={styles.detailsLabel}>{t('uploadMethod.label')}</dt>
-                    <dd className={styles.detailsValue} data-testid="review-upload-method">{upload.label}</dd>
-                    {upload.feeText ? (
+                    <dd className={styles.detailsValue} data-testid="review-upload-method">
+                        {pendingMultipart && multipartQuote?.summary
+                            ? `${upload.label}, ${multipartQuote.summary}`
+                            : upload.label}
+                    </dd>
+                    {reviewFeeText ? (
                         <>
                             <dt className={styles.detailsLabel}>{t('uploadMethod.review.fee')}</dt>
-                            <dd className={styles.detailsValue} data-testid="review-upload-fee">{upload.feeText}</dd>
+                            <dd className={styles.detailsValue} data-testid="review-upload-fee">{reviewFeeText}</dd>
                         </>
                     ) : null}
                 </dl>

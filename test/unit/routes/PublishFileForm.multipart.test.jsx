@@ -64,6 +64,14 @@ describe('PublishFileForm multipart publish', () => {
         await waitFor(() => expect(document.body.textContent).toContain('large.bin'));
         fireEvent.click(screen.getByRole('button', { name: 'Publish File' }));
 
+        // Publish File opens the one approval (Decision Q6): nothing is sent
+        // until Sign and Publish, and the review quotes the whole file.
+        const approve = await screen.findByRole('button', { name: 'Sign and Publish' });
+        expect(screen.getByTestId('review-upload-method')).toHaveTextContent(/Standard, \d+ parts, \d+ transactions/);
+        expect(screen.getByTestId('review-upload-fee')).toHaveTextContent(/^[\d.]+ BTC$/);
+        expect(shell.fileMultipart).not.toHaveBeenCalled();
+        fireEvent.click(approve);
+
         await waitFor(() => expect(shell.fileMultipart).toHaveBeenCalledOnce());
         expect(shell.fileMultipart).toHaveBeenCalledWith(expect.objectContaining({
             walletId: 'wallet-1',

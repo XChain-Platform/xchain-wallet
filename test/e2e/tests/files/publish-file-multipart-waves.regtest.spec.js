@@ -167,9 +167,14 @@ test.describe(`Publish a multipart file in funding waves on ${REGTEST_CHAIN_LABE
         let manifest;
         await test.step('approve once and mine both waves through assembly', async () => {
             await startProgressCapture(page);
-            // Publish File is the one approval (Q6): the Upload method field above
-            // quoted the whole file, and no prompt follows while both waves send.
+            // Publish File opens the review, the one approval (Q6): it quotes the whole
+            // file, and no prompt follows while both waves send.
             await main.getByRole('button', { name: 'Publish File', exact: true }).click();
+            await expect(main.getByTestId('review-upload-method'))
+                .toContainText(`${EXPECTED_PARTS} parts, ${EXPECTED_TRANSACTIONS} transactions`);
+            const password = main.locator('#publish-file-password');
+            if (await password.isVisible()) await password.fill(UNLOCK_VALUE);
+            await main.getByRole('button', { name: 'Sign and Publish', exact: true }).click();
             manifest = await waitForCompleteManifest(page, source);
             expect(Number(manifest.multipart.total_parts)).toBe(EXPECTED_PARTS);
             expect(manifest.multipart.status).toBe('complete');
