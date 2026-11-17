@@ -80,7 +80,15 @@ describe('multipartPanelProps record validation', () => {
         expect(error.message).toContain('record');
     });
 
-    it.each([1, 2.5, 33])('rejects invalid totalParts %s', (totalParts) => {
+    // The size cap allows 65,535 parts; the panel once refused past 32 and drew
+    // nothing for a 101-part upload on the rail.
+    it('maps 101 parts across two waves to 206 transactions', () => {
+        const props = multipartPanelProps(record({ totalParts: 101, pieces: [] }));
+        expect(props.transactions).toBe(206);
+        expect(props.currentPart).toBe(1);
+    });
+
+    it.each([1, 2.5, 65_536])('rejects invalid totalParts %s', (totalParts) => {
         const error = captureError(record({ totalParts }));
         expect(error.code).toBe('FILE_PANEL_RECORD_INVALID');
         expect(error.message).toContain('totalParts');

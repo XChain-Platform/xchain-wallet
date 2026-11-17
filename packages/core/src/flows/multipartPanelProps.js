@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { MULTIPART_FILE_MAX_PARTS } from './fileSizeLimits.js';
 import { multipartTransactionCount } from './multipartWaves.js';
 
 const VALID_STAGES = new Set([
@@ -31,7 +32,7 @@ export function multipartPanelProps(record) {
         throw invalidRecord('record');
     }
     const { totalParts, stage, pieces } = record;
-    if (!Number.isInteger(totalParts) || totalParts < 2 || totalParts > 32) {
+    if (!Number.isInteger(totalParts) || totalParts < 2 || totalParts > MULTIPART_FILE_MAX_PARTS) {
         throw invalidRecord('totalParts');
     }
     if (!VALID_STAGES.has(stage)) throw invalidRecord('stage');
@@ -60,7 +61,7 @@ export function summaryPanelProps(entry) {
         throw invalidRecord('entry');
     }
     const { totalParts, partsSent, stage } = entry;
-    if (!Number.isInteger(totalParts) || totalParts < 2 || totalParts > 32) {
+    if (!Number.isInteger(totalParts) || totalParts < 2 || totalParts > MULTIPART_FILE_MAX_PARTS) {
         throw invalidRecord('totalParts');
     }
     if (!Number.isInteger(partsSent) || partsSent < 0 || partsSent > totalParts) {
