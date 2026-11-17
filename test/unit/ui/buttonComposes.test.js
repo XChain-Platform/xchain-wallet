@@ -45,4 +45,17 @@ describe('core CSS modules and the Button sheet', () => {
             .map(({ rel }) => rel);
         expect(composing, 'core modules that compose from Button.module.css').toEqual([]);
     });
+
+    it('keeps control overrides in their base class instead of defensive specificity resets', () => {
+        const read = (rel) => readFileSync(join(coreSrc, rel), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        // NetworkFilter keeps its `.wrap .trigger` rule on purpose: it is the one place
+        // the size classes set the trigger height, so a filter matches the field beside it.
+        const chain = read(join('ui', 'ChainPicker.module.css'));
+        const chip = read(join('ui', 'Chip.module.css'));
+        const iconSelect = read(join('ui', 'IconSelect.module.css'));
+
+        expect(chain).not.toMatch(/(?:^|})\s*\.wrap\s+\.trigger\s*\{/m);
+        expect(iconSelect).not.toMatch(/(?:^|})\s*\.wrap\s+\.trigger\s*\{/m);
+        expect(chip).not.toMatch(/(?:^|})\s*button\.(?:toggle|pressed)\b/m);
+    });
 });

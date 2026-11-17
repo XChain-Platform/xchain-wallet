@@ -26,6 +26,7 @@ import {
     completeRecoveryPhraseChallenge, dismissIntroCarousel, gotoSection, nav, openSettings,
     readRecoveryPhrase, unlockedShell,
 } from '../fixtures/wallet.js';
+import { measureButtonSizes } from './button-outlines.js';
 
 /** Names never clicked: they lock, delete, reset, or leave the wallet. */
 const DESTRUCTIVE = /lock|remove|delete|reset|wipe|erase|sign ?out|log ?out|forget|revoke|uninstall|export|backup|reveal|show (seed|recovery)|recovery phrase|private key|clear (all|data)|factory/i;
@@ -788,6 +789,14 @@ export async function recordMeasuredScreen(page, {
         result.rootFontPx = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).fontSize));
     } catch { /* reported as a root font failure below */ }
     if (expectedRootPx != null) result.expectedRootFontPx = expectedRootPx;
+    // This shared recorder is used by browser mobile, extension and Electron
+    // sweeps, so each shell reports its real button sizes and role-like
+    // surfaces on every screen instead of relying on the web-only audit.
+    try {
+        result.buttons = await page.evaluate(measureButtonSizes);
+    } catch (err) {
+        result.buttonsError = String(err?.message || err);
+    }
     if (rulings) {
         try {
             result.rulings = await page.evaluate(measureRulings);
