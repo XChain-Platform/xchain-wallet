@@ -158,11 +158,20 @@ function viteBin(tree) {
     throw new Error(`no vite under ${tree}; install the tree first`);
 }
 
+export function viteServerEnvironment(out, side, inherited = process.env) {
+    return {
+        ...inherited,
+        VITE_XCHAIN_REAL_SDK: '0',
+        BROWSER: 'none',
+        XCHAIN_VITE_CACHE_DIR: join(out, 'vite-cache', side),
+    };
+}
+
 async function startServer(side, tree, port) {
     const log = openSync(join(OUT, `server-${side}.log`), 'w');
     const child = spawn(process.execPath, [viteBin(tree), '--port', String(port), '--strictPort', '--host', '127.0.0.1'], {
         cwd: join(tree, 'packages/web'),
-        env: { ...process.env, VITE_XCHAIN_REAL_SDK: '0', BROWSER: 'none' },
+        env: viteServerEnvironment(OUT, side),
         detached: true,
         stdio: ['ignore', log, log],
     });
