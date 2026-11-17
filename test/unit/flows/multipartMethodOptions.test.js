@@ -6,7 +6,7 @@ import { multipartMethodSummaries } from '../../../packages/core/src/flows/multi
 
 const quote = (parts, fee = 100) => ({
     parts,
-    transactions: 1 + (2 * (parts + 1)),
+    transactions: Math.ceil((parts + 1) / 100) + (2 * (parts + 1)),
     fee,
 });
 
@@ -14,7 +14,7 @@ describe('multipart method summaries for available quotes', () => {
     it.each([
         [2, 7],
         [26, 55],
-        [32, 67],
+        [65_535, 131_728],
     ])('formats a %i-part quote with %i transactions', (parts, transactions) => {
         const taproot = quote(parts, 123.5);
         const result = multipartMethodSummaries({ taproot, standard: null });
@@ -58,7 +58,7 @@ describe('invalid multipart quotes', () => {
     it.each([
         ['fractional parts', { parts: 2.5, transactions: 7, fee: 1 }],
         ['too few parts', { parts: 1, transactions: 5, fee: 1 }],
-        ['too many parts', { parts: 33, transactions: 69, fee: 1 }],
+        ['too many parts', { parts: 65_536, transactions: 131_075, fee: 1 }],
         ['wrong transaction count', { parts: 2, transactions: 8, fee: 1 }],
         ['fractional transactions', { parts: 2, transactions: 7.5, fee: 1 }],
         ['negative fee', { parts: 2, transactions: 7, fee: -1 }],

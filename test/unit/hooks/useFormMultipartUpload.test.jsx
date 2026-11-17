@@ -66,7 +66,7 @@ afterEach(cleanup);
 describe('drop zone maximum bytes', () => {
     it('uses the multipart cap, single cap, and null for invalid support', () => {
         const supported = mount();
-        expect(supported.result.current.maxBytes).toBe(12_000_000);
+        expect(supported.result.current.maxBytes).toBe(67_108_864);
         const unsupported = mount(createMultipartShellStub(), { support: UNSUPPORTED });
         expect(unsupported.result.current.maxBytes).toBe(2);
         const invalid = mount(createMultipartShellStub(), { support: null });
@@ -78,7 +78,7 @@ describe('single-transaction file start', () => {
     it('resolves a fresh single path without calling messaging', async () => {
         const hook = mount();
         const outcome = await begin(hook.result, { bytes: Uint8Array.of(1) });
-        expect(outcome).toEqual({ path: 'single', maxBytes: 12_000_000 });
+        expect(outcome).toEqual({ path: 'single', maxBytes: 67_108_864 });
         expect(calls(hook.stub, 'fileMultipart')).toHaveLength(0);
     });
 });

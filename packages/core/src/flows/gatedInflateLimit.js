@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { declaresDeflateRaw, fileCompressionFieldOf } from './payloadCompression.js';
-import { MULTIPART_FILE_MAX_BYTES } from './fileSizeLimits.js';
+import { GATED_MULTIPART_MAX_BYTES } from './fileSizeLimits.js';
 
 const ACTION_STRING_KEYS = ['tx_data', 'action_string', 'actionString', 'raw_action'];
 
@@ -38,7 +38,7 @@ function inspectAction(action) {
 }
 
 function cappedOptions() {
-    return { maxOutputBytes: MULTIPART_FILE_MAX_BYTES };
+    return { maxOutputBytes: GATED_MULTIPART_MAX_BYTES };
 }
 
 /**
@@ -48,14 +48,18 @@ function cappedOptions() {
  * @param {{ sdk: any, actionIndex: string|number, declared?: string|null }} params
  * @returns {Promise<{declared: string, options: {maxOutputBytes?: number}}>}
  */
-export async function resolveGatedInflate({ sdk, actionIndex, declared = null }) {
+export async function resolveGatedInflate(params) {
+    const { sdk, actionIndex, declared = null } = params;
     const supplied = typeof declared === 'string' && declared.length > 0 ? declared : '';
     if (supplied && !declaresDeflateRaw(supplied)) return { declared: supplied, options: {} };
-    if (!sdk || typeof sdk.getAction !== 'function') {
+    const actionSupplied = Object.hasOwn(params, 'action');
+    if (!actionSupplied && (!sdk || typeof sdk.getAction !== 'function')) {
         return { declared: supplied, options: cappedOptions() };
     }
     try {
-        const action = await sdk.getAction(String(actionIndex));
+        const action = actionSupplied
+            ? params.action
+            : await sdk.getAction(String(actionIndex));
         const inspected = inspectAction(action);
         return {
             declared: supplied || inspected.declared,

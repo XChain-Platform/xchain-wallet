@@ -104,7 +104,7 @@ describe('multipartSupportFor input contract', () => {
 
 describe('maxUploadBytesFor', () => {
     it('uses the multipart cap for supported uploads', () => {
-        expect(maxUploadBytesFor({ supported: true }, 260_000)).toBe(12_000_000);
+        expect(maxUploadBytesFor({ supported: true }, 260_000)).toBe(262_140_000_000);
     });
 
     it('keeps the single-transaction cap for unsupported uploads', () => {

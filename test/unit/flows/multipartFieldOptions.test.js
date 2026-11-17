@@ -24,6 +24,12 @@ import {
 
 const METHODS = ['taproot', 'standard'];
 const SOFTWARE = Object.freeze({ source: 'hd', label: 'Primary' });
+const STANDARD_MAX_BYTES = 531_750_990;
+
+class LengthStub extends Uint8Array {
+    get byteLength() { return STANDARD_MAX_BYTES + 1; }
+}
+
 const BITCOIN = bitcoinDescriptors.find(({ networkKind }) => networkKind === 'regtest');
 const DOGECOIN = dogecoinDescriptors.find(({ networkKind }) => networkKind === 'regtest');
 const LANES = Object.freeze({
@@ -45,8 +51,11 @@ function supportFor(descriptor = BITCOIN, addressType = 'p2wpkh', addressRecord 
 }
 
 async function realQuoteOptions(byteLength) {
+    const bytes = byteLength instanceof Uint8Array
+        ? byteLength
+        : Uint8Array.from(randomBytes(byteLength));
     const preview = await previewMultipartQuotes({
-        bytes: Uint8Array.from(randomBytes(byteLength)),
+        bytes,
         meta: {}, gate: null, rate: 2, methods: METHODS, lanes: LANES, sizes: SIZES,
     });
     const summaries = multipartMethodSummaries(preview.quotes);
@@ -78,14 +87,15 @@ function expectInvalid(overrides, field) {
 
 describe('settled multipart field options', () => {
     it('shows a large Bitcoin file as taproot multipart and refuses Standard at its cap', async () => {
-        const quoteOptions = await realQuoteOptions(400_000);
+        const bytes = new LengthStub(randomBytes(400_000));
+        const quoteOptions = await realQuoteOptions(bytes);
         const result = multipartFieldOptions(input({ quoteOptions }));
         expect(result.options.taproot).toMatchObject({
             reason: null, multipart: true, pending: false,
             summary: '2 parts, 7 transactions', fee: expect.any(Number),
         });
         expect(result.options.standard).toEqual({
-            ...EMPTY, reason: 'tooLarge', cap: 259_648,
+            ...EMPTY, reason: 'tooLarge', cap: STANDARD_MAX_BYTES,
         });
         expect(result.reasons).toEqual({ taproot: null, standard: 'tooLarge' });
         expect(result.ready).toBe(true);

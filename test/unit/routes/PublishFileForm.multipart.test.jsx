@@ -51,7 +51,7 @@ describe('PublishFileForm multipart publish', () => {
     it('starts the selected lane and finishes on the manifest action index', async () => {
         const shell = messaging();
         mount(shell);
-        const input = await screen.findByLabelText('File (up to 12,000,000 bytes)');
+        const input = await screen.findByLabelText('File (up to 262,140,000,000 bytes)');
         fireEvent.click(screen.getByRole('button', { name: 'Upload method: Taproot upload' }));
         fireEvent.click(screen.getAllByRole('option')[1]);
         expect(screen.getByRole('button', { name: 'Upload method: Standard' })).toBeEnabled();
@@ -115,7 +115,7 @@ describe('PublishFileForm fee validation with multipart available', () => {
     ])('refuses the custom fee %j before starting any publish path', async (rate, message) => {
         const shell = messaging();
         mount(shell);
-        const input = await screen.findByLabelText('File (up to 12,000,000 bytes)');
+        const input = await screen.findByLabelText('File (up to 262,140,000,000 bytes)');
         fireEvent.change(input, {
             target: { files: [new File(['abc'], 'small.txt', { type: 'text/plain' })] },
         });

@@ -12,6 +12,7 @@ import { sha256 } from '@noble/hashes/sha2';
 import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from '@noble/hashes/utils';
 import pako from 'pako';
 import {
+    GATED_MULTIPART_MAX_BYTES,
     MULTIPART_ENVELOPE_PART_CAPACITY,
     MULTIPART_FILE_MAX_BYTES,
     MULTIPART_FILE_MAX_PARTS,
@@ -91,6 +92,27 @@ function capacityFor(carrier) {
         : MULTIPART_ENVELOPE_PART_CAPACITY;
 }
 
+function assertOriginalBounds(length, gate, carrier) {
+    if (!Number.isSafeInteger(length)) return;
+    if (gate && length > GATED_MULTIPART_MAX_BYTES) {
+        throw rangeError('GATED_BYTES_TOO_LARGE', 'original bytes exceed the gated multipart limit', {
+            originalBytes: length, maxBytes: GATED_MULTIPART_MAX_BYTES,
+        });
+    }
+    if (length > MULTIPART_FILE_MAX_BYTES) {
+        throw rangeError('ORIGINAL_BYTES_TOO_LARGE', 'original bytes exceed the multipart limit', {
+            originalBytes: length, maxBytes: MULTIPART_FILE_MAX_BYTES,
+        });
+    }
+    const capacity = capacityFor(carrier);
+    const totalParts = Math.ceil(length / capacity);
+    if (totalParts > MULTIPART_FILE_MAX_PARTS) {
+        throw rangeError('TOO_MANY_PARTS', 'original bytes require too many multipart pieces', {
+            totalParts, maxParts: MULTIPART_FILE_MAX_PARTS, capacity,
+        });
+    }
+}
+
 function splitStoredBytes(stored, capacity) {
     const parts = [];
     for (let offset = 0; offset < stored.length; offset += capacity) {
@@ -161,6 +183,9 @@ function manifestParams(meta, gate, stored, prepared, partPlan) {
 }
 
 export async function planMultipartFile(bytes, meta = {}, options = {}) {
+    const gate = options.gate || null;
+    const suppliedLength = bytes?.byteLength ?? bytes?.length;
+    assertOriginalBounds(suppliedLength, gate, options.carrier);
     const original = asBytes(bytes);
     if (original.length === 0) throw rangeError('EMPTY_FILE', 'multipart files must not be empty');
     if (original.length > MULTIPART_FILE_MAX_BYTES) {
@@ -168,7 +193,6 @@ export async function planMultipartFile(bytes, meta = {}, options = {}) {
             originalBytes: original.length, maxBytes: MULTIPART_FILE_MAX_BYTES,
         });
     }
-    const gate = options.gate || null;
     const prepared = prepareStoredBytes(original, gate);
     if (prepared.bytes.length > MULTIPART_FILE_MAX_BYTES) {
         throw rangeError('STORED_BYTES_TOO_LARGE', 'stored bytes exceed the multipart limit', {
