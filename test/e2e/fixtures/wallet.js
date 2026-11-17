@@ -1029,14 +1029,39 @@ export async function acknowledgeImportNotice(page, ads = 'on') {
 }
 
 /**
+ * Opens Settings -> Network and Fees -> Automatic Donations. The screen walk
+ * (2b842b099) folded the donations row into the Network and Fees group, so it
+ * is no longer a row on the Settings list.
+ */
+export async function openAutomaticDonations(page) {
+    await openSettings(page);
+    await page.getByRole('button', { name: /^Network and Fees/ }).click();
+    await page.getByRole('button', { name: /^Automatic Donations/ }).click();
+}
+
+/**
+ * Backs out of a Settings page to the Settings list. Back pops one level, so a
+ * page inside a group takes two steps.
+ */
+export async function backToSettingsList(page) {
+    const back = page.getByRole('button', { name: 'Back to settings', exact: true });
+    const list = page.getByRole('button', { name: /^Network and Fees/ });
+    for (let step = 0; step < 4; step++) {
+        await expect(back.or(list).first()).toBeVisible();
+        if (await list.isVisible()) return;
+        await back.click();
+    }
+    await expect(list).toBeVisible();
+}
+
+/**
  * Turns automatic donations off the only way the wallet offers: Settings ->
- * Automatic Donations -> Per transaction -> None (ruling 2026-11-14: one
- * wallet-wide setting, no switch). Ends back on Home.
+ * Network and Fees -> Automatic Donations -> Per transaction -> None (ruling
+ * 2026-11-14: one wallet-wide setting, no switch). Ends back on Home.
  */
 export async function turnOffDonations(page, { waitForBalances = true } = {}) {
     await expect(createdWalletShell(page, waitForBalances)).toBeVisible({ timeout: KDF_STEP_MS });
-    await openSettings(page);
-    await page.getByRole('button', { name: /^Automatic Donations/ }).click();
+    await openAutomaticDonations(page);
     const perTransaction = page.getByRole('combobox', { name: 'Per transaction', exact: true });
     await expect(perTransaction).toBeVisible();
     if (!/None/.test(await perTransaction.textContent())) {
@@ -1047,7 +1072,7 @@ export async function turnOffDonations(page, { waitForBalances = true } = {}) {
         await expect(perTransaction).toHaveText(/None/);
     }
     await expect(page.getByTestId('ads-hero')).toContainText('Automatic Donations off');
-    await page.getByRole('button', { name: 'Back to settings', exact: true }).click();
+    await backToSettingsList(page);
     if (await nav(page).count() > 0) await gotoSection(page, 'Home');
     else await page.getByRole('button', { name: 'Back', exact: true }).click();
     await expect(createdWalletShell(page, waitForBalances)).toBeVisible();

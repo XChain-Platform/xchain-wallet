@@ -14,12 +14,13 @@
 
 import {
     DEFAULT_PASSWORD,
+    backToSettingsList,
     completeRecoveryPhraseChallenge,
     readRecoveryPhrase,
     dismissIntroCarousel,
     expect,
     nav,
-    openSettings,
+    openAutomaticDonations,
     test,
     unlockedAnyScreen,
 } from '../../fixtures/wallet.js';
@@ -104,13 +105,12 @@ async function continueToHome(page) {
     await page.getByRole('button', { name: 'Continue', exact: true }).click();
     await expect(unlockedAnyScreen(page)).toBeVisible({ timeout: kdfStepTimeout() });
     // The ads setting is not written: the default (on) still holds in Settings.
-    await openSettings(page);
-    await page.getByRole('button', { name: /^Automatic Donations/ }).click();
+    await openAutomaticDonations(page);
     const perTransaction = page.getByRole('combobox', { name: 'Per transaction', exact: true });
     await expect(perTransaction).toBeVisible();
     await expect(perTransaction, 'Continue leaves the default on').toHaveText(/\$0\.05/);
     await expect(page.getByTestId('ads-hero')).toContainText('$0.05 per transaction');
-    await page.getByRole('button', { name: 'Back to settings', exact: true }).click();
+    await backToSettingsList(page);
     if (await nav(page).count() === 0) {
         await page.getByRole('button', { name: 'Back', exact: true }).click();
     }
