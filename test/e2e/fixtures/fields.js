@@ -28,7 +28,9 @@ const pageOf = (scope) => (typeof scope.page === 'function' ? scope.page() : sco
 /**
  * The field labelled `label` inside `scope`. A string matches the whole label,
  * optionally followed by an AmountField unit such as " (BTC)"; a RegExp is
- * used as given. Either way the field's "About ..." help button is excluded.
+ * used as given. Either way the field's "About ..." help button is excluded,
+ * and so is a switch: Issue Token's "lock Max supply" switch is labelled
+ * "Max supply" too. A switch is found with getByRole('switch').
  *
  * @param {import('@playwright/test').Locator | import('@playwright/test').Page} scope
  * @param {string | RegExp} label
@@ -38,7 +40,8 @@ export function fieldByLabel(scope, label) {
     const name = typeof label === 'string'
         ? new RegExp(`^${escapeRe(label)}(?: \\([^)]*\\))?$`)
         : label;
-    return scope.getByLabel(name).and(scope.locator(':not(button[aria-label^="About "])'));
+    return scope.getByLabel(name)
+        .and(scope.locator(':not(button[aria-label^="About "]):not([role="switch"])'));
 }
 
 /**

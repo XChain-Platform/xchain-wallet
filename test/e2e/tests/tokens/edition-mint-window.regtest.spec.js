@@ -73,6 +73,7 @@ import {
     REGTEST_CHAIN_ID,
     openFromAddress,
     approveConfirm,
+    expectApproveRefused,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
 
@@ -573,9 +574,10 @@ test.describe(`limited-edition mint window on ${REGTEST_CHAIN_LABEL}`, () => {
                 await expect(warning,
                     'the wallet did not quote the network\'s verdict for the per-address cap')
                     .toContainText(/would be refused because .*MINT_ADDRESS_MAX/i);
-                await expect(page.getByTestId('confirm-approve'),
-                    'a mint past the address cap can be approved without overriding the refusal')
-                    .toBeDisabled();
+                // Approve keeps its colour (G130): a tap without overriding
+                // the refusal is answered at the top and sends nothing.
+                await expectApproveRefused(page, ['signAnyway', 'fails'],
+                    'a mint past the address cap, with the refusal not overridden');
                 await page.getByTestId('confirm-reject').click();
                 await expect(page.getByTestId('confirm-modal')).toBeHidden({ timeout: 30_000 });
             } else {

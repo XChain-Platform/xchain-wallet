@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { createWallet, expect, gotoSection, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, gotoSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import { fieldByLabel, searchTokenPicker } from '../../fixtures/fields.js';
 
 const PASSWORD = 'confirm-top-password';
@@ -18,14 +18,8 @@ const VIEWPORTS = [
     { name: 'desktop', width: 1024, height: 700 },
 ];
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Wallet menu' });
-    await expect(palette).toBeVisible({ timeout: 15_000 });
-    await palette.getByRole('combobox').first().fill(title);
-    await page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first().click();
-    await expect(palette).toBeHidden({ timeout: 15_000 });
-}
+// The shared wallet-menu fixture, which follows the palette's current search.
+const gotoPalette = (page, title) => openPaletteCommand(page, title);
 
 async function scrollFormToBottom(page) {
     const main = page.getByRole('main');
@@ -58,7 +52,14 @@ async function openSendConfirm(page) {
     const main = page.getByRole('main');
     await main.getByLabel('To', { exact: true }).fill(VALID_BTC);
     await main.getByRole('textbox', { name: /^Amount/ }).fill('0.01');
-    await main.locator('summary', { hasText: 'Advanced' }).click();
+    // Advanced is a form section now, not a <details> summary, and the fees
+    // sit in their own Speed and Fees section. Opening both makes the form
+    // long enough to scroll at every width.
+    for (const name of [/^Advanced\b/, /^Speed and Fees\b/]) {
+        const section = main.getByRole('button', { name }).first();
+        await expect(section).toBeVisible();
+        if (await section.getAttribute('aria-expanded') !== 'true') await section.click();
+    }
     await scrollFormToBottom(page);
     await main.getByRole('button', { name: 'Send', exact: true }).click();
 }

@@ -49,7 +49,6 @@ import {
     test,
     openedWalletHome,
 } from '../../fixtures/wallet.js';
-import { pickOption } from '../../fixtures/pickOption.js';
 import {
     approveConfirm,
     expectConfirmModal,
@@ -57,9 +56,9 @@ import {
     fundAddress,
     readReceiveAddress,
     REGTEST_ADDRESS_RE,
-    REGTEST_CHAIN_ID,
     REGTEST_CHAIN_LABEL,
     REGTEST_DESTINATION,
+    selectVenueChain,
     selectVenueSendAsset,
     switchToRegtest,
     unlockAfterReload,
@@ -154,14 +153,13 @@ test.describe(`contacts restore on import and failed sends in History, on ${REGT
             const main = page.getByRole('main');
             // The Publish labels page opens straight on its form (no Publish Now button).
             await main.getByRole('button', { name: /^Publish labels on-chain\b/ }).first().click();
-            const chain = page.getByLabel('Publish network');
-            await expect(chain, 'the publish form has no chain picker').toBeVisible({ timeout: 30_000 });
-            await pickOption(chain, REGTEST_CHAIN_ID);
+            // The network is the standard Network field and its full-screen list.
+            await selectVenueChain(main, 'Network');
             // An unlocked session publishes with its pooled signer and asks no
             // password (2026-11-14); fill it only when the form shows it.
             const password = fieldByLabel(page, 'Wallet password');
             if (await password.count()) await password.fill(PASSWORD);
-            await page.getByRole('button', { name: 'Publish', exact: true }).click();
+            await main.getByRole('button', { name: 'Publish Labels', exact: true }).click();
             // The publish signs through the shared confirm screen, which opens
             // in place of the form. When it never opens, the fixture reports
             // the error the form put above it instead of a missing locator.

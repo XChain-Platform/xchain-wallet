@@ -74,6 +74,7 @@ import {
     waitForTokenBalance,
     waitForValidAction,
     approveConfirm as approveWhenReady,
+    expectApproveRefused,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
 
@@ -349,10 +350,13 @@ test.describe('the PC-26 gated SEND guard', () => {
                     .toBeVisible({ timeout: 60_000 });
                 const override = refusal.getByRole('checkbox', { name: 'Sign anyway' });
                 await expect(override, 'the SDK override policy was ignored').toBeVisible();
-                const approve = holder.getByTestId('confirm-approve');
-                await expect(approve, 'Approve was enabled before explicit consent').toBeDisabled();
+                // Approve keeps its colour (G130): before explicit consent a
+                // tap is refused with "Tick Sign anyway" and sends nothing.
+                await expectApproveRefused(holder, 'signAnyway', 'the bypassed raw SEND before explicit consent');
                 await override.check();
-                await expect(approve, 'Approve stayed disabled after explicit consent').toBeEnabled();
+                await expect(holder.getByTestId('confirm-blocked').and(holder.locator('[data-reason="signAnyway"]')),
+                    'the Sign anyway refusal stayed after explicit consent')
+                    .toHaveCount(0);
                 await holder.getByTestId('confirm-reject').click();
                 await expect(confirm).toHaveCount(0);
             }

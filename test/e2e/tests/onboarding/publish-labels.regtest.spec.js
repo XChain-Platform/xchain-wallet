@@ -64,13 +64,13 @@
 
 import { spawn } from 'node:child_process';
 import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
-import { pickOption } from '../../fixtures/pickOption.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
-    REGTEST_CHAIN_ID,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
+    approveConfirm,
+    expectConfirmModal,
     fundAddress,
     minerRpc,
     selectVenueChain,
@@ -186,14 +186,17 @@ async function publishLabels(page) {
     await expect(open, 'Backup and Recovery offers no "Publish labels on-chain" row').toBeVisible({ timeout: 30_000 });
     await open.click();
 
-    const chain = page.getByLabel('Publish network');
-    await expect(chain, 'the publish form has no chain picker').toBeVisible({ timeout: 30_000 });
-    await pickOption(chain, REGTEST_CHAIN_ID);
+    // The network is the standard Network field and its full-screen list.
+    await selectVenueChain(main, 'Network');
     // An unlocked session publishes with its pooled signer and asks no
     // password (2026-11-14); fill it only when the form shows it.
     const password = fieldByLabel(page, 'Wallet password');
     if (await password.count()) await password.fill(PASSWORD);
-    await page.getByRole('button', { name: 'Publish', exact: true }).click();
+    await main.getByRole('button', { name: 'Publish Labels', exact: true }).click();
+    // The publish signs through the shared confirm screen, which opens in
+    // place of the form.
+    await expectConfirmModal(page, 'the label publish', 120_000);
+    await approveConfirm(page, 'the label publish');
 
     await expect(main.getByText('✓ Labels published'), 'the publish never reported success')
         .toBeVisible({ timeout: 180_000 });

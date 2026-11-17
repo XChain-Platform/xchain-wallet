@@ -47,7 +47,9 @@ const KDF_STEP_MS = kdfStepTimeout();
  * way a wallet gets the `watcher` or `signer` mode is the two-phone pairing
  * in Settings, Advanced, "Use another phone as a signer".
  */
-const PAIR_ROLE_BUTTON = { watcher: 'Sign on Another Phone', signer: 'Make This Phone the Signer' };
+// PairPartnerWallet's role rows: an ActionListItem's name is its title then
+// its description, so each is matched on the leading title.
+const PAIR_ROLE_BUTTON = { watcher: /^Sign on another phone\b/, signer: /^Make this phone the signer\b/ };
 
 /** The name a mode wallet gets when the caller names none. */
 const DEFAULT_MODE_WALLET_NAME = { watcher: 'Signs on Another Phone', signer: 'Signer Phone' };
@@ -74,10 +76,11 @@ export async function fillPairAnotherPhone(page, { words, name, password, wallet
     const main = page.getByRole('main');
     await main.getByRole('button', { name: /^Advanced\b/ }).first().click();
     await main.getByRole('button', { name: /^Use another phone as a signer\b/ }).click();
-    await expect(page.getByRole('heading', { level: 1, name: 'Use Another Phone as a Signer' }),
+    // The page's heading is PairPartnerWallet's PAGE_TITLE, shorter than the row.
+    await expect(page.getByRole('heading', { level: 1, name: 'Phone Signer', exact: true }),
         'Settings, Advanced has no "Use another phone as a signer" page')
         .toBeVisible({ timeout: 30_000 });
-    await page.getByRole('button', { name: role, exact: true }).click();
+    await page.getByRole('button', { name: role }).first().click();
     await page.getByLabel('Wallet name', { exact: true }).fill(name);
     await page.getByRole('textbox', { name: /^Shared recovery phrase/ })
         .fill(Array.isArray(words) ? words.join(' ') : words);
@@ -310,7 +313,9 @@ export async function openPaletteSearch(page, query, { timeoutMs = 30_000 } = {}
  * close behind it.
  *
  * The option is matched as an anchored word prefix of its accessible name,
- * because a row's name carries its subtitle after the title.
+ * because a row's name carries its subtitle after the title. The match
+ * ignores case: palette rows are title case ("Issue Token") while the
+ * action entries and the specs say "Issue token".
  *
  * @param {import('@playwright/test').Page} page
  * @param {string} title  the command's visible title, typed as the search
@@ -318,7 +323,7 @@ export async function openPaletteSearch(page, query, { timeoutMs = 30_000 } = {}
  */
 export async function openPaletteCommand(page, title, { option, timeoutMs = 30_000 } = {}) {
     const dialog = await openPaletteSearch(page, title, { timeoutMs });
-    const row = dialog.getByRole('option', { name: option || new RegExp(`^${escapeRegExp(title)}\\b`) }).first();
+    const row = dialog.getByRole('option', { name: option || new RegExp(`^${escapeRegExp(title)}\\b`, 'i') }).first();
     await expect(row, `no palette command matching "${title}"`).toBeVisible({ timeout: 15_000 });
     await row.click();
     await expect(dialog, `the wallet menu is visible after choosing "${title}"`)

@@ -84,6 +84,7 @@ import {
     expectConfirmModal as sharedConfirmModal,
     selectVenueSendAsset,
     approveConfirm,
+    expectApproveRefused,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
 
@@ -402,7 +403,6 @@ test.describe(`utility token divisibility on ${REGTEST_CHAIN_LABEL}`, () => {
             // What is NOT acceptable is a signable transaction, because this
             // action can only ever confirm as `invalid` and burn the miner fee.
             const confirm = page.getByTestId('confirm-modal');
-            const approve = page.getByTestId('confirm-approve');
             const formAlert = page.getByRole('alert');
 
             await confirm.or(formAlert).first()
@@ -411,12 +411,13 @@ test.describe(`utility token divisibility on ${REGTEST_CHAIN_LABEL}`, () => {
             if (await confirm.count() > 0) {
                 // The gate blocks by default (tests/send/preflight-gate), and
                 // is deliberately overridable - so this asserts the DEFAULT,
-                // which is the state a user actually meets.
-                await expect(approve,
-                    'an amount the chain will refuse as AMOUNT (format) reached a signable confirm '
-                    + 'screen: overriding this can only burn the miner fee, since no chain state '
-                    + 'can ever make 9 digits legal on an 8-decimal token')
-                    .toBeDisabled({ timeout: 90_000 });
+                // which is the state a user actually meets. Approve keeps its
+                // colour (G130), so the default is what a tap does: refused,
+                // nothing sent.
+                await expectApproveRefused(page, ['signAnyway', 'fails'],
+                    'an amount the chain will refuse as AMOUNT (format): overriding this can only '
+                    + 'burn the miner fee, since no chain state can ever make 9 digits legal on an '
+                    + '8-decimal token');
             } else {
                 await expect(formAlert.first()).toBeVisible();
             }

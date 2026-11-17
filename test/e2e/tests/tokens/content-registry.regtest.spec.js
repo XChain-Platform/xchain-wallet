@@ -247,16 +247,26 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             await page.getByRole('main').getByText('Link cross-chain actions', { exact: true })
                 .first().click();
 
-            const panelA = page.locator('fieldset').filter({ hasText: 'Network A' });
-            const panelB = page.locator('fieldset').filter({ hasText: 'Network B' });
+            // LinkForm's two cards, "Action 1" and "Action 2": each holds its
+            // own Network field and an "Action number" looked up on leaving it.
+            const actionCard = (n) => page.locator('fieldset')
+                .filter({ has: page.locator('legend', { hasText: `Action ${n}` }) });
+            const panelA = actionCard(1);
+            const panelB = actionCard(2);
             await selectVenueChain(panelA, 'Network');
             await selectVenueChain(panelB, 'Network');
-            await panelA.getByLabel('Action to reference').fill(issueActionIndex);
-            await panelB.getByLabel('Action to reference').fill(fileActionIndex);
+            for (const [n, panel, index] of [[1, panelA, issueActionIndex], [2, panelB, fileActionIndex]]) {
+                const field = fieldByLabel(panel, 'Action number');
+                await field.fill(index);
+                await field.blur();
+                await expect(panel.locator(`[aria-label="Action ${n} details"]`),
+                    `the Link form found no action #${index} on this network for Action ${n}`)
+                    .toBeVisible({ timeout: 60_000 });
+            }
 
             const main = page.getByRole('main');
             const password = fieldByLabel(main, 'Password');
-            const linkAction = main.getByRole('button', { name: 'Link', exact: true });
+            const linkAction = main.getByRole('button', { name: 'Link Actions', exact: true });
             await linkAction.click();
             if (await password.count() > 0 && await password.isVisible()) {
                 await password.fill(PASSWORD);
@@ -386,8 +396,9 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await page.getByRole('button', { name: 'Transfer List', exact: true }).click();
             const transferMain = page.getByRole('main');
+            // The Transfer List form has no typed TRANSFER word any more: the
+            // new owner is the only field before review (ListCreateForm, 2026-11-16).
             await fieldByLabel(transferMain, 'New owner').fill(REGTEST_DESTINATION);
-            await transferMain.getByLabel('Type TRANSFER to confirm').fill('TRANSFER');
             await transferMain.getByRole('button', { name: 'Transfer List', exact: true }).click();
             const transferPassword = fieldByLabel(transferMain, 'Password');
             if (await transferPassword.count() > 0 && await transferPassword.isVisible()) await transferPassword.fill(PASSWORD);

@@ -334,7 +334,7 @@ for (const viewport of VIEWPORTS) {
         await expectListScreen(page, 'Transfer list', 'Transfer list');
         await page.getByLabel('New owner', { exact: true }).fill(TRANSFER_DESTINATION);
         await page.getByLabel('Memo', { exact: true }).fill('transfer-review');
-        await page.getByLabel('Type TRANSFER to confirm', { exact: true }).fill('TRANSFER');
+        // No typed TRANSFER word on this form any more (ListCreateForm, 2026-11-16).
         await scrollScreenToEnd(page);
         await page.getByRole('form', { name: 'Transfer list' })
             .getByRole('button', { name: 'Transfer List', exact: true }).click();
