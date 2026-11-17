@@ -106,10 +106,15 @@ test('dark mode fields share the field tokens', async ({ page }, testInfo) => {
         await page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first().click();
         await dialog.waitFor({ state: 'hidden', timeout: 15_000 });
     };
-    for (const name of ['Send', 'Receive', 'Issue token', 'Create dispenser']) {
+    for (const name of ['Send', 'Receive', 'Issue Token', 'Create dispenser']) {
         try {
             if (name === 'Send' || name === 'Receive') await gotoSection(page, name);
             else await palette(name);
+            // Issue Token opens the token wizard straight on its Issue form,
+            // with the template as a dropdown on that form.
+            if (name === 'Issue Token') {
+                await page.getByRole('form', { name: 'Issue Token', exact: true }).waitFor({ state: 'visible', timeout: 15_000 });
+            }
             await snap(`page-${name}`);
         } catch (err) { screens[`page-${name}`] = [{ error: String(err.message).slice(0, 120) }]; }
     }
