@@ -164,8 +164,8 @@ assert.match(
 );
 assert.match(
     formSrc,
-    /\(isHwSource \? hwStatus !== 'available' : \(!signerReady && password\.length === 0\)\)/,
-    'PsbtSignForm gates submit on HW status when HW, password length when software',
+    /'form:device': isHwSource && hwStatus !== 'available'[\s\S]{0,220}'psbt-sign-password': !useConfirmPage && !isHwSource && !signerReady && password\.length === 0/,
+    'PsbtSignForm validates HW readiness or the software password after the always-active submit is pressed',
 );
 assert.doesNotMatch(
     formSrc,

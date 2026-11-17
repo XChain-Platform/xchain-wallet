@@ -38,7 +38,7 @@
     height: var(--xc-tap-min);
     /* Half a dot of room at each end, so a dot at 12 AM or 12 PM stays whole. */
     margin: 0 var(--xc-space-2);
-    touch-action: none;
+    touch-action: pan-y pinch-zoom;
 }
 
 .line {
@@ -79,7 +79,7 @@
     align-items: center;
     justify-content: center;
     cursor: grab;
-    touch-action: none;
+    touch-action: pan-y pinch-zoom;
     outline: none;
 }
 

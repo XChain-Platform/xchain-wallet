@@ -27,7 +27,7 @@ import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/ui.js';
 import { isHwSource } from '../components/SignCredentials.jsx';
 import { AmountField } from '../components/AmountField.jsx';
-import { formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { divideDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
@@ -41,6 +41,7 @@ import {
 } from '../../flows/feeEstimate.js';
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { useTickFiatRate } from '../hooks/useFiatRate.js';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
 import { ActionList, ActionListItem } from '../components/ActionList.jsx';
 import { XChainExplorerIcon } from '../components/ExplorerFavicon.jsx';
@@ -57,6 +58,7 @@ import {
     reopenTermsFrom,
     terminalDispenserNotice,
 } from '../utils/dispenserReopen.js';
+import { dispenserStock } from '../utils/dispenserStock.js';
 import {
     CHAIN_TIME_REFRESH_MS, chainClockFromTipRead, dispenserCancelTimestamp, dispenserCloseEta,
 } from '../utils/dispenserCloseWindow.js';
@@ -101,6 +103,9 @@ import { exceedsBalance } from '../utils/dividendPerUnit.js';
 // The Home-style blue card and the Actions | Details | Activity toggle.
 import { DispenserHero } from './DispenserHero.jsx';
 import { ActionsDetailsToggle } from '../components/ActionsDetailsToggle.jsx';
+import { TickerIcon } from '../components/TickerIcon.jsx';
+import { coinToFiatExact } from '../../flows/priceLookup.js';
+import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -728,6 +733,15 @@ export function DispenserDetail({
     const coinBuyable = isCoinPaid && !isFiatPriced && Boolean(feeCoinTicker)
         && String(getCoin).toUpperCase() === feeCoinTicker;
     const payTick = isTokenPaid ? getTick : (coinBuyable ? feeCoinTicker : '');
+    const fiatCurrency = settings?.fiatCurrency || 'USD';
+    const payFiatRate = useTickFiatRate({
+        chainCoin: descriptor?.coin,
+        tick: payTick,
+        nativeTicker: feeCoinTicker,
+        fiatCurrency,
+        allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
+        enabled: embedded && descriptor?.networkKind === 'mainnet' && Boolean(payTick),
+    });
     const canBuyWithSend = (isTokenPaid || coinBuyable) && buyerAddresses.length > 0
         && !ownerAddress && isOpen && hasCompleteFill;
     const showPayHere = isCoinPaid && !ownerAddress && isOpen && hasCompleteFill;
@@ -2361,6 +2375,242 @@ export function DispenserDetail({
         setFills(next.toString());
         buyFormErrors.clear(stepperId);
     };
+
+    const recordedFills = dispenser?.dispense_count != null && /^\d+$/.test(String(dispenser.dispense_count))
+        ? BigInt(dispenser.dispense_count)
+        : (dispensesLoaded ? BigInt(validDispenseCount) : null);
+    const stock = dispenserStock({
+        remainingEscrow: escrowRemaining,
+        giveAmount,
+        originalEscrow: action?.give_escrow
+            ?? dispenser?.original_give_escrow
+            ?? dispenser?.give_escrow,
+        totalDispenses: dispenser?.total_dispenses ?? dispenser?.dispense_total,
+        dispenseCount: recordedFills,
+    });
+    const perTokenPrice = getAmount && giveAmount
+        ? divideDecimalStrings(String(getAmount), String(giveAmount), 8)
+        : null;
+    const priceFiat = getAmount && payFiatRate ? coinToFiatExact(String(getAmount), payFiatRate) : null;
+    const priceFiatText = priceFiat ? formatFiatAmount(priceFiat, fiatCurrency, settings?.language) : '';
+
+    if (embedded && !ownerAddress) {
+        return wrap(
+            <div className={local.embeddedLayout} data-testid="embedded-dispenser-detail">
+                <section className={local.identityCard} aria-label="Dispenser identity" data-testid="embedded-identity">
+                    <TickerIcon chainId={chainId} tick={detailText(giveTick)} size={64} />
+                    <h2 className={local.identityAmount}>{heroGive}</h2>
+                    <p className={local.identityPrice}>
+                        {heroPrice ? `for ${heroPrice} each dispense` : 'Price unavailable'}
+                        {priceFiatText ? `, about ${priceFiatText}` : ''}
+                    </p>
+                    <span className={`${local.identityStatus} ${isOpen ? local.statusOpen : isClosing ? local.statusClosing : local.statusDone}`}>
+                        {isClosing ? 'Closing' : detailText(dispenserStatusLabel(liveStatus))}
+                    </span>
+                </section>
+
+                <section className={local.embeddedSection} aria-labelledby="embedded-buy-title" data-testid="embedded-buy">
+                    <h3 id="embedded-buy-title" className={local.embeddedTitle}>Buy</h3>
+                    <div className={local.embeddedCard}>
+                        <div className={local.stockHead}>
+                            <span>Stock</span>
+                            <strong>
+                                {stock.label}
+                            </strong>
+                        </div>
+                        <span
+                            className={local.stockTrack}
+                            role="meter"
+                            aria-label="Stock left"
+                            aria-valuemin="0"
+                            aria-valuemax="100"
+                            aria-valuenow={stock.percent}
+                        >
+                            <span className={local.stockFill} style={{ width: `${stock.percent}%` }} />
+                        </span>
+                        <p className={local.stockCaption}>
+                            {recordedFills != null ? `${formatNum(String(recordedFills))} dispensed so far` : ''}
+                        </p>
+
+                        {canBuyWithSend ? (
+                            <FormErrorsContext.Provider value={buyFormErrors}>
+                                <div className={local.embeddedBuyForm} data-testid="dispenser-buy-form">
+                                    <FormErrorSummary form={buyFormErrors} />
+                                    {listWarnings}
+                                    <div className={local.wideStepper} data-testid="buy-stepper">
+                                        <div className={local.wideStepperLabel}>
+                                            <label htmlFor={stepperId}>Dispenses</label>
+                                            <span id={`${stepperId}-hint`}>
+                                                {maxBuyFills != null && maxBuyFills > 0n
+                                                    ? `Up to ${formatNum(String(maxBuyFills))}`
+                                                    : ''}
+                                            </span>
+                                        </div>
+                                        <div className={local.stepperRow}>
+                                            <Button
+                                                type="button"
+                                                variant="secondary"
+                                                icon={<Icon.MinusIcon />}
+                                                aria-label="One fewer dispense"
+                                                onClick={() => stepFills(-1)}
+                                                disabled={fillsCount == null || fillsCount <= 1n}
+                                            />
+                                            <div className={local.stepperField}>
+                                                <Input
+                                                    id={stepperId}
+                                                    className={local.stepperInput}
+                                                    inputMode="numeric"
+                                                    enterKeyHint="done"
+                                                    autoComplete="off"
+                                                    value={fills}
+                                                    onChange={(event) => {
+                                                        setFills(String(event.target.value).replace(/,/g, ''));
+                                                        buyFormErrors.clear(stepperId);
+                                                    }}
+                                                    aria-describedby={`${stepperId}-hint`}
+                                                />
+                                            </div>
+                                            <Button
+                                                type="button"
+                                                variant="secondary"
+                                                icon={<Icon.PlusIcon />}
+                                                aria-label="One more dispense"
+                                                onClick={() => stepFills(1)}
+                                                disabled={remainingFills != null && fillsCount != null && fillsCount >= remainingFills}
+                                            />
+                                        </div>
+                                    </div>
+                                    {totalPayAmount && totalReceive ? (
+                                        <dl className={local.wideTotals} data-testid="buy-totals">
+                                            <div>
+                                                <dt>You get</dt>
+                                                <dd>{formatWithThousands(totalReceive)} {giveTick}</dd>
+                                            </div>
+                                            <div>
+                                                <dt>You pay</dt>
+                                                <dd>{formatWithThousands(totalPayAmount)} {payTick}</dd>
+                                                <span>
+                                                    {selectedFeeEstimate?.coinAmount
+                                                        ? `Network fee ~${formatWithThousands(selectedFeeEstimate.coinAmount)} ${feeCoinTicker}`
+                                                        : 'Network fee unavailable'}
+                                                </span>
+                                            </div>
+                                        </dl>
+                                    ) : null}
+                                    {fillsError ? <StatusMessage variant="warning" role="alert">{fillsError}</StatusMessage> : null}
+                                    {inventoryError ? <StatusMessage variant="warning" role="alert">{inventoryError}</StatusMessage> : null}
+                                    {minFillsNotice ? <StatusMessage variant="warning">{minFillsNotice}</StatusMessage> : null}
+                                    {buyDustBlock ? <StatusMessage variant="warning" role="alert" testId="buy-dust-block">{buyDustBlock}</StatusMessage> : null}
+                                    {buyUnderfunded ? (
+                                        <FormNotice variant="warning" role="alert">
+                                            {buyPreflight?.findings?.[0]?.message}
+                                        </FormNotice>
+                                    ) : null}
+                                    {buyError ? <StatusMessage variant="error">{buyError}</StatusMessage> : null}
+                                    {demoGuard.note}
+                                    {demoGuard.dialog}
+                                    <Button
+                                        variant="success"
+                                        block
+                                        className={local.buyButton}
+                                        icon={<Icon.TokenIcon />}
+                                        onClick={beginBuy}
+                                        loading={buyStage === 'submitting' || buyConfirm.composing}
+                                    >
+                                        {ownerLane.isWatcherMode ? 'Create Unsigned Transaction' : 'Buy'}
+                                    </Button>
+                                </div>
+                            </FormErrorsContext.Provider>
+                        ) : (
+                            <StatusMessage variant="status">{buyUnavailable}</StatusMessage>
+                        )}
+                    </div>
+                </section>
+
+                <section className={local.embeddedSection} aria-labelledby="embedded-details-title" data-testid="embedded-details">
+                    <h3 id="embedded-details-title" className={local.embeddedTitle}>Details</h3>
+                    <dl className={`${styles.detailsList} ${local.embeddedDetails}`}>
+                        <dt className={styles.detailsLabel}>Network</dt>
+                        <dd className={styles.detailsValue}>{descriptor?.displayName || chainId}</dd>
+                        <dt className={styles.detailsLabel}>Each dispense gives</dt>
+                        <dd className={styles.detailsValue}>{heroGive}</dd>
+                        <dt className={styles.detailsLabel}>Price per dispense</dt>
+                        <dd className={styles.detailsValue}>{heroPrice || '-'}</dd>
+                        <dt className={styles.detailsLabel}>Price per token</dt>
+                        <dd className={styles.detailsValue}>
+                            {perTokenPrice ? `${formatNum(perTokenPrice)} ${payUnit}` : '-'}
+                        </dd>
+                        <dt className={styles.detailsLabel}>Stock</dt>
+                        <dd className={styles.detailsValue}>
+                            {stock.label}
+                        </dd>
+                        <dt className={styles.detailsLabel}>In escrow</dt>
+                        <dd className={styles.detailsValue}>
+                            {escrowRemaining != null ? `${formatNum(escrowRemaining)} ${detailText(giveTick)}` : '-'}
+                        </dd>
+                        <dt className={styles.detailsLabel}>Vended</dt>
+                        <dd className={styles.detailsValue} data-testid="vended-total">
+                            {vendedSoFar != null
+                                ? `${formatNum(vendedSoFar)} ${giveTick || ''} in ${formatNum(String(recordedFills ?? 0n))} fills`
+                                : '-'}
+                        </dd>
+                        <dt className={styles.detailsLabel}>Status</dt>
+                        <dd className={styles.detailsValue}>
+                            {isClosing ? 'Closing (1-hour window)' : detailText(dispenserStatusLabel(liveStatus))}
+                        </dd>
+                        <dt className={styles.detailsLabel}>Opened</dt>
+                        <dd className={styles.detailsValue}>{openedText || '-'}</dd>
+                        <dt className={styles.detailsLabel}>Expires</dt>
+                        <dd className={styles.detailsValue}>{currentExpiration ? formatUnixDate(currentExpiration) : 'Never'}</dd>
+                        <dt className={styles.detailsLabel}>Allow list</dt>
+                        <dd className={styles.detailsValue}>{listValueText(currentAllowList)}</dd>
+                        <dt className={styles.detailsLabel}>Block list</dt>
+                        <dd className={styles.detailsValue}>{listValueText(currentBlockList)}</dd>
+                    </dl>
+                </section>
+
+                <section className={local.embeddedSection} aria-labelledby="embedded-recent-title" data-testid="embedded-recent">
+                    <div className={local.recentHead}>
+                        <h3 id="embedded-recent-title" className={local.embeddedTitle}>Recent dispenses</h3>
+                        {recordedFills != null ? <span>{formatNum(String(recordedFills))} fills</span> : null}
+                    </div>
+                    {!dispensesLoaded ? (
+                        <StatusMessage variant="status">Loading recent dispenses...</StatusMessage>
+                    ) : matchingDispenses.length === 0 ? (
+                        <EmptyState title="No dispenses yet" body="Completed dispenses appear here." titleAs="p" />
+                    ) : (
+                        <ul className={local.dispenseList} aria-label="Recent dispenses">
+                            {matchingDispenses.slice(0, 40).map((row) => {
+                                const refused = !row.valid;
+                                const fillGive = `${formatNum(row.give_amount)} ${row.give_tick || giveTick || ''}`.trim();
+                                const paidAmount = row.get_amount ?? getAmount;
+                                const paidUnit = row.get_tick || row.get_coin || getTick || getCoin || '';
+                                const when = activityTimeSec(row);
+                                return (
+                                    <li key={row.action_index}>
+                                        <ListRow
+                                            className={refused ? local.dispenseInvalid : undefined}
+                                            leading={<TickerIcon chainId={chainId} tick={row.give_tick || giveTick || ''} />}
+                                            title={<span className={local.dispenseAmount}>
+                                                {refused ? 'Dispense refused' : `Dispensed ${fillGive}`}
+                                            </span>}
+                                            subtitle={<span className={local.dispensePaid}>
+                                                {paidAmount != null ? `for ${formatNum(paidAmount)} ${paidUnit}` : ''}
+                                                {refused ? <InvalidMarker row={row} /> : null}
+                                            </span>}
+                                            trailing={<span className={local.dispenseWhen}>
+                                                {when != null ? formatRelativeTime(when) : ''}
+                                            </span>}
+                                        />
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    )}
+                </section>
+            </div>,
+        );
+    }
 
     return wrap(
         <>

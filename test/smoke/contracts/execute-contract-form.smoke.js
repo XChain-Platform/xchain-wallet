@@ -121,8 +121,8 @@ for (const [shell, appPath] of [
         `${shell} tracks the contract-execute sub-route`);
     // A function row passes its method, which rides the same prefill a deep
     // link uses; Call by name passes none and clears it.
-    assert.ok(/onExecute=\{\(ref\)\s*=>\s*\{\s*setExecutePrefill\(ref\?\.method \? \{ method: ref\.method \} : null\);\s*setUnlockedView\('contract-execute'\);\s*\}\}/.test(app),
-        `${shell} wires ContractDetail.onExecute → contract-execute with the row's method`);
+    assert.ok(/onExecute=\{\(next\)\s*=>\s*\{\s*setContractRef\(ref\);\s*setExecutePrefill\(next\?\.method \? \{ method: next\.method \} : null\);\s*setUnlockedView\('contract-execute'\);\s*\}\}/.test(app),
+        `${shell} preserves the selected contract and opens contract-execute with the row's method`);
     // Back pops the shell's history, so the form returns to the contract
     // detail page it was opened from rather than naming that page.
     assert.ok(/onBack=\{\(\) => \{ setExecutePrefill\(null\); goBack\(\); \}\}/.test(app),

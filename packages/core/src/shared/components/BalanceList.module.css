@@ -272,14 +272,14 @@
     box-shadow: var(--xc-shadow-nav-indicator);
 }
 
-/* Marketplace's wide picker opts into the side-menu row surface. Wide Home
-   keeps its separately ruled balance-row treatment. */
+/* Marketplace's wide picker uses edge-to-edge row fills inside its list card.
+   Wide Home keeps its separately ruled balance-row treatment. */
 .row[data-xc-split-row] {
     position: relative;
-    width: calc(100% - (2 * var(--xc-space-2)));
-    margin-inline: var(--xc-space-2);
+    width: 100%;
+    margin-inline: 0;
     border-top-color: transparent;
-    border-radius: 10px;
+    border-radius: 0;
     background: transparent;
     box-shadow: none;
 }
@@ -288,7 +288,7 @@
     content: '';
     position: absolute;
     inset-block-start: 0;
-    inset-inline: calc(-1 * var(--xc-space-2));
+    inset-inline: 0;
     border-top: 1px solid var(--xc-border);
 }
 

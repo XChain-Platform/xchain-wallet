@@ -108,7 +108,7 @@ assert.match(sendSrc, /setStage\('form'\)/, 'returns to form');
 
 assert.match(
     sendSrc,
-    /<StatusMessage variant="info" role="alert" lead=\{t\('send\.testGate\.title'\)\}>/,
+    /<StatusMessage variant="info" role="alert" title=\{t\('send\.testGate\.title'\)\}>/,
     'banner is a shared StatusMessage that announces as an alert',
 );
 // The banner used to be inlined in the `stage === 'review'` branch,
@@ -133,10 +133,10 @@ assert.match(
     /status=\{\[[\s\S]*?,\s*testSendGateBanner\s*[,\]]/,
     'banner renders on the compose form',
 );
-assert.match(
+assert.doesNotMatch(
     formRender,
-    /<FormAction\b[\s\S]{0,200}disabled=\{(?:isDemo \|\| )?networkOffline \|\| !!testSendGate \|\| maxUnavailable \|\| !!amountBalanceError\}/,
-    'compose-form Send button disabled while offline, gated, Max is unavailable, or the amount exceeds the known balance',
+    /<FormAction\b[\s\S]{0,200}disabled=/,
+    'compose-form Send button stays enabled so a blocked tap can explain the problem',
 );
 // Under the form error standard (2026-11-15) the gate is one more entry of
 // the press's error map, added when the payment is otherwise valid, and the
@@ -159,12 +159,12 @@ assert.match(
     'continue button records ack',
 );
 
-// --- submit disable -----------------------------------------------------
+// --- submit stays enabled ----------------------------------------------
 
-assert.match(
-    sendSrc,
-    /!!testSendGate\s*\|\|/,
-    'submit disabled while gate active',
+assert.doesNotMatch(
+    formRender,
+    /<FormAction\b[\s\S]{0,200}disabled=/,
+    'G130 keeps submit enabled while the test-send gate is active',
 );
 
 // --- CSS hooks ----------------------------------------------------------

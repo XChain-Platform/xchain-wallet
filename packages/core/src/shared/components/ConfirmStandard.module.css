@@ -135,6 +135,7 @@
 }
 
 .chip {
+    --xc-icon-size: var(--xc-icon-xs);
     display: inline-flex;
     align-items: center;
     gap: var(--xc-space-1);
@@ -147,11 +148,6 @@
     font-weight: 600;
     line-height: 1.4;
     white-space: nowrap;
-}
-
-.chip svg {
-    width: 14px;
-    height: 14px;
 }
 
 /* --- plain lines and the signed message --- */

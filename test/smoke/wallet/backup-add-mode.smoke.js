@@ -119,26 +119,29 @@ assert.equal(payload.pendingTxs[0].fromAddress, 'bc1qb',
 // --- 3. Host registration forwards req.mode -----------------------------
 
 const bg = readFileSync(bgPath, 'utf8');
-// The window is generous because this is a source-text assertion inside a
-// handler that grows: a later change added walletPassword / devicePassword forwarding
-// between the two anchors and pushed `mode` past a 400-char bound, which reads
-// as "mode is no longer forwarded" when nothing about mode changed.
+const importHandlerStart = bg.indexOf("host.register('wallet.importBackup'");
+const pointerHandlerStart = bg.indexOf("host.register('wallet.importBackupPointer'");
+assert.ok(importHandlerStart >= 0 && pointerHandlerStart > importHandlerStart,
+    'createBackgroundHost registers both backup import handlers');
+const importHandler = bg.slice(importHandlerStart, pointerHandlerStart);
+const nextHandlerStart = bg.indexOf('host.register(', pointerHandlerStart + 1);
+const pointerHandler = bg.slice(pointerHandlerStart, nextHandlerStart >= 0 ? nextHandlerStart : undefined);
 assert.ok(
-    /wallet\.importBackup'[\s\S]{0,900}mode:\s*req\?\.\s*mode/m.test(bg),
+    /mode:\s*req\?\.\s*mode/m.test(importHandler),
     'createBackgroundHost forwards req.mode into importBackupFile',
 );
 // And the two re-key passwords ride the same handler. Without them a
 // restored wallet is sealed under the password it left its old device with.
 assert.ok(
-    /wallet\.importBackup'[\s\S]{0,900}walletPassword:\s*req\?\.\s*walletPassword/m.test(bg),
+    /walletPassword:\s*req\?\.\s*walletPassword/m.test(importHandler),
     'createBackgroundHost forwards req.walletPassword into importBackupFile',
 );
 assert.ok(
-    /wallet\.importBackup'[\s\S]{0,900}devicePassword:\s*req\?\.\s*devicePassword/m.test(bg),
+    /devicePassword:\s*req\?\.\s*devicePassword/m.test(importHandler),
     'createBackgroundHost forwards req.devicePassword into importBackupFile',
 );
 assert.ok(
-    /wallet\.importBackupPointer'[\s\S]{0,900}devicePassword:\s*req\?\.\s*devicePassword/m.test(bg),
+    /devicePassword:\s*req\?\.\s*devicePassword/m.test(pointerHandler),
     'createBackgroundHost forwards req.devicePassword into restoreFromBackupPointer',
 );
 

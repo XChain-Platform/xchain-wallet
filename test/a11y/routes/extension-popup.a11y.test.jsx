@@ -206,7 +206,7 @@ describe('extension popup main-screen accessibility', () => {
         window.history.replaceState(null, '', '/approval.html?id=approval-1');
         const { container } = render(<Router />);
         await screen.findByRole('heading', { level: 1, name: 'Connect Wallet' });
-        await screen.findByLabelText('Share Main');
+        await screen.findByRole('button', { name: 'Accounts it can see Main' });
         await expectNoSeriousAxeViolations(container);
     });
 });

@@ -138,10 +138,10 @@ for (const [shell, appPath] of [
         `${shell} tracks contract-deposit sub-route`);
     assert.ok(app.includes("'contract-withdraw'"),
         `${shell} tracks contract-withdraw sub-route`);
-    assert.ok(/onDeposit=\{\(\)\s*=>\s*setUnlockedView\('contract-deposit'\)\}/.test(app),
-        `${shell} wires ContractDetail.onDeposit → contract-deposit`);
-    assert.ok(/onWithdraw=\{\(\)\s*=>\s*setUnlockedView\('contract-withdraw'\)\}/.test(app),
-        `${shell} wires ContractDetail.onWithdraw → contract-withdraw`);
+    assert.ok(/onDeposit=\{\(\)\s*=>\s*\{\s*setContractRef\(ref\);\s*setUnlockedView\('contract-deposit'\);\s*\}\}/.test(app),
+        `${shell} preserves the selected contract and opens contract-deposit`);
+    assert.ok(/onWithdraw=\{\(\)\s*=>\s*\{\s*setContractRef\(ref\);\s*setUnlockedView\('contract-withdraw'\);\s*\}\}/.test(app),
+        `${shell} preserves the selected contract and opens contract-withdraw`);
     assert.ok(/mode="deposit"/.test(app),
         `${shell} App.jsx passes mode="deposit" to ContractFundsForm for the deposit route`);
     assert.ok(/mode="withdraw"/.test(app),

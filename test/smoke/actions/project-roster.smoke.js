@@ -123,8 +123,8 @@ for (const [shell, msgPath] of [
 assert.ok(/onManageRoster/.test(manageSrc), 'ManageToken accepts onManageRoster');
 assert.ok(/id:\s*['"]official-list['"][^\n]*\.\.\.ownerAction\(options\.onManageRoster\)/.test(manageSrc),
     'ManageToken renders the Official-list action');
-assert.ok(/const ownerAction = \(handler\) => \(\{[\s\S]*?disabled: blockIssuerActions/.test(manageSrc),
-    'ManageToken disables Official list for non-owners');
+assert.ok(/const ownerAction = \(handler\) => \(\{[\s\S]*?onSelect: handler,[\s\S]*?disabled: typeof handler !== 'function'/.test(manageSrc),
+    'ManageToken leaves Official list authorization to form preflight');
 
 for (const [shell, appPath] of [
     ['popup', join(ext, 'src', 'popup', 'App.jsx')],

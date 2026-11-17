@@ -66,23 +66,26 @@ function mount(props = {}) {
 }
 
 describe('MessagingInbox two panels', () => {
-    it('starts the wide selected row at the panel inset without a list frame', () => {
+    it('starts the wide list frame 8px under the header with a full-width selected row', () => {
         const css = readFileSync('packages/core/src/shared/routes/MessagingInbox.module.css', 'utf8');
         const panelCss = readFileSync('packages/core/src/shared/components/PanelSplit.module.css', 'utf8');
+        const cardCss = readFileSync('packages/core/src/ui/Card.module.css', 'utf8');
         const tokens = readFileSync('packages/core/src/ui/tokens.css', 'utf8');
-        const wideList = css.match(/\.convList\[data-wide='true'\]\s*\{([^}]*)\}/);
+        const list = css.match(/\.convList\s*\{([^}]*)\}/);
         const selectedRow = css.match(/\.convList\[data-wide='true'\] \.convItem\[aria-current='true'\]\s*\{([^}]*)\}/);
         const listBody = panelCss.match(/\.listBody\s*\{([^}]*)\}/);
 
-        expect(wideList).not.toBeNull();
-        expect(wideList[1]).toMatch(/border:\s*0/);
+        expect(list).not.toBeNull();
+        expect(list[1]).toMatch(/composes:\s*flush from '\.\.\/\.\.\/ui\/Card\.module\.css'/);
+        expect(list[1]).toMatch(/overflow:\s*hidden/);
+        expect(cardCss).toMatch(/:root \[data-xc-split-list\]\s*\{[^}]*border:\s*var\(--xc-card-border\);[^}]*border-radius:\s*var\(--xc-card-radius\);[^}]*overflow:\s*hidden/s);
         expect(listBody[1]).toMatch(/padding-block-start:\s*var\(--xc-space-2\)/);
         expect(tokens).toMatch(/--xc-space-2:\s*8px/);
         expect(selectedRow).not.toBeNull();
         expect(selectedRow[1]).toMatch(/background:\s*color-mix\([^;]*--xc-accent-primary[^;]*20%/);
-        expect(selectedRow[1]).toMatch(/border-radius:\s*var\(--xc-card-radius\)/);
-        expect(selectedRow[1]).toMatch(/margin-inline:\s*var\(--xc-list-row-padding\)/);
-        expect(selectedRow[1]).not.toMatch(/margin-block|margin-top/);
+        expect(selectedRow[1]).toMatch(/width:\s*100%/);
+        expect(selectedRow[1]).toMatch(/margin-inline:\s*0/);
+        expect(selectedRow[1]).toMatch(/border-radius:\s*0/);
         expect(selectedRow[1]).toMatch(/box-shadow:\s*none/);
     });
 

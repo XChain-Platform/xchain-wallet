@@ -70,9 +70,9 @@ for (const cls of ['field', 'label', 'control', 'text', 'tick', 'placeholder', '
 assert.match(sendJs, /import \{ TokenField \}/, 'Send imports the standard TokenField');
 assert.match(sendJs, /import \{ TickerIcon \}/, 'Send renders the shared token icon');
 assert.match(sendJs, /<TokenField[\s\S]{0,300}id="send-token"[\s\S]{0,600}onOpenPicker=\{\(\) => setTokenPickerRecipientId\(PRIMARY_TOKEN_PICKER\)\}/, 'Send wires its asset field to the token picker');
-// Multi's add-recipient form uses the same standard Token field, opening the
-// same picker (tokens only) through Send's picker state.
-assert.match(sendJs, /onOpenTokenPicker=\{\(\) => setTokenPickerRecipientId\(MULTI_TOKEN_PICKER\)\}/,
-    'the Multi recipient Token field opens the token picker');
+// Multi's add and edit forms use the same standard Token field. Send keeps
+// distinct targets so the picker result returns to the right draft.
+assert.match(sendJs, /onOpenTokenPicker=\{\(target\) => setTokenPickerRecipientId\(\s*target === 'add' \? MULTI_ADD_TOKEN_PICKER : MULTI_TOKEN_PICKER,\s*\)\}/,
+    'the Multi recipient Token field opens the picker for the active draft');
 
 console.log('token-field smoke OK');

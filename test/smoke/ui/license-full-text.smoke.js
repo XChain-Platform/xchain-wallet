@@ -69,7 +69,7 @@ assert.doesNotMatch(aboutSrc, /from '\.\.\/\.\.\/\.\.\/license\.js'/, 'About imp
 assert.doesNotMatch(aboutSrc, /licenseOpen|aria-expanded/, 'About has no expand-in-place license toggle');
 assert.match(
     aboutSrc,
-    /title=\{t\('settings\.about\.license'\)\}[\s\S]+?docLinkProps\(LICENSE_FILE\)/,
+    /<ActionListItem\s+icon=\{<Icon\.BookIcon \/>\}[\s\S]{0,300}docLinkProps\(LICENSE_FILE\)/,
     'About links the License row to the repository file',
 );
 assert.doesNotMatch(aboutSrc, /AboutLicensePage|full-license-text/, 'About has no in-app license page');

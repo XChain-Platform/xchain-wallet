@@ -123,7 +123,7 @@ assert.ok(/function ThreadComposer\b/.test(src),
     'MessagingInbox defines ThreadComposer (docked message input)');
 assert.ok(/onSubmit=\{\(\) => \{/.test(src) && /onCompose\(\{/.test(src),
     'composer Enter routes the draft to the New-message form via onCompose');
-assert.ok(/toAddress: selectedCounterparty/.test(src) && /message: t,/.test(src),
+assert.ok(/toAddress: activeCounterparty/.test(src) && /message: t,/.test(src),
     'the reply prefill carries the recipient and the typed body');
 assert.ok(/fixedEncryption: threadEncryption/.test(src) && /threadEncryption\b/.test(src),
     'the reply locks the conversation encryption method onto the form');
@@ -183,8 +183,8 @@ assert.ok(/readMsgRead\b/.test(src) && /writeMsgRead\b/.test(src),
     'MessagingInbox loads + persists per-conversation read marks');
 assert.ok(/lastIncomingTimestamp\b/.test(src),
     'conversations track their newest incoming message for unread detection');
-assert.ok(/local\.unreadDot\b/.test(src),
-    'the conversation list shows an unread dot');
+assert.ok(/notificationStyles\.unreadDot\b/.test(src),
+    'the conversation list shows the shared Notifications unread dot');
 assert.ok(/function openConversation\b/.test(src) && /setSelectedCounterparty\(/.test(src),
     'opening a conversation goes straight to the thread and clears the read mark');
 assert.ok(/Unread messages/.test(src) && /firstUnreadRef\b/.test(src),

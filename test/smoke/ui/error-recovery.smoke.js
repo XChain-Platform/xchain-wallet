@@ -77,7 +77,7 @@ assert.ok(/error=\{backupErrorFor\('file'\)\}/.test(importSrc),
 //    as the notice's recovery.
 assert.ok(/StatusMessage/.test(pairSrc),
     'PairSignerForm imports StatusMessage');
-assert.ok(/<StatusMessage key="failure" variant="error">\{connection\.message\}<\/StatusMessage>/.test(pairSrc),
+assert.ok(/<StatusMessage key="connection-error" variant="error">\{failedMessage\}<\/StatusMessage>/.test(pairSrc),
     'PairSignerForm shows the connection failure as a plain error notice');
 assert.ok(/title=\{t\('hardwareConnect\.connect\.tryAgain'\)\}[\s\S]{0,200}onClick=\{\(\) => runPairing\(vendor\)\}/.test(pairSrc),
     'PairSignerForm Try again row runs the pairing again');

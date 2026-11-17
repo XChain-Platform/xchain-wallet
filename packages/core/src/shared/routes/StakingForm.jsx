@@ -1501,6 +1501,7 @@ export function StakingForm({
     const header = (
         <PageHeader
             onBack={stage === 'review' ? leaveReview : onBack}
+            nested={reviewing}
             backDisabled={stage === 'submitting' || actionConfirm.composing}
             {...(isContract ? { backLabel: stage === 'review' ? 'Back to edit' : 'Back to contract' } : {})}
             title={pageTitle}

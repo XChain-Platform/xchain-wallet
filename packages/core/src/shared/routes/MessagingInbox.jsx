@@ -47,6 +47,7 @@ import { neutralizeControlText } from '../utils/textHardening.js';
 import { messageTextForDisplay } from '../utils/messageTextSafety.js';
 import styles from './IssueTokenForm.module.css';
 import local from './MessagingInbox.module.css';
+import notificationStyles from './AlertsRoute.module.css';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
 
@@ -941,12 +942,6 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                                       <span className={local.convBody}>
                                         <span className={local.convTop}>
                                             <span className={local.convNameWrap}>
-                                                {isUnread ? (
-                                                    <span
-                                                        className={local.unreadDot}
-                                                        aria-label="Unread messages"
-                                                    />
-                                                ) : null}
                                                 <span
                                                     className={isUnread
                                                         ? `${local.convName} ${local.convNameUnread}`
@@ -964,12 +959,15 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                                             </span>
                                             <span className={local.convTime}>
                                                 {c.lastTimestamp ? <RelativeTime timestamp={c.lastTimestamp} /> : ''}
+                                                {isUnread ? (
+                                                    <span
+                                                        className={notificationStyles.unreadDot}
+                                                        aria-label="Unread"
+                                                    />
+                                                ) : null}
                                             </span>
                                         </span>
-                                        <span className={isUnread
-                                            ? `${local.convPreview} ${local.convPreviewUnread}`
-                                            : local.convPreview}
-                                        >
+                                        <span className={local.convPreview}>
                                             {previewFor(c.lastText)}
                                         </span>
                                       </span>

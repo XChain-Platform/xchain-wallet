@@ -181,7 +181,7 @@ describe('DispenserExplorer result price for an oracle-priced dispenser', () => 
             'packages/core/src/shared/routes/DispensersList.module.css',
         ), 'not all and (min-width: 400px)');
         expect(ruleBody(listNarrow, '.row')).toMatch(/grid-template-columns:\s*40px minmax\(0, 1fr\)/);
-        expect(ruleBody(listNarrow, '.status')).toMatch(/overflow-wrap:\s*anywhere/);
+        expect(ruleBody(listNarrow, '.status')).toMatch(/overflow-wrap:\s*break-word/);
 
 
         const detailNarrow = mediaBlock(readCss(

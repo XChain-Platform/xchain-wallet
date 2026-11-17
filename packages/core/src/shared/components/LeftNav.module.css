@@ -303,7 +303,7 @@
     background: transparent;
     /* A transparent 1px edge on every row keeps the active row, which colours it, from shifting the list. */
     border: 1px solid transparent;
-    border-radius: 10px;
+    border-radius: calc(var(--xc-radius-md) + var(--xc-radius-xs));
     color: var(--xc-text);
     font: inherit;
     font-size: var(--xc-text-sm);
@@ -333,7 +333,7 @@
     padding: var(--xc-space-2) var(--xc-space-3);
     background: transparent;
     border: 1px solid transparent;
-    border-radius: 10px;
+    border-radius: calc(var(--xc-radius-md) + var(--xc-radius-xs));
     color: var(--xc-text);
     font: inherit;
     font-size: var(--xc-text-sm);

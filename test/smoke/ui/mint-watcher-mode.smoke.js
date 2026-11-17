@@ -48,8 +48,8 @@ assert.match(
 );
 assert.match(
     formSrc,
-    /if \(!isWatcherMode && !isHwSource && \(!signerReady && password\.length === 0\)\) return;/,
-    'password gate skipped in watcher mode',
+    /if \(!isWatcherMode && !isHwSource && !signerReady && password\.length === 0\) \{[\s\S]{0,180}reviewErrors\.validate\(\{ 'mint-review-password':[\s\S]{0,120}return;\s*\}/,
+    'password gate skipped in watcher mode and reports a field error when empty',
 );
 assert.match(
     formSrc,

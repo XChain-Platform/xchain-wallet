@@ -69,8 +69,8 @@
     display: flex;
 }
 
-/* The wide split turns the narrow card grid into the same inset row stack as
-   the side menu. The list scroller, not a card frame, owns the top 8px gap. */
+/* The wide split turns the narrow card grid into one framed row stack. The
+   list scroller supplies the 8px gap above the card. */
 .marketList[data-xc-split-list] {
     display: flex;
     flex-direction: column;
@@ -82,10 +82,10 @@
 }
 
 .splitRow.splitRow {
-    width: calc(100% - (2 * var(--xc-space-2)));
-    margin-inline: var(--xc-space-2);
+    width: 100%;
+    margin-inline: 0;
     border: 0;
-    border-radius: 10px;
+    border-radius: 0;
     background: transparent;
     box-shadow: none;
 }

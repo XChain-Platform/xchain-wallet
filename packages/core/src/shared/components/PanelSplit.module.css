@@ -124,6 +124,15 @@
     padding-block-end: 0;
 }
 
+/* With no fixed list header, the scroller starts right at the page header
+   line, so rows scroll all the way up to it; the 8px top gap lives inside
+   the scroller (.listBody) instead (operator 2026-11-16). */
+@supports selector(:has(*)) {
+    .listPanel:not(:has(> .listHeader)) {
+        padding-block-start: 0;
+    }
+}
+
 .listHeader {
     flex: none;
     min-width: 0;

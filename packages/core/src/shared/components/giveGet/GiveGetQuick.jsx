@@ -53,6 +53,7 @@ import styles from './GiveGet.module.css';
  * @param {QuickSide} props.get
  * @param {() => void} [props.onFlip]              omit to hide the flip button (Dispenser)
  * @param {string} [props.flipLabel]
+ * @param {boolean} [props.singleSide]              render only `give`, for a picker card that flips its meaning in place
  * @param {import('react').ReactNode} [props.notice]  under the cards (gated content, coin-for-coin)
  * @param {import('react').ReactNode} [props.rate]    a RateLine, or a price line
  * @param {{ title?: string, summary?: import('react').ReactNode, children: import('react').ReactNode } | null} [props.ownership]
@@ -60,7 +61,7 @@ import styles from './GiveGet.module.css';
  *   With `children`, an in-place collapsible section (open / onToggle).
  * @param {import('react').ReactNode} [props.after]
  */
-export function GiveGetQuick({ give, get, onFlip, flipLabel = 'Flip give and get', notice, rate, ownership, terms, after }) {
+export function GiveGetQuick({ give, get, onFlip, flipLabel = 'Flip give and get', singleSide = false, notice, rate, ownership, terms, after }) {
     return (
         <>
             <div className={styles.pair}>
@@ -79,7 +80,7 @@ export function GiveGetQuick({ give, get, onFlip, flipLabel = 'Flip give and get
                         </button>
                     </div>
                 ) : null}
-                <QuickSideCard side={get} fallbackLabel={t('components.giveGet.youGet')} />
+                {singleSide ? null : <QuickSideCard side={get} fallbackLabel={t('components.giveGet.youGet')} />}
             </div>
             {notice}
             {rate}
