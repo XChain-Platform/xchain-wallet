@@ -19,6 +19,7 @@
 
 import { getRecentShellErrors } from './errorCapture.js';
 import { sendMessage } from './bridgeMessaging.js';
+import { desktopFileRefOf } from './desktopFileRef.js';
 
 export { sendMessage };
 
@@ -711,7 +712,13 @@ export function listPendingDeploys(req) {
 
 /** Multi-part file upload or resume. */
 export function fileMultipart(opts) {
-    return /** @type {any} */ (sendMessage('action.fileMultipart', opts));
+    const inlineFile = opts?.fileRef?.kind === 'inline' ? opts.fileRef.blob : null;
+    const pathRef = inlineFile
+        ? desktopFileRefOf(inlineFile, /** @type {any} */ (globalThis).xchainWalletBridge)
+        : null;
+    return /** @type {any} */ (sendMessage('action.fileMultipart', pathRef
+        ? { ...opts, fileRef: pathRef }
+        : opts));
 }
 
 /** In-flight multi-part file uploads for a wallet. */
