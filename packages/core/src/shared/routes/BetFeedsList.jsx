@@ -18,7 +18,6 @@ import { outcomeLabelsOf } from '../utils/betOutcomeLabels.js';
 // The standard title-line filter, the gauge card and the wallet's bets loader.
 import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
 import { BetMarketCard, betPoolTotal } from '../components/BetMarketCard.jsx';
-import { QuestionList } from '../components/QuestionList.jsx';
 import { useWalletBets, yourBetText } from '../components/BetMyBetsPanel.jsx';
 import {
     LIST_DETAIL_MIN_WIDTH,
@@ -475,6 +474,7 @@ export function BetFeedsList({
                     onSelectMarket?.(ref);
                 }}
                 selected={selected}
+                className={twoPanel ? local.splitRow : undefined}
                 yourBet={yourBetText(betsByMarket.get(marketKey(chainId, m)), m)}
                 yours={ownAddresses.has(String(m?.source || ''))}
             />
@@ -495,9 +495,18 @@ export function BetFeedsList({
     } else if (shown && shown.length === 0) {
         emptyState = <EmptyState title="No matching markets" body="Change or clear the filter to see more." titleAs="p" />;
     }
-    const body = shown && shown.length > 0
-        ? <QuestionList label="Prediction markets" split={twoPanel}>{shown.map(card)}</QuestionList>
-        : emptyState ? <QuestionList label="Prediction markets" empty={emptyState} /> : null;
+    const body = (
+        <>
+            {emptyState}
+            {shown && shown.length > 0 ? (
+                <div className={local.cardArea}>
+                    <ul className={local.marketList} aria-label="Prediction markets" data-xc-split-list={twoPanel ? '' : undefined}>
+                        {shown.map(card)}
+                    </ul>
+                </div>
+            ) : null}
+        </>
+    );
 
     let notice = null;
     if (error) {

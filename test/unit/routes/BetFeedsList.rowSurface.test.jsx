@@ -8,8 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Prediction markets and governance render the same framed question list and
-// the same question row. Their adapters retain money and vote wording.
+// A market row is the shared ListRow, as Governance poll rows are. Rendered
+// through the shared Button, the row took Button's primary fill: every market
+// card was accent blue with the label and outcomes in muted grey on it, about
+// 1.5:1, so the market a user was about to open could not be read. Vitest
+// blanks CSS modules, so the row is told apart by the aria-busy attribute the
+// shared Button always sets and ListRow never does.
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -49,18 +53,18 @@ describe('BetFeedsList market rows', () => {
         }
     });
 
-    it('renders markets through the shared framed question list', () => {
+    it('keeps each market row on the card surface the poll rows use', () => {
         const source = readFileSync(resolve(process.cwd(), 'packages/core/src/shared/routes/BetFeedsList.jsx'), 'utf8');
-        const cardSource = readFileSync(resolve(process.cwd(), 'packages/core/src/shared/components/BetMarketCard.jsx'), 'utf8');
-        const sharedCss = readFileSync(resolve(process.cwd(), 'packages/core/src/shared/components/QuestionList.module.css'), 'utf8');
+        const css = readFileSync(resolve(process.cwd(), 'packages/core/src/shared/routes/BetFeedsList.module.css'), 'utf8');
         expect(source.length).toBeGreaterThan(1000);
+        // Each market is a BetMarketCard, a plain button drawn on the shared
+        // Card surface, and it is the only card: All, My bets and My markets
+        // draw the same one (ruling 2026-11-13).
         expect(source).toMatch(/<BetMarketCard\s+market=\{m\}/);
-        expect(source).toContain('<QuestionList label="Prediction markets"');
         expect(source).toMatch(/if \(!twoPanel\) \{\s*onOpenMarket\(chainId, m\.action_index\);/);
         expect(source.match(/<BetMarketCard\b/g)).toHaveLength(1);
-        expect(cardSource).toContain('<QuestionListRow');
-        expect(sharedCss).toMatch(/\.panel\s*\{[^}]*composes:\s*flush/s);
-        expect(sharedCss).toMatch(/\.row\[aria-current='true'\]/);
+        const cardCss = readFileSync(resolve(process.cwd(), 'packages/core/src/shared/components/BetMarketCard.module.css'), 'utf8');
+        expect(cardCss).toMatch(/\.card \{[^}]*composes: card from '\.\.\/\.\.\/ui\/Card\.module\.css';/s);
     });
 
     it('lets the phone tab underline span the full toolbar row', () => {
