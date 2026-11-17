@@ -615,8 +615,19 @@ describe('wide Home detail panel', () => {
             </MessagingProvider>,
         );
         const note = await screen.findByText('No price history yet');
+        const hero = screen.getByRole('region', { name: 'PEPE' });
+        const name = within(hero).getByTitle('PEPE');
+        const valueCaption = within(hero).getByText('Value');
+        const icon = name.parentElement.previousElementSibling;
+        expect(Array.from(name.parentElement.children)).toEqual([name, valueCaption]);
+        expect(icon?.className).toContain('cardCaptionIconWrap');
+        await waitFor(() => expect(icon?.querySelector('[class*="cardCaptionIconFallback"]')).toHaveTextContent('PE'));
+        expect(icon?.querySelector('[class*="cardCaptionChain"]')).not.toBeNull();
         expect(note.closest('[data-chart-note]')).not.toBeNull();
         expect(document.querySelector('[data-chart-behind] svg polyline')).toBeNull();
+        fireEvent.click(within(hero).getByRole('button', { name: 'Show balance in PEPE' }));
+        const balanceCaption = within(hero).getByText('Balance');
+        expect(Array.from(name.parentElement.children)).toEqual([name, balanceCaption]);
         // The hero's line comes from the wallet's one history read: the panel
         // reads no history of its own until its History tab opens. (Its one
         // address-list read is the issuer check, which predates this line.)

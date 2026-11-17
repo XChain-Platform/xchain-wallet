@@ -10,13 +10,12 @@
 
 // TokenDetail drawn as wide Home's detail panel (G115, `embedded`): Home's
 // Screen is the page, so the panel adds no main landmark, page header or
-// Back, names itself with a heading and shows the asset on its card; an NFT
-// (0 decimals, locked supply) opens with its outlined identity card (G16)
-// instead of the blue card; and its reads are the selected asset's own, the
-// same whatever else the wallet holds.
+// Back, names itself with a heading and shows every coin and token in the same
+// value-chart hero; its reads are the selected asset's own, the same whatever
+// else the wallet holds.
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { TokenDetail } from '../../../packages/core/src/shared/routes/TokenDetail.jsx';
@@ -46,11 +45,12 @@ function messagingFor(tokenInfo, otherHoldings = 0) {
         getHoldersForToken: vi.fn().mockResolvedValue({ data: [] }),
         listGatedContent: vi.fn().mockResolvedValue([]),
         getSupplyHistory: vi.fn().mockResolvedValue([]),
+        getAddressHistory: vi.fn().mockResolvedValue([]),
         getWalletBalances: vi.fn().mockResolvedValue({ [CHAIN]: [{ balances: { tokens } }] }),
     };
 }
 
-function mount({ embedded = true, tick = 'RAREPEPE', displayName = 'Rare Pepe', divisibility = 0, quantity = '1', tokenInfo = {}, messaging } = {}) {
+function mount({ embedded = true, ownerView = false, tick = 'RAREPEPE', displayName = 'Rare Pepe', divisibility = 0, quantity = '1', tokenInfo = {}, messaging } = {}) {
     const m = messaging || messagingFor(tokenInfo);
     const view = render(
         <MessagingProvider shell="web" messaging={m}>
@@ -63,6 +63,7 @@ function mount({ embedded = true, tick = 'RAREPEPE', displayName = 'Rare Pepe', 
                 divisibility={divisibility}
                 quantity={quantity}
                 embedded={embedded}
+                ownerView={ownerView}
                 onBack={() => {}}
             />
         </MessagingProvider>,
@@ -91,13 +92,44 @@ describe('TokenDetail embedded in wide Home', () => {
         expect(screen.queryByRole('heading', { level: 2, name: 'Counterparty' })).toBeNull();
     });
 
-    it('opens an NFT with its identity card, not the blue card', async () => {
-        mount({ tokenInfo: { divisibility: 0, totalSupply: '298', locks: { max_supply: true } } });
-        await waitFor(() => expect(document.querySelector('[data-nft-identity]')).not.toBeNull());
-        const card = screen.getByRole('region', { name: 'Rare Pepe' });
-        expect(card).toHaveTextContent('RAREPEPE · NFT on Bitcoin');
-        expect(card).toHaveTextContent('You hold 1 of 298.');
-        expect(screen.getByRole('tab', { name: 'Actions' })).toBeInTheDocument();
+    it.each([
+        ['NFT-like token', { tick: 'BTCNFT', displayName: 'Bitcoin NFT', quantity: '1', supply: '1' }],
+        ['stamp token', { tick: 'STAMP', displayName: 'Stamps NFT on Bitcoin', quantity: '847', supply: '847' }],
+    ])('keeps the standard hero for a %s on every token surface', async (_label, asset) => {
+        for (const surface of [
+            { embedded: false, ownerView: false },
+            { embedded: true, ownerView: false },
+            { embedded: false, ownerView: true },
+        ]) {
+            const view = mount({
+                ...surface,
+                tick: asset.tick,
+                displayName: asset.displayName,
+                quantity: asset.quantity,
+                tokenInfo: {
+                    divisibility: 0,
+                    totalSupply: asset.supply,
+                    locks: { max_supply: true },
+                },
+            });
+
+            const hero = await screen.findByRole('region', { name: asset.displayName });
+            expect(hero).toHaveTextContent('Balance');
+            expect(hero).toHaveTextContent(asset.quantity);
+            expect(document.querySelector('[data-nft-identity]')).toBeNull();
+
+            const chart = await screen.findByRole('region', { name: 'Balance chart' });
+            const line = await within(chart).findByRole('img', { name: /^Balance over 1W/ });
+            expect(line.getAttribute('aria-label') || line.textContent)
+                .toMatch(new RegExp(`Start ${asset.quantity} ${asset.tick}\\. End ${asset.quantity} ${asset.tick}\\.`));
+            expect(chart.querySelector('[data-chart-scale="flat"]')).not.toBeNull();
+            expect(within(screen.getByRole('tablist', { name: 'Chart range' })).getAllByRole('tab'))
+                .toHaveLength(8);
+
+            view.unmount();
+            cleanup();
+            __clearTokenInfoCache();
+        }
     });
 
     it('keeps the blue card for a token whose supply is not locked', async () => {
@@ -107,19 +139,12 @@ describe('TokenDetail embedded in wide Home', () => {
         expect(document.querySelector('[data-nft-identity]')).toBeNull();
     });
 
-    it('keeps the identity card off the coin page itself', async () => {
-        mount({ embedded: false, tokenInfo: { divisibility: 0, totalSupply: '298', locks: { max_supply: true } } });
-        await screen.findByRole('main');
-        await waitFor(() => expect(screen.getByRole('tab', { name: 'Actions' })).toBeInTheDocument());
-        expect(document.querySelector('[data-nft-identity]')).toBeNull();
-    });
-
     it('reads only the selected asset, the same with 3 and 30 other holdings', async () => {
         const counts = [];
         for (const holdings of [3, 30]) {
             const messaging = messagingFor({ divisibility: 0, locks: { max_supply: true } }, holdings);
             const view = mount({ messaging });
-            await waitFor(() => expect(document.querySelector('[data-nft-identity]')).not.toBeNull());
+            await screen.findByRole('region', { name: 'Balance chart' });
             counts.push(readCount(messaging));
             view.unmount();
             __clearTokenInfoCache();

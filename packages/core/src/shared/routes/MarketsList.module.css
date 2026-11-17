@@ -1,10 +1,7 @@
 /* One market per row: the row's 24h chart fills it behind the open button. */
 .row {
     position: relative;
-    display: flex;
-    align-items: center;
     min-width: 0;
-    padding: var(--xc-space-3);
     color: var(--xc-text);
     overflow: hidden;
 }
@@ -88,38 +85,10 @@
     display: contents;
 }
 
-/* The open button sits above the row chart and lets it show through (the
-   kit ListRow draws it borderless on a transparent background). */
+/* The chart is positioned inside the kit ListRow, which owns all row spacing
+   and interaction states. */
 .marketButton {
     position: relative;
-    display: flex;
-    align-items: center;
-    min-height: var(--xc-tap-min);
-    gap: var(--xc-space-2);
-    flex: 1;
-    min-width: 0;
-    padding: 0;
-    color: inherit;
-    font: inherit;
-    text-align: start;
-    cursor: pointer;
-}
-
-/* The kit row paints its hover fill on the button, which would sit over the
-   chart inside it. The button stays transparent and draws no press ring; the
-   row beneath the chart takes the standard list-row hover fill instead. */
-.row .marketButton:is(:hover, :active):not(:disabled) {
-    background: transparent;
-    box-shadow: none;
-}
-
-/* Browsers without :has() (Chrome 102) simply show no hover fill on the row. */
-@supports selector(:has(*)) {
-    @media (hover: hover) and (pointer: fine) {
-        .row:not([data-selected='true']):has(.marketButton:hover:not(:disabled)) {
-            background: var(--xc-control-bg-hover);
-        }
-    }
 }
 
 /* The token name gives way with an ellipsis (a ticker may run to 250
@@ -222,26 +191,6 @@
 .marketPanel {
     composes: detailPanel from '../components/PanelSplit.module.css';
 }
-
-/* The row whose market the right panel shows reads like the side menu's active
-   item: a light brand tint and the brand bar on the leading edge, no border.
-   The tint stays faint so the row chart and the muted orders line keep their
-   contrast. */
-.row[data-selected='true'] {
-    background: var(--xc-row-active-bg);
-    box-shadow: var(--xc-shadow-nav-indicator);
-}
-
-:global([dir='rtl']) .row[data-selected='true'] {
-    box-shadow: inset -3px 0 0 var(--xc-accent-primary, var(--xc-text));
-}
-
-@media (forced-colors: active) {
-    .row[data-selected='true'] {
-        border-inline-start: 3px solid Highlight;
-    }
-}
-
 
 /* Two panels: the market's tools join the list filter on the DEX header
    line, 8px apart, so neither panel carries a row of floating buttons. */

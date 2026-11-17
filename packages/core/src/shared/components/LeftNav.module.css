@@ -376,10 +376,8 @@
 .itemActive {
     --xc-button-hover-bg: var(--xc-row-active-bg);
     --xc-button-hover-border: transparent;
-    border: 1px solid transparent;
     background: var(--xc-row-active-bg);
-    font-weight: 600;
-    color: var(--xc-accent-text, var(--xc-text));
+    font-weight: inherit;
 }
 
 .icon {
@@ -412,13 +410,6 @@
     flex-direction: column;
 }
 
-@media (prefers-contrast: more) {
-    .nav .itemActive {
-        outline: 2px solid currentColor;
-        outline-offset: -2px;
-    }
-}
-
 /* Forced colors paints a transparent border in CanvasText, which would outline
    every row. Idle rows take the canvas colour and the active row takes the
    selection colour, so only the current destination shows an edge. */
@@ -428,10 +419,6 @@
         border-color: Canvas;
     }
 
-    .nav .itemActive {
-        --xc-button-hover-border: Highlight;
-        border-color: Highlight;
-    }
 }
 
 @media (prefers-reduced-motion: reduce) {

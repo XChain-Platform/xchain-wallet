@@ -190,12 +190,13 @@ async function layoutOf(heading) {
 }
 
 describe('asset and token-management pages', () => {
-    it('keeps the asset hero on detail and the approved identity card on Manage Token', async () => {
+    it('keeps the same value-chart hero on detail and Manage Token', async () => {
         renderCoin();
         const coin = await layoutOf('Bitcoin');
         cleanup();
         __clearTokenInfoCache();
         renderManagedToken();
+        const managedToken = await layoutOf('MYTOKEN');
 
         const expected = {
             heroInStack: true,
@@ -212,11 +213,11 @@ describe('asset and token-management pages', () => {
             labelsHaveCollisionShift: false,
         };
         expect(coin).toEqual(expected);
-        expect(await screen.findByRole('region', { name: 'Token identity' })).toBeInTheDocument();
-        expect(screen.queryByRole('region', { name: /chart$/i })).toBeNull();
-        expect(within(screen.getByRole('tablist', { name: 'Coin or token view' }))
-            .getAllByRole('tab').map((tab) => tab.textContent))
-            .toEqual(['Actions', 'Details', 'History']);
+        expect(managedToken).toEqual({
+            ...expected,
+            pageTabs: ['Actions', 'Details', 'Files', 'History'],
+        });
+        expect(document.querySelector('[data-nft-identity]')).toBeNull();
     });
 
     it('gives a token with no price history its balance line from the wallet rows', async () => {

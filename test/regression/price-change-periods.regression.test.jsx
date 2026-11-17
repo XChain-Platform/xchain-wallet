@@ -168,10 +168,10 @@ describe('regression/price-change-periods', () => {
 
         await waitFor(() => expect(messaging.getNativePricesRequest)
             .toHaveBeenCalledWith(PRICE_HISTORY_REQUEST));
-        expect(await screen.findByRole('img', { name: /^Value trend\. Range 1W\./ }))
+        expect(await screen.findByRole('img', { name: /^Value over 1W\. Range 1W\./ }))
             .toBeInTheDocument();
         fireEvent.click(screen.getByRole('tab', { name: '1M' }));
-        expect(await screen.findByRole('img', { name: /^Value trend\. Range 1M\./ }))
+        expect(await screen.findByRole('img', { name: /^Value over 1M\. Range 1M\./ }))
             .toBeInTheDocument();
         expect(screen.queryByText('No price history yet')).toBeNull();
     });

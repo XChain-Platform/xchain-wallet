@@ -13,7 +13,8 @@ import listPageStyles from '../../../packages/core/src/ui/ListPage.module.css';
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = { address: 'bc1qexampleexampleexampleexampleexampleex' };
-const questionListCss = readFileSync('packages/core/src/shared/components/QuestionList.module.css', 'utf8');
+const betCardCss = readFileSync('packages/core/src/shared/components/BetMarketCard.module.css', 'utf8');
+const betListCss = readFileSync('packages/core/src/shared/routes/BetFeedsList.module.css', 'utf8');
 
 function pending() {
     return new Promise(() => {});
@@ -99,7 +100,7 @@ describe('GovernancePolls states', () => {
         expect(screen.getByRole('menuitem', { name: 'Create poll' })).toBeInTheDocument();
     });
 
-    it('renders the shared question rows, answer shares, binding state and ruled actions', async () => {
+    it('renders the shared gauge cards, answer shares, binding state, vote weight and ruled actions', async () => {
         mount({
             getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
             governancePolls: vi.fn().mockResolvedValue({
@@ -129,25 +130,33 @@ describe('GovernancePolls states', () => {
                     { option_index: 1, total_weight: '25', voter_count: 1 },
                 ],
             }),
+            governanceVotes: vi.fn().mockResolvedValue({
+                data: [{ action_index: 20, poll_index: 12, source: ADDRESS.address, weight: '1200' }],
+            }),
         });
 
         await screen.findByText('Ship the release?');
         const list = screen.getByRole('list');
         expect(list.tagName).toBe('UL');
-        expect(list.closest('[data-question-list-panel]')).not.toBeNull();
-        expect(questionListCss).toMatch(/\.panel\s*\{[^}]*composes:\s*flush from '\.\.\/\.\.\/ui\/Card\.module\.css'/s);
-        expect(questionListCss).toMatch(/\.list > li \+ li\s*\{[^}]*border-top:\s*1px solid var\(--xc-border\)/s);
+        expect(list).toHaveAttribute('aria-label', 'Governance polls');
+        expect(betListCss).toMatch(/\.marketList\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fill, minmax\(min\(100%, 290px\), 1fr\)\)/s);
+        expect(betCardCss).toMatch(/\.card\s*\{[^}]*composes:\s*card from '\.\.\/\.\.\/ui\/Card\.module\.css'/s);
         const items = screen.getAllByRole('listitem');
         expect(items).toHaveLength(2);
         for (const item of items) {
             const row = item.querySelector('button');
             expect(row).not.toBeNull();
-            expect(row).toHaveAttribute('data-question-list-row');
+            expect(row).toHaveAttribute('data-poll-index');
+            expect(row.querySelector('[data-question-card-gauge]')).not.toBeNull();
             expect(row.querySelector('svg')).not.toBeNull();
         }
         expect(screen.getByText('Binding')).toBeInTheDocument();
         expect(await screen.findAllByText('75%')).toHaveLength(2);
-        expect(screen.getByText('Leading')).toBeInTheDocument();
+        expect([...document.querySelectorAll('[data-governance-card-weight]')]
+            .some((node) => node.textContent.replace(/\s+/g, ' ') === '100 VOTE voting weight')).toBe(true);
+        const voteChip = await screen.findByLabelText('Your vote: 1,200 VOTE');
+        expect(voteChip).toHaveTextContent('1,200 VOTE');
+        expect(screen.getAllByText('Closed')).toHaveLength(1);
         expect(screen.getByRole('tab', { name: 'My votes' })).toBeInTheDocument();
         expect(screen.getByRole('tab', { name: 'My polls' })).toBeInTheDocument();
 

@@ -220,7 +220,7 @@ button.row {
 }
 
 button.row:hover:not(:disabled) {
-    background: var(--xc-bg-muted);
+    background: var(--xc-row-hover-bg);
 }
 
 /* An offer's tag and amount on one line under its price. */

@@ -513,7 +513,7 @@ export function StakeDetail({
                 {/* The page header names the stake on its own page; in Staking's
                     right panel the card's caption does, as the market card
                     names its pair beside the DEX list. */}
-                <section className={embedded ? heroStyles.hero : `${heroStyles.hero} ${tokenDetailStyles.cardNoCaption}`} aria-labelledby={captionId}>
+                <section className={heroStyles.hero} aria-labelledby={captionId}>
                     <div className={heroStyles.row}>
                         <span id={captionId} className={`${heroStyles.label} ${local.chartLegend}`}>
                             {embedded ? <span className={local.positionTitle}>{title}</span> : null}

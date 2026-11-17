@@ -59,8 +59,11 @@ for (const [pattern, what] of [
 assert.ok(!/styles\.detailsList|local\.quickActions|aria-haspopup="menu"/.test(src),
     'StakeDetail has no hero details list, old quick-action row or More menu');
 assert.ok(!/QuickActionTile|assetActionGrid/.test(src), 'StakeDetail draws no square action tiles (G101)');
-// The range chips are Home's without 24h, in the approved order.
-assert.ok(/\['1w', '1m', '3m', '6m', 'ytd', '1y', 'all'\]/.test(src), 'StakeDetail offers 1W to All range chips');
+// The range chips inherit Home's complete approved set and ordering.
+assert.ok(/RANGES as CHART_RANGES/.test(src) && /const STAKE_RANGES = CHART_RANGES/.test(src),
+    'StakeDetail uses Home\'s complete 24h to All range chips');
+assert.ok(/showScale/.test(src) && /heroScale/.test(src),
+    'StakeDetail uses the shared Hero 2 five-value scale and halfway guides');
 // Actions is the default tab and uses the Zap icon; Details uses Info.
 assert.ok(/useState\('actions'\)/.test(src), 'StakeDetail opens on the Actions tab');
 assert.ok(/id: 'actions', label: tabLabel\(Icon\.ZapIcon/.test(src), 'Actions carries the Zap icon');

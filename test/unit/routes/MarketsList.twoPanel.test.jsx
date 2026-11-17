@@ -133,8 +133,10 @@ describe('MarketsList two panels on wide content', () => {
         expect(panel.querySelector('[data-market-layout]')).toHaveAttribute('data-market-layout', 'single');
         // The first row is the shown market.
         const first = screen.getByRole('button', { name: 'Open TOK0 market' });
+        expect(list.closest('[data-xc-split-list]')).not.toBeNull();
+        expect(first).toHaveAttribute('data-xc-split-row');
         expect(first).toHaveAttribute('aria-current', 'true');
-        expect(first.closest('li')).toHaveAttribute('data-selected', 'true');
+        expect(first.closest('li')).not.toHaveAttribute('data-selected');
         expect(screen.getByRole('button', { name: 'Open TOK1 market' })).not.toHaveAttribute('aria-current');
     });
 

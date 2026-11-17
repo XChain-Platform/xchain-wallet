@@ -6,6 +6,8 @@
 import { useId } from 'react';
 import { Icon } from '@xchain-wallet/core/ui';
 import { outcomeSurfaceColor } from './outcomeDetail/outcomeColors.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 import styles from './QuestionList.module.css';
 
 /** The one framed question list used by prediction markets and governance. */
@@ -13,6 +15,7 @@ export function QuestionList({ label, children, empty = null, split = false }) {
     return (
         <div className={styles.panel} data-question-list-panel="">
             {children ? (
+                /* Safari needs an explicit list role because this class removes list styling. */
                 <ul className={styles.list} role="list" aria-label={label} data-xc-split-list={split ? '' : undefined}>
                     {children}
                 </ul>
@@ -63,18 +66,18 @@ export function QuestionListRow({
             <span id={detailId} className={styles.detail}>
                 <span className={styles.meta}>
                     {status ? <span className={styles.status}>{status}</span> : null}
-                    {timing ? <span className={styles.timing}>{timing}</span> : null}
+                    {timing ? <span>{timing}</span> : null}
                     {badge ? <span className={styles.badge}>{badge}</span> : null}
                 </span>
                 {leading ? (
                     <span className={styles.leading}>
-                        <span>Leading</span>
+                        <span>{t('components.questionList.leading')}</span>
                         <strong>{leading.label}</strong>
                         <strong>{leading.percent}%</strong>
                     </span>
                 ) : null}
                 {answers.length ? (
-                    <span className={styles.answers} aria-label="Answer shares">
+                    <span className={styles.answers} aria-label={t('components.questionList.answerShares')}>
                         {answers.map((answer, index) => {
                             const percent = Number.isFinite(answer.percent)
                                 ? Math.max(0, Math.min(100, answer.percent))

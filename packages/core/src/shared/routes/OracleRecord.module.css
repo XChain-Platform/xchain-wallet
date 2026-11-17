@@ -112,8 +112,10 @@ button.marketRow {
     cursor: pointer;
 }
 
-button.marketRow:hover {
-    background: var(--xc-bg-muted);
+@media (hover: hover) and (pointer: fine) {
+    button.marketRow:hover {
+        background: var(--xc-row-hover-bg);
+    }
 }
 
 button.marketRow:focus-visible {

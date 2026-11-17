@@ -401,11 +401,9 @@
     --xc-shadow-selected-ring: inset 0 0 0 1px var(--xc-control-selected);
     --xc-shadow-focus-ring: 0 0 0 3px var(--xc-focus-ring);
     --xc-shadow-danger-focus-ring: 0 0 0 3px rgba(220, 38, 38, 0.2);
-    --xc-shadow-nav-indicator: inset 3px 0 0 var(--xc-accent-primary, var(--xc-text));
     /* currentColor resolves on the element using the token, so the halo and
        ring follow that element's own text color. */
     --xc-shadow-status-halo: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent);
-    --xc-shadow-identity-ring: 0 0 0 2px var(--xc-surface), 0 0 0 4px currentColor;
 
     /* How tall the app shell may be. NOT plain 100dvh, because
      * `body` below pads itself by the top safe-area inset, so a shell that
@@ -512,18 +510,19 @@
     border-top: 1px solid var(--xc-border);
 }
 
-:root [role="menu"] [role="menuitem"]:not(:disabled, [aria-disabled="true"]):hover,
-:root [role="menu"] [role="menuitemradio"]:not(:disabled, [aria-disabled="true"]):hover,
-:root [role="menu"] [role="menuitemcheckbox"]:not(:disabled, [aria-disabled="true"]):hover,
-:root [data-xc-menu-list] [data-xc-menu-item]:not(:disabled, [aria-disabled="true"]):hover {
-    background: var(--xc-bg-muted);
+@media (hover: hover) and (pointer: fine) {
+    :root [role="menu"] [role="menuitem"]:not(:disabled, [aria-disabled="true"]):hover,
+    :root [role="menu"] [role="menuitemradio"]:not(:disabled, [aria-disabled="true"]):hover,
+    :root [role="menu"] [role="menuitemcheckbox"]:not(:disabled, [aria-disabled="true"]):hover,
+    :root [data-xc-menu-list] [data-xc-menu-item]:not(:disabled, [aria-disabled="true"]):hover {
+        background: var(--xc-row-hover-bg);
+    }
 }
 
 :root [role="menu"] :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"]):is([aria-current], [aria-checked="true"], [aria-selected="true"]),
 :root [data-xc-menu-list] [data-xc-menu-item][aria-current] {
-    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
-    color: var(--xc-accent-text);
-    font-weight: 600;
+    background: var(--xc-row-active-bg);
+    font-weight: inherit;
 }
 
 :root [role="menu"] [role="menuitem"]:focus-visible,
@@ -536,10 +535,6 @@
 
 :root :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [data-xc-menu-item])[data-destructive="true"] {
     color: var(--xc-danger-fg);
-}
-
-:root :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [data-xc-menu-item])[data-destructive="true"]:not(:disabled, [aria-disabled="true"]):hover {
-    background: var(--xc-danger-bg);
 }
 
 :root :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [data-xc-menu-item])[data-destructive="true"] svg {
@@ -1050,12 +1045,6 @@ body {
 
 :where([dir='rtl']) :where(svg[data-xc-directional]) {
     transform: scaleX(-1);
-}
-
-/* The active-navigation rail is drawn with a physical inset, so it sits on
-   the leading edge only when the token flips with the reading direction. */
-:root[dir='rtl'] {
-    --xc-shadow-nav-indicator: inset -3px 0 0 var(--xc-accent-primary, var(--xc-text));
 }
 
 :where(

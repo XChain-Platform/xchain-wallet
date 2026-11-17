@@ -40,7 +40,7 @@
 }
 
 .selectedRow {
-    background: var(--xc-surface-muted, var(--xc-surface));
+    background: var(--xc-row-active-bg);
 }
 
 /* A network's icon: its bundled image, or its first letter on its colour. */

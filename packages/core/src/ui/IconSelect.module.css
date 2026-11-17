@@ -296,8 +296,10 @@
     text-align: start;
 }
 
-.item:hover {
-    background: var(--xc-bg-muted);
+@media (hover: hover) and (pointer: fine) {
+    .item:hover {
+        background: var(--xc-row-hover-bg);
+    }
 }
 
 .item:focus-visible {
@@ -306,7 +308,7 @@
 }
 
 .itemActive {
-    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
+    background: var(--xc-row-active-bg);
 }
 
 /* A disabled option stays listed, as in a native select, but reads as unavailable. */

@@ -94,7 +94,9 @@ describe('Market page notices', () => {
                 .click();
             await drain();
         });
-        expect(utils.queryByRole('button', { name: 'Buy' })).toBeNull();
+        const position = utils.getByRole('region', { name: 'Your position' });
+        expect(within(position).getByRole('button', { name: 'Buy' })).toBeTruthy();
+        expect(within(utils.getByRole('tabpanel', { name: 'Buy' })).queryByRole('button', { name: 'Buy' })).toBeNull();
         expect(utils.container.querySelectorAll('[role="alert"]')).toHaveLength(0);
         expect(utils.container.textContent).not.toMatch(/Choose an outcome/);
         const slot = utils.container.querySelector('[data-form-status]');

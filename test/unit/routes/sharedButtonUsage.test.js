@@ -67,7 +67,6 @@ const styleGuideRowRoutes = [
 const listRowRoutes = [
     'ContactsList',
     'CoSignerAccountList',
-    'GovernancePolls',
     'MarketActivity',
     'MyLists',
 ];
@@ -244,6 +243,17 @@ describe('shared route button usage', () => {
         expect(source).toMatch(/import\s+\{[^}]*\bListRow\b[^}]*\}\s+from\s+'@xchain-wallet\/core\/ui'/s);
         expect(source).toMatch(/<ListRow\b/);
         expect(source).not.toMatch(/<button\b/);
+    });
+
+    it('GovernancePolls uses the approved prediction-market question card', () => {
+        const source = readFileSync(
+            resolve(process.cwd(), 'packages/core/src/shared/routes/GovernancePolls.jsx'),
+            'utf8',
+        );
+
+        expect(source).toMatch(/import\s+\{[^}]*\bQuestionCard\b[^}]*\}\s+from\s+'\.\.\/components\/BetMarketCard\.jsx'/s);
+        expect(source).toMatch(/<QuestionCard\b/);
+        expect(source).not.toMatch(/<ListRow\b/);
     });
 
     it.each(tokenControlRoutes)('%s uses the matching kit choice controls', (routeName, controls) => {

@@ -49,6 +49,7 @@ import {
     formatWithThousands,
     multiplyDecimalStrings,
     roundDecimalString,
+    subtractDecimalStrings,
     trimAmountTail,
     sumDecimalStrings,
 } from '../utils/amountFormat.js';
@@ -178,6 +179,32 @@ function trimZeros(v) {
     const s = String(v === null || v === undefined ? '' : v);
     if (!s.includes('.')) return s;
     return s.replace(/0+$/, '').replace(/\.$/, '');
+}
+
+// Settlement floors both the oracle fee and each payout at the asset's
+// precision. The decimal helpers keep the arithmetic exact; this final slice
+// applies the protocol's floor instead of display rounding.
+function floorAmount(value, places) {
+    const match = /^(\d+)(?:\.(\d+))?$/.exec(String(value ?? ''));
+    const precision = Number(places);
+    if (!match || !Number.isInteger(precision) || precision < 0 || precision > 18) return null;
+    if (precision === 0) return match[1];
+    const fraction = (match[2] || '').slice(0, precision).replace(/0+$/, '');
+    return fraction ? `${match[1]}.${fraction}` : match[1];
+}
+
+function potentialPayout({ held, total, outcomePool, feePct, divisibility }) {
+    if (compareDecimalStrings(total, '0') !== 1 || compareDecimalStrings(outcomePool, '0') !== 1) return null;
+    const precision = Number(divisibility);
+    if (!Number.isInteger(precision) || precision < 0 || precision > 18) return null;
+    const workPrecision = Math.min(100, precision + 24);
+    const feeRaw = divideDecimalStrings(multiplyDecimalStrings(total, String(feePct || 0)), '100', workPrecision);
+    const fee = floorAmount(feeRaw, precision);
+    const pot = fee === null ? null : subtractDecimalStrings(total, fee);
+    const payoutRaw = pot === null
+        ? null
+        : divideDecimalStrings(multiplyDecimalStrings(held, pot), outcomePool, workPrecision);
+    return floorAmount(payoutRaw, precision);
 }
 
 function betAmountError(value, minimum) {
@@ -982,7 +1009,7 @@ export function BetFeedDetail({
             This market has more than {SETTLED_BET_LIMIT} positions; only {SETTLED_BET_LIMIT} were read.
         </p>
     ) : null;
-    // What this wallet holds on each side, under the Place bet button.
+    // What this wallet currently holds on each outcome.
     const heldByOutcome = new Map();
     for (const b of myBets) {
         if (!isAcceptedBet(b) || (b?.bet_status && b.bet_status !== 'open')) continue;
@@ -991,6 +1018,56 @@ export function BetFeedDetail({
         if (!Number.isInteger(i) || !/^\d{1,47}(\.\d{1,18})?$/.test(amountText)) continue;
         heldByOutcome.set(i, sumDecimalStrings([heldByOutcome.get(i) || '0', amountText]));
     }
+    const canBuyPositions = takingBets && outcomes.length > 0 && (addressesByChain?.[chainId] || [])
+        .some((address) => String(address.address) !== String(feed.source));
+    const positionPanel = (
+        <section className={local.positionPanel} aria-label="Your position" data-testid="market-position-panel">
+            <h2 className={local.positionTitle}>Your position</h2>
+            {feedBets === null ? (
+                <p className={local.positionQuiet}>Loading your position…</p>
+            ) : feedBetsFailed ? (
+                <p className={local.positionQuiet}>Your position could not be loaded.</p>
+            ) : heldByOutcome.size > 0 ? (
+                <ul className={local.positionList}>
+                    {[...heldByOutcome.entries()].map(([i, held]) => {
+                        const name = safeOutcomeLabel(outcomes[i]) || `Outcome ${i}`;
+                        const currentShare = shareOf(i);
+                        const payout = potentialPayout({
+                            held,
+                            total,
+                            outcomePool: byOutcome[i]?.pool || '0',
+                            feePct: feed.fee,
+                            divisibility: stakeDivisibility,
+                        });
+                        return (
+                            <li key={i} className={local.positionRow}>
+                                <div className={local.positionValues}>
+                                    <strong className={local.positionAmount}>{withTick(held)}</strong>
+                                    <span className={local.positionOutcome}>{name}</span>
+                                    {currentShare ? <span>Current share {currentShare}</span> : null}
+                                    {payout !== null ? <span>Potential payout {withTick(payout)}</span> : null}
+                                </div>
+                                {canBuyPositions ? (
+                                    <Button type="button" size="sm" variant="secondary" onClick={() => openPlaceBet(i)}>
+                                        Buy More
+                                    </Button>
+                                ) : null}
+                            </li>
+                        );
+                    })}
+                </ul>
+            ) : (
+                <div className={local.positionEmpty}>
+                    <p className={local.positionQuiet}>You have no position in this market</p>
+                    {canBuyPositions ? (
+                        <Button type="button" size="sm" variant="secondary" onClick={() => setTab('bet')}>
+                            Buy
+                        </Button>
+                    ) : null}
+                </div>
+            )}
+        </section>
+    );
 
     // Details: the market's terms and facts, one per row, then its rules
     // stated plainly.
@@ -1566,15 +1643,18 @@ export function BetFeedDetail({
         <>
             <OutcomeDetailLayout
                 hero={(
-                    <BetMarketHero
-                        feed={feed}
-                        outcomes={outcomes}
-                        pools={pools}
-                        total={total}
-                        betCount={betCount}
-                        bets={feedBets}
-                        live={live}
-                    />
+                    <>
+                        <BetMarketHero
+                            feed={feed}
+                            outcomes={outcomes}
+                            pools={pools}
+                            total={total}
+                            betCount={betCount}
+                            bets={feedBets}
+                            live={live}
+                        />
+                        {positionPanel}
+                    </>
                 )}
                 tabs={tabItems}
                 tab={tab}

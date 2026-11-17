@@ -189,7 +189,7 @@ describe('TokenDetail price history', () => {
             const info = {
                 creator: 'bcrt1qx',
                 marketPrice: '0.5',
-                projects: ['Example'],
+                projects: [{ project: 'Example', linkActionIndex: '42' }],
                 images: [{ type: 'icon', url: 'https://assets.example/icon.png' }],
             };
             for (const resolve of finishInfo) resolve(info);
@@ -197,7 +197,7 @@ describe('TokenDetail price history', () => {
         });
 
         expect(await screen.findByRole('img', { name: /Supply of SUPPLYPROBE over time/ })).toBeTruthy();
-        expect(screen.getByText('Projects').closest('li')).toHaveTextContent('Example');
+        expect(screen.getByText(/Official: part of the/).closest('div')).toHaveTextContent('Example project');
         expect(detailsCard.nextElementSibling).toBe(supplySlot);
         expect(screen.queryByRole('status', { name: 'Loading supply history' })).toBeNull();
     });

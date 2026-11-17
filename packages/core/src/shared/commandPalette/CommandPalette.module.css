@@ -213,8 +213,13 @@
 }
 
 .rowActive {
-    background: var(--xc-accent-primary);
-    color: var(--xc-on-accent);
+    background: var(--xc-row-active-bg);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .row:hover {
+        background: var(--xc-row-hover-bg);
+    }
 }
 
 .rowIcon {
@@ -223,8 +228,6 @@
     flex: 0 0 auto;
     color: var(--xc-text-muted);
 }
-
-.rowActive .rowIcon { color: var(--xc-on-accent); }
 
 .rowText {
     flex: 1 1 auto;
@@ -248,9 +251,6 @@
     overflow-wrap: normal;
     word-break: normal;
 }
-
-/* Full-strength text: fading it 15% dropped the subtitle under 4.5:1 on the accent. */
-.rowActive .rowSubtitle { color: var(--xc-on-accent); }
 
 .empty {
     padding: var(--xc-space-5) var(--xc-space-4);
@@ -452,7 +452,7 @@
 }
 
 .walletGroupList .walletRow {
-    --xc-button-hover-bg: var(--xc-bg-muted);
+    --xc-button-hover-bg: var(--xc-row-hover-bg);
     --xc-button-hover-border: transparent;
     inline-size: 100%;
     justify-content: flex-start;
@@ -472,14 +472,15 @@
     transform: none;
 }
 
-.walletGroupList .walletRow:hover {
-    background: var(--xc-bg-muted);
+@media (hover: hover) and (pointer: fine) {
+    .walletGroupList .walletRow:hover {
+        background: var(--xc-row-hover-bg);
+    }
 }
 
 .walletGroupList .walletRowActive {
-    background: var(--xc-bg-muted);
-    color: var(--xc-accent-text);
-    font-weight: 600;
+    background: var(--xc-row-active-bg);
+    font-weight: inherit;
 }
 
 .walletGroupList .walletRow[data-wallet-menu-focused] {
@@ -494,10 +495,6 @@
     justify-content: center;
     flex: 0 0 auto;
     color: var(--xc-text-muted);
-}
-
-.walletRowActive .walletRowIcon {
-    color: var(--xc-accent-text);
 }
 
 .walletRowLabel {
@@ -521,11 +518,6 @@
     flex: 0 0 auto;
     width: var(--xc-icon-size);
     height: var(--xc-icon-size);
-}
-
-.rowActive .rowChevron,
-.walletRowActive .rowChevron {
-    color: currentColor;
 }
 
 /* The menu keeps equal margins on both sides, so it does not reserve the
@@ -657,10 +649,6 @@
 @media (forced-colors: active) {
     .walletGroupList .walletRow {
         border-color: Canvas;
-    }
-
-    .walletGroupList .walletRowActive {
-        border-color: Highlight;
     }
 
     .walletGroupList .walletRow[data-wallet-menu-focused] {

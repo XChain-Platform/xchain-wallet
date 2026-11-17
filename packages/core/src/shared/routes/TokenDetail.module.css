@@ -50,21 +50,14 @@
 /* ───── Asset balance card - Home's balance card (TotalBalanceHero in
    HomeTabs' heroStack, PortfolioChart behind it) ───── */
 
-/* The caption carries the asset's small icon beside its name, in Home's 20px
-   name style. The icon's chain badge may sit past the caption's edge, so only
-   the name itself is cut to an ellipsis. */
+/* The caption matches Home's icon plus two-line name and mode layout. The
+   icon's chain badge may sit past the caption's edge, so only the name itself
+   is cut to an ellipsis. */
 .cardCaption.cardCaption {
     display: flex;
     align-items: center;
     gap: var(--xc-space-2);
     overflow: visible;
-}
-
-.cardIdentity {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    min-width: 0;
 }
 
 .cardCaptionText {
@@ -330,6 +323,333 @@
     gap: var(--xc-space-3);
 }
 
+.profileCard {
+    overflow: hidden;
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-lg);
+    background: var(--xc-surface);
+}
+
+.profileBanner {
+    display: block;
+    width: 100%;
+    height: clamp(112px, 28vw, 180px);
+    object-fit: cover;
+    background: var(--xc-bg-muted);
+}
+
+.profileBody {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+    padding: var(--xc-space-3);
+}
+
+.profileIdentity {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-3);
+    min-width: 0;
+}
+
+.profileIdentity > span:last-child {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.profileIdentity strong {
+    overflow-wrap: anywhere;
+    color: var(--xc-text);
+    font-size: var(--xc-text-lg);
+}
+
+.profileIdentity small {
+    color: var(--xc-text-muted);
+}
+
+.profileLogo,
+.profileLogoFallback {
+    width: 56px;
+    height: 56px;
+    flex: 0 0 56px;
+    border-radius: var(--xc-avatar-shape);
+    object-fit: cover;
+}
+
+.profileLogoFallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--xc-bg-muted);
+    color: var(--xc-text);
+    font-weight: 800;
+}
+
+.officialLine {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+    padding: var(--xc-space-2);
+    border: 1px solid var(--xc-success);
+    border-radius: var(--xc-radius-sm);
+    background: color-mix(in srgb, var(--xc-success) 10%, transparent);
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+}
+
+.officialLine svg {
+    width: var(--xc-icon-sm);
+    height: var(--xc-icon-sm);
+    flex: 0 0 auto;
+    color: var(--xc-success);
+}
+
+.officialLine span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.officialLine a {
+    margin-inline-start: auto;
+    color: var(--xc-accent-text);
+    font-weight: 700;
+}
+
+.profileDescription {
+    margin: 0;
+    color: var(--xc-text);
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.categoryChips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+}
+
+.categoryChips span {
+    padding: var(--xc-space-1) var(--xc-space-2);
+    border: 1px solid var(--xc-border);
+    border-radius: 999px;
+    background: var(--xc-bg-muted);
+    color: var(--xc-text);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+}
+
+.projectOwnership,
+.collectionLine {
+    margin: 0;
+    color: var(--xc-text);
+    overflow-wrap: anywhere;
+}
+
+.projectOwnership a,
+.collectionLine a,
+.collectionChildren a,
+.explorerInfoLink {
+    color: var(--xc-accent-text);
+}
+
+.collectionChildren {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+}
+
+.collectionChildren strong {
+    flex-basis: 100%;
+}
+
+.quietNote {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-4);
+    color: var(--xc-text-muted);
+    text-align: start;
+}
+
+.quietNote > span {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+}
+
+.quietNote strong {
+    color: var(--xc-text);
+}
+
+.quietNote svg {
+    width: var(--xc-icon-sm);
+    height: var(--xc-icon-sm);
+}
+
+.filesPanel,
+.gatedContent {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+.filesToggle.filesToggle [role='tab'] {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.filesToggle.filesToggle [role='tab'] svg {
+    width: var(--xc-icon-sm);
+    height: var(--xc-icon-sm);
+}
+
+.fileGrid,
+.gatedGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--xc-space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+@media (min-width: 700px) {
+    .fileGrid,
+    .gatedGrid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+.fileTile,
+.gatedTile {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-surface);
+    color: var(--xc-text);
+    text-decoration: none;
+}
+
+.fileTilePreview,
+.gatedTilePreview {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 112px;
+    overflow: hidden;
+    background: var(--xc-bg-muted);
+    color: var(--xc-text-muted);
+}
+
+.fileTilePreview img {
+    width: 100%;
+    height: 112px;
+    object-fit: cover;
+}
+
+.fileTilePreview > svg,
+.gatedTilePreview > svg {
+    width: 42px;
+    height: 42px;
+}
+
+.gatedTilePreview > svg {
+    filter: blur(4px);
+    opacity: 0.55;
+}
+
+.gatedTileUnlocked .gatedTilePreview > svg {
+    filter: none;
+    opacity: 1;
+}
+
+.fileTilePlay,
+.gatedTileLock,
+.gatedTileOpen {
+    position: absolute;
+    inset: 50% auto auto 50%;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    padding: var(--xc-space-1) var(--xc-space-2);
+    transform: translate(-50%, -50%);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--xc-text) 82%, transparent);
+    color: var(--xc-surface);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.fileTilePlay svg,
+.gatedTileLock svg,
+.gatedTileOpen svg {
+    width: 14px;
+    height: 14px;
+}
+
+.gatedTileOpen {
+    background: var(--xc-success);
+    color: var(--xc-on-success);
+}
+
+.fileTileBody,
+.gatedTileBody {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    padding: var(--xc-space-2);
+    text-align: start;
+}
+
+.fileTileBody strong,
+.gatedTileBody strong,
+.fileTileBody small,
+.gatedTileBody small {
+    overflow-wrap: anywhere;
+}
+
+.fileTileBody small,
+.gatedTileBody small {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+}
+
+.fileHash {
+    font-family: var(--xc-font-mono, monospace);
+}
+
+.gatedTileContent,
+.fileButton > span {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+
+.holdersSummary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-2);
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+}
+
+.holdersSummary span {
+    flex: 0 0 auto;
+    color: var(--xc-text-muted);
+}
+
 .aboutCard > .metaBlock + .metaBlock {
     padding-top: var(--xc-space-2);
     border-top: 1px solid var(--xc-border);
@@ -556,9 +876,10 @@
     width: 100%;
 }
 
-.fileLink:hover,
-.fileLink:focus-visible {
-    background: color-mix(in srgb, var(--xc-accent-primary, #2563eb) 10%, transparent);
+@media (hover: hover) and (pointer: fine) {
+    .fileLink:hover {
+        background: var(--xc-row-hover-bg);
+    }
 }
 
 .fileLinkIcon {
@@ -684,17 +1005,6 @@
     gap: var(--xc-space-2);
     max-width: 100%;
     min-width: 0;
-}
-
-/* The page header already names the asset, so its identity stays available to
-   the hero's region name without repeating visually. The mode caption remains. */
-.cardNoCaption .cardIdentity {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
 }
 
 /* The Actions tab: the action list (G101), then the issuer's heading and

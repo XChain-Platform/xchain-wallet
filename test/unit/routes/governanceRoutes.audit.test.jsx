@@ -678,7 +678,7 @@ describe('governance route audit', () => {
             governanceVotes: vi.fn().mockResolvedValue({
                 data: [
                     { action_index: 50, source: ADDRESS.address, poll_index: 7, choice: 0, share: '1' },
-                    { action_index: 55, source: ADDRESS.address, poll_index: 7, choice: 1, share: '1' },
+                    { action_index: 55, source: ADDRESS.address, poll_index: 7, choice: 1, share: '1', weight: '1200' },
                 ],
             }),
         });
@@ -690,9 +690,11 @@ describe('governance route audit', () => {
         // buttons, since a later vote replaces it until the close.
         expect(await screen.findByText('You voted: 1: No')).toBeTruthy();
         expect(screen.queryByText('You voted: 0: Yes')).toBeNull();
+        expect(screen.getByRole('heading', { name: 'Your vote' })).toBeTruthy();
+        expect(screen.getByText('Voting weight: 1,200 VOTE')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Change Vote' })).toBeEnabled();
         expect(screen.getByRole('button', { name: 'Vote for Yes' })).toBeEnabled();
         expect(screen.getByRole('button', { name: 'Vote for No' })).toBeEnabled();
-        expect(screen.getByText(/latest confirmed vote from this address replaces its earlier vote/)).toBeTruthy();
         // G121: the read-only votes and voters line carries no help tip, so
         // the delegation rule is not on the poll page itself.
         expect(screen.queryByText(/A direct vote overrides any standing VOTE delegation/)).toBeNull();

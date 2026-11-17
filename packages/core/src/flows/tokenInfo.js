@@ -46,6 +46,9 @@ import { imagePreviewDataUrl } from '../shared/utils/publishingFile.js';
  * @property {string} url                                full https URL after scheme rewrite
  * @property {string | null} type                        extension or TIS-supplied type ("png" / "icon" / "mp4" / …)
  * @property {string | null} name                        human-readable label when the TIS document provides one
+ * @property {string | null} title                       display title when supplied separately from the filename
+ * @property {string | null} hash                        declared sha256 hash
+ * @property {string | null} size                        declared dimensions or byte-size label
  */
 
 /**
@@ -118,7 +121,9 @@ import { imagePreviewDataUrl } from '../shared/utils/publishingFile.js';
  * @property {number | null} marketFloor                 coin-denominated floor, null if unset
  * @property {number | null} divisibility                token decimals (0-8); null when the explorer doesn't expose this field
  * @property {boolean} [loadError]                     true when the explorer failed to answer; every field then reads as unknown
- * @property {string[]} projects                         project ticks whose CURRENT roster includes this token (the "Official" banner data)
+ * @property {Array<{project:string, linkActionIndex:string|null, rosterActionIndex:string|null}>} projects project rosters whose CURRENT membership includes this token
+ * @property {{rosterActionIndex:string|null, membershipActionIndex:string|null, linkActionIndex:string|null, total:number}|null} registry this token's project roster, when it owns one
+ * @property {Array<Object>} linkedFiles                 owner-attached FILE+LINK rows read in one bulk request
  * @property {string | null} imageUrl                    best-effort hero image URL (TIS images[0] if present, else regex from description)
  * @property {TisMediaEntry[]} images                    full image gallery (icon / standard / large / hires)
  * @property {TisMediaEntry[]} audio                     audio tracks
@@ -631,6 +636,11 @@ function tisEntryToMedia(entry) {
         dataRef,
         type: (entry && typeof entry === 'object' && entry.type) ? String(entry.type) : null,
         name: (entry && typeof entry === 'object' && entry.name) ? String(entry.name) : null,
+        title: (entry && typeof entry === 'object' && entry.title) ? String(entry.title) : null,
+        hash: (entry && typeof entry === 'object' && entry.hash) ? String(entry.hash) : null,
+        size: (entry && typeof entry === 'object' && entry.size) ? String(entry.size) : null,
+        locked: Boolean(entry && typeof entry === 'object' && entry.locked),
+        packId: (entry && typeof entry === 'object' && entry.pack_id) ? String(entry.pack_id) : null,
     };
 }
 
@@ -674,6 +684,7 @@ export function tisToMediaBundle(doc) {
         owner: /** @type {TisOwner | null} */ (null),
         contacts: /** @type {TisContact[]} */ ([]),
         pgpsig: null,
+        htmlAvailable: false,
         dns: /** @type {TisDnsRecord[]} */ ([]),
     };
     if (!doc || typeof doc !== 'object') return empty;
@@ -703,7 +714,7 @@ export function tisToMediaBundle(doc) {
             if (typeof f === 'string') {
                 const url = normalizeMediaUrl(f);
                 if (!url) return null;
-                return { url, name: null, type: null, dataRef: null, locked: false, packId: null };
+                return { url, name: null, title: null, type: null, dataRef: null, hash: null, size: null, locked: false, packId: null };
             }
             // Object form supports: { data: <url>, data_ref: 'action:<index>',
             // name, type, locked, pack_id }. data_ref takes precedence over data
@@ -715,7 +726,10 @@ export function tisToMediaBundle(doc) {
                 url,
                 dataRef,
                 name: (f.name) ? String(f.name) : null,
+                title: (f.title) ? String(f.title) : null,
                 type: (f.type) ? String(f.type) : null,
+                hash: (f.hash) ? String(f.hash) : null,
+                size: (f.size) ? String(f.size) : null,
                 locked: Boolean(f.locked),
                 packId: (f.pack_id) ? String(f.pack_id) : null,
             };
@@ -756,6 +770,9 @@ export function tisToMediaBundle(doc) {
     const description = typeof doc.description === 'string' ? doc.description : null;
     const name = typeof doc.name === 'string' && doc.name.trim() ? doc.name.trim() : null;
     const pgpsig = typeof doc.pgpsig === 'string' && doc.pgpsig.trim() ? doc.pgpsig.trim() : null;
+    // TIS `html` is deliberately never returned. The renderer receives only
+    // this presence bit and may offer the explorer's guarded presentation.
+    const htmlAvailable = typeof doc.html === 'string' && doc.html.trim().length > 0;
     const categoriesRaw = Array.isArray(doc.categories) ? doc.categories : [];
     const categories = categoriesRaw
         .map((c) => {
@@ -811,6 +828,7 @@ export function tisToMediaBundle(doc) {
         owner,
         contacts,
         pgpsig,
+        htmlAvailable,
         dns,
     };
 }
@@ -943,8 +961,37 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null, options
     // "just show it" (Project_Registry.md), so no extra filtering here.
     const projects = Array.isArray(row?.projects)
         ? row.projects
-            .map((p) => (p && typeof p.project === 'string' && p.project ? p.project.toUpperCase() : null))
+            .map((p) => (p && typeof p.project === 'string' && p.project ? {
+                project: p.project.toUpperCase(),
+                linkActionIndex: p.link_action_index == null ? null : String(p.link_action_index),
+                rosterActionIndex: p.roster_action_index == null ? null : String(p.roster_action_index),
+            } : null))
             .filter((p) => p !== null)
+        : [];
+    const registryRaw = row?.registry && typeof row.registry === 'object' ? row.registry : null;
+    const registry = registryRaw ? {
+        rosterActionIndex: registryRaw.roster_action_index == null ? null : String(registryRaw.roster_action_index),
+        membershipActionIndex: registryRaw.membership_action_index == null ? null : String(registryRaw.membership_action_index),
+        linkActionIndex: registryRaw.link_action_index == null ? null : String(registryRaw.link_action_index),
+        total: Number.isFinite(Number(registryRaw.total)) ? Number(registryRaw.total) : 0,
+    } : null;
+    const linkedFiles = Array.isArray(row?.linked_files)
+        ? row.linked_files.flatMap((file) => {
+            if (!file || file.action_index == null) return [];
+            return [{
+                actionIndex: String(file.action_index),
+                name: file.name == null ? null : String(file.name),
+                title: file.title == null ? null : String(file.title),
+                type: file.type == null ? null : String(file.type),
+                blockIndex: file.block_index == null ? null : String(file.block_index),
+                gated: file.gated === true || Number(file.gated) === 1,
+                gateTicker: file.gate_ticker == null ? null : String(file.gate_ticker),
+                gateMinAmount: file.gate_min_amount == null ? null : String(file.gate_min_amount),
+                keyHash: file.key_hash == null ? null : String(file.key_hash),
+                encryptionMethod: file.encryption_method == null ? null : Number(file.encryption_method),
+                url: typeof file.url === 'string' ? file.url : null,
+            }];
+        })
         : [];
     // TIS bundle (when fetched) supplies the richer description body and
     // media arrays. We keep the on-chain description string as a fallback
@@ -967,6 +1014,8 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null, options
     const owner = tisBundle?.owner || null;
     const contacts = tisBundle?.contacts || [];
     const pgpsig = tisBundle?.pgpsig || null;
+    const htmlAvailable = tisBundle?.htmlAvailable === true;
+    const tisAvailable = tisBundle != null;
     const dns = tisBundle?.dns || [];
     const imageUrl = allowRemoteMedia
         ? ((images.length > 0 && images[0]?.url) || extractImageUrl(onChainDescription))
@@ -1003,6 +1052,8 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null, options
         marketFloor,
         divisibility,
         projects,
+        registry,
+        linkedFiles,
         imageUrl,
         images,
         audio,
@@ -1017,6 +1068,8 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null, options
         owner,
         contacts,
         pgpsig,
+        htmlAvailable,
+        tisAvailable,
         dns,
     };
 }
@@ -1180,6 +1233,29 @@ export async function tokenInfoFor({
         } catch {
             raw = null;
             readFailed = true;
+        }
+    }
+    // Owner-attached FILE+LINK content is one bulk token query, never one
+    // action read per tile. The token endpoint's embedded list is capped at
+    // ten rows, so this read is required for galleries with 25 or more files.
+    if (!demo && raw && typeof sdk?.getFiles === 'function') {
+        try {
+            const response = await sdk.getFiles(tick, 'token', { limit: 100 });
+            const files = Array.isArray(response) ? response : (Array.isArray(response?.data) ? response.data : []);
+            const row = Array.isArray(raw) ? raw[0] : raw;
+            if (row && typeof row === 'object') {
+                const linkedFiles = files.map((file) => ({
+                    ...file,
+                    url: file?.action_index != null && typeof sdk.fileRawUrl === 'function'
+                        ? sdk.fileRawUrl(String(file.action_index))
+                        : null,
+                }));
+                raw = Array.isArray(raw)
+                    ? [{ ...row, linked_files: linkedFiles }, ...raw.slice(1)]
+                    : { ...row, linked_files: linkedFiles };
+            }
+        } catch {
+            // Keep the token endpoint's bounded linked_files fallback.
         }
     }
     let tisBundle = null;

@@ -111,12 +111,23 @@ describe('BetMarketCard', () => {
     });
 
     it('is one button named by the question, its odds and pool line the description', () => {
-        render(<BetMarketCard market={market(9, 'open')} onOpen={() => {}} yourBet="Your position: 15 XCHAIN on No" />);
+        render(<BetMarketCard market={market(9, 'open')} onOpen={() => {}} yourPosition="15 XCHAIN" />);
         const card = screen.getByRole('button', { name: 'Will market 9 settle?' });
         const described = document.getElementById(card.getAttribute('aria-describedby'));
         expect(described.textContent).toContain('pool');
-        expect(described.textContent).toContain('Your position: 15 XCHAIN on No');
+        expect(described.textContent).toContain('15 XCHAIN');
         expect(card.querySelectorAll('button')).toHaveLength(0);
+    });
+
+    it('draws no position chip without a position and exposes the full short-chip value', () => {
+        const { rerender } = render(<BetMarketCard market={market(9, 'open')} onOpen={() => {}} />);
+        expect(screen.queryByTestId('bet-market-your-position')).toBeNull();
+
+        rerender(<BetMarketCard market={market(9, 'open')} onOpen={() => {}} yourPosition="15 LONG-TICKER-NAME" />);
+        const chip = screen.getByTestId('bet-market-your-position');
+        expect(chip).toHaveTextContent('15 LONG-TICKER-NAME');
+        expect(chip).toHaveAccessibleName('Your position: 15 LONG-TICKER-NAME');
+        expect(chip).toHaveAttribute('title', 'Your position: 15 LONG-TICKER-NAME');
     });
 
     it('is compact: 8px insets and gaps and a smaller donut', () => {
@@ -126,6 +137,8 @@ describe('BetMarketCard', () => {
         expect(rule('card')).toMatch(/gap:\s*var\(--xc-space-2\)/);
         expect(rule('gauge')).toMatch(/gap:\s*var\(--xc-space-2\)/);
         expect(rule('donut')).toMatch(/width:\s*64px/);
+        expect(rule('right')).toBeTruthy();
+        expect(css).toMatch(/\.right \.chip\s*\{[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;/s);
         expect(css).not.toMatch(/\.(top|tile|topText|ref|when|status)\s*\{/);
     });
 });

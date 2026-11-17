@@ -45,6 +45,9 @@
         "packages/core/src/shared/routes/TokenDetail.module.css | .galleryMediaCard": "Artwork or a camera or QR frame, not a card.",
         "packages/core/src/shared/routes/TokenDetail.module.css | .heroImageFallback": "Artwork or a camera or QR frame, not a card.",
         "packages/core/src/shared/routes/TokenDetail.module.css | .pgpsigBlock": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
+        "packages/core/src/shared/routes/TokenDetail.module.css | .profileCard": "The picked token profile has an edge-to-edge project banner above its padded identity and metadata body.",
+        "packages/core/src/shared/routes/TokenDetail.module.css | .officialLine": "The verified-project line is a compact success status inside the token profile, not another card.",
+        "packages/core/src/shared/routes/TokenDetail.module.css | .fileTile, .gatedTile": "The picked file gallery uses media preview tiles, including blurred locked previews, rather than standard content cards.",
         "packages/core/src/ui/AddressCombobox.module.css | .dropdown": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
         "packages/core/src/ui/ChainPicker.module.css | .trigger": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/ui/Checkbox.module.css | .box": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
@@ -87,6 +90,9 @@
         "packages/core/src/shared/components/settings/TestNetworksPages.module.css | .fieldValue": "A control (button, field, toggle or picker trigger), not a card; the faucet's read-only To value keeps the field border and radius of the fields beside it.",
         "packages/core/src/shared/components/settings/HideSmallBalancesPage.module.css | .currency": "A control-height read-only label (the amount's display currency) that sits beside the amount field and keeps the field border and radius, not a card.",
         "packages/core/src/shared/components/settings/HideSmallBalancesPage.module.css | .tag": "A small outlined chip (the Small tag on a balance row), not a card."
+    },
+    "dashed": {
+        "packages/core/src/shared/routes/StakeDetail.module.css | .legendDash | border-top: 1.25px dashed var(--xc-hero-scale-text)": "The ruled staking hero uses a dashed second series for staked plus unclaimed rewards."
     },
     "overrides": {
         "packages/core/src/shared/components/BetMarketCard.module.css | .card | padding": "The compact Prediction markets card takes an 8px inset so several fit side by side in the card grid (operator ruling 2026-11-13, Prediction markets walk).",

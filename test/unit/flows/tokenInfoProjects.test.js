@@ -24,7 +24,10 @@ describe('normalizeTokenInfo projects', () => {
                 { project: 'PROJ2', link_action_index: 500, roster_action_index: 499 },
             ],
         });
-        expect(info.projects).toEqual(['PROJ1', 'PROJ2']);
+        expect(info.projects).toEqual([
+            { project: 'PROJ1', linkActionIndex: '400', rosterActionIndex: '399' },
+            { project: 'PROJ2', linkActionIndex: '500', rosterActionIndex: '499' },
+        ]);
     });
 
     it('defaults to an empty array when absent', () => {
@@ -36,7 +39,7 @@ describe('normalizeTokenInfo projects', () => {
         const info = normalizeTokenInfo('bitcoin-mainnet', 'MEMA', {
             projects: [null, {}, { project: 42 }, { project: '' }, { project: 'OK' }],
         });
-        expect(info.projects).toEqual(['OK']);
+        expect(info.projects).toEqual([{ project: 'OK', linkActionIndex: null, rosterActionIndex: null }]);
     });
 
     it('tolerates a non-array projects field', () => {

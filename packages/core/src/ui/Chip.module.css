@@ -56,11 +56,11 @@
 }
 
 .pressed {
-    --xc-button-hover-bg: var(--xc-control-selected);
-    --xc-button-hover-border: var(--xc-control-selected);
-    background: var(--xc-control-selected);
-    border-color: var(--xc-control-selected);
-    color: var(--xc-control-selected-text);
+    --xc-button-hover-bg: var(--xc-toggle-selected-bg);
+    --xc-button-hover-border: var(--xc-toggle-selected-bg);
+    background: var(--xc-toggle-selected-bg);
+    border-color: var(--xc-toggle-selected-bg);
+    color: var(--xc-toggle-selected-text);
 }
 
 /* A module that `composes` from Button.module.css (TokenField does) inlines a
@@ -84,7 +84,7 @@ button.toggle {
 }
 
 button.pressed {
-    border-color: var(--xc-control-selected);
+    border-color: var(--xc-toggle-selected-bg);
 }
 
 /* Pressed is the selected fill, not the button's pressed ring. */

@@ -8,10 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// An NFT's identity card (G16) for wide Home's detail panel (G115): an NFT
-// has no price history, so instead of the blue chart card it opens with an
-// outlined white card holding its art, its name in bold, the ticker and
-// network muted, and how many of the supply this wallet holds.
+// Legacy NFT identity-card presentation. Token detail surfaces no longer use
+// this card: every coin, fungible token, NFT-like token and stamp uses the
+// shared value-chart hero, with artwork and collection facts in its tabs.
 
 import { useState } from 'react';
 import { formatFiatAmount } from '../utils/fiatAmountFormat.js';

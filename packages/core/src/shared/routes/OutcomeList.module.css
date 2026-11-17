@@ -58,9 +58,14 @@
     background: transparent;
 }
 
-.list .row.row:not(:disabled):hover,
+@media (hover: hover) and (pointer: fine) {
+    .list .row.row:not(:disabled):hover {
+        background: var(--xc-row-hover-bg);
+    }
+}
+
 .list .row.row:not(:disabled):active {
-    background: color-mix(in srgb, var(--xc-text) 6%, transparent);
+    background: var(--xc-row-hover-bg);
 }
 
 .list .row.row:disabled {

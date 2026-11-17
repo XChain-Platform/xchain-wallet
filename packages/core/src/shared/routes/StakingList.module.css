@@ -70,7 +70,7 @@
 /* The kit's hover sets every side's colour from the token, so the divider
    on top keeps its own colour here. */
 .rowItem > .row:hover:not(:disabled) {
-    background: var(--xc-bg-muted);
+    background: var(--xc-row-hover-bg);
     border-top-color: var(--xc-border);
 }
 
@@ -100,14 +100,14 @@
 
 @media (hover: hover) and (pointer: fine) {
     .rowItem[data-xc-split-item] > .row:hover:not(:disabled) {
-        background: color-mix(in srgb, var(--xc-text) 10%, transparent);
+        background: var(--xc-row-hover-bg);
         border-color: transparent;
         box-shadow: none;
     }
 }
 
 .rowItem[data-xc-split-item] > .row[aria-current='true'] {
-    background: color-mix(in srgb, var(--xc-accent-primary) 20%, transparent);
+    background: var(--xc-row-active-bg);
     box-shadow: none;
     font-weight: inherit;
 }

@@ -47,6 +47,12 @@
     box-shadow: var(--xc-shadow-popover);
 }
 
+@media (forced-colors: active) {
+    .triggerActive.triggerActive.triggerActive {
+        border-color: Highlight;
+    }
+}
+
 /* A dropdown opened inside the filter panel sits in the panel's own flow, so
    the panel grows to show the whole list. NetworkFilter marks its popover
    with data-listbox-popover, since Safari 16 has no :has(). */
@@ -61,12 +67,6 @@
 .panel [role='listbox'] [role='listbox'],
 .panel [data-listbox-popover] > [role='listbox'] {
     margin-top: 0;
-}
-
-@media (forced-colors: active) {
-    .triggerActive.triggerActive.triggerActive {
-        border-color: Highlight;
-    }
 }
 
 /* Phone and popup widths: the panel is centred across the screen, just

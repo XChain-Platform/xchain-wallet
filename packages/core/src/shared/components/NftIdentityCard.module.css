@@ -1,6 +1,5 @@
-/* The NFT identity card (G16): the outlined card, the art centred, the name
-   in bold, the ticker and network line and the holding muted. No blue fill
-   and no network chip. */
+/* Legacy outlined NFT card styles. Token detail surfaces use the shared
+   value-chart hero instead. */
 .card {
     composes: card from '../../ui/Card.module.css';
     display: flex;

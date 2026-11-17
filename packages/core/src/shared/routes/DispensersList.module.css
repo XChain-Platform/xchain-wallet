@@ -64,9 +64,11 @@
     color: inherit;
 }
 
-.marketRow:hover,
-.row:hover {
-    background: var(--xc-bg-muted);
+@media (hover: hover) and (pointer: fine) {
+    .marketRow:hover,
+    .row:hover {
+        background: var(--xc-row-hover-bg);
+    }
 }
 
 .marketRow:focus-visible,

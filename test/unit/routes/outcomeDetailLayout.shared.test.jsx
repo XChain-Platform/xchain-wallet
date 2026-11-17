@@ -353,16 +353,25 @@ describe('the 8px rhythm around the tab row (G13)', () => {
     const OUTCOME_CSS = 'packages/core/src/shared/components/outcomeDetail/OutcomeDetail.module.css';
 
     it('stacks the hero or identity card, the tab row and the panel in one column 8px apart', async () => {
-        for (const open of [() => openBet(), () => openPoll()]) {
-            await open();
-            const stack = document.querySelector('[data-outcome-stack]');
-            const children = [...stack.children];
-            expect(children[0]).toBe(hero());
-            expect(children[1].getAttribute('role')).toBe('tablist');
-            expect(children[2]).toBe(panel());
-            expect(stack.className).toMatch(/stack/);
-            cleanup();
-        }
+        await openBet();
+        let stack = document.querySelector('[data-outcome-stack]');
+        let children = [...stack.children];
+        expect(children[0]).toBe(hero());
+        expect(children[1]).toHaveAttribute('data-testid', 'market-position-panel');
+        expect(children[2].getAttribute('role')).toBe('tablist');
+        expect(children[3]).toBe(panel());
+        expect(stack.className).toMatch(/stack/);
+        cleanup();
+
+        await openPoll();
+        stack = document.querySelector('[data-outcome-stack]');
+        children = [...stack.children];
+        expect(children[0]).toBe(hero());
+        expect(children[1]).toHaveAttribute('data-poll-your-vote');
+        expect(children[2].getAttribute('role')).toBe('tablist');
+        expect(children[3]).toBe(panel());
+        expect(stack.className).toMatch(/stack/);
+        cleanup();
         // The column's gap is the 8px space token, and nothing between the
         // three adds a margin of its own.
         expect(readFileSync('packages/core/src/ui/tokens.css', 'utf8')).toMatch(/--xc-space-2:\s*8px/);
@@ -420,7 +429,8 @@ describe('the shared tab strip', () => {
             '1: Faster sync30%38,688 weight, 14 voters',
             '2: Address book import18%23,212.8 weight, 8 voters',
         ]);
-        expect(within(result).getByText('You voted: 0: Hardware wallet support')).toBeTruthy();
+        expect(within(screen.getByRole('region', { name: 'Your vote' }))
+            .getByText('You voted: 0: Hardware wallet support')).toBeTruthy();
 
         // Activity lists the votes cast, this wallet's marked, each led by
         // its choice's mark as a bet row is (the first choice's letter).
@@ -527,14 +537,15 @@ describe('the pick and its one green button', () => {
         expect(pollCard.previousElementSibling.tagName).toBe('DL');
     });
 
-    it('poll: names this wallet\'s standing vote under the choice list while the poll is open', async () => {
+    it('poll: names this wallet\'s standing vote under the chart while the poll is open', async () => {
         await openPoll({ votes: [{ action_index: 50, source: OWN, poll_index: 7, choice: 2, share: '1', block_index: 110 }] });
         const votePanel = screen.getByRole('tabpanel', { name: 'Vote' });
         // A vote changes until the close, so the rows stay buttons, as bet
-        // rows do after a bet, and the vote is named under the list.
+        // rows do after a bet, and the vote is named under the chart.
         const list = within(votePanel).getByRole('list', { name: 'Choice to vote for' });
-        const youVoted = within(votePanel).getByText('You voted: 2: Address book import');
-        expect(list.compareDocumentPosition(youVoted) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        const yourVote = screen.getByRole('region', { name: 'Your vote' });
+        expect(within(yourVote).getByText('You voted: 2: Address book import')).toBeTruthy();
+        expect(within(yourVote).getByRole('button', { name: 'Change Vote' })).toBeEnabled();
         expect(within(list).getByRole('button', { name: 'Vote for Address book import' })).toBeEnabled();
         expect(within(votePanel).queryByRole('button', { name: 'Change Vote' })).toBeNull();
         expect(within(votePanel).queryAllByRole('checkbox')).toHaveLength(0);

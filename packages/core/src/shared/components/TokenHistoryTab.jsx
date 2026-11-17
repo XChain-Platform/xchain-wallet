@@ -126,8 +126,9 @@ export function useTokenHistory({ messaging, walletId, chainId, tick, isNative, 
  * @param {{ entries: any[] | null, failed: boolean }} [props.history]  rows the page already read;
  *   left out, the tab reads its own
  * @param {(entry: any) => void} [props.onSelectEntry] opens one row's detail
+ * @param {string} [props.query] narrows notes, labels, addresses and counterparties
  */
-export function TokenHistoryTab({ walletId, chainId, tick, isNative = false, history: suppliedHistory = null, onSelectEntry }) {
+export function TokenHistoryTab({ walletId, chainId, tick, isNative = false, history: suppliedHistory = null, onSelectEntry, query = '' }) {
     const { messaging } = useWalletSource(walletId);
     const tokenInfo = useTokenInfo({ chainId, tick, skip: isNative, demo: isDemoWallet(walletId) });
     const ownHistory = useTokenHistory({ messaging, walletId, chainId, tick, isNative, enabled: !suppliedHistory });
@@ -142,6 +143,11 @@ export function TokenHistoryTab({ walletId, chainId, tick, isNative = false, his
     const assetLookup = useMemo(() => new Map([[`${chainId}|${tick}`, {
         divisibility, imageUrl, displayName: tick,
     }]]), [chainId, tick, divisibility, imageUrl]);
+    const visibleEntries = useMemo(() => {
+        const entries = history.entries || [];
+        const searchQuery = String(query || '').trim();
+        return searchQuery ? applyHistoryFilters(entries, { searchQuery }) : entries;
+    }, [history.entries, query]);
 
     if (history.entries === null) {
         return (
@@ -160,6 +166,14 @@ export function TokenHistoryTab({ walletId, chainId, tick, isNative = false, his
             />
         );
     }
+    if (visibleEntries.length === 0) {
+        return (
+            <EmptyState
+                title={t('tokenDetail.history.noMatchTitle')}
+                body={t('tokenDetail.history.noMatchBody')}
+            />
+        );
+    }
     return (
         // One list card of rows, newest first; no day headings.
         <ul
@@ -167,7 +181,7 @@ export function TokenHistoryTab({ walletId, chainId, tick, isNative = false, his
             aria-label={t('tokenDetail.history.label', { tick })}
             data-history-flat=""
         >
-            {history.entries.map((entry) => (
+            {visibleEntries.map((entry) => (
                 <ActivityEntryRow
                     key={entry.key}
                     entry={entry}

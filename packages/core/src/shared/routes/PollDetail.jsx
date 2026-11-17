@@ -82,7 +82,7 @@ import { explorerReadFailure } from '../../sdk/explorerErrors.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { useTickBalance } from '../hooks/useTickBalance.js';
-import { compareDecimalStrings, formatWithThousands } from '../utils/amountFormat.js';
+import { compareDecimalStrings, formatDecimalAmount, formatWithThousands } from '../utils/amountFormat.js';
 import { OFFER_LIFECYCLE_REFUSAL } from '../../flows/marketExpiry.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import {
@@ -137,6 +137,13 @@ function ballotRowText(row, options, isSplit) {
     const option = Number(row?.choice ?? row?.option_index);
     const label = Number.isInteger(option) ? `${option}: ${options[option] ?? ''}` : 'Unknown option';
     return isSplit ? `${label} (${String(row?.share ?? '0')} share)` : label;
+}
+
+function ballotWeight(rows) {
+    const value = (Array.isArray(rows) ? rows : [])
+        .map((row) => row?.voting_weight ?? row?.vote_weight ?? row?.weight)
+        .find((weight) => /^\d+(?:\.\d+)?$/.test(String(weight ?? '').trim()));
+    return value === undefined ? null : String(value).trim();
 }
 
 /**
@@ -415,6 +422,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack, embedded = fa
         [fromAddress, walletVotes],
     );
     const ballotLabelId = useId();
+    const yourVoteTitleId = useId();
 
     // The ballot is set only by the choice row the voter tapped (and edited
     // on Cast Vote). It is never seeded from an earlier vote: a seed that
@@ -895,28 +903,54 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack, embedded = fa
         { key: 'number', label: t('governance.detail.pollNumber'), value: `#${String(pollIndex)}` },
     ];
 
-    // What this wallet voted, the last lines of Result: "You voted: ...",
-    // one line per voting address, which is named when there are two.
-    const voteReceipt = (
-        <div className={detailStyles.receipt}>
+    const shownWalletBallot = sourceBallot.length
+        ? { address: fromAddress?.address, rows: sourceBallot }
+        : walletBallots[0] || null;
+    const shownVoteWeight = ballotWeight(shownWalletBallot?.rows);
+    const shownVoteChoice = shownWalletBallot?.rows
+        ?.map((row) => ballotRowText(row, options, isSplit)).join(' · ');
+    const yourVoteSection = (
+        <section className={detailStyles.yourVote} aria-labelledby={yourVoteTitleId} data-poll-your-vote="">
+            <div className={detailStyles.yourVoteHead}>
+                <h3 id={yourVoteTitleId}>Your vote</h3>
+                {isOpen && fromAddress && walletVotes !== null && !voteLoadError ? (
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                            const choice = Number(shownWalletBallot?.rows?.[0]?.choice ?? shownWalletBallot?.rows?.[0]?.option_index);
+                            if (shownWalletBallot && Number.isInteger(choice)) voteFor(choice);
+                            else setTab('vote');
+                        }}
+                    >
+                        {shownWalletBallot ? 'Change Vote' : 'Vote'}
+                    </Button>
+                ) : null}
+            </div>
             {walletVotes === null ? (
-                <p className={styles.hint}>Loading your vote…</p>
-            ) : walletBallots.length ? (
-                walletBallots.map(({ address, rows }) => (
-                    <p className={detailStyles.youVoted} key={address} data-poll-you-voted="">
+                <p className={detailStyles.yourVoteQuiet}>Loading your vote…</p>
+            ) : voteLoadError ? (
+                <p className={detailStyles.yourVoteQuiet}>Your vote could not be loaded.</p>
+            ) : shownWalletBallot ? (
+                <>
+                    <p className={detailStyles.youVoted} data-poll-you-voted="">
                         <span className={detailStyles.youVotedIcon} aria-hidden="true"><Icon.CheckIcon /></span>
                         <span className={detailStyles.youVotedText}>
-                            {t('governance.detail.youVoted', { choice: rows.map((row) => ballotRowText(row, options, isSplit)).join(' · ') })}
-                            {walletBallots.length > 1 ? <> · <AddressText address={address} /></> : null}
+                            {t('governance.detail.youVoted', { choice: shownVoteChoice })}
+                            {walletBallots.length > 1 ? <> · <AddressText address={shownWalletBallot.address} /></> : null}
                         </span>
                     </p>
-                ))
+                    <p className={detailStyles.voteWeight}>
+                        Voting weight: {shownVoteWeight === null
+                            ? 'counted at close'
+                            : `${formatDecimalAmount(shownVoteWeight)} ${poll.tick || ''}`.trim()}
+                    </p>
+                </>
             ) : (
-                <p className={styles.hint}>{voteLoadError
-                    ? 'Your vote could not be loaded.'
-                    : 'No direct vote from this wallet.'}</p>
+                <p className={detailStyles.yourVoteQuiet}>No vote from this wallet.</p>
             )}
-        </div>
+        </section>
     );
 
     // Frozen results are unavailable while voting is open (weight is set at
@@ -1077,7 +1111,6 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack, embedded = fa
             }))}
             winnerLabel="Winner"
             empty={<p className={styles.hint}>{noTallyText}</p>}
-            footer={voteReceipt}
         />
     );
 
@@ -1375,9 +1408,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack, embedded = fa
                 // The choice rows stay disabled with no address here, so the page says why.
                 <p className={styles.hint} data-poll-no-address="">No address on this network. Use Receive to generate one, then vote.</p>
             ) : null}
-            {sourceBallot.length ? <p className={styles.hint}>You can change this address&apos;s vote until the poll closes. The latest confirmed vote from this address replaces its earlier vote.</p> : null}
             <FormStatusSlot status={formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null} />
-            {walletBallots.length || voteLoadError ? voteReceipt : null}
         </section>
     );
 
@@ -1445,7 +1476,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack, embedded = fa
     return wrap(
         <ListPage notices={pageNotices}>
             <OutcomeDetailLayout
-                hero={hero}
+                hero={<>{hero}{yourVoteSection}</>}
                 tabs={tabItems}
                 tab={tab}
                 onTabChange={setTab}

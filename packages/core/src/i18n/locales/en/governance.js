@@ -42,6 +42,13 @@ const messages = {
     'governance.statusFilter.closed': 'Closed',
     'governance.newMenu': 'New poll or delegation',
     'governance.pollNumber': 'Poll #{id}',
+    'governance.views.label': 'Governance poll views',
+    'governance.views.myVotes': 'My votes',
+    'governance.views.myPolls': 'My polls',
+    'governance.card.binding': 'Binding',
+    'governance.card.noVotingWeight': 'No voting weight',
+    'governance.card.weight': '{weight} {tick} voting weight',
+    'governance.card.weightCountedAtClose': 'Voting weight counted at close',
     // --- my delegations -------------------------------------------
     'governance.myDelegations': 'My delegations',
     'governance.delegations.title': 'My Delegations',

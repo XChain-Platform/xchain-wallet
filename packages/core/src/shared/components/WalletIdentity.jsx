@@ -138,10 +138,9 @@ export function IdentityAvatar({
  * @param {{ id: string, name?: string } | null} props.wallet
  * @param {string} [props.label]
  * @param {string} [props.namePrefix]
- * @param {boolean} [props.active]
  * @param {'header'|'list'|'hero'} [props.context]
  */
-export function WalletIdentity({ wallet, label = '', namePrefix = '', active = false, context }) {
+export function WalletIdentity({ wallet, label = '', namePrefix = '', context }) {
     const [, setTileTick] = useState(0);
     useEffect(() => {
         const onTile = () => setTileTick((n) => n + 1);
@@ -170,7 +169,7 @@ export function WalletIdentity({ wallet, label = '', namePrefix = '', active = f
                 tone={tile.colour || WALLET_TONES[tone]}
                 src={tile.image || null}
                 text={walletTileText(name)}
-                className={`${styles.avatar} ${active ? styles.active : ''}`.trim()}
+                className={styles.avatar}
             />
             <span className={styles.name}>{namePrefix}{name}</span>
         </span>

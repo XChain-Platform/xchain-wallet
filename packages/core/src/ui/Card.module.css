@@ -139,3 +139,20 @@
     border-radius: var(--xc-card-radius);
     overflow: hidden;
 }
+
+/* Shared states for rows and menu items that cannot compose ListRow. */
+@media (hover: hover) and (pointer: fine) {
+    :root [data-xc-row-state]:not(:disabled, [aria-disabled="true"]):hover {
+        background: var(--xc-row-hover-bg);
+    }
+}
+
+:root [data-xc-row-state]:is(
+    [aria-current]:not([aria-current='false']),
+    [aria-selected='true'],
+    [data-selected='true']
+) {
+    background: var(--xc-row-active-bg);
+    box-shadow: none;
+    font-weight: inherit;
+}
