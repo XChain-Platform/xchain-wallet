@@ -8,6 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { multipartTransactionCount } from './multipartWaves.js';
+
 const VALID_STAGES = new Set([
     'funding',
     'sending',
@@ -47,7 +49,7 @@ export function multipartPanelProps(record) {
     )).length;
     return {
         totalParts,
-        transactions: 1 + (2 * (totalParts + 1)),
+        transactions: multipartTransactionCount(totalParts),
         currentPart: Math.min(sentParts + 1, totalParts),
         stage,
     };
@@ -68,7 +70,7 @@ export function summaryPanelProps(entry) {
 
     return {
         totalParts,
-        transactions: 1 + (2 * (totalParts + 1)),
+        transactions: multipartTransactionCount(totalParts),
         currentPart: Math.min(partsSent + 1, totalParts),
         stage,
     };

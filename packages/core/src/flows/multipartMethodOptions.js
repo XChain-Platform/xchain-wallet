@@ -1,6 +1,9 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { MULTIPART_FILE_MAX_PARTS } from './fileSizeLimits.js';
+import { multipartTransactionCount } from './multipartWaves.js';
+
 function invalidQuote(method) {
     const error = new Error(`Invalid multipart quote for ${method}`);
     error.code = 'MULTIPART_QUOTE_INVALID';
@@ -11,9 +14,11 @@ function methodSummary(method, quote) {
     if (quote === null) return { summary: null, fee: null };
 
     const { parts, transactions, fee } = quote;
-    const partsValid = Number.isInteger(parts) && parts >= 2 && parts <= 32;
+    const partsValid = Number.isInteger(parts)
+        && parts >= 2
+        && parts <= MULTIPART_FILE_MAX_PARTS;
     const transactionsValid = Number.isInteger(transactions)
-        && transactions === 1 + (2 * (parts + 1));
+        && transactions === multipartTransactionCount(parts);
     const feeValid = Number.isFinite(fee) && fee >= 0;
 
     if (!partsValid || !transactionsValid || !feeValid) {
