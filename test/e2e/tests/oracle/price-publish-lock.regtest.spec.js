@@ -380,13 +380,13 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Create dispenser');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
+            await expect(main.getByLabel('Give amount per fill', { exact: true })).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
 
             await main.getByRole('button', { name: /^Token/ }).click();
             await selectPickerAsset(page, TICK);
-            await main.getByLabel('Give amount per fill').fill(String(GIVE_PER_FILL));
-            await main.getByLabel('Escrow amount').fill(String(ESCROW));
+            await main.getByLabel('Give amount per fill', { exact: true }).fill(String(GIVE_PER_FILL));
+            await main.getByLabel('Escrow amount', { exact: true }).fill(String(ESCROW));
 
             await main.getByRole('button', { name: /Advanced options/ }).click();
             await pickFiatCurrency(main, FIAT);

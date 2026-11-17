@@ -70,7 +70,7 @@ async function newDevice(browser) {
 async function approveAndReadTxid(page, what, { typedCallback = false } = {}) {
     await expectConfirmModal(page, what, 90_000);
     if (typedCallback) {
-        const typed = page.getByLabel('Type "RECALL" to confirm');
+        const typed = page.getByLabel('Type "RECALL" to confirm', { exact: true });
         await expect(typed, 'the RECALL confirmation field is missing')
             .toBeVisible({ timeout: 30_000 });
         await typed.fill('RECALL');
@@ -93,7 +93,7 @@ async function approveAndReadTxid(page, what, { typedCallback = false } = {}) {
 async function openManageToken(page) {
     await openPaletteCommand(page, 'My tokens');
     const main = page.getByRole('main');
-    const search = main.getByLabel('Search your tokens by ticker or description');
+    const search = main.getByLabel('Search your tokens by ticker or description', { exact: true });
     await expect(search, 'My Tokens did not render').toBeVisible({ timeout: 30_000 });
     await search.fill(TICK);
     const row = main.getByRole('button', { name: `Open ${TICK} token details`, exact: true }).first();
@@ -262,7 +262,7 @@ test.describe(`holder-payout callback on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('issue the token and configure its holder payout', async () => {
             await openPaletteCommand(ownerPage, 'Issue token');
             let main = ownerPage.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(main.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
             expect(await readIssueSource(main)).toBe(owner);
             await issuePlainToken(main, { ticker: TICK, supply: SUPPLY });
 
@@ -276,11 +276,21 @@ test.describe(`holder-payout callback on ${REGTEST_CHAIN_LABEL}`, () => {
             main = await openManageToken(ownerPage);
             await clickManageTokenAction(main, 'Callback settings');
             main = ownerPage.getByRole('main');
-            await expect(main.getByLabel('Callback token')).toBeVisible({ timeout: 30_000 });
+            // Callback token is a token field: a button that opens the token
+            // picker, whose search sits behind its Filter button.
+            const callbackToken = main.getByRole('button', { name: /^Callback token:/ });
+            await expect(callbackToken).toBeVisible({ timeout: 30_000 });
             callbackBlock = await callbackBlockAhead(await readCurrentHeight(main));
-            await main.getByLabel('Callback token').fill(PAYOUT_TICK);
-            await main.getByLabel('Payout per unit').fill(String(PAYOUT_AMOUNT));
-            await main.getByLabel('Callback allowed from block').fill(String(callbackBlock));
+            await callbackToken.click();
+            await ownerPage.getByRole('button', { name: 'Filter coins and tokens', exact: true }).click();
+            await ownerPage.getByLabel('Search coins or tokens', { exact: true }).fill(PAYOUT_TICK);
+            await ownerPage.getByRole('button', { name: new RegExp(`^Select ${PAYOUT_TICK} on `) }).first()
+                .click({ timeout: 30_000 });
+            main = ownerPage.getByRole('main');
+            await expect(main.getByRole('button', { name: new RegExp(`^Callback token: ${PAYOUT_TICK} on `) }))
+                .toBeVisible({ timeout: 30_000 });
+            await main.getByLabel('Payout per unit', { exact: true }).fill(String(PAYOUT_AMOUNT));
+            await main.getByLabel('Callback allowed from block', { exact: true }).fill(String(callbackBlock));
             await main.getByRole('button', { name: 'Update callback settings', exact: true }).click();
 
             const update = await waitForValidAction(

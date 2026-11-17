@@ -277,10 +277,10 @@ async function openTokenAdmin(page, item, tick = TICK) {
 async function readIssueSource(probe) {
     await openIssueSection(probe, 'From');
     await selectVenueChain(probe);
-    await expect.poll(async () => probe.getByLabel('From address').inputValue().catch(() => ''),
+    await expect.poll(async () => probe.getByLabel('From address', { exact: true }).inputValue().catch(() => ''),
         { timeout: 30_000, message: 'the Issue Token form names no signing address' })
         .toMatch(REGTEST_ADDRESS_RE);
-    return probe.getByLabel('From address').inputValue();
+    return probe.getByLabel('From address', { exact: true }).inputValue();
 }
 
 /**
@@ -301,7 +301,7 @@ async function fillEdition(main, tick) {
     await main.getByLabel('Max per transaction', { exact: true }).fill(String(EDITION_PER_TX));
     await main.getByLabel('Max per address', { exact: true }).fill(String(EDITION_SIZE));
     await openIssueSection(main, 'Description');
-    await main.getByLabel('Image URL').fill(EDITION_IMAGE_URL);
+    await main.getByLabel('Image URL', { exact: true }).fill(EDITION_IMAGE_URL);
 }
 
 /**
@@ -511,7 +511,7 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(submit,
                 'a permanent lock is submittable without the typed confirmation')
                 .toBeDisabled();
-            const typed = form.getByLabel('Type LOCK to confirm');
+            const typed = form.getByLabel('Type LOCK to confirm', { exact: true });
             await expect(typed, 'the Lock form has no typed confirmation at all on this path')
                 .toBeVisible({ timeout: 15_000 });
             await typed.fill('LOOK');
@@ -612,7 +612,7 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             // first driven with.
             await form.getByRole('checkbox', { name: /^Minting/ }).check();
             await expect(submit).toBeDisabled();
-            await form.getByLabel('Type LOCK to confirm').fill('LOCK');
+            await form.getByLabel('Type LOCK to confirm', { exact: true }).fill('LOCK');
             await expect(submit).toBeEnabled();
             await submit.click();
 

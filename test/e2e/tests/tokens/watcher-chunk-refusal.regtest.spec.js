@@ -97,7 +97,7 @@ const TICK_LONG = `WCL${RUN}`;
 async function stageIssue(page, tick, description) {
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    await expect(main.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
     // §3.5: every form carries its own chain picker and the wallet defaults to
     // Bitcoin. Skipping this composes on the contended chain instead of the one
     // the run was pointed at, which is a silently wrong-venue pass.
@@ -129,7 +129,7 @@ test.describe('the watcher lane and an action the encoder chunks', () => {
 
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(main.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
             source = await readIssueSource(main);
             expect(source, 'this wallet has no address on the venue chain').toMatch(REGTEST_ADDRESS_RE);
 

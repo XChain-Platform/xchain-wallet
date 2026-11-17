@@ -135,7 +135,7 @@ async function issueToken(page, source, tick) {
     await openPaletteCommand(page, 'My tokens');
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    await expect(main.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
     expect(await readIssueSource(main),
         `the Issue token form defaulted away from ${source}, so the issued token would not be owned `
         + 'by the address this test funded')
@@ -166,7 +166,7 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Issue token');
             const issueMain = page.getByRole('main');
-            await expect(issueMain.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(issueMain.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
             source = await readIssueSource(issueMain);
             expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
@@ -414,7 +414,12 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(page.locator('[data-balance-key]').first(),
                 'the token picker listed nothing at all, so its balances never arrived')
                 .toBeVisible({ timeout: 60_000 });
-            await page.getByLabel('Search coins or tokens').fill(MEMBER);
+            // The search box sits behind the picker's Filter button.
+            const search = page.getByLabel('Search coins or tokens', { exact: true });
+            if (!(await search.isVisible().catch(() => false))) {
+                await page.getByRole('button', { name: 'Filter coins and tokens', exact: true }).click();
+            }
+            await search.fill(MEMBER);
             await page.getByRole('button', { name: new RegExp(`^Select ${MEMBER}( on |$)`) }).first().click();
             await expect(rosterMain.getByRole('listitem').filter({ hasText: MEMBER })).toBeVisible({ timeout: 30_000 });
             await expect(rosterMain.getByRole('button', { name: `Remove ${MEMBER}`, exact: true })).toBeVisible();

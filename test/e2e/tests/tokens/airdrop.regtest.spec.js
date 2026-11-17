@@ -413,7 +413,7 @@ async function issueToken(page, tick, supply, source) {
     await reloadToHome(page);
     await openPaletteCommand(page, 'Issue token');
     const form = page.getByRole('main');
-    await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    await expect(form.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
     expect(await readIssueSource(form),
         'the Issue form is not signing with the funded address')
         .toBe(source);
@@ -427,6 +427,18 @@ async function issueToken(page, tick, supply, source) {
         + 'usually the price sentinel going stale mid-run (campaign §3.2), not a wallet defect')
         .toBe('valid');
     await waitForBalance(source, tick, supply);
+}
+
+/**
+ * Types into the token picker's search box, which sits in the panel behind
+ * its Filter coins and tokens button and is not on screen until that opens.
+ */
+async function searchTokenPicker(page, text) {
+    const search = page.getByLabel('Search coins or tokens', { exact: true });
+    if (!(await search.isVisible().catch(() => false))) {
+        await page.getByRole('button', { name: 'Filter coins and tokens', exact: true }).click();
+    }
+    await search.fill(text);
 }
 
 /**
@@ -445,7 +457,7 @@ async function onboardAndIssue(page, ticks = [[TICK, SUPPLY]], walletName = 'Air
 
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    await expect(main.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
     const source = await readIssueSource(main);
     expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
         .toMatch(REGTEST_ADDRESS_RE);
@@ -523,7 +535,7 @@ async function pickAsset(page, tick) {
             await expect(page.locator('[data-balance-key]').first(),
                 'the asset picker listed nothing at all, so its balances never arrived')
                 .toBeVisible({ timeout: 30_000 });
-            await page.getByLabel('Search coins or tokens').fill(tick);
+            await searchTokenPicker(page, tick);
             const row = page.locator(`[data-balance-key="${REGTEST_CHAIN_ID}:${tick}"]`).first();
             await expect(row, `the wallet's balance list does not carry ${tick}`)
                 .toBeVisible({ timeout: 15_000 });
@@ -579,7 +591,7 @@ async function generateExtraAddresses(page, count) {
     await page.getByTestId('address-add-menu').click();
     await page.getByTestId('address-add-address').click();
     await selectVenueChain(page, 'Coin');
-    await page.getByLabel('Number of addresses').fill(String(count));
+    await page.getByLabel('Number of addresses', { exact: true }).fill(String(count));
     await page.getByTestId('add-address-generate').click();
     // The modal derives the addresses one at a time and closes only after the
     // last one is stored; navigating or reloading before that drops the rest.
@@ -598,7 +610,7 @@ async function pickDropToken(page, tick) {
     await expect(page.locator('[data-balance-key]').first(),
         'the token picker listed nothing at all, so its balances never arrived')
         .toBeVisible({ timeout: 60_000 });
-    await page.getByLabel('Search coins or tokens').fill(tick);
+    await searchTokenPicker(page, tick);
     const row = page.locator(`[data-balance-key="${REGTEST_CHAIN_ID}:${tick}"]`).first();
     await expect(row, `the wallet's balance list does not carry ${tick}`)
         .toBeVisible({ timeout: 30_000 });
@@ -916,7 +928,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBe(issuer);
 
             await page.getByRole('textbox', { name: /^Per-recipient amount/ }).fill(String(AMOUNT));
-            await pickOption(main.getByLabel('Airdrop to'), 'holders');
+            await pickOption(main.getByLabel('Airdrop to', { exact: true }), 'holders');
             await page.getByLabel('Tokens (one per line)', { exact: true }).fill(MEMB_TICK);
 
             // TWO holders right now: the issuer, which kept most of the supply,
@@ -1091,7 +1103,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             expect(others.length).toBe(2);
             [member, heldOut] = others;
 
-            await pickOption(main.getByLabel('Airdrop to'), 'existing');
+            await pickOption(main.getByLabel('Airdrop to', { exact: true }), 'existing');
             await main.getByRole('button', { name: /^List:/ }).click();
             await expect(page.getByText('No published lists yet', { exact: true }))
                 .toBeVisible({ timeout: 30_000 });
@@ -1114,7 +1126,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             await readChainAddresses(page, issuer);
 
             await page.getByRole('textbox', { name: /^Per-recipient amount/ }).fill(String(AMOUNT));
-            await pickOption(main.getByLabel('Airdrop to'), 'existing');
+            await pickOption(main.getByLabel('Airdrop to', { exact: true }), 'existing');
             await main.getByRole('button', { name: /^List:/ }).click();
             const row = page.getByRole('button', { name: `Address list #${listIndex}` });
             await expect(row, `the list picker does not offer list #${listIndex}, which this wallet `
