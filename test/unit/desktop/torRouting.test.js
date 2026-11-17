@@ -382,6 +382,40 @@ describe('applyTorRouting', () => {
         }
     }, 20_000);
 
+    it('leaves a session created while routing is turning off on a direct connection', async () => {
+        const registry = { setPool() {} };
+        let releaseMain = () => {};
+        let mainCalled = () => {};
+        const mainReachedOff = new Promise((r) => { mainCalled = r; });
+        const mainSession = {
+            setProxy: vi.fn(async (cfg) => {
+                if (cfg.mode !== 'direct') return;
+                mainCalled();
+                await new Promise((r) => { releaseMain = r; });
+            }),
+        };
+        // Stands in for the lazily built Trezor Connect partition.
+        let partition = null;
+        const extraSessions = () => (partition ? [partition] : []);
+
+        await applyTorRouting({
+            settings: { privacy: { torRouting: true, socksProxyAddress: `127.0.0.1:${proxyPort}` } },
+            sdkRegistry: registry,
+            session: mainSession,
+            extraSessions,
+        });
+
+        const off = applyTorRouting({ settings: {}, sdkRegistry: registry, session: mainSession, extraSessions });
+        await mainReachedOff;
+        const partitionCalls = [];
+        partition = { setProxy: async (cfg) => { partitionCalls.push(cfg); } };
+        await applyProxyToSession(partition);
+        releaseMain();
+        await off;
+
+        expect(partitionCalls.at(-1)).toEqual({ mode: 'direct' });
+    });
+
     it('puts a later session on the routing in force and leaves it direct when off', async () => {
         const later = [];
         const laterSession = { setProxy: async (cfg) => { later.push(cfg); } };
