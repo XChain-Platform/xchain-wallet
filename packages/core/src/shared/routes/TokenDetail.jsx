@@ -692,9 +692,12 @@ function TokenDetailContent({
     // for fiat the code is the wallet's preferred currency.
     const assetAmount = formatAmount(quantity, resolvedDivisibility);
     const fiatAmount = fiatAvailable ? formatFiatNumber(fiat, fiatCurrency) : null;
-    // The stored choice owns the mode. Missing market data changes the Value
-    // contents, never the choice or the availability of the toggle.
-    const showFiatPrimary = !assetUnit;
+    // The stored choice owns the mode on mainnet. Test networks have no fiat
+    // value, so their heroes stay in Balance mode and offer no unit toggle.
+    // Missing mainnet market data changes the Value contents, never the choice
+    // or the availability of the toggle.
+    const fiatModeAvailable = fiatSupported && fiatAllowed;
+    const showFiatPrimary = fiatModeAvailable && !assetUnit;
     const primaryAmount = showFiatPrimary ? (fiatAmount ?? 'No price yet') : assetAmount;
     const primaryCode = showFiatPrimary && fiatAvailable ? fiatCurrency : (!showFiatPrimary ? tick : null);
     const priceSourceLabel = showFiatPrimary && fiatAvailable
@@ -1185,20 +1188,22 @@ function TokenDetailContent({
                                         {null}
                                     </Button>
                                 ) : null}
-                                <Button
-                                    type="button"
-                                    className={heroStyles.eye}
-                                    onClick={toggleAssetUnit}
-                                    aria-label={showFiatPrimary
-                                        ? t('tokenDetail.hero.showBalance', { unit: tick })
-                                        : t('tokenDetail.hero.showValue', { unit: fiatCurrency })}
-                                    title={showFiatPrimary
-                                        ? t('tokenDetail.hero.showBalance', { unit: tick })
-                                        : t('tokenDetail.hero.showValue', { unit: fiatCurrency })}
-                                    icon={<Icon.SwapIcon />}
-                                >
-                                    {null}
-                                </Button>
+                                {fiatModeAvailable ? (
+                                    <Button
+                                        type="button"
+                                        className={heroStyles.eye}
+                                        onClick={toggleAssetUnit}
+                                        aria-label={showFiatPrimary
+                                            ? t('tokenDetail.hero.showBalance', { unit: tick })
+                                            : t('tokenDetail.hero.showValue', { unit: fiatCurrency })}
+                                        title={showFiatPrimary
+                                            ? t('tokenDetail.hero.showBalance', { unit: tick })
+                                            : t('tokenDetail.hero.showValue', { unit: fiatCurrency })}
+                                        icon={<Icon.SwapIcon />}
+                                    >
+                                        {null}
+                                    </Button>
+                                ) : null}
                             </div>
                         </div>
                         <div className={heroStyles.meta} role="group" aria-label={t('components.totalBalanceHero.balanceSummary')}>

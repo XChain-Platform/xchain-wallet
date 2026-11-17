@@ -150,6 +150,7 @@ describe('test-network fiat suppression', () => {
                 tick="BTC"
                 kind="native"
                 quantity="50000000"
+                divisibility={8}
                 fiatRate={RATE}
                 onBack={() => {}}
             />
@@ -159,14 +160,16 @@ describe('test-network fiat suppression', () => {
         // no value" line belongs to Home's hero (checked above).
         const balance = await screen.findByRole('region', { name: 'BTC' });
         expect(balance).not.toHaveTextContent('$');
-        // Value remains the selected mode when no market price exists. The
-        // current ruling keeps the unit toggle available and names that state
-        // instead of silently switching the hero back to Balance.
-        expect(balance).toHaveTextContent('No price yet');
-        expect(screen.getByRole('button', { name: 'Show balance in BTC' })).toBeInTheDocument();
-        expect(screen.queryByRole('region', { name: 'Balance chart' })).toBeNull();
+        // Test networks have no fiat mode, so the hero shows only Balance and
+        // offers no Value/Balance unit toggle.
+        expect(balance).toHaveTextContent('Balance');
+        expect(balance).toHaveAccessibleName('BTC');
+        expect(within(balance).getByLabelText('0.50000000 BTC')).toBeInTheDocument();
+        expect(within(balance).queryByText('No price yet')).toBeNull();
+        expect(within(balance).queryByRole('button', { name: /Show (?:value|balance) in/ })).toBeNull();
+        expect(await screen.findByRole('region', { name: 'Balance chart' })).toBeInTheDocument();
         expect(screen.queryByRole('region', { name: 'Price chart' })).toBeNull();
-        expect(screen.getByRole('region', { name: 'Value chart' })).toHaveTextContent('No market price for BTC yet');
+        expect(screen.queryByRole('region', { name: 'Value chart' })).toBeNull();
         expect(screen.queryByLabelText(/ change\. /)).toBeNull();
         expect(screen.queryByRole('button', { name: /chart/i })).toBeNull();
         expect(screen.queryByRole('button', { name: /price alert/i })).toBeNull();

@@ -14,7 +14,7 @@
 //        corresponding mainnet coin price to test coins or their fees.
 
 import React from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessagingProvider } from '../../packages/core/src/shared/MessagingProvider.jsx';
 import { TotalBalanceHero } from '../../packages/core/src/shared/components/TotalBalanceHero.jsx';
@@ -257,9 +257,10 @@ describe('regression/test-networks-no-fiat', () => {
                 fireEvent.click(unitButton);
                 expect(detail).not.toHaveTextContent('$');
             } else {
-                const unitButton = screen.getByRole('button', { name: 'Show value in USD' });
-                expect(unitButton).toBeDisabled();
+                expect(within(detail).getByText('Balance')).toBeTruthy();
+                expect(within(detail).queryByRole('button', { name: /Show (?:value|balance) in/ })).toBeNull();
                 expect(detail).not.toHaveTextContent('$');
+                expect(detail).not.toHaveTextContent('No price yet');
             }
         },
     );

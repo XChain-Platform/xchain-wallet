@@ -93,7 +93,9 @@ describe('ManageToken is the one asset page', () => {
         expect(within(hero).queryByText('A useful token for its community.')).toBeNull();
         expect(screen.getByRole('tablist', { name: 'Chart range' })).toBeInTheDocument();
         expect(within(hero).getByRole('group', { name: /balance summary/i })).toBeInTheDocument();
-        expect(within(hero).getByRole('button', { name: /show balance/i })).toBeInTheDocument();
+        expect(within(hero).getByText('Balance')).toBeInTheDocument();
+        expect(within(hero).getByLabelText('1.00000000 APPROVED')).toBeInTheDocument();
+        expect(within(hero).queryByRole('button', { name: /Show (?:value|balance) in/ })).toBeNull();
         expect(pageTabs().map((tab) => tab.textContent)).toEqual(['Actions', 'Details', 'Files', 'History']);
 
         expect(messaging.getHoldersForToken).not.toHaveBeenCalled();
