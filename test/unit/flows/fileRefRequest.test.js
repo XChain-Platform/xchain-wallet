@@ -63,7 +63,7 @@ describe('fileRefFor', () => {
         ['missing key', { blobStore: { put: vi.fn() } }],
         ['empty key', { blobStore: { put: vi.fn() }, key: '' }],
         ['store without put', { blobStore: {}, key: 'upload-1' }],
-    ])('refuses a %s', async (_label, options) => {
+    ])('refuses options with a %s', async (_label, options) => {
         await expect(fileRefFor(blobStub(), options)).rejects.toMatchObject({
             code: 'FILE_REF_REQUEST_INVALID',
         });
@@ -75,7 +75,7 @@ describe('fileRefFor', () => {
         ['fractional size', blobStub(1.5)],
         ['unsafe size', blobStub(Number.MAX_SAFE_INTEGER + 1)],
         ['missing slice', { size: 1 }],
-    ])('refuses a %s', async (_label, file) => {
+    ])('refuses a file given as a %s', async (_label, file) => {
         await expect(fileRefFor(file)).rejects.toMatchObject({
             code: 'FILE_REF_REQUEST_INVALID',
         });
