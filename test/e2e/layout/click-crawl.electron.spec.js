@@ -56,7 +56,7 @@ for (let shard = 0; shard < SHARDS; shard += 1) {
             const start = async () => {
                 await page.reload();
                 const accept = page.getByRole('button', { name: 'Accept and continue' });
-                const past = page.getByRole('button', { name: 'Try in demo mode' })
+                const past = page.getByRole('button', { name: 'Try Demo' })
                     .or(page.getByRole('button', { name: 'Skip' }))
                     .or(page.getByRole('navigation').first());
                 await accept.or(past).first().waitFor({ state: 'visible', timeout: 60_000 });

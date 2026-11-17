@@ -83,7 +83,7 @@ test('popup keeps onboarding actions and bottom navigation labels visible', asyn
         await expectFullyInsideViewport(getStarted, 'Get started');
         await getStarted.click();
 
-        await page.getByRole('button', { name: 'Try in demo mode' }).click();
+        await page.getByRole('button', { name: 'Try Demo' }).click();
         const bottomNavigation = page.getByRole('navigation', { name: 'Bottom navigation' });
         await expect(bottomNavigation).toBeVisible({ timeout: 120_000 });
 

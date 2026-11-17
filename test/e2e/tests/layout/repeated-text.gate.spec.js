@@ -67,7 +67,7 @@ for (const { name, viewport } of VIEWPORTS) {
         await sweep.measure('onboarding: intro carousel');
         await dismissIntroCarousel(page);
         await sweep.measure('onboarding: welcome');
-        await page.getByRole('button', { name: 'Try in demo mode' }).click();
+        await page.getByRole('button', { name: 'Try Demo' }).click();
         await expect(unlockedShell(page)).toBeVisible({ timeout: kdfStepTimeout() });
         await sweep.unlocked();
         expect(screens.length, 'the walk measured screens').toBeGreaterThan(10);

@@ -20,6 +20,8 @@ export function multipartStartArgs(args) {
         chainId: args.chainId,
         sourceAddress: args.from.address,
         originalSha256,
+        // A file match without a digest names the upload by start time.
+        ...(file ? { startedAt: Date.now() } : {}),
     };
     return { request, match };
 }

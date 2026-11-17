@@ -15,7 +15,6 @@ import {
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
-import { expectDropdownValue, pickOption } from '../../fixtures/pickOption.js';
 import {
     describeOffenders,
     documentOverflow,
@@ -53,26 +52,21 @@ async function settle(page) {
 async function enablePseudoRtl(page) {
     await gotoSection(page, 'Settings');
     await page.getByRole('main').getByRole('button', { name: /^Advanced\b/ }).click();
-    await page.getByRole('main').getByRole('button', { name: /^Developer mode\b/ }).click();
-
-    const developerMode = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
+    const developerMode = page.getByRole('switch', { name: 'Developer mode', exact: true });
     if (!(await developerMode.isChecked())) {
         await developerMode.click();
         await expect(developerMode).toBeChecked();
     }
 
-    // Back twice: row page to the Advanced group page, then to the index.
+    // Back once: the switch lives on the Advanced group page.
     const back = page.getByRole('button', { name: 'Back to settings', exact: true }).filter({ visible: true }).first();
-    await back.click();
     await back.click();
     // Language is a row on the Appearance group page.
     await page.getByRole('main').getByRole('button', { name: /^Appearance\b/ }).click();
     await page.getByRole('main').getByRole('button', { name: /^Language\b/ }).click();
-    await pickOption(page.getByLabel('Language', { exact: true }), 'pseudo-rtl');
+    // Language is a list of choices; a pick saves and returns.
+    await page.getByRole('main').getByRole('list', { name: 'Languages' }).getByRole('button', { name: 'pseudo-rtl', exact: true }).click();
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
-    // The field's own label is localized too, so in the pseudo locale it reads
-    // as the wrapped pseudo string rather than "Language".
-    await expectDropdownValue(page.getByLabel(/^\u200F?⟦Language⟧$/), 'pseudo-rtl');
 }
 
 // The pseudo locale wraps every translated string, the navigation and the

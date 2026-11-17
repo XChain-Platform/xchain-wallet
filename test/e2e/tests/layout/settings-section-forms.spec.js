@@ -17,7 +17,7 @@
 // state.
 
 import {
-    createWallet, expect, openSettings, test,
+    createWallet, expect, openAutomaticDonations, openSettings, test,
 } from '../../fixtures/wallet.js';
 
 const SIZES = [
@@ -94,12 +94,7 @@ for (const size of SIZES) {
 
         test('Automatic donation says its threshold sentence once, above the network cards', async ({ page }) => {
             await createWallet(page);
-            await openSettings(page);
-            const back = page.getByRole('button', { name: 'Back to settings' }).filter({ visible: true }).first();
-            if (await back.count()) await back.click();
-            // Donations is a row on Network and Fees (2026-11-13).
-            await page.getByRole('main').getByRole('button', { name: /^Network and Fees\b/ }).first().click();
-            await page.getByRole('main').getByRole('button', { name: /^Automatic Donations\b/ }).first().click();
+            await openAutomaticDonations(page);
             await expect(page.getByRole('main').getByRole('heading').nth(1)).toBeVisible();
 
             // Every network carries the same default amounts, so one sentence covers them all.
@@ -116,16 +111,17 @@ for (const size of SIZES) {
             await createWallet(page);
             await openSettings(page);
             await page.getByRole('button', { name: /^Advanced\b/ }).click();
-            await page.getByRole('button', { name: /^Developer mode\b/ }).click();
-            const toggle = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
+            // Developer mode is a switch on the Advanced page's own row.
+            const toggle = page.getByRole('switch', { name: 'Developer mode', exact: true });
             await toggle.click();
             await expect(toggle).toBeChecked();
-            // Back twice: row page to the Advanced group page, then to the index.
+            // Back once: the Advanced group page to the index.
             const backToSettings = page.getByRole('button', { name: 'Back to settings', exact: true }).filter({ visible: true }).first();
-            await backToSettings.click();
             await backToSettings.click();
             await page.getByRole('button', { name: /^Network and Fees\b/ }).click();
             await page.getByRole('button', { name: /^Network endpoints\b/ }).click();
+            // Endpoints is a list of networks; each network's page holds its fields.
+            await page.getByRole('main').getByRole('button', { name: /^Bitcoin\b/ }).first().click();
             await expect(page.getByLabel('Explorer URL').first()).toBeVisible();
 
             await expectBorderedLabelledFields(page.getByRole('main'), `${size.name} Network & endpoints`);

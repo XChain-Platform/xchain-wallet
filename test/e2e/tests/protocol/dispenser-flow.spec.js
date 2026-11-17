@@ -105,10 +105,15 @@ async function fillDispenserAndReject(page, label) {
 
 async function exerciseOwnedDispensers(page, label) {
     await openPaletteCommand(page, 'Dispensers', 'Your dispensers');
-    await expect(page.getByRole('heading', { name: 'My dispensers' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Dispensers' })).toBeVisible();
+    const views = page.getByRole('radiogroup', { name: 'Dispenser views' });
+    await expect(views.getByRole('radio', { name: 'All', exact: true })).toBeVisible();
+    await expect(views.getByRole('radio', { name: 'My Dispensers', exact: true })).toBeChecked();
 
-    const search = page.getByLabel('Search dispensers');
-    const network = page.getByRole('button', { name: /^Filter by network/ });
+    await page.getByRole('button', { name: 'Filter dispensers', exact: true }).click();
+    const filters = page.getByRole('dialog', { name: 'Filter dispensers' });
+    const search = filters.getByLabel('Search dispensers');
+    const network = filters.getByRole('button', { name: /^Filter by network/ });
     await expect(search).toBeVisible({ timeout: 30_000 });
     await search.fill('PEPECASH');
     await network.click();

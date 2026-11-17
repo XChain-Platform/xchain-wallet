@@ -29,7 +29,7 @@ const CASES = [
 async function enterDemoWallet(page) {
     await page.goto('/');
     await dismissIntroCarousel(page);
-    await page.getByRole('button', { name: 'Try in demo mode' }).click();
+    await page.getByRole('button', { name: 'Try Demo' }).click();
     await expect(unlockedShell(page)).toBeVisible({ timeout: kdfStepTimeout() });
 }
 

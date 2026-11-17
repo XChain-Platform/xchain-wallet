@@ -79,12 +79,12 @@ test('balance hero sentences stay secondary and clear of actions', async ({ page
     await switchToRegtest(page, PASSWORD);
     await gotoSection(page, 'Home');
 
-    const hero = page.getByRole('region', { name: 'Active address balance' });
+    const hero = page.getByRole('region', { name: 'Unpriced hero wallet' });
     const amount = hero.locator([
         '[aria-label="Price unavailable"]',
         '[aria-label="Test coins have no value"]',
     ].join(', '));
-    const label = hero.getByText('Active address balance', { exact: true });
+    const label = hero.getByText(/^(?:Wallet value|Wallet balance)$/);
 
     for (const viewport of VIEWPORTS) {
         await test.step(`${viewport.width}x${viewport.height}`, async () => {

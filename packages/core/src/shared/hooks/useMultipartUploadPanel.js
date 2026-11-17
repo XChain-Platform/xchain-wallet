@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { uploadMatchesKey } from '../../flows/multipartPanelProps.js';
 import { useResumeFilePick } from './useResumeFilePick.js';
 import { useRunningFileUpload } from './useRunningFileUpload.js';
 import { useUnfinishedFileUploads } from './useUnfinishedFileUploads.js';
@@ -9,7 +10,7 @@ import { useUnfinishedFileUploads } from './useUnfinishedFileUploads.js';
 function matchesRunningUpload(entry, match) {
     return matchesLowerCase(entry?.chainId, match?.chainId)
         && matchesLowerCase(entry?.sourceAddress, match?.sourceAddress)
-        && matchesLowerCase(entry?.originalSha256, match?.originalSha256);
+        && uploadMatchesKey(entry, match);
 }
 
 function matchesLowerCase(left, right) {

@@ -84,13 +84,14 @@ test('dark mode fields share the field tokens', async ({ page }, testInfo) => {
     try {
         await gotoSection(page, 'Settings');
         await page.getByRole('main').getByRole('button', { name: /^Advanced\b/ }).click();
-        await page.getByRole('main').getByRole('button', { name: /^Developer mode\b/ }).click();
-        const dev = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
-        if (!(await dev.isChecked())) await dev.click();
+        const dev = page.getByRole('switch', { name: 'Developer mode', exact: true });
+        if (!(await dev.isChecked())) {
+            await dev.click();
+            await expect(dev).toBeChecked();
+        }
         await snap('settings-Developer mode on');
-        // Back twice: row page to the Advanced group page, then to the index.
+        // Back once: the switch lives on the Advanced group page.
         const back = page.getByRole('button', { name: 'Back to settings', exact: true }).filter({ visible: true }).first();
-        await back.click();
         await back.click();
         await page.getByRole('main').getByRole('button', { name: /^Network and Fees\b/ }).click();
         await page.getByRole('main').getByRole('button', { name: /^Network endpoints\b/i }).first().click();
@@ -105,10 +106,15 @@ test('dark mode fields share the field tokens', async ({ page }, testInfo) => {
         await page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first().click();
         await dialog.waitFor({ state: 'hidden', timeout: 15_000 });
     };
-    for (const name of ['Send', 'Receive', 'Issue token', 'Create dispenser']) {
+    for (const name of ['Send', 'Receive', 'Issue Token', 'Create dispenser']) {
         try {
             if (name === 'Send' || name === 'Receive') await gotoSection(page, name);
             else await palette(name);
+            // Issue Token opens the token wizard straight on its Issue form,
+            // with the template as a dropdown on that form.
+            if (name === 'Issue Token') {
+                await page.getByRole('form', { name: 'Issue Token', exact: true }).waitFor({ state: 'visible', timeout: 15_000 });
+            }
             await snap(`page-${name}`);
         } catch (err) { screens[`page-${name}`] = [{ error: String(err.message).slice(0, 120) }]; }
     }

@@ -31,7 +31,7 @@ async function enterDemo(page, origin) {
     await page.goto(`${origin}/popup.html`);
 
     const accept = page.getByRole('button', { name: 'Accept and continue' });
-    const pastLicense = page.getByRole('button', { name: 'Try in demo mode' })
+    const pastLicense = page.getByRole('button', { name: 'Try Demo' })
         .or(page.getByRole('button', { name: 'Skip' }))
         .or(unlockedShell(page));
     await accept.or(pastLicense).first().waitFor({ state: 'visible', timeout: 60_000 });
@@ -49,7 +49,7 @@ async function enterDemo(page, origin) {
 
     if (await unlockedShell(page).isVisible().catch(() => false)) return;
     await dismissIntroCarousel(page);
-    await page.getByRole('button', { name: 'Try in demo mode' }).click();
+    await page.getByRole('button', { name: 'Try Demo' }).click();
     await unlockedShell(page).waitFor({ state: 'visible', timeout: kdfStepTimeout() });
 }
 

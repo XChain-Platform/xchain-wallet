@@ -288,9 +288,10 @@ assert.doesNotMatch(confirmStandardCss, /\.stack\s*\{[^}]*padding-(?:block-)?top
         assert.doesNotMatch(src, /<Button\b/, `${name}: adds no footer buttons of its own`);
     }
     {
-        // Gated publish signs on the shared confirm screen alone: Review hands
-        // the composed publish to <ActionConfirmScreen>, and no review stage of
-        // the form puts a second sign button in front of Reject and Approve.
+        // Gated publish signs a single-part file on the shared confirm screen
+        // alone: Review hands the composed publish to <ActionConfirmScreen>. Only a
+        // multi-part file opens the form's own review first, the one approval that
+        // quotes the whole file (multipart-no-size-cap Decision Q6).
         const gatedSrc = read('packages', 'core', 'src', 'shared', 'routes', 'GatedPublishForm.jsx');
         assert.doesNotMatch(gatedSrc, /gatedPublish\.signAndPublish/, 'GatedPublishForm: no Sign and Publish button');
         assert.doesNotMatch(gatedSrc, /send\.review\.signOn/, 'GatedPublishForm: no Sign on device button');
@@ -303,14 +304,22 @@ assert.doesNotMatch(confirmStandardCss, /\.stack\s*\{[^}]*padding-(?:block-)?top
         const reviewBranch = reviewStart === -1
             ? ''
             : gatedSrc.slice(reviewStart, gatedSrc.indexOf('// Form stage.', reviewStart));
-        assert.doesNotMatch(reviewBranch, /<Button\b/, 'GatedPublishForm: the review branch has no submit <Button>');
+        assert.match(reviewBranch, /publishFile\.review\.signAndPublish/,
+            'GatedPublishForm: multipart review has the shared Sign and Publish label');
+        assert.match(reviewBranch, /<SignCredentials\b/,
+            'GatedPublishForm: multipart review uses shared sign credentials');
+        assert.match(reviewBranch, /setStage\('form'\)/,
+            'GatedPublishForm: multipart approval returns to the progress form');
         // handleReview through the publish step it calls, up to the header.
         const reviewHandler = gatedSrc.slice(
             gatedSrc.indexOf('async function handleReview('),
             gatedSrc.indexOf('const header = ('),
         );
         assert.match(reviewHandler, /actionConfirm\.run\(/, 'GatedPublishForm: Review hands off to the confirm flow');
-        assert.doesNotMatch(reviewHandler, /setStage\('review'\)/, 'GatedPublishForm: Review opens no second review stage');
+        assert.match(reviewHandler, /start\.path === 'single'[\s\S]{0,160}await publish\(\)/,
+            'GatedPublishForm: the single-part path still enters the shared confirm flow');
+        assert.match(reviewHandler, /setPendingMultipart\(true\);\s*setStage\('review'\)/,
+            'GatedPublishForm: only a multipart path opens the whole-file review');
     }
 }
 

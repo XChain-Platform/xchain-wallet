@@ -47,20 +47,20 @@ const VIEWPORTS = [
 // Navigation labels as the sidebar and wallet menu show them, with the route id the
 // registry lists them under, so the Back ruling can be derived per surface.
 const ROUTES = [
-    { name: 'Home', id: 'home', tab: true },
-    { name: 'History', id: 'history', tab: true },
-    { name: 'Send', id: 'send', tab: true },
+    { name: 'Home', id: 'home', tab: true, sidebar: true },
+    { name: 'History', id: 'history', tab: true, sidebar: true },
+    { name: 'Send', id: 'send', tab: true, sidebar: true },
     { name: 'Scan', id: 'scan' },
-    { name: 'Receive', id: 'receive', tab: true },
-    { name: 'DEX', id: 'markets' },
-    { name: 'Marketplace', id: 'market-activity' },
-    { name: 'Dispensers', id: 'dispensers-list' },
-    { name: 'Contracts', id: 'contracts-list', optional: true },
-    { name: 'Messaging', id: 'messaging' },
-    { name: 'Contacts', id: 'contacts' },
+    { name: 'Receive', id: 'receive', tab: true, sidebar: true },
+    { name: 'DEX', id: 'markets', sidebar: true },
+    { name: 'Marketplace', id: 'market-activity', sidebar: true },
+    { name: 'Dispensers', id: 'dispensers-list', sidebar: true },
+    { name: 'Contracts', id: 'contracts-list', optional: true, sidebar: true },
+    { name: 'Messaging', id: 'messaging', sidebar: true },
+    { name: 'Contacts', id: 'contacts', sidebar: true },
     { name: 'Lists', id: 'lists' },
     { name: 'Payments due', id: 'obligations' },
-    { name: 'Settings', id: 'settings', tab: true },
+    { name: 'Settings', id: 'settings', tab: true, sidebar: true },
 ];
 
 // The tiered --xc-page-gutter: 12px below 640px, 16px from 640px, 24px from 900px.
@@ -230,7 +230,7 @@ test('the shell keeps its rulings at every width and route', async ({ page }) =>
                 expect.soft(m.title, at('screen title present')).toBeTruthy();
 
                 // 3. Back.
-                const backExpected = wide ? false : !route.tab;
+                const backExpected = wide ? !route.sidebar : !route.tab;
                 expect.soft(m.backCount > 0, at('Back shown')).toBe(backExpected);
 
                 // 5. no sideways page scroll.

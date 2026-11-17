@@ -79,7 +79,7 @@ test('Home and Send compact controls give a 44px tap area on touch', async ({ pa
     test.slow();
     await page.goto('/');
     await dismissIntroCarousel(page);
-    await page.getByRole('button', { name: 'Try in demo mode' }).click();
+    await page.getByRole('button', { name: 'Try Demo' }).click();
     await expect(unlockedShell(page)).toBeVisible({ timeout: kdfStepTimeout() });
 
     const rangePills = page.getByRole('main').locator('[role="tablist"][aria-label*="ange"] [role="tab"]');

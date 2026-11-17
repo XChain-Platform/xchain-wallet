@@ -66,7 +66,7 @@ describe('summaryPanelProps validation', () => {
         ['entry', null],
         ['totalParts', entry({ totalParts: 1 })],
         ['totalParts', entry({ totalParts: 2.5 })],
-        ['totalParts', entry({ totalParts: 33 })],
+        ['totalParts', entry({ totalParts: 65_536 })],
         ['partsSent', entry({ partsSent: -1 })],
         ['partsSent', entry({ partsSent: 1.5 })],
         ['partsSent', entry({ partsSent: 5 })],
@@ -81,6 +81,25 @@ describe('summaryPanelProps validation', () => {
         'accepts the %s stage',
         (stage) => expect(summaryPanelProps(entry({ stage })).stage).toBe(stage),
     );
+});
+
+// A file held by reference starts before its digest is known, so its match
+// carries a blob key or an inline placeholder; the rail showed the panel stuck
+// at 0 for a 101-part upload until these matched.
+describe('findActiveUpload for a file held by reference', () => {
+    it('matches an extension upload by its blob key, the record id', () => {
+        const wanted = entry({ id: 'blob-key-1' });
+        expect(findActiveUpload([entry({ id: 'other' }), wanted], match({ originalSha256: 'blob-key-1' }))).toBe(wanted);
+    });
+
+    it('matches an inline upload created since the start, not an older one', () => {
+        const startedAt = Date.parse('2026-11-17T10:00:00.000Z');
+        const older = entry({ id: 'older', createdAt: '2026-11-17T09:00:00.000Z' });
+        const running = entry({ id: 'running', createdAt: '2026-11-17T10:00:02.000Z', originalSha256: 'cd'.repeat(32) });
+        const inline = match({ originalSha256: 'inline:art.bin:900000', startedAt });
+        expect(findActiveUpload([older, running], inline)).toBe(running);
+        expect(findActiveUpload([older], inline)).toBeNull();
+    });
 });
 
 describe('findActiveUpload identity and stage matching', () => {

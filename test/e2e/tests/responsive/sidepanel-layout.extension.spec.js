@@ -191,7 +191,7 @@ test('side panel fits primary routes at narrow extension sizes', async () => {
         await page.goto(`${origin}/sidepanel.html`);
 
         const accept = page.getByRole('button', { name: 'Accept and continue' });
-        const ready = page.getByRole('button', { name: 'Try in demo mode' })
+        const ready = page.getByRole('button', { name: 'Try Demo' })
             .or(page.getByRole('button', { name: 'Skip' }))
             .or(unlockedShell(page));
         await accept.or(ready).first().waitFor({ state: 'visible', timeout: 60_000 });
@@ -207,7 +207,7 @@ test('side panel fits primary routes at narrow extension sizes', async () => {
         }
 
         await dismissIntroCarousel(page);
-        await page.getByRole('button', { name: 'Try in demo mode' }).click();
+        await page.getByRole('button', { name: 'Try Demo' }).click();
         await expect(unlockedShell(page)).toBeVisible({ timeout: kdfStepTimeout() });
 
         for (const viewport of VIEWPORTS) {
