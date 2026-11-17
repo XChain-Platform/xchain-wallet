@@ -18,11 +18,31 @@ import {
     MULTIPART_FILE_MAX_BYTES,
     MULTIPART_FILE_MAX_PARTS,
     MULTIPART_STANDARD_PART_CAPACITY,
+    MAX_COMPILED_ACTION_BYTES,
     fileMultipartActivationTime,
+    multipartPartCapacity,
+    pushPrefixSize,
 } from '../../../packages/core/src/flows/fileSizeLimits.js';
 
 const { vectors } = vectorsFixture;
 const partsOf = (vector) => vector.parts.map((part) => hexToBytes(part.hex));
+
+function deterministicBytes(length, seed = 0x13579bdf) {
+    const bytes = new Uint8Array(length);
+    let state = seed >>> 0;
+    for (let index = 0; index < length; index += 1) {
+        state ^= state << 13;
+        state ^= state >>> 17;
+        state ^= state << 5;
+        bytes[index] = state & 0xff;
+    }
+    return bytes;
+}
+
+function compiledPartSize(plan, part) {
+    const action = new TextEncoder().encode(`FILE|2|${plan.fileHash}|${part.partIndex}`).length;
+    return action + pushPrefixSize(action) + part.bytes.length + pushPrefixSize(part.bytes.length);
+}
 
 describe('multipart FILE protocol constants', () => {
     it('pins caps, capacities, and chain-id activation segments', () => {
@@ -30,6 +50,10 @@ describe('multipart FILE protocol constants', () => {
         expect(MULTIPART_FILE_MAX_BYTES).toBe(262_140_000_000);
         expect(MULTIPART_ENVELOPE_PART_CAPACITY).toBe(389_920);
         expect(MULTIPART_STANDARD_PART_CAPACITY).toBe(8_114);
+        expect([2, 3, 4, 5].map((digits) => multipartPartCapacity('STANDARD', digits)))
+            .toEqual([8_114, 8_113, 8_111, 8_110]);
+        expect([2, 3, 4, 5].map((digits) => multipartPartCapacity('TAPROOT', digits)))
+            .toEqual([389_920, 389_919, 389_917, 389_916]);
         expect(FILE_MULTIPART_ACTIVATION_TIME).toEqual({
             mainnet: null, testnet: 1_794_787_200, regtest: 0,
         });
@@ -71,7 +95,8 @@ describe('documentation multipart vectors', () => {
 
 describe('multipart planning', () => {
     it('refuses an original that exceeds the Standard part ceiling before copying it', async () => {
-        const maxBytes = MULTIPART_STANDARD_PART_CAPACITY * MULTIPART_FILE_MAX_PARTS;
+        const capacity = multipartPartCapacity('STANDARD', 5);
+        const maxBytes = capacity * MULTIPART_FILE_MAX_PARTS;
         class LengthStub extends Uint8Array {
             get byteLength() { return maxBytes + 1; }
         }
@@ -80,7 +105,7 @@ describe('multipart planning', () => {
                 code: 'TOO_MANY_PARTS',
                 totalParts: MULTIPART_FILE_MAX_PARTS + 1,
                 maxParts: MULTIPART_FILE_MAX_PARTS,
-                capacity: MULTIPART_STANDARD_PART_CAPACITY,
+                capacity,
             });
     });
 
@@ -91,6 +116,27 @@ describe('multipart planning', () => {
         expect(standard.parts.map((part) => part.bytes.length)).toEqual([8_113, 2]);
         expect(envelope.partCapacity).toBe(389_920);
         expect(standard.partCapacity).toBe(8_114);
+    });
+
+    it('keeps the two-digit Standard capacity for exactly 100 parts', async () => {
+        const bytes = deterministicBytes(MULTIPART_STANDARD_PART_CAPACITY * 100);
+        const plan = await planMultipartFile(bytes, {}, { carrier: 'STANDARD' });
+
+        expect(plan.parts).toHaveLength(100);
+        expect(plan.partCapacity).toBe(MULTIPART_STANDARD_PART_CAPACITY);
+        expect(plan.parts.every((part) => part.bytes.length === MULTIPART_STANDARD_PART_CAPACITY))
+            .toBe(true);
+    });
+
+    it('narrows Standard parts when the real index reaches three digits', async () => {
+        const bytes = deterministicBytes(MULTIPART_STANDARD_PART_CAPACITY * 101);
+        const plan = await planMultipartFile(bytes, {}, { carrier: 'STANDARD' });
+
+        expect(plan.parts.length).toBeGreaterThan(100);
+        expect(plan.partCapacity).toBeLessThan(MULTIPART_STANDARD_PART_CAPACITY);
+        expect(plan.parts.every((part) => compiledPartSize(plan, part) <= MAX_COMPILED_ACTION_BYTES))
+            .toBe(true);
+        expect(compiledPartSize(plan, plan.parts[100])).toBe(MAX_COMPILED_ACTION_BYTES);
     });
 
     it('keeps a 10 MB ratio-guarded file raw and returns the SDK plan shape', async () => {

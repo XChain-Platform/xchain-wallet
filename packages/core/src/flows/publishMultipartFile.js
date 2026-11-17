@@ -548,6 +548,7 @@ async function recordForRun(opts, record, source, plan, quote, rate, originalSha
     confirmResumePick(record, {
         fileHash: plan.fileHash,
         totalParts: plan.totalParts,
+        partCapacity: plan.partCapacity,
         sourceAddress: source.address,
     });
     const manifest = record.wave?.pieces.find((piece) => piece.index === -1);

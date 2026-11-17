@@ -12,10 +12,9 @@ import { sha256 } from '@noble/hashes/sha2';
 import { bytesToHex, concatBytes, hexToBytes } from '@noble/hashes/utils';
 import pako from 'pako';
 import {
-    MULTIPART_ENVELOPE_PART_CAPACITY,
     MULTIPART_FILE_MAX_BYTES,
     MULTIPART_FILE_MAX_PARTS,
-    MULTIPART_STANDARD_PART_CAPACITY,
+    multipartPartCapacity,
 } from './fileSizeLimits.js';
 import { assertPartSource } from './filePartSource.js';
 
@@ -28,11 +27,19 @@ function rangeError(code, message, details = {}) {
     return error;
 }
 
-function capacityFor(carrier) {
-    const lane = String(carrier || 'TAPROOT').toUpperCase();
-    return lane === 'STANDARD' || lane === 'P2SH'
-        ? MULTIPART_STANDARD_PART_CAPACITY
-        : MULTIPART_ENVELOPE_PART_CAPACITY;
+function capacityFor(carrier, indexDigits = 2) {
+    return multipartPartCapacity(carrier, indexDigits);
+}
+
+function capacityForStoredLength(carrier, storedBytes) {
+    let digits = 2;
+    for (;;) {
+        const capacity = capacityFor(carrier, digits);
+        const totalParts = Math.ceil(storedBytes / capacity);
+        const needed = Math.max(2, String(totalParts - 1).length);
+        if (needed <= digits) return { capacity, totalParts };
+        digits = needed;
+    }
 }
 
 function field(source, camel, wire, fallback = '') {
@@ -138,6 +145,20 @@ function fileHashOfDigests(parts) {
     return bytesToHex(hasher.digest());
 }
 
+async function collectStoredParts(input, capacity, compressed) {
+    const collector = new PartCollector(capacity);
+    const deflater = compressed ? deflaterFor(collector) : null;
+    for (let start = 0; start < input.size; start += capacity) {
+        const end = Math.min(start + capacity, input.size);
+        const bytes = sourceBytes(await input.readSlice(start, end), end - start);
+        if (deflater) pushDeflate(deflater, bytes);
+        else collector.write(bytes);
+    }
+    if (deflater) pushDeflate(deflater, new Uint8Array(), true);
+    finishCollector(collector);
+    return collector;
+}
+
 function manifestParams(source, meta, plan) {
     return {
         version: 1,
@@ -187,14 +208,14 @@ export async function planMultipartStream(source, meta = {}, options = {}) {
         });
     }
 
-    const capacity = capacityFor(options.carrier);
-    const raw = new PartCollector(capacity);
-    const compressed = new PartCollector(capacity);
+    const initialCapacity = capacityFor(options.carrier);
+    const raw = new PartCollector(initialCapacity);
+    const compressed = new PartCollector(initialCapacity);
     const originalHasher = sha256.create();
     const deflater = deflaterFor(compressed);
 
-    for (let start = 0; start < input.size; start += capacity) {
-        const end = Math.min(start + capacity, input.size);
+    for (let start = 0; start < input.size; start += initialCapacity) {
+        const end = Math.min(start + initialCapacity, input.size);
         const bytes = sourceBytes(await input.readSlice(start, end), end - start);
         originalHasher.update(bytes);
         raw.write(bytes);
@@ -210,16 +231,21 @@ export async function planMultipartStream(source, meta = {}, options = {}) {
             storedBytes: selected.collector.totalBytes, maxBytes: MULTIPART_FILE_MAX_BYTES,
         });
     }
-    if (selected.collector.parts.length > MULTIPART_FILE_MAX_PARTS) {
+    const sized = capacityForStoredLength(options.carrier, selected.collector.totalBytes);
+    if (sized.totalParts > MULTIPART_FILE_MAX_PARTS) {
         throw rangeError('TOO_MANY_PARTS', 'stored bytes require too many multipart pieces', {
-            totalParts: selected.collector.parts.length,
+            totalParts: sized.totalParts,
             maxParts: MULTIPART_FILE_MAX_PARTS,
-            capacity,
+            capacity: sized.capacity,
         });
     }
 
-    const fileHash = fileHashOfDigests(selected.collector.parts);
-    const parts = partDescriptors(selected.collector.parts, fileHash);
+    const stored = sized.capacity === initialCapacity
+        ? selected.collector
+        : await collectStoredParts(input, sized.capacity, selected.compressed);
+
+    const fileHash = fileHashOfDigests(stored.parts);
+    const parts = partDescriptors(stored.parts, fileHash);
     const plan = {
         parts,
         partDigests: parts.map((part) => part.digest),
@@ -231,7 +257,7 @@ export async function planMultipartStream(source, meta = {}, options = {}) {
         TOTAL_BYTES: selected.collector.totalBytes,
         totalParts: parts.length,
         TOTAL_PARTS: parts.length,
-        partCapacity: capacity,
+        partCapacity: sized.capacity,
         compression: selected.compression,
         compressionField: selected.compression,
         compressed: selected.compressed,

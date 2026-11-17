@@ -19,6 +19,7 @@ function upload(overrides = {}) {
         originalSha256: ORIGINAL_SHA,
         fileHash: FILE_HASH,
         totalParts: 3,
+        partCapacity: 389_920,
         stage: 'parts',
         createdAt: '2026-11-15T08:00:00.000Z',
         ...overrides,
@@ -77,13 +78,15 @@ describe('findResumableUpload stage and recency', () => {
 describe('confirmResumePick', () => {
     it('confirms the same plan with a case-insensitive file hash', () => {
         expect(confirmResumePick(upload(), {
-            fileHash: FILE_HASH.toUpperCase(), totalParts: 3, sourceAddress: 'bc1qsource',
+            fileHash: FILE_HASH.toUpperCase(), totalParts: 3, partCapacity: 389_920,
+            sourceAddress: 'bc1qsource',
         })).toBe(true);
     });
 
     it.each([
         ['hash', { fileHash: 'ef'.repeat(32), totalParts: 3 }],
         ['part count', { fileHash: FILE_HASH, totalParts: 4 }],
+        ['part capacity', { fileHash: FILE_HASH, totalParts: 3, partCapacity: 389_919 }],
     ])('refuses a changed %s and names both hashes', (_reason, plan) => {
         expect(() => confirmResumePick(upload(), { ...plan, sourceAddress: 'bc1qsource' }))
             .toThrow(expect.objectContaining({
@@ -99,13 +102,15 @@ describe('confirmResumePick', () => {
 
     it('refuses a changed source address', () => {
         expect(() => confirmResumePick(upload(), {
-            fileHash: FILE_HASH, totalParts: 3, sourceAddress: 'bc1qother',
+            fileHash: FILE_HASH, totalParts: 3, partCapacity: 389_920,
+            sourceAddress: 'bc1qother',
         })).toThrow(expect.objectContaining({ code: 'RESUME_SOURCE_MISMATCH' }));
     });
 
     it('checks the plan before the source address', () => {
         expect(() => confirmResumePick(upload(), {
-            fileHash: 'ef'.repeat(32), totalParts: 3, sourceAddress: 'bc1qother',
+            fileHash: 'ef'.repeat(32), totalParts: 3, partCapacity: 389_920,
+            sourceAddress: 'bc1qother',
         })).toThrow(expect.objectContaining({ code: 'RESUME_PLAN_MISMATCH' }));
     });
 });
@@ -114,7 +119,10 @@ describe('multipart resume input immutability', () => {
     it('does not mutate records or pick inputs', () => {
         const records = [upload(), upload({ id: 'newer', createdAt: '2026-11-15T09:00:00.000Z' })];
         const lookup = pick({ originalSha256: ORIGINAL_SHA.toUpperCase() });
-        const plan = { fileHash: FILE_HASH.toUpperCase(), totalParts: 3, sourceAddress: 'bc1qsource' };
+        const plan = {
+            fileHash: FILE_HASH.toUpperCase(), totalParts: 3, partCapacity: 389_920,
+            sourceAddress: 'bc1qsource',
+        };
         const before = structuredClone({ records, lookup, plan });
         const record = findResumableUpload(records, lookup);
         confirmResumePick(record, plan);
