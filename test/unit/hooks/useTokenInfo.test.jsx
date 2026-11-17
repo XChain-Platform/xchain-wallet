@@ -191,7 +191,22 @@ describe('useTokenInfo across ticks', () => {
         rerender({ tick: 'THROWS' });
         expect(result.current).toBeNull();
         await waitFor(() => expect(messaging.getTokenInfo).toHaveBeenCalledTimes(3));
-        expect(result.current).toBeNull();
+        await waitFor(() => expect(result.current).toMatchObject({
+            chainId: CHAIN,
+            tick: 'THROWS',
+            loadError: true,
+        }));
+    });
+
+    it('turns a rejected lookup into an explicit failed record', async () => {
+        const getTokenInfo = vi.fn().mockRejectedValue(new Error('explorer offline'));
+        const { result } = mountHook({ getTokenInfo });
+
+        await waitFor(() => expect(result.current).toMatchObject({
+            chainId: CHAIN,
+            tick: TICK,
+            loadError: true,
+        }));
     });
 });
 
