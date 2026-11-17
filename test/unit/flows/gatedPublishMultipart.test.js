@@ -174,6 +174,10 @@ describe('gated publish form multipart wiring', () => {
         });
         await screen.findByText((text) => text.startsWith(META.name));
         fireEvent.click(screen.getByRole('button', { name: 'Publish File' }));
+        // The whole-file review is the one approval: nothing starts before it.
+        const approve = await screen.findByRole('button', { name: 'Sign and Publish' });
+        expect(formHooks.start).not.toHaveBeenCalled();
+        fireEvent.click(approve);
 
         await waitFor(() => expect(formHooks.start).toHaveBeenCalledOnce());
         const [request, match] = formHooks.start.mock.calls[0];
