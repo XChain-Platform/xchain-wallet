@@ -80,7 +80,7 @@ export function parseCosignerSharePayload(value, networkKind) {
         throw new Error('Shared cosigner setup contains an invalid master fingerprint.');
     }
     if (!/^m(?:\/\d+'?)*$/.test(payload.derivationPath || '')) {
-        throw new Error('Shared cosigner setup contains an invalid derivation path.');
+        throw new Error('Shared cosigner setup contains an invalid account path.');
     }
     if (typeof payload.xpub !== 'string' || payload.xpub.length === 0) {
         throw new Error('Shared cosigner setup does not contain an extended public key.');
@@ -299,15 +299,15 @@ export function MultisigCreate({ walletId, onBack, onShare }) {
         const thresholdProblem = (message) => { add('threshold', message); return problems; };
         if (!rawThreshold) return thresholdProblem('Threshold is required.');
         if (!/^-?\d+(?:\.\d+)?$/.test(rawThreshold)) return thresholdProblem('Threshold must be a whole number.');
-        const t = Number(rawThreshold);
-        if (!Number.isInteger(t)) return thresholdProblem('Threshold must be a whole number.');
-        if (t <= 0) return thresholdProblem('Threshold must be at least 1.');
-        if (t > rows.length) return thresholdProblem('Threshold must be ≤ cosigner count.');
+        const required = Number(rawThreshold);
+        if (!Number.isInteger(required)) return thresholdProblem('Threshold must be a whole number.');
+        if (required <= 0) return thresholdProblem('Threshold must be at least 1.');
+        if (required > rows.length) return thresholdProblem('Threshold must be ≤ cosigner count.');
         // MuSig2 is n-of-n: a T<N Taproot-MuSig2 address can never be signed by
         // fewer than N cosigners, so the funds would be permanently locked.
         // Steer the user to P2WSH for a genuine T-of-N policy.
-        if (scheme === 'taproot-musig2' && t !== rows.length) {
-            return form(`Taproot requires all ${rows.length} cosigners to sign (set the threshold to ${rows.length}). To let ${t} of ${rows.length} sign, pick SegWit instead.`);
+        if (scheme === 'taproot-musig2' && required !== rows.length) {
+            return form(`Taproot requires all ${rows.length} cosigners to sign (set the threshold to ${rows.length}). To let ${required} of ${rows.length} sign, pick SegWit instead.`);
         }
         // Only one cosigner can be this wallet's own key: local signing
         // signs for exactly one, so a second could never add its signature.
@@ -355,7 +355,7 @@ export function MultisigCreate({ walletId, onBack, onShare }) {
             }
             if (!r.fingerprint || !/^[0-9a-fA-F]{8}$/.test(r.fingerprint)) add(at('fingerprint'), `${tag}: fingerprint must be 8 characters, using 0 to 9 and a to f.`);
             if (!/^m(?:\/\d+'?)*$/.test(r.derivationPath)) {
-                add(at('derivationPath'), `${tag}: enter a valid derivation path starting with m.`);
+                add(at('derivationPath'), `${tag}: enter a valid account path starting with m.`);
                 continue;
             }
             if (r.origin === 'external-xpub') {
@@ -859,7 +859,7 @@ function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, c
             <Input
                 id={`${row.id}:derivationPath`}
                 label="Account path"
-                help="Enter the derivation path of the cosigner's key."
+                help={"Enter the account path for the cosigner's key."}
                 onBlur={() => onTouch('derivationPath')}
                 value={row.derivationPath}
                 onChange={(e) => onChange({ derivationPath: e.target.value.trim() })}

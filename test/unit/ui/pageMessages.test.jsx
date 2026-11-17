@@ -22,7 +22,7 @@
 // second page message. The freshness line next to a balance is not a notice.
 
 import React from 'react';
-import { act, cleanup, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { RouteErrorBoundary } from '../../../packages/core/src/shared/components/RouteErrorBoundary.jsx';
@@ -30,6 +30,7 @@ import { FullLayoutWithNav } from '../../../packages/core/src/shared/components/
 import { ReachabilityBanner } from '../../../packages/core/src/shared/components/ReachabilityBanner.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { ROUTE_REGISTRY } from '../../../packages/core/src/shared/routeRegistry.js';
+import { ListCreateForm } from '../../../packages/core/src/shared/routes/ListCreateForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 // jsdom draws no canvas; the market chart gets a stand-in that accepts any call.
@@ -106,7 +107,7 @@ function failure(state) {
 
 // Every method the routes call answers by state; a few that shape the
 // shell (settings, the wallet list) answer the same in every state.
-function messagingFor(state) {
+function messagingFor(state, overrides = {}) {
     const fixed = {
         getSettings: () => Promise.resolve(SETTINGS),
         listWallets: () => Promise.resolve([WALLET]),
@@ -114,6 +115,7 @@ function messagingFor(state) {
         getAddressesByChain: () => Promise.resolve({ [CHAIN_ID]: [{ id: 'address-1', address: ADDRESS, source: 'hd', role: 'receive' }] }),
         getActiveAddresses: () => Promise.resolve({ [CHAIN_ID]: { id: 'address-1', address: ADDRESS } }),
         checkReachabilityRequest: () => (state === 'loading' ? pending() : Promise.resolve(reachabilityFor(state))),
+        ...overrides,
     };
     return new Proxy({}, {
         get(target, property) {
@@ -244,4 +246,100 @@ describe('one page message per route state', () => {
         // Zero is fine (a page still loading); two is a stack.
         expect(messages.length, `${id} in ${state}: ${messages.join(' | ')}`).toBeLessThanOrEqual(limit);
     }, 60_000);
+});
+
+const LIST_OWNER = Object.freeze({
+    id: 'address-1',
+    address: ADDRESS,
+    publicKey: '02aa',
+    derivationPath: "m/84'/0'/0'/0/0",
+    source: 'hd',
+    signerId: 'signer-owner',
+});
+const LIST_DESTINATION = '1FWDonkMbC6hL64JiysuggHnUAw2CKWszs';
+const LIST_REF = Object.freeze({ chainId: CHAIN_ID, actionIndex: '2700', source: ADDRESS });
+
+function submittedListMessaging() {
+    return messagingFor('offline', {
+        getAddressesByChain: () => Promise.resolve({ [CHAIN_ID]: [LIST_OWNER] }),
+        getActiveAddresses: () => Promise.resolve({ [CHAIN_ID]: LIST_OWNER }),
+        signerReady: () => Promise.resolve({ ready: true }),
+        getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
+        getListByActionIndex: () => Promise.resolve({
+            action_index: 2700,
+            type: 2,
+            source: ADDRESS,
+            name: 'Treasury',
+            description: 'Current list',
+            list: ['bc1qmember'],
+            state: { owner: ADDRESS, edit_resolution_active: true, current_list: ['bc1qmember'] },
+        }),
+        getListsForSource: () => Promise.resolve({
+            data: [{ action_index: 101, type: 1, name: null, members: ['XCP'] }],
+        }),
+        getSharedLists: () => Promise.resolve({ lists: [], unavailable: [] }),
+        getActionFormats: () => Promise.resolve({
+            0: 'VERSION|TYPE|MEMO|...ITEM',
+            2: 'VERSION|LIST_ACTION_INDEX|MEMO',
+            3: 'VERSION|LIST_ACTION_INDEX|DESTINATION|MEMO',
+            4: 'VERSION|TYPE|NAME|DESCRIPTION|MEMO|...ITEM',
+            5: 'VERSION|LIST_ACTION_INDEX|NAME|DESCRIPTION|MEMO',
+        }),
+        composeForConfirm: () => Promise.resolve({
+            psbt: 'aa00', encoding: 'psbt', actionString: 'LIST|0|2||item', version: 1,
+        }),
+        preflight: () => Promise.resolve({ verdict: 'pass', findings: [] }),
+        createList: () => Promise.resolve({ txid: 'submitted-list-txid' }),
+    });
+}
+
+async function submitListResult(kind) {
+    if (kind === 'union') {
+        fireEvent.click(await screen.findByRole('checkbox', { name: 'Token list #101' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Create union list$/i }));
+    } else if (kind === 'rename') {
+        fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'New treasury' } });
+        fireEvent.click(screen.getByRole('button', { name: /^Publish edit$/i }));
+    } else {
+        fireEvent.change(await screen.findByLabelText('New owner'), { target: { value: LIST_DESTINATION } });
+        fireEvent.click(screen.getByRole('button', { name: /^Transfer list$/i }));
+    }
+    const approve = await screen.findByTestId('confirm-approve');
+    await waitFor(() => expect(approve.disabled).toBe(false));
+    fireEvent.click(approve);
+}
+
+describe('submitted list forms keep one page message while offline', () => {
+    it.each([
+        ['union', 'list-create', { initialType: '3', chainId: CHAIN_ID }, 'Union list submitted'],
+        ['rename', 'list-rename', { action: 'edit', listRef: LIST_REF }, 'List rename submitted'],
+        ['transfer', 'list-transfer', { action: 'transfer', listRef: LIST_REF }, 'List transfer submitted'],
+    ])('%s result does not stack over the reachability notice', async (kind, routeKey, props, heading) => {
+        vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+        const { container } = render(
+            <MessagingProvider shell="web" messaging={submittedListMessaging()}>
+                <ToastHost>
+                    <FullLayoutWithNav
+                        routeKey={routeKey}
+                        notices={<ReachabilityBanner startupGraceMs={0} confirmMs={0} intervalMs={600_000} />}
+                    >
+                        <ListCreateForm
+                            walletId="wallet-1"
+                            activeAccountId="account-1"
+                            onBack={noop}
+                            onDone={noop}
+                            {...props}
+                        />
+                    </FullLayoutWithNav>
+                </ToastHost>
+            </MessagingProvider>,
+        );
+
+        await submitListResult(kind);
+        await waitFor(() => expect(container.textContent).toContain(heading));
+        await settle(container);
+        const messages = visibleMessages(container);
+        expect(messages).toHaveLength(1);
+        expect(messages[0]).toContain("You're offline.");
+    });
 });

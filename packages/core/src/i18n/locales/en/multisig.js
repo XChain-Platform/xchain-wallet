@@ -15,6 +15,11 @@
 import { addEnglish } from '../../store.js';
 
 const messages = {
+    'multisig.create.accountPathDepthMismatch': 'Account path and account public key have different depths.',
+    'multisig.create.accountPathChildMismatch': 'Account path and account public key have different child indexes.',
+    'multisig.create.accountPathHardenedChild': 'Account path asks this account public key to derive a hardened child.',
+    'multisig.create.publicKeyMismatch': 'Public key differs from the one this account public key and account path give.',
+    'multisig.create.accountPathDeriveFailed': "Account path can't be derived from this account public key.",
     'multisig.share.title': 'Share Wallet as Cosigner',
     'multisig.share.noticeTitle': 'Share Public Keys',
     'multisig.share.instructions':

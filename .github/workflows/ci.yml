@@ -4,6 +4,7 @@ permissions:
   contents: read
 
 on:
+  workflow_dispatch:
   push:
     # develop is where all work lands; master only ever receives release PRs.
     # Both run the gate: develop so a lane push is verified as it lands, master

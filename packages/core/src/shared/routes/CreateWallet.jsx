@@ -38,6 +38,7 @@ const MIN_PASSWORD_LENGTH = 8;
 const CONFIRM_PASSWORD_MESSAGE = 'Confirm your password.';
 // The "I have saved my recovery phrase" checkbox: its id keys its error entry.
 const SAVED_CHECK_ID = 'create-saved-phrase';
+const REVEAL_PHRASE_ID = 'create-reveal-phrase';
 
 function numberedWalletName(wallets) {
     const names = new Set(
@@ -118,7 +119,6 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
     const [mnemonic, setMnemonic] = useState(/** @type {string | null} */ (null));
     const [phraseRevealed, setPhraseRevealed] = useState(false);
     const [saved, setSaved] = useState(false);
-    const [savedFieldError, setSavedFieldError] = useState(/** @type {string | null} */ (null));
     // G130: Verify Recovery Phrase is never disabled. A tap explains whether
     // the phrase must be revealed or the acknowledgement must be checked.
     const savedErrors = useFormErrors();
@@ -127,6 +127,8 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
     );
     const headingRef = useRef(/** @type {HTMLHeadingElement | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const revealPhraseRef = useRef(/** @type {HTMLButtonElement | null} */ (null));
+    const savedCheckboxRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const firstQuizInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const stageFormRef = useRef(/** @type {HTMLFormElement | null} */ (null));
     const keepKeyboardDismissedRef = useRef(false);
@@ -171,6 +173,14 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
         return () => clearTimeout(id);
     }, [stage]);
 
+    // This step intentionally has no error summary. Its one failing control
+    // receives focus, and the inline error supplies the live announcement.
+    useEffect(() => {
+        if (stage !== 'mnemonic' || savedErrors.attempt === 0) return;
+        if (savedErrors.errorFor(REVEAL_PHRASE_ID)) revealPhraseRef.current?.focus();
+        else if (savedErrors.errorFor(SAVED_CHECK_ID)) savedCheckboxRef.current?.focus();
+    }, [savedErrors.attempt, savedErrors.errors, stage]);
+
     // A flow step, not an overlay: backgrounding the app keeps the stage, so
     // the phrase being written down is never replaced on resume.
     useBackHandler(handleNativeBack, stage === 'persisting' || stage === 'ads-notice', 'screen');
@@ -188,7 +198,6 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
         setMnemonic(null);
         setPhraseRevealed(false);
         setSaved(false);
-        setSavedFieldError(null);
         savedErrors.reset();
         setQuizPositions([]);
         setQuizAnswers({});
@@ -231,7 +240,6 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
             clearEntrySecrets();
             setPhraseRevealed(false);
             setSaved(false);
-            setSavedFieldError(null);
             savedErrors.reset();
             setQuizPositions([]);
             setQuizAnswers({});
@@ -301,17 +309,20 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
 
     function handleStartVerify() {
         if (stage !== 'mnemonic' || !mnemonic) return;
-        const problem = !phraseRevealed
-            ? t('createWallet.revealPhraseFirst')
-            : !saved
-                ? t('createWallet.tickSavedFirst')
-                : null;
-        if (problem) {
-            setSavedFieldError(problem);
-            savedErrors.validate({ [SAVED_CHECK_ID]: problem });
+        if (!phraseRevealed) {
+            savedErrors.validate({
+                [REVEAL_PHRASE_ID]: t('createWallet.revealPhraseFirst'),
+                [SAVED_CHECK_ID]: null,
+            });
             return;
         }
-        setSavedFieldError(null);
+        if (!saved) {
+            savedErrors.validate({
+                [REVEAL_PHRASE_ID]: null,
+                [SAVED_CHECK_ID]: t('createWallet.tickSavedFirst'),
+            });
+            return;
+        }
         savedErrors.reset();
         const totalWords = mnemonic.trim().split(/\s+/).length;
         const positions = pickQuizPositions(totalWords);
@@ -541,7 +552,6 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
                 ref={stageFormRef}
                 label={t('importWallet.recoveryPhrase')}
                 cardless
-                errors={savedErrors}
                 // One compact danger notice says what the words are (U71, the
                 // Notice Standard); a second loose paragraph under it would
                 // repeat it (U18). It is part of the step from the first
@@ -558,11 +568,13 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
                     <MnemonicGrid
                         mnemonic={mnemonic || ''}
                         variant={variant}
+                        revealButtonId={REVEAL_PHRASE_ID}
+                        revealButtonRef={revealPhraseRef}
+                        revealError={savedErrors.errorFor(REVEAL_PHRASE_ID)}
                         onRevealedChange={(revealed) => {
                             setPhraseRevealed(revealed);
                             if (revealed) {
-                                setSavedFieldError(null);
-                                savedErrors.clear(SAVED_CHECK_ID);
+                                savedErrors.clear(REVEAL_PHRASE_ID);
                             }
                         }}
                     />
@@ -571,6 +583,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
                     </p>
                     <Checkbox
                         id={SAVED_CHECK_ID}
+                        ref={savedCheckboxRef}
                         className={styles.confirmRow}
                         label={t('createWallet.iHaveSavedMyRecovery')}
                         help={t('createWallet.savedPhraseHelp')}
@@ -578,15 +591,17 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
                         onChange={(e) => {
                             if (e.target.checked && !phraseRevealed) {
                                 setSaved(false);
-                                setSavedFieldError(t('createWallet.revealPhraseFirst'));
+                                savedErrors.validate({
+                                    [REVEAL_PHRASE_ID]: t('createWallet.revealPhraseFirst'),
+                                    [SAVED_CHECK_ID]: null,
+                                });
                                 return;
                             }
                             setSaved(e.target.checked);
-                            setSavedFieldError(null);
                             savedErrors.clear(SAVED_CHECK_ID);
                         }}
                         disabled={stage === 'persisting'}
-                        error={savedFieldError || savedErrors.errorFor(SAVED_CHECK_ID)}
+                        error={savedErrors.errorFor(SAVED_CHECK_ID)}
                     />
                     <Button
                         variant="success"

@@ -10,6 +10,8 @@
 
 import { HDKey } from '@scure/bip32';
 import { secp256k1 } from '@noble/curves/secp256k1';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/multisig.js';
 
 const MAINNET_VERSIONS = { private: 0x0488ade4, public: 0x0488b21e };
 const TESTNET_VERSIONS = { private: 0x04358394, public: 0x043587cf };
@@ -59,24 +61,24 @@ export function validateCosignerXpub(xpub, networkKind, derivationPath, pubkey) 
 
     const parts = parseDerivationPath(derivationPath);
     if (!parts || parsed.node.depth > parts.length) {
-        return 'Derivation path does not match the xpub depth.';
+        return t('multisig.create.accountPathDepthMismatch');
     }
     if (parsed.node.depth > 0
         && pathIndex(parts[parsed.node.depth - 1]) !== parsed.node.index) {
-        return 'Derivation path does not match the xpub child index.';
+        return t('multisig.create.accountPathChildMismatch');
     }
     const suffix = parts.slice(parsed.node.depth);
     if (suffix.some((part) => part.endsWith("'"))) {
-        return 'Derivation path asks this public xpub to derive a hardened child.';
+        return t('multisig.create.accountPathHardenedChild');
     }
     try {
         const child = parsed.node.derive(suffix.length > 0 ? `m/${suffix.join('/')}` : 'm');
         const derived = bytesToHex(child.publicKey);
         if (derived !== pubkey.toLowerCase()) {
-            return 'Public key does not match the xpub and derivation path.';
+            return t('multisig.create.publicKeyMismatch');
         }
     } catch {
-        return 'Derivation path cannot be derived from this xpub.';
+        return t('multisig.create.accountPathDeriveFailed');
     }
     return null;
 }

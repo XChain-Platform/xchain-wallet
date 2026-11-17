@@ -47,7 +47,13 @@ describe('StakeDetail Hero 2 chart', () => {
         const chart = await screen.findByRole('img', { name: /^Staked\./ });
         expect(chart).toHaveAccessibleName(/Staked \+ rewards\./);
         expect(screen.getAllByText('Validator Stake')).toHaveLength(1);
-        expect(screen.getByText('Staked + rewards')).toBeInTheDocument();
+        const heroTitle = screen.getByText('Staked + rewards');
+        const hero = heroTitle.closest('section');
+        expect(hero).toHaveAccessibleName('Staked + rewards');
+        expect([...hero.querySelectorAll('[data-stake-hero-line]')].map((line) => line.dataset.stakeHeroLine))
+            .toEqual(['title', 'change', 'total']);
+        expect(within(hero).queryByText('Staked', { selector: 'span' })).toBeNull();
+        expect(within(hero).queryByText('Validator Stake')).toBeNull();
 
         const primary = chart.querySelector('[data-chart-series="primary"]');
         const secondary = chart.querySelector('[data-chart-series="secondary"]');
@@ -100,14 +106,15 @@ describe('StakeDetail Hero 2 chart', () => {
         });
     });
 
-    it('falls back to today\'s unclaimed caption when reward rows have no historical block', async () => {
+    it('keeps the fixed hero title when reward rows have no historical block', async () => {
         const { container } = mount({
             stakes: [{ action_index: 1, amount: '25000', asset: 'XCHAIN', status: 'valid', block_index: 500 }],
             rewards: [{ id: 1, amount: '82.4' }],
         });
 
         await screen.findByRole('img', { name: /^Staked\./ });
-        expect(screen.getByText('+82.4 XCHAIN unclaimed')).toBeInTheDocument();
+        expect(screen.getByText('Staked + rewards')).toBeInTheDocument();
+        expect(screen.queryByText('+82.4 XCHAIN unclaimed')).toBeNull();
         expect(container.querySelector('[data-chart-series="secondary"]')).toBeNull();
     });
 });

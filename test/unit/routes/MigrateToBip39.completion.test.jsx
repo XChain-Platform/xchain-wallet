@@ -90,6 +90,7 @@ function renderMigration(messaging = makeMessaging()) {
     expect(why.textContent).toMatch(/old wallet/);
     expect(why.textContent).toMatch(/tokens/);
     expect(why.textContent).not.toMatch(/BIP39|Counterwallet|sweep|legacy/i);
+    expect(document.body.textContent).not.toMatch(/\bBIP39\b/i);
     expectOnlySuccessAction('Generate Recovery Phrase');
     expect(screen.queryByRole('button', { name: 'Not Now' })).toBeNull();
     return { messaging, onBack, onMigrated, onSweepChain };
@@ -150,7 +151,8 @@ async function reachVerify(context, options) {
     fireEvent.click(screen.getByRole('button', { name: 'Verify Recovery Phrase' }));
     expect(await screen.findByText('Step 3 of 3: Check your copy')).toBeTruthy();
     expectOnlyPageTitle('Upgrade Wallet');
-    expectOnlySuccessAction('Create BIP39 Wallet');
+    expectOnlySuccessAction('Create New Wallet');
+    expect(document.body.textContent).not.toMatch(/\bBIP39\b/i);
     expectNoBodyBackAction();
 }
 
@@ -172,7 +174,7 @@ describe('MigrateToBip39 safety and completion', () => {
         const nameInput = screen.getByLabelText('New wallet name');
         expect(nameInput).toHaveAttribute('maxLength', '64');
         expect(screen.getByText(`${nameInput.value.length} / 64`)).toBeTruthy();
-        expectFieldHelp('New wallet name', 'Names the new BIP39 wallet in wallet lists on this device.');
+        expectFieldHelp('New wallet name', 'Names the new wallet in wallet lists on this device.');
         expectFieldHelp('Password', 'Encrypts the new wallet on this device. Use at least 8 characters.');
         expectFieldHelp('Confirm password', 'Type the same password again to confirm the new wallet password.');
         expect(screen.queryByText('At least 8 characters.')).toBeNull();
@@ -190,7 +192,7 @@ describe('MigrateToBip39 safety and completion', () => {
         fireEvent.click(screen.getByRole('checkbox'));
         fireEvent.click(screen.getByRole('button', { name: 'Verify Recovery Phrase' }));
         expect(await screen.findByText('Step 3 of 3: Check your copy')).toBeTruthy();
-        expectOnlySuccessAction('Create BIP39 Wallet');
+        expectOnlySuccessAction('Create New Wallet');
         expectNoBodyBackAction();
         for (const input of screen.getAllByLabelText(/^Word \d+$/)) {
             const label = input.labels[0].textContent;
@@ -230,10 +232,10 @@ describe('MigrateToBip39 safety and completion', () => {
         const context = renderMigration();
         await reachVerify(context, { name: '   ' });
         answerQuiz();
-        fireEvent.click(screen.getByRole('button', { name: 'Create BIP39 Wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create New Wallet' }));
 
         await waitFor(() => expect(context.messaging.addImportedWallet).toHaveBeenCalledWith(
-            expect.objectContaining({ name: 'XChain BIP39 Wallet' }),
+            expect.objectContaining({ name: 'XChain Recovery Wallet' }),
         ));
     });
 
@@ -243,7 +245,7 @@ describe('MigrateToBip39 safety and completion', () => {
         }));
         await reachVerify(context);
         answerQuiz();
-        const form = screen.getByRole('button', { name: 'Create BIP39 Wallet' }).closest('form');
+        const form = screen.getByRole('button', { name: 'Create New Wallet' }).closest('form');
         await act(async () => {
             fireEvent.submit(form);
             fireEvent.submit(form);
@@ -256,7 +258,7 @@ describe('MigrateToBip39 safety and completion', () => {
         const context = renderMigration();
         await reachVerify(context, { name: '  Cold storage  ' });
         answerQuiz();
-        fireEvent.click(screen.getByRole('button', { name: 'Create BIP39 Wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create New Wallet' }));
 
         await waitFor(() => expect(context.messaging.addImportedWallet).toHaveBeenCalledWith(
             expect.objectContaining({ name: 'Cold storage' }),
@@ -274,7 +276,7 @@ describe('MigrateToBip39 safety and completion', () => {
         expect(getBackupVerifiedAt('wallet-new')).toBeNull();
 
         answerQuiz();
-        fireEvent.click(screen.getByRole('button', { name: 'Create BIP39 Wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create New Wallet' }));
 
         expect(await screen.findByText('Creating the new wallet')).toBeTruthy();
         expectOnlyPageTitle('Upgrade Wallet');
@@ -284,7 +286,7 @@ describe('MigrateToBip39 safety and completion', () => {
         await waitFor(() => expect(messaging.addImportedWallet).toHaveBeenCalledWith({
             password: 'password1',
             mnemonic: PHRASE,
-            name: 'XChain BIP39 Wallet',
+            name: 'XChain Recovery Wallet',
             origin: 'created',
         }));
 
@@ -335,7 +337,7 @@ describe('MigrateToBip39 safety and completion', () => {
             globalThis.IS_REACT_ACT_ENVIRONMENT = previous;
         }
         expect(await screen.findByText('Step 3 of 3: Check your copy')).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Create BIP39 Wallet' }).closest('form')).not.toBe(backupForm);
+        expect(screen.getByRole('button', { name: 'Create New Wallet' }).closest('form')).not.toBe(backupForm);
         expect(screen.queryByText('Fill in every requested word.')).toBeNull();
     });
 
@@ -344,7 +346,7 @@ describe('MigrateToBip39 safety and completion', () => {
         await reachVerify(context);
 
         answerQuiz({ wrongFirst: true });
-        fireEvent.click(screen.getByRole('button', { name: 'Create BIP39 Wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create New Wallet' }));
 
         expect(await screen.findByText(/does not match your recovery phrase/)).toBeTruthy();
         expect(context.messaging.addImportedWallet).not.toHaveBeenCalled();
@@ -371,7 +373,7 @@ describe('MigrateToBip39 safety and completion', () => {
         await reachVerify(context);
         answerQuiz();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Create BIP39 Wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create New Wallet' }));
         expect(await screen.findByRole('alert')).toHaveTextContent('Vault is locked.');
         expect(screen.getByText('Step 3 of 3: Check your copy')).toBeTruthy();
 
@@ -380,7 +382,7 @@ describe('MigrateToBip39 safety and completion', () => {
         expect(screen.getByRole('list', { name: 'Recovery phrase' })).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Verify Recovery Phrase' }));
         answerQuiz();
-        fireEvent.click(screen.getByRole('button', { name: 'Create BIP39 Wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create New Wallet' }));
 
         expect(await screen.findByText('New wallet ready')).toBeTruthy();
         expect(messaging.addImportedWallet).toHaveBeenCalledTimes(2);
@@ -394,7 +396,7 @@ describe('MigrateToBip39 safety and completion', () => {
         await reachVerify(context);
         answerQuiz();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Create BIP39 Wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create New Wallet' }));
         expect(await screen.findByRole('alert')).toHaveTextContent(/Your recovery phrase is still here/);
         expect(document.body.textContent).not.toMatch(/wallet\.addImported/);
     });
@@ -405,7 +407,7 @@ describe('MigrateToBip39 safety and completion', () => {
         answerQuiz();
         context.messaging.addImportedWallet = undefined;
 
-        fireEvent.click(screen.getByRole('button', { name: 'Create BIP39 Wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create New Wallet' }));
         const alert = await screen.findByRole('alert');
         expect(alert).toHaveTextContent(/not supported in this version of the app/);
         expect(alert.textContent).not.toMatch(/messaging\.|shell/);
@@ -416,7 +418,7 @@ describe('MigrateToBip39 safety and completion', () => {
         await reachVerify(context);
         answerQuiz();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Create BIP39 Wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create New Wallet' }));
         const alert = await screen.findByRole('alert');
         expect(alert).toHaveTextContent(/Check your wallet list before trying again/);
         expect(alert.textContent).not.toMatch(/walletId/);
@@ -437,9 +439,9 @@ describe('MigrateToBip39 safety and completion', () => {
         const context = renderMigration(messaging);
         await reachVerify(context);
         answerQuiz();
-        fireEvent.click(screen.getByRole('button', { name: 'Create BIP39 Wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create New Wallet' }));
 
-        expect(await screen.findByText('Could not load all migration addresses.')).toBeTruthy();
+        expect(await screen.findByText('Some migration addresses failed to load.')).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
         expect(await screen.findByRole('button', { name: 'Review Sweep' })).toBeTruthy();
         expect(messaging.addImportedWallet).toHaveBeenCalledTimes(1);

@@ -223,6 +223,21 @@ describe('ListDetail look', () => {
 });
 
 describe('ListDetail List tab', () => {
+    it('does not render a detail returned for another network', async () => {
+        mountDetail({
+            row: {
+                ...OWN_LIST,
+                chainId: 'litecoin-mainnet',
+                name: 'Foreign list',
+                list: ['ltc1qforeignone', 'ltc1qforeigntwo'],
+            },
+        });
+
+        expect(await screen.findByText('List not found')).toBeInTheDocument();
+        expect(screen.queryByText('Foreign list')).toBeNull();
+        expect(screen.queryByText(/2 members/)).toBeNull();
+    });
+
     it('shows a standard list in one card with addresses cut in the middle', async () => {
         const { container } = mountDetail();
         await openTab('List');

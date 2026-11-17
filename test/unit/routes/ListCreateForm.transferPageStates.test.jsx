@@ -140,13 +140,15 @@ describe('ListTransferForm lays out every non-signing state through FormPage', (
         await waitFor(() => expect(approve.disabled).toBe(false));
         fireEvent.click(approve);
         await waitFor(() => expect(messaging.createList).toHaveBeenCalledTimes(1));
-        await waitFor(() => expect(container.textContent).toContain('List transfer submitted.'));
+        await waitFor(() => expect(container.textContent).toContain('List transfer submitted'));
 
         const txid = byText(container, 'code', 'transfer-txid');
         const root = formPageRoot(container, txid);
         const done = Array.from(root.querySelectorAll('button')).find((b) => b.textContent.trim() === 'Done');
         expect(done).toBeTruthy();
-        expect(byText(root, '[data-form-status]', 'List transfer submitted.')).not.toBeNull();
+        // Issue 114: the success notice is the page title, never a status notice.
+        expect(byText(root, 'h2', 'List transfer submitted')).not.toBeNull();
+        expect(root.querySelector('[data-form-status]')).toBeNull();
         noBareChild(container, 'p, dl, [data-variant]');
     });
 });

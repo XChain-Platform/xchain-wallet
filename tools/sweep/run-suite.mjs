@@ -9,6 +9,7 @@ import {
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { smokeEnv, smokeNodeArgs } from '../../test/smoke/_smoke-launch.js';
 import { startRecordedProcess, stopRecordedProcess } from './lane-pid.mjs';
 import { httpCondition, waitUntil } from './wait-for.mjs';
 
@@ -93,9 +94,10 @@ function pnpmCommand() {
 }
 
 function suiteProcess(options, repoRoot, smokeFile) {
-    const command = smokeFile ? process.execPath : pnpmCommand();
-    const args = smokeFile ? [smokeFile] : ['run', `test:${options.suite}`, ...options.files];
-    const env = { ...process.env };
+    const smokePath = smokeFile ? resolve(repoRoot, smokeFile) : null;
+    const command = smokePath ? process.execPath : pnpmCommand();
+    const args = smokePath ? smokeNodeArgs(smokePath) : ['run', `test:${options.suite}`, ...options.files];
+    const env = smokePath ? smokeEnv(smokePath, { ...process.env }) : { ...process.env };
     if (options.suite === 'e2e') {
         env.E2E_DEV_PORT = String(options.port);
         env.XCHAIN_SWEEP_EXTERNAL_SERVER = '1';

@@ -1949,7 +1949,8 @@ function UnionListBody({
             <FormPage
                 as="div"
                 label="Union list submitted"
-                status={<StatusMessage variant="success">Union list submitted.</StatusMessage>}
+                title="Union list submitted"
+                headingAs="h2"
                 actions={<Button type="button" variant="success" icon={<Icon.CheckIcon />} onClick={onDone}>Done</Button>}
             />,
         );
@@ -3271,7 +3272,8 @@ function ListMembersBody({
             <FormPage
                 as="div"
                 label={cfg.formLabel}
-                status={<StatusMessage variant="success">List rename submitted.</StatusMessage>}
+                title="List rename submitted"
+                headingAs="h2"
                 actions={<Button type="button" variant="success" icon={<Icon.CheckIcon />} onClick={onDone}>Done</Button>}
             >
                 <p className={styles.hint}>The new list details appear when this transaction confirms.</p>
@@ -4699,11 +4701,8 @@ function ListTransferBody({ cfg, walletId, listRef, actionField = null, shared, 
             <FormPage
                 as="div"
                 label="List transfer submitted"
-                status={(
-                    <StatusMessage variant="success">
-                        {result.psbtHex && !result.txid ? 'Unsigned list transfer created.' : 'List transfer submitted.'}
-                    </StatusMessage>
-                )}
+                title="List transfer submitted"
+                headingAs="h2"
                 actions={<Button type="button" variant="success" icon={<Icon.CheckIcon />} onClick={onDone}>Done</Button>}
             >
                 <p className={styles.hint}>The new owner takes control when the transfer confirms.</p>

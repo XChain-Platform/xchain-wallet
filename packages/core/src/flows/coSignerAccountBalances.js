@@ -98,7 +98,12 @@ export async function coSignerAccountBalances({ vault, sdkRegistry, chainRegistr
                     : null;
                 const { balResp, addrResp } = readsFromBatchEntry(slot, address);
                 try {
-                    assign(address, { balances: shapeFromReads({ balResp, addrResp, nativeTicker, address }), error: null });
+                    assign(address, {
+                        balances: shapeFromReads({
+                            balResp, addrResp, nativeTicker, descriptor, address,
+                        }),
+                        error: null,
+                    });
                 } catch (e) {
                     assign(address, unavailable(e && e.message ? String(e.message) : String(e)));
                 }

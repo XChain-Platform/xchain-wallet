@@ -338,6 +338,7 @@ export function App() {
 function AppInner({ canOpenInTab, titleEnabled }) {
     const { showToast } = useToast();
     const { settings } = useSettings();
+    const activeNetwork = settings ? (settings.activeNetwork || 'mainnet') : undefined;
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
     useClearToastsOnLock(status.state);
     const [surfaceStateRevision, setSurfaceStateRevision] = useState(0);
@@ -375,6 +376,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
         capture: () => navContext.current.capture(),
         restore: (ctx) => navContext.current.restore(ctx),
         itemKey: navItemKey,
+        network: activeNetwork,
     });
     const unlockedView = nav.view;
     const setUnlockedView = nav.navigate;

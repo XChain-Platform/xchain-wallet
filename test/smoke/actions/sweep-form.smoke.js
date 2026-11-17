@@ -130,7 +130,8 @@ for (const shell of [
 // ---- Migrate wizard -----------------------------------------------------
 const migrate = read('packages', 'core', 'src', 'shared', 'routes', 'MigrateToBip39.jsx');
 assert.match(migrate, /onSweepChain/, 'wizard exposes the per-chain sweep step');
-assert.match(migrate, /Review Sweep/, 'done screen opens sweep review per chain');
+// The button copy lives in the migration dictionary; the wizard names its key.
+assert.match(migrate, /t\('migration\.reviewSweep'/, 'done screen opens sweep review per chain');
 assert.ok(!/doesn't\s+exist yet/.test(migrate) && !/SweepForm surface that doesn'?t/.test(migrate),
     'stale "SweepForm does not exist" claim removed (§14 rule 3)');
 

@@ -133,8 +133,8 @@ describe('ListCreateForm union type lays out every non-signing state through For
 
     it('keeps the submitted panel and its Done step inside the FormPage template', async () => {
         const container = await submitUnion(mount());
-        await waitFor(() => expect(container.textContent).toContain('Union list submitted.'));
-        const root = formPageRoot(container, byText(container, '[data-variant]', 'Union list submitted.'));
+        await waitFor(() => expect(container.textContent).toContain('Union list submitted'));
+        const root = formPageRoot(container, byText(container, 'h2', 'Union list submitted'));
         const done = Array.from(root.querySelectorAll('button')).find((b) => b.textContent.trim() === 'Done');
         expect(done).toBeTruthy();
         expect(done.closest('[role="group"], form')).toBe(root);

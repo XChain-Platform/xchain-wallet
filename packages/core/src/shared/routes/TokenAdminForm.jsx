@@ -46,6 +46,7 @@ import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
+import { invalidateTokenInfo } from '../utils/tokenInfoCache.js';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
@@ -443,6 +444,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     );
     const currentAssetInfo = assetInfoMatchesSelection ? assetInfo : null;
     const tokenInfoPending = !!chainId && !!ticker && !currentAssetInfo;
+    const tokenInfoFailed = !!currentAssetInfo?.loadError;
     const tokenLocks = currentAssetInfo?.locks || {};
     const ownerEligibility = tokenIssuerEligibility({
         tokenInfo: currentAssetInfo,
@@ -1588,7 +1590,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         && (addressesByChain[chainId] || []).filter((a) => a.role !== 'dispenser').length === 0;
     const mainSummary = ticker ? String(ticker).trim().toUpperCase() : null;
     const ModeIcon = MODE_ACTION_ICON[mode] || Icon.GearIcon;
-    const actionUnavailable = tokenInfoPending
+    const actionUnavailable = tokenInfoPending || tokenInfoFailed
         || (mode === 'mint-settings' && nothingMintEditable)
         || (mode === 'callback-settings' && callbackFieldsDisabled)
         || (mode === 'lock' && (allLocksSet || lockStateUnknown));
@@ -1600,7 +1602,13 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             // The press list leads the page, far above the button on a phone.
             errors={form}
             status={!form.hasErrors && eagerEligibilityError ? (
-                <StatusMessage variant="error">
+                <StatusMessage
+                    variant="error"
+                    recovery={tokenInfoFailed ? {
+                        label: t('common.tryAgain'),
+                        onAction: () => invalidateTokenInfo(chainId, ticker),
+                    } : undefined}
+                >
                     {eagerEligibilityError}
                 </StatusMessage>
             ) : null}

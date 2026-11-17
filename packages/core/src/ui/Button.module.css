@@ -91,6 +91,18 @@
     outline-offset: 2px;
 }
 
+/* A button can be a form control, such as a picker or reveal gate. Its invalid
+   state follows the same red border and focus ring as the other shared fields. */
+.btn[aria-invalid='true'] {
+    --xc-button-hover-border: var(--xc-danger);
+    border-color: var(--xc-danger);
+}
+
+.btn[aria-invalid='true']:focus-visible {
+    border-color: var(--xc-danger);
+    box-shadow: var(--xc-shadow-danger-focus-ring);
+}
+
 /* G130 (operator 2026-11-16): a button never looks disabled. A disabled or
    busy button keeps its variant's colours, full opacity and pointer; only its
    press and hover feedback stop. An action that cannot go ahead yet stays

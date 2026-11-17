@@ -62,8 +62,7 @@ describe('StakeDetail in the demo wallet', () => {
         mountDemo();
 
         expect(await screen.findByLabelText('50,000 XCHAIN staked')).toBeInTheDocument();
-        // 50,000 XCHAIN at the fixture's $1.25.
-        expect(screen.getByText('≈ $62,500.00')).toBeInTheDocument();
+        expect(screen.queryByText('≈ $62,500.00')).toBeNull();
         // The balance line rose this week as rewards accrued.
         expect(screen.getByLabelText(/^1W change ▲ \+/)).toBeInTheDocument();
 

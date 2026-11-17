@@ -85,7 +85,7 @@ async function reachDone(legacyByChain, newByChain) {
         const position = Number(input.labels[0].textContent.match(/\d+/)[0]);
         fireEvent.change(input, { target: { value: WORDS[position - 1] } });
     }
-    fireEvent.click(screen.getByRole('button', { name: 'Create BIP39 Wallet' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create New Wallet' }));
     await screen.findByText('New wallet ready');
     await waitFor(() => expect(messaging.getAddressesByChain).toHaveBeenCalledTimes(2));
     return { onSweepChain };

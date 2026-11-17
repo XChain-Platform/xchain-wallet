@@ -109,14 +109,23 @@ async function upload(name, text) {
 const legsOf = (messaging) => messaging.composeForConfirm.mock.calls[0][0].legs;
 
 describe('Send: Advanced tab', () => {
-    it('shows the line format as its placeholder, with example lines', async () => {
+    it('shows the translatable line format in its empty placeholder and help', async () => {
         mount();
         const textarea = await openAdvanced();
-        const lines = textarea.getAttribute('placeholder').split('\n');
-        expect(lines.length).toBeGreaterThanOrEqual(2);
-        expect(lines.length).toBeLessThanOrEqual(3);
-        for (const line of lines) expect(line.split(',')).toHaveLength(3);
+        expect(textarea).toHaveAttribute(
+            'placeholder',
+            'address, token, amount\naddress, token, amount\naddress, token, amount',
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'About Recipients' }));
+        expect(screen.getByRole('tooltip')).toHaveTextContent('One recipient per line: address, token, amount.');
         expect(screen.getByText('Upload CSV (up to 2 MB)')).toBeInTheDocument();
+    });
+
+    it('keeps prefilled recipient lines instead of showing the placeholder', async () => {
+        mount();
+        const textarea = await openAdvanced();
+        type(`${ALICE},PEPE,1`);
+        expect(textarea).toHaveValue(`${ALICE},PEPE,1`);
     });
 
     it('keeps every recipient on one visual line with horizontal scrolling', async () => {
