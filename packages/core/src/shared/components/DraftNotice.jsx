@@ -49,6 +49,7 @@ export function DraftNotice({
                     variant="success"
                     block
                     icon={<Icon.RefreshIcon />}
+                    className={styles.restore}
                     onClick={onRestore}
                 >
                     {restoreLabel ?? t('components.draftNotice.restore')}

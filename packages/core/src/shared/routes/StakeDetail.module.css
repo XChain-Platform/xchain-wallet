@@ -11,54 +11,16 @@
     min-width: 0;
 }
 
-/* The fiat value under the staked amount keeps its digits in order on a
-   right-to-left page. */
-.heroFiat {
-    direction: ltr;
-    unicode-bidi: isolate;
-}
-
-/* The chart caption doubles as its compact two-series legend. */
-.chartLegend {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--xc-space-1) var(--xc-space-2);
+/* Every staking chart hero uses the same single title above its change and total. */
+.heroTitle.heroTitle {
+    display: block;
     text-transform: none;
     letter-spacing: normal;
+    /* It names the chart, so it reads as a heading, not a caption (operator 2026-11-17). */
+    font-size: var(--xc-text-lg);
+    font-weight: 600;
+    color: var(--xc-text);
 }
-
-.positionTitle {
-    flex-basis: 100%;
-}
-
-.legendItem {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--xc-space-1);
-    white-space: nowrap;
-}
-
-.unclaimedCaption {
-    white-space: nowrap;
-}
-
-.legendDot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--xc-hero-scale-text);
-}
-
-.legendDash {
-    width: 14px;
-    border-top: 1.25px dashed var(--xc-hero-scale-text);
-}
-
-.legendDot[data-chart-tone='up'] { background: var(--xc-hero-chart-up); }
-.legendDot[data-chart-tone='down'] { background: var(--xc-hero-chart-down); }
-.legendDash[data-chart-tone='up'] { border-color: var(--xc-hero-chart-up); }
-.legendDash[data-chart-tone='down'] { border-color: var(--xc-hero-chart-down); }
 
 /* Claimable and Earned: two equal bubbles 8px apart. */
 .bubbles {

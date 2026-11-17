@@ -78,7 +78,7 @@ describe('StakeDetail bubbles', () => {
         expect(bubbles.textContent).not.toMatch(/XCHAIN/);
         // 12.4 XCHAIN at $2.73.
         expect(within(bubbles).getAllByText('≈ $33.85')).toHaveLength(2);
-        expect(screen.getByText('≈ $3,412.50')).toBeInTheDocument();
+        expect(screen.queryByText('≈ $3,412.50')).toBeNull();
     });
 
     it('hides every fiat line when no price is known', async () => {

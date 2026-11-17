@@ -102,8 +102,8 @@ const DEMO_TIP_HEIGHT = 12_500;
  * @param {() => void} [props.onOpenContract]  contract kind: open ContractDetail
  * @param {() => void} [props.onBack]  the page header's Back; an embedded panel has no header
  * @param {boolean} [props.embedded] drawn as Staking's right panel beside the stake list
- *   (the DEX's embedded MarketView): no Screen or page header of its own, the card
- *   names the stake, and Share stays with the selected stake's actions
+ *   (the DEX's embedded MarketView): no Screen or page header of its own, and Share
+ *   stays with the selected stake's actions
  * @param {object | null} [props.preloaded] embedded only: what the stake list already read
  *   for this stake (StakingList's stakePreload), so those reads are not made again
  * @param {(el: HTMLElement | null) => void} [props.measureRef] the page's body box for a
@@ -457,7 +457,6 @@ export function StakeDetail({
     if (loadError) return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
 
     const change = rangeChangeLine(series.stakedWithRewards || series.staked, { tick, fiatRate, fiatCurrency, locale });
-    const chartTone = change?.direction === 'positive' ? 'up' : change?.direction === 'negative' ? 'down' : 'unchanged';
     const formatChartAmount = (value) => `${new Intl.NumberFormat(locale, { maximumFractionDigits: 8 }).format(value)}${tick ? ` ${tick}` : ''}`;
     // An unreadable amount shows as "-", never as a guessed zero.
     const stakedText = hasPosition ? fmt(stakedAmount) : '0';
@@ -506,45 +505,15 @@ export function StakeDetail({
                 </StatusMessage>
             ) : null}
 
-            {/* The blue card, built like Home's and the coin page's: the change
-                pill, the staked amount and its fiat value, the balance line
-                behind them and the range chips along its foot. */}
+            {/* The blue card, built like Home's and the coin page's: one title,
+                the change pill, the staked amount, the balance line behind them
+                and the range chips along its foot. */}
             <div className={`${homeTabsStyles.heroStack} ${homeTabsStyles.heroStackWithChart}`}>
-                {/* The page header names the stake on its own page; in Staking's
-                    right panel the card's caption does, as the market card
-                    names its pair beside the DEX list. */}
                 <section className={heroStyles.hero} aria-labelledby={captionId}>
-                    <div className={heroStyles.row}>
-                        <span id={captionId} className={`${heroStyles.label} ${local.chartLegend}`}>
-                            {embedded ? <span className={local.positionTitle}>{title}</span> : null}
-                            <span className={local.legendItem}>
-                                <span className={local.legendDot} data-chart-tone={chartTone} aria-hidden="true" />
-                                Staked
-                            </span>
-                            {series.stakedWithRewards ? (
-                                <span className={local.legendItem}>
-                                    <span className={local.legendDash} data-chart-tone={chartTone} aria-hidden="true" />
-                                    Staked + rewards
-                                </span>
-                            ) : isValidator && claimsKnown && compareDecimalStrings(pending, '0') === 1 && !balanceHidden ? (
-                                <span className={local.unclaimedCaption}>{`+${fmt(pending)} ${tick || STAKING_TICK} unclaimed`}</span>
-                            ) : null}
-                        </span>
-                        <div
-                            className={heroStyles.amount}
-                            aria-label={balanceHidden ? 'Balance hidden' : `${stakedText} ${tick} staked`.replace(/\s+/g, ' ')}
-                        >
-                            {balanceHidden ? (
-                                <span className={heroStyles.hidden}>•••••</span>
-                            ) : (
-                                <>
-                                    <span className={heroStyles.amountValue}>{stakedText}</span>
-                                    <span className={heroStyles.amountCode}>{tick ? `${tick} staked` : 'staked'}</span>
-                                </>
-                            )}
-                        </div>
-                    </div>
-                    <div className={heroStyles.meta} role="group" aria-label="Stake summary">
+                    <span id={captionId} className={`${heroStyles.label} ${local.heroTitle}`} data-stake-hero-line="title">
+                        Staked + rewards
+                    </span>
+                    <div className={heroStyles.meta} role="group" aria-label="Stake summary" data-stake-hero-line="change">
                         <span className={heroStyles.metaLeft}>
                             {balanceHidden ? (
                                 <span className={`${heroStyles.hidden} ${heroStyles.hiddenChange}`} aria-label="Balance hidden">••••</span>
@@ -561,11 +530,20 @@ export function StakeDetail({
                             )}
                         </span>
                     </div>
-                    {stakedFiat && !balanceHidden ? (
-                        <div className={`${tokenDetailStyles.cardSecondary} ${local.heroFiat}`}>
-                            <span>{`≈ ${stakedFiat}`}</span>
-                        </div>
-                    ) : null}
+                    <div
+                        className={heroStyles.amount}
+                        aria-label={balanceHidden ? 'Balance hidden' : `${stakedText} ${tick} staked`.replace(/\s+/g, ' ')}
+                        data-stake-hero-line="total"
+                    >
+                        {balanceHidden ? (
+                            <span className={heroStyles.hidden}>•••••</span>
+                        ) : (
+                            <>
+                                <span className={heroStyles.amountValue}>{stakedText}</span>
+                                <span className={heroStyles.amountCode}>{tick ? `${tick} staked` : 'staked'}</span>
+                            </>
+                        )}
+                    </div>
                 </section>
                 <section
                     className={`${portfolioChartStyles.wrap} ${portfolioChartStyles.behind}${balanceHidden ? ` ${portfolioChartStyles.behindHidden}` : ''}`}

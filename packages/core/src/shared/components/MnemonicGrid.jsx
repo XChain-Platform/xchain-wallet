@@ -41,14 +41,18 @@ export const PLACEHOLDER_WORDS = Object.freeze([
  * @param {boolean} [props.revealDisabled]
  * @param {boolean} [props.revealLoading]
  * @param {boolean} [props.hideRevealAction] the host draws its own Reveal button; the concealed area itself then asks the host to reveal when tapped (needs onRevealRequest)
+ * @param {string} [props.revealButtonId] explicit id when the Reveal action participates in form validation
+ * @param {import('react').Ref<HTMLButtonElement>} [props.revealButtonRef]
+ * @param {import('react').ReactNode} [props.revealError] error shown under and described by the Reveal action
  */
-export function MnemonicGrid({ mnemonic, variant = 'full', startRevealed = false, onRevealedChange, onRevealRequest, revealDisabled = false, revealLoading = false, hideRevealAction = false }) {
+export function MnemonicGrid({ mnemonic, variant = 'full', startRevealed = false, onRevealedChange, onRevealRequest, revealDisabled = false, revealLoading = false, hideRevealAction = false, revealButtonId, revealButtonRef, revealError }) {
     // A recovery phrase on screen is a copy of the wallet: hold the screen
     // guard for as long as the grid is mounted, whatever screen hosts it.
     useProtectedScreen();
     const mnemonicKey = useMemo(() => Symbol('mnemonic'), [mnemonic]);
     const [revealedKey, setRevealedKey] = useState(null);
     const contentId = useId();
+    const revealErrorId = revealError ? `${revealButtonId || contentId}-error` : undefined;
     const words = mnemonic.trim().split(/\s+/);
     const gridClass = variant === 'small' ? styles.gridPopup : styles.gridFull;
     // startRevealed shows the words at once (the page already took the password).
@@ -101,16 +105,25 @@ export function MnemonicGrid({ mnemonic, variant = 'full', startRevealed = false
                     {hideRevealAction ? null : (
                     <div className={styles.revealAction}>
                         <Button
+                            id={revealButtonId}
+                            ref={revealButtonRef}
                             variant="secondary"
                             size="sm"
                             aria-controls={contentId}
                             aria-expanded="false"
+                            aria-invalid={revealError ? 'true' : undefined}
+                            aria-describedby={revealErrorId}
                             disabled={revealDisabled}
                             loading={revealLoading}
                             onClick={() => (typeof onRevealRequest === 'function' ? onRevealRequest() : setRevealedKey(mnemonicKey))}
                         >
                             {t('settings.backup.revealRecoveryPhraseAction')}
                         </Button>
+                        {revealError ? (
+                            <span id={revealErrorId} className={styles.revealError} role="alert">
+                                {revealError}
+                            </span>
+                        ) : null}
                     </div>
                     )}
                 </div>

@@ -154,6 +154,11 @@ label.root {
     border-color: var(--xc-danger);
 }
 
+.invalid .label,
+.invalid .labelLine {
+    color: var(--xc-danger-fg);
+}
+
 .invalid .input:focus-visible + .box {
     border-color: var(--xc-danger);
     box-shadow: var(--xc-shadow-danger-focus-ring);

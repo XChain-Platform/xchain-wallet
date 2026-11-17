@@ -89,7 +89,6 @@
         "packages/core/src/shared/components/settings/HideSmallBalancesPage.module.css | .tag": "A small outlined chip (the Small tag on a balance row), not a card."
     },
     "dashed": {
-        "packages/core/src/shared/routes/StakeDetail.module.css | .legendDash | border-top: 1.25px dashed var(--xc-hero-scale-text)": "The ruled staking hero uses a dashed second series for staked plus unclaimed rewards."
     },
     "overrides": {
         "packages/core/src/shared/components/BetMarketCard.module.css | .card | padding": "The compact Prediction markets card takes an 8px inset so several fit side by side in the card grid (operator ruling 2026-11-13, Prediction markets walk).",
