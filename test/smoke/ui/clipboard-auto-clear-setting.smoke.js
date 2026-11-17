@@ -27,12 +27,15 @@ const shared = join(core, 'src', 'shared');
 // --- 1. Schema exposes bounds + default + tolerant validation ------------
 
 const settingsSchema = readFileSync(join(schemas, 'settings.js'), 'utf8');
+const startupSettings = readFileSync(join(schemas, 'settingsStartup.js'), 'utf8');
 assert.ok(/CLIPBOARD_AUTO_CLEAR_MIN\s*=\s*0/.test(settingsSchema),
     'schema exports CLIPBOARD_AUTO_CLEAR_MIN = 0');
-assert.ok(/CLIPBOARD_AUTO_CLEAR_MAX\s*=\s*600/.test(settingsSchema),
+assert.ok(/CLIPBOARD_AUTO_CLEAR_MAX\s*=\s*600/.test(startupSettings),
     'schema exports CLIPBOARD_AUTO_CLEAR_MAX = 600');
-assert.ok(/CLIPBOARD_AUTO_CLEAR_DEFAULT\s*=\s*60/.test(settingsSchema),
+assert.ok(/CLIPBOARD_AUTO_CLEAR_DEFAULT\s*=\s*60/.test(startupSettings),
     'schema exports CLIPBOARD_AUTO_CLEAR_DEFAULT = 60');
+assert.ok(/export\s*\{[\s\S]*CLIPBOARD_AUTO_CLEAR_DEFAULT[\s\S]*CLIPBOARD_AUTO_CLEAR_MAX[\s\S]*\}/.test(settingsSchema),
+    'persisted settings schema re-exports the startup clipboard constants');
 assert.ok(/clipboardAutoClearSeconds:\s*CLIPBOARD_AUTO_CLEAR_DEFAULT/.test(settingsSchema),
     'createDefaultSettings seeds clipboardAutoClearSeconds');
 // Tolerant validation: undefined OK, integer in [0, 600] OK, anything else fails.

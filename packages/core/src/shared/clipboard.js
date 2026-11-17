@@ -13,7 +13,7 @@
 // copies use browser APIs. Sensitive writes on every path share the selected
 // expiry and cancel the clear when the clipboard changes first.
 
-import { CLIPBOARD_AUTO_CLEAR_DEFAULT, CLIPBOARD_AUTO_CLEAR_MAX } from '../schemas/settings.js';
+import { CLIPBOARD_AUTO_CLEAR_DEFAULT, CLIPBOARD_AUTO_CLEAR_MAX } from '../schemas/settingsStartup.js';
 import { getNativePlugin, isNativeShell } from './nativeShell.js';
 
 /** The plugin name registered natively (`jsName` / `@CapacitorPlugin(name=)`). */

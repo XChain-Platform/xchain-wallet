@@ -56,13 +56,16 @@ import {
 // The demo-exit confirm opens only on a tap, so it and its styles load on demand.
 import { DemoExitConfirmOnDemand as DemoExitConfirm } from '../components/onDemandOverlays.js';
 import { useLockedAutopayNotice } from '../components/LockedAutopayNotice.jsx';
-import { useIdlePreload } from '../utils/onDemandComponent.js';
+import { onDemandComponent, openWhenLoaded, useIdlePreload } from '../utils/onDemandComponent.js';
 import { useNativeExitRoot } from '../hooks/useNativeExitRoot.js';
-import { ForgotPassword } from './ForgotPassword.jsx';
 import styles from './Locked.module.css';
 import { t } from '../../i18n/index.js';
 
 const BIOMETRIC_PASSWORD_FALLBACK = 'Biometric unlock is unavailable. Use your wallet password.';
+const ForgotPassword = onDemandComponent(
+    () => import('./ForgotPassword.jsx'),
+    'ForgotPassword',
+);
 
 /**
  * Unlock screen. Reads the shell from context and picks the matching
@@ -239,7 +242,7 @@ export function Locked({ onUnlocked, lockReason = null }) {
     // The unlock screen is the bottom of the app, so Android Back leaves it
     // the way Home does.
     useNativeExitRoot(true, true);
-    useIdlePreload(DemoExitConfirm);
+    useIdlePreload(DemoExitConfirm, ForgotPassword);
 
     useEffect(() => {
         inputRef.current?.focus();
@@ -821,7 +824,7 @@ export function Locked({ onUnlocked, lockReason = null }) {
                                 variant="secondary"
                                 block
                                 icon={<Icon.InfoIcon />}
-                                onClick={() => setForgotOpen(true)}
+                                onClick={() => openWhenLoaded(ForgotPassword, () => setForgotOpen(true))}
                             >
                                 {t('locked.forgotPassword')}
                             </Button>
