@@ -11,8 +11,14 @@
 import { randomBytes } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { previewMultipartQuotes } from '../../../packages/core/src/flows/multipartQuotePreview.js';
+import {
+    MULTIPART_FILE_MAX_PARTS,
+    multipartPartCapacity,
+} from '../../../packages/core/src/flows/fileSizeLimits.js';
 
-const STANDARD_MAX_BYTES = 531_750_990;
+// The Standard cap sizes every part for the widest index a 65,535-part file uses.
+const STANDARD_MAX_BYTES = MULTIPART_FILE_MAX_PARTS
+    * multipartPartCapacity('STANDARD', String(MULTIPART_FILE_MAX_PARTS - 1).length);
 
 class LengthStub extends Uint8Array {
     get byteLength() { return STANDARD_MAX_BYTES + 1; }
