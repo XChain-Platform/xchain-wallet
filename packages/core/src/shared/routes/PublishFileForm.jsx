@@ -73,6 +73,7 @@ import { useFormMultipartUpload } from '../hooks/useFormMultipartUpload.js';
 import { MultipartUploadSection } from '../components/MultipartUploadSection.jsx';
 import { multipartQuoteLanes } from '../../flows/multipartQuoteLanes.js';
 import { multipartSupportForMethod } from '../../flows/multipartMethodSupport.js';
+import { FALLBACK_FILE_NAME } from '../../flows/fileSizeLimits.js';
 import { multipartPublishResult } from '../../flows/multipartPublishResult.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -106,7 +107,7 @@ function safeMultipartLanes(descriptor) {
 function usePublicMultipartMethod({
     descriptor, fromAddress, isWatcherMode, file, title, memo, feeEstimate,
 }) {
-    const meta = { name: file?.name || 'file.bin', type: file?.type || 'application/octet-stream', title, memo };
+    const meta = { name: file?.name || FALLBACK_FILE_NAME, type: file?.type || 'application/octet-stream', title, memo };
     const taprootCap = flowsLib.maxPublicFileBytes(meta, uploadMethodCeilingOpts(UPLOAD_METHOD_TAPROOT));
     const standardCap = flowsLib.maxPublicFileBytes(meta, {});
     const singleReasons = {
@@ -369,7 +370,7 @@ export function PublishFileForm({ walletId, onBack }) {
         : { supported: false, reason: 'signer' };
     const selectedSingleCap = flowsLib.maxPublicFileBytes(
         {
-            name: fileMeta?.name || 'file.bin',
+            name: fileMeta?.name || FALLBACK_FILE_NAME,
             type: fileMeta?.type || 'application/octet-stream',
             title,
             memo,

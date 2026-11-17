@@ -72,7 +72,7 @@ import { fileUploadStart } from '../../flows/fileUploadStart.js';
 import { multipartQuoteLanes } from '../../flows/multipartQuoteLanes.js';
 import { multipartResumeRequestBuilder } from '../../flows/multipartResumeRequest.js';
 import { multipartSupportForMethod } from '../../flows/multipartMethodSupport.js';
-import { MULTIPART_FILE_MAX_BYTES } from '../../flows/fileSizeLimits.js';
+import { FALLBACK_FILE_NAME, MULTIPART_FILE_MAX_BYTES } from '../../flows/fileSizeLimits.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/publishFile.js';
@@ -407,7 +407,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
     const { isWatcherMode } = useWalletMode();
     const uploadMeta = useMemo(() => ({
-        name: fileMeta?.name || 'file.bin',
+        name: fileMeta?.name || FALLBACK_FILE_NAME,
         type: fileMeta?.type || 'application/octet-stream',
         title,
         memo,

@@ -479,8 +479,14 @@ describe('translations', () => {
             ['accountPicker.title', 'hardwareConnect.accounts.accountsTab', 'hardwareConnect.step.accounts'],
             // The Action detail Verification field and About's Verification section title.
             ['actionDetail.field.verification', 'settings.about.sectionVerification'],
-            // The Action detail status step a transaction has passed, the BROADCAST action's name on Manage token and its wallet menu row.
-            ['actionDetail.step.broadcast', 'routes.manageToken.broadcast', 'walletMenu.row.broadcast'],
+            // The Action detail status step a transaction has passed, the transaction timeline label for the same stage, and the BROADCAST wallet menu row.
+            ['actionDetail.step.broadcast', 'txTimeline.broadcast.label', 'walletMenu.row.broadcast'],
+            // The Action detail step and the transaction timeline label for a processed transaction.
+            ['actionDetail.step.processed', 'txTimeline.processed.label'],
+            // The Action detail step and the transaction timeline label for a signed transaction.
+            ['actionDetail.step.signed', 'txTimeline.signed.label'],
+            // A finished Action detail step and a finished transaction timeline stage.
+            ['actionDetail.stepState.done', 'txTimeline.state.complete'],
             // The address detail's Actions heading reuses the menu group, token page heading and tab, and multisig start label.
             ['addressList.detail.actions', 'multisig.start.actionsLabel', 'routes.manageToken.actions', 'tokenDetail.tabs.actions', 'walletMenu.group.actions'],
             // The address detail's Balance row and Manage token's Balance row.
@@ -561,8 +567,8 @@ describe('translations', () => {
             ['components.leftNav.groupTrade', 'palette.category.trade', 'walletMenu.group.trade'],
             // The side menu, Settings and menu model share the Wallet group label.
             ['components.leftNav.groupWallet', 'settings.thisWallet.wallet', 'walletMenu.group.wallet'],
-            // The order book's size column and the Publish File review's size row.
-            ['components.orderbookPanel.size', 'publishFile.details.size'],
+            // The order book's size column and its size field label, and the Publish File review's size row.
+            ['components.orderbookPanel.size', 'components.orderbookPanel.sizeLabel', 'publishFile.details.size'],
             // The order panel's Market label and the token page's Market section.
             ['components.placeOrderPanel.market', 'tokenMarket.label'],
             // The order panel's price field and the token page's price row.
@@ -628,6 +634,8 @@ describe('translations', () => {
             ['governance.statusFilter.label', 'history.filters.statusHeader', 'parallelComposer.statusPrefix'],
             // Open is the status label and the developer folder action.
             ['governance.statusFilter.open', 'settings.developer.open'],
+            // A governance proposal that has not opened and a transaction timeline stage not reached yet.
+            ['governance.statusFilter.pending', 'txTimeline.state.notStarted'],
             // The Add Wallet button on the hardware connect flow and on the wallet picker.
             ['hardwareConnect.accounts.addWallet', 'walletPicker.add'],
             // A found account's balance line and the faucet's amount line: the amount and its ticker.
@@ -645,16 +653,14 @@ describe('translations', () => {
             // The vendor brand names on the hardware connect flow and on Send's device line.
             ['hardwareConnect.vendor.ledger', 'send.device.ledger'],
             ['hardwareConnect.vendor.trezor', 'send.device.trezor'],
-            // The History status filter header and the parallel composer's status-pill label prefix.
-            ['history.filters.statusHeader', 'parallelComposer.statusPrefix'],
-            // The History status chip and the timeline stage heading for a confirmed transaction.
-            ['history.status.confirmed', 'txTimeline.confirmed.label'],
-            // The History status chip and the timeline label for a transaction that failed.
-            ['history.status.failed', 'txTimeline.mempool.failedLabel'],
             // Saving a custom notification sound and a contact share the action label.
             ['history.contact.save', 'settings.notifications.saveSound'],
             // Loading the History page and the token page's History tab.
             ['history.loading', 'tokenDetail.history.loading'],
+            // The History status chip and the timeline stage heading for a confirmed transaction.
+            ['history.status.confirmed', 'txTimeline.confirmed.label'],
+            // The History status chip and the timeline label for a transaction that failed.
+            ['history.status.failed', 'txTimeline.mempool.failedLabel'],
             // The History page, its menu row and the token page's History tab.
             ['history.title', 'tokenDetail.tabs.history', 'walletMenu.row.history'],
             // The wallet menu reuses the label the same destination carries elsewhere.
@@ -713,8 +719,6 @@ describe('translations', () => {
             ['palette.createPublishFile.title', 'publishFile.formLabel', 'walletMenu.row.publishFile'],
             ['palette.createToken.title', 'walletMenu.row.createToken'],
             ['palette.navBetting.title', 'walletMenu.row.betting'],
-            // The pending detail headline for a transaction replaced elsewhere and the timeline label for one the user replaced.
-            ['pending.detail.replacedElsewhere', 'txTimeline.mempool.replacedLabel'],
             // The wallet menu reuses the label the same destination carries elsewhere.
             ['palette.navBrowseDispensers.title', 'walletMenu.row.browseDispensers'],
             ['palette.navMySwaps.title', 'walletMenu.row.mySwaps'],
@@ -722,6 +726,8 @@ describe('translations', () => {
             ['palette.tradeOrder.title', 'walletMenu.row.createOrder'],
             ['palette.tradeXchainOrder.title', 'walletMenu.row.crossChainOrder'],
             ['palette.tradeXchainSwap.title', 'walletMenu.row.crossChainSwap'],
+            // The pending detail headline for a transaction replaced elsewhere and the timeline label for one the user replaced.
+            ['pending.detail.replacedElsewhere', 'txTimeline.mempool.replacedLabel'],
             // The command palette's About entry and the About page's title name the same destination.
             ['routes.addressList.about', 'settings.about.pageTitle'],
             // An address list row's Hidden state and the Hide Small Balances preview's tag on a folded balance.
