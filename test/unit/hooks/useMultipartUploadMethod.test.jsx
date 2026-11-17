@@ -14,8 +14,6 @@ import { describe, expect, it, vi } from 'vitest';
 import {
     useMultipartUploadMethod,
 } from '../../../packages/core/src/shared/hooks/useMultipartUploadMethod.js';
-import { planMultipartFile } from '../../../packages/core/src/flows/multipartFilePlan.js';
-import { previewMultipartQuotes } from '../../../packages/core/src/flows/multipartQuotePreview.js';
 import {
     bitcoinDescriptors,
     dogecoinDescriptors,
@@ -30,18 +28,6 @@ class LengthStub extends Uint8Array {
     get byteLength() { return STANDARD_MAX_BYTES + 1; }
 }
 
-async function standardCapPlanner(bytes, meta, options) {
-    if (options.carrier === 'standard' && bytes.byteLength > STANDARD_MAX_BYTES) {
-        throw Object.assign(new RangeError('stored bytes require too many multipart pieces'), {
-            code: 'TOO_MANY_PARTS',
-        });
-    }
-    return planMultipartFile(bytes, meta, options);
-}
-
-function standardCapPreview(input) {
-    return previewMultipartQuotes({ ...input, planner: standardCapPlanner });
-}
 const LANES = Object.freeze({
     envelope: Object.freeze({ type: 'envelope', outputFloor: 546, revealPad: false }),
     standard: Object.freeze({ type: 'standard', outputFloor: 546 }),
@@ -96,7 +82,7 @@ async function settled(result) {
 describe('real multipart upload method preview', () => {
     it('shows the Taproot quote and the Standard multipart cap', async () => {
         const bytes = new LengthStub(randomBytes(400_000));
-        const hook = mount(props({ bytes, preview: standardCapPreview }));
+        const hook = mount(props({ bytes }));
         await settled(hook.result);
         expect(hook.result.current.options.taproot).toMatchObject({
             reason: null, multipart: true, summary: '2 parts, 7 transactions',

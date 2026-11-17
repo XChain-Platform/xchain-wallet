@@ -12,26 +12,11 @@ import { randomBytes } from 'node:crypto';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { useMultipartQuotePreview } from '../../../packages/core/src/shared/hooks/useMultipartQuotePreview.js';
-import { planMultipartFile } from '../../../packages/core/src/flows/multipartFilePlan.js';
-import { previewMultipartQuotes } from '../../../packages/core/src/flows/multipartQuotePreview.js';
 
 const STANDARD_MAX_BYTES = 531_750_990;
 
 class LengthStub extends Uint8Array {
     get byteLength() { return STANDARD_MAX_BYTES + 1; }
-}
-
-async function standardCapPlanner(bytes, meta, options) {
-    if (options.carrier === 'standard' && bytes.byteLength > STANDARD_MAX_BYTES) {
-        throw Object.assign(new RangeError('stored bytes require too many multipart pieces'), {
-            code: 'TOO_MANY_PARTS',
-        });
-    }
-    return planMultipartFile(bytes, meta, options);
-}
-
-function standardCapPreview(input) {
-    return previewMultipartQuotes({ ...input, planner: standardCapPlanner });
 }
 
 const methods = ['taproot', 'standard'];
@@ -84,7 +69,7 @@ async function expectSettled(result) {
 describe('real multipart quote previews', () => {
     it('maps a large file to a taproot summary and Standard cap', async () => {
         const bytes = new LengthStub(randomBytes(400_000));
-        const { result } = mount(props({ bytes, preview: standardCapPreview }));
+        const { result } = mount(props({ bytes }));
         await expectSettled(result);
         expect(result.current.options.taproot.summary).toBe('2 parts, 7 transactions');
         expect(result.current.options.taproot.fee).toEqual(expect.any(Number));

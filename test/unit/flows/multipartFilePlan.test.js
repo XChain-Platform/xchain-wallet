@@ -70,6 +70,20 @@ describe('documentation multipart vectors', () => {
 });
 
 describe('multipart planning', () => {
+    it('refuses an original that exceeds the Standard part ceiling before copying it', async () => {
+        const maxBytes = MULTIPART_STANDARD_PART_CAPACITY * MULTIPART_FILE_MAX_PARTS;
+        class LengthStub extends Uint8Array {
+            get byteLength() { return maxBytes + 1; }
+        }
+        await expect(planMultipartFile(new LengthStub(1), {}, { carrier: 'standard' }))
+            .rejects.toMatchObject({
+                code: 'TOO_MANY_PARTS',
+                totalParts: MULTIPART_FILE_MAX_PARTS + 1,
+                maxParts: MULTIPART_FILE_MAX_PARTS,
+                capacity: MULTIPART_STANDARD_PART_CAPACITY,
+            });
+    });
+
     it('uses exact capacities and rebalances a one-byte final slice', async () => {
         const envelope = await planMultipartFile(new Uint8Array(389_921));
         const standard = await planMultipartFile(new Uint8Array(8_115), {}, { carrier: 'STANDARD' });
