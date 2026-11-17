@@ -69,9 +69,23 @@ function latin1Of(bytes) {
     return out;
 }
 
+async function readPickedFile(file) {
+    if (typeof file.arrayBuffer === 'function') {
+        return new Uint8Array(await file.arrayBuffer());
+    }
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(reader.error || new Error('Could not read that file.'));
+        reader.onload = () => reader.result instanceof ArrayBuffer
+            ? resolve(new Uint8Array(reader.result))
+            : reject(new Error('Could not read that file.'));
+        reader.readAsArrayBuffer(file);
+    });
+}
+
 /** The compiled action-plus-file push of a public FILE upload, for the Upload method fees. */
 function publicUploadBytes(file, { title, memo }) {
-    return publicFileCompiledBytes({ name: file.name, type: file.type, title, memo }, file.bytes.length);
+    return publicFileCompiledBytes({ name: file.name, type: file.type, title, memo }, file.size);
 }
 
 function safeMultipartLanes(descriptor) {
@@ -92,13 +106,13 @@ function usePublicMultipartMethod({
     const singleReasons = {
         taproot: taprootUnavailableReason({ descriptor, fromAddress, isWatcherMode }),
         standard: standardUnavailableReason({
-            fileBytes: file?.bytes?.length ?? null,
+            fileBytes: file?.size ?? null,
             standardCap,
         }),
     };
     const singleFits = {
-        taproot: !file || file.bytes.length <= taprootCap,
-        standard: !file || file.bytes.length <= standardCap,
+        taproot: !file || file.size <= taprootCap,
+        standard: !file || file.size <= standardCap,
     };
     const rate = feeEstimate?.unit
         ? displayRateToPerByte(feeEstimate.unit, Number(feeEstimate.rateValue))
@@ -165,10 +179,10 @@ function publishReviewStop({
     const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
     if (feeStop) return feeStop;
     const cap = publicCapFor(fileMeta.name, fileMeta.type);
-    if (fileMeta.bytes.length > cap) {
+    if (fileMeta.size > cap) {
         return {
             formError: `With this title/memo the on-chain ceiling is ${cap.toLocaleString()} bytes `
-                + `and the file is ${fileMeta.bytes.length.toLocaleString()}. Shorten the title or memo.`,
+                + `and the file is ${fileMeta.size.toLocaleString()}. Shorten the title or memo.`,
         };
     }
     return ackForever ? null : { formError: 'Confirm you understand the publish is permanent.' };
@@ -457,7 +471,7 @@ export function PublishFileForm({ walletId, onBack }) {
         const reply = multipartUpload.result;
         if (!reply) return;
         try {
-            const originalBytes = fileMeta?.bytes?.length || reply.multipart?.total_bytes;
+            const originalBytes = fileMeta?.size || reply.multipart?.total_bytes;
             setResult(multipartPublishResult(reply, { originalBytes }));
             setStage('done');
         } catch (error) {
@@ -489,28 +503,18 @@ export function PublishFileForm({ walletId, onBack }) {
             );
             return;
         }
-        const reader = new FileReader();
-        reader.onload = () => {
-            if (readId !== fileReadIdRef.current) return;
-            if (!(reader.result instanceof ArrayBuffer)) {
-                setFormError('Could not read that file.');
-                return;
-            }
-            const bytes = new Uint8Array(reader.result);
-            if (bytes.length === 0) { setFormError('That file is empty.'); return; }
-            if (bytes.length > cap) {
-                setFormError(
-                    `That file is ${bytes.length.toLocaleString()} bytes; with this metadata the `
-                    + `on-chain ceiling is ${cap.toLocaleString()} bytes.`,
-                );
-                return;
-            }
-            setFileMeta({ name: file.name || 'file', type, bytes });
+        const picked = {
+            name: file.name || 'file', type, size: file.size, file, bytes: null,
         };
-        reader.onerror = () => {
+        if (file.size > selectedSingleCap) {
+            setFileMeta(picked);
+            return;
+        }
+        readPickedFile(file).then((bytes) => {
+            if (readId === fileReadIdRef.current) setFileMeta({ ...picked, bytes });
+        }).catch(() => {
             if (readId === fileReadIdRef.current) setFormError('Could not read that file.');
-        };
-        reader.readAsArrayBuffer(file);
+        });
     }
 
     // §5.6: a publish is permanent and a chunked FILE is among the largest
@@ -532,8 +536,8 @@ export function PublishFileForm({ walletId, onBack }) {
 
     // Compose, tamper-check and pre-flight run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
-    async function openConfirmScreen() {
-        const rawData = latin1Of(fileMeta.bytes);
+    async function openConfirmScreen(picked = fileMeta) {
+        const rawData = latin1Of(picked.bytes);
         const from = {
             address: fromAddress.address,
             publicKey: fromAddress.publicKey,
@@ -545,7 +549,7 @@ export function PublishFileForm({ walletId, onBack }) {
         // The same params flows/fileAction.js builds, so the previewed and
         // the submitted composition cannot drift (PC-28).
         const params = flowsLib.fileActionParams({
-            name: fileMeta.name, type: fileMeta.type, title, memo,
+                    name: picked.name, type: picked.type, title, memo,
         });
         setSubmitError(null);
         try {
@@ -568,8 +572,8 @@ export function PublishFileForm({ walletId, onBack }) {
                     walletId,
                     chainId,
                     from,
-                    name: fileMeta.name,
-                    type: fileMeta.type,
+                    name: picked.name,
+                    type: picked.type,
                     title: title.trim() || undefined,
                     memo: memo.trim() || undefined,
                     rawData,
@@ -608,19 +612,29 @@ export function PublishFileForm({ walletId, onBack }) {
         if (reviewStop) { setFormError(reviewStop.formError); return; }
         setFormError(null);
         setSubmitError(null);
-        if (fileMeta.bytes.length <= selectedSingleCap) {
-            if (singleEncode) { openConfirmScreen(); return; }
+        if (fileMeta.size <= selectedSingleCap) {
+            let picked = fileMeta;
+            if (!picked.bytes) {
+                try {
+                    picked = { ...picked, bytes: await readPickedFile(picked.file) };
+                    setFileMeta(picked);
+                } catch {
+                    setFormError('Could not read that file.');
+                    return;
+                }
+            }
+            if (singleEncode) { openConfirmScreen(picked); return; }
             setStage('review');
             return;
         }
         try {
             const started = await multipartUpload.startFile({
-                bytes: fileMeta.bytes,
+                file: fileMeta.file,
                 meta: { name: fileMeta.name, type: fileMeta.type, title, memo },
             });
             if (started.path === 'multipart') {
                 setResult(multipartPublishResult(started.reply, {
-                    originalBytes: fileMeta.bytes.length,
+                    originalBytes: fileMeta.size,
                 }));
                 setStage('done');
                 return;
@@ -769,7 +783,7 @@ export function PublishFileForm({ walletId, onBack }) {
         // because with the default ON neither asking nor not asking tells you what
         // actually happened (§5.2 keeps the compressed form only when it is smaller).
         const storedLine = flowsLib.storedSizeLine(
-            flowsLib.storedSizeSummary(result?.compression, fileMeta?.bytes?.length),
+            flowsLib.storedSizeSummary(result?.compression, fileMeta?.size),
         );
         if (result?.psbtHex && !result?.txid) {
             return wrap(
@@ -881,7 +895,7 @@ export function PublishFileForm({ walletId, onBack }) {
                     ) : null}
                     <dt className={styles.detailsLabel}>File</dt>
                     <dd className={styles.detailsValue}>
-                        {fileMeta?.name.trim()} · {fileMeta?.bytes.length.toLocaleString()} bytes · {fileMeta?.type}
+                        {fileMeta?.name.trim()} · {fileMeta?.size.toLocaleString()} bytes · {fileMeta?.type}
                     </dd>
                     {title.trim() ? (
                         <>
@@ -1152,7 +1166,7 @@ export function PublishFileForm({ walletId, onBack }) {
                                 <dt className={styles.detailsLabel}>Type</dt>
                                 <dd className={styles.detailsValue}>{fileMeta.type}</dd>
                                 <dt className={styles.detailsLabel}>Size</dt>
-                                <dd className={styles.detailsValue}>{fileMeta.bytes.length.toLocaleString()} bytes</dd>
+                                <dd className={styles.detailsValue}>{fileMeta.size.toLocaleString()} bytes</dd>
                             </dl>
                         </>
                     ) : null}

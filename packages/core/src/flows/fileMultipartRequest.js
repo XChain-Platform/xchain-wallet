@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { binaryStringOf } from './filePieceEncoderOpts.js';
+import { assertFileRef } from './fileRefSource.js';
 
 const META_FIELDS = ['name', 'type', 'title', 'memo'];
 const ISSUE_ACTION_INDEX = /^[1-9]\d*$/;
@@ -50,12 +51,19 @@ function requestGate(gate) {
 }
 
 function validateInputs(args) {
-    const { walletId, chainId, from, bytes, path, resumeId, rate, existingKeyHash } = args;
+    const {
+        walletId, chainId, from, bytes, file, fileRef, path, resumeId, rate, existingKeyHash,
+    } = args;
     requireText(walletId, 'walletId');
     requireText(chainId, 'chainId');
     requireText(from?.address, 'from.address');
     requireText(from?.publicKey, 'from.publicKey');
-    if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0) invalid('bytes');
+    const hasBytes = bytes instanceof Uint8Array && bytes.byteLength > 0;
+    const hasFile = Boolean(file && Number.isSafeInteger(file.size) && file.size > 0
+        && typeof file.slice === 'function');
+    if (!hasBytes && !hasFile) invalid(hasOwn(args, 'file') ? 'file' : 'bytes');
+    if (hasBytes && hasFile) invalid('file');
+    if (hasFile) assertFileRef(fileRef ?? { kind: 'inline', blob: file });
     if (path?.path !== 'multipart') invalid('path');
     if (resumeId !== undefined) requireText(resumeId, 'resumeId');
     if (rate !== undefined && (!Number.isFinite(rate) || rate <= 0)) invalid('rate');
@@ -65,10 +73,46 @@ function validateInputs(args) {
     if (existingKeyHash !== undefined && args.gate == null) invalid('existingKeyHash');
 }
 
+let extensionBlobStorePromise = null;
+
+function extensionRuntime() {
+    return globalThis.chrome?.runtime?.id && typeof globalThis.chrome.runtime.sendMessage === 'function';
+}
+
+async function defaultExtensionBlobStore() {
+    if (!extensionRuntime()) return null;
+    if (!extensionBlobStorePromise) {
+        extensionBlobStorePromise = import('../../../extension/src/storage/pendingFileBlobs.js')
+            .then(({ createPendingFileBlobs }) => createPendingFileBlobs())
+            .catch((error) => {
+                extensionBlobStorePromise = null;
+                throw error;
+            });
+    }
+    return extensionBlobStorePromise;
+}
+
+export async function fileRefFor(file, { blobStore, key } = {}) {
+    if (!file || !Number.isSafeInteger(file.size) || file.size <= 0
+        || typeof file.slice !== 'function') {
+        invalid('file');
+    }
+    const store = blobStore === undefined ? await defaultExtensionBlobStore() : blobStore;
+    if (store == null) return { kind: 'inline', blob: file };
+    if (typeof store.put !== 'function') invalid('blobStore');
+    if (typeof key !== 'string' || key.length === 0) invalid('fileRef.key');
+    await store.put(key, file);
+    return { kind: 'blob', key };
+}
+
+function legacyRawData(bytes) {
+    return binaryStringOf(bytes);
+}
+
 export function fileMultipartRequest(args = {}) {
     validateInputs(args);
     const {
-        walletId, chainId, from, bytes, meta, path, linkTarget, gate,
+        walletId, chainId, from, bytes, file, fileRef, meta, path, linkTarget, gate,
         resumeId, rate, existingKeyHash,
     } = args;
     return {
@@ -76,7 +120,9 @@ export function fileMultipartRequest(args = {}) {
         chainId,
         sourceAddress: from.address,
         from: { ...from, sourceAddress: from.address },
-        rawData: binaryStringOf(bytes),
+        ...(file ? { fileRef: fileRef ?? { kind: 'inline', blob: file } } : {
+            rawData: legacyRawData(bytes),
+        }),
         meta: requestMeta(meta),
         lane: path.lane,
         buildMode: path.buildMode,

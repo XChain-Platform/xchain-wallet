@@ -55,6 +55,8 @@ import { useMultipartArtworkLink } from '../hooks/useMultipartArtworkLink.js';
 import { useMultipartUploadMethod } from '../hooks/useMultipartUploadMethod.js';
 import { useMultipartUploadPanel } from '../hooks/useMultipartUploadPanel.js';
 import { fileUploadStart } from '../../flows/fileUploadStart.js';
+import { fileRefFor } from '../../flows/fileMultipartRequest.js';
+import { randomUUID } from '../../util/uuid.js';
 import { multipartQuoteLanes } from '../../flows/multipartQuoteLanes.js';
 import { multipartResumeRequestBuilder } from '../../flows/multipartResumeRequest.js';
 import { multipartSupportForMethod } from '../../flows/multipartMethodSupport.js';
@@ -70,7 +72,7 @@ const MAX_DROP_BYTES = 32 * 1024;
 
 /** The compiled action-plus-file push of the artwork FILE leg, for the Upload method fees. */
 function artworkUploadBytes(file, { title, memo }) {
-    return publicFileCompiledBytes({ name: file.name, type: file.type, title, memo }, file.bytes.length);
+    return publicFileCompiledBytes({ name: file.name, type: file.type, title, memo }, file.size);
 }
 
 function multipartSource(address) {
@@ -139,8 +141,8 @@ function artworkDraftError({
         return 'Choose an image file before making it the token picture.';
     }
     const cap = attachmentLimitFor(fileMeta.name, fileMeta.type);
-    if (fileMeta.bytes.length > cap) {
-        return `With this title and memo the on-chain ceiling is ${cap.toLocaleString()} bytes and the file is ${fileMeta.bytes.length.toLocaleString()} bytes. Shorten the title or memo.`;
+    if (fileMeta.size > cap) {
+        return `With this title and memo the on-chain ceiling is ${cap.toLocaleString()} bytes and the file is ${fileMeta.size.toLocaleString()} bytes. Shorten the title or memo.`;
     }
     return null;
 }
@@ -478,13 +480,13 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     const singleReasons = {
         taproot: taprootUnavailableReason({ descriptor, fromAddress, isWatcherMode }),
         standard: standardUnavailableReason({
-            fileBytes: fileMeta?.bytes?.length ?? null,
+            fileBytes: fileMeta?.size ?? null,
             standardCap: singleCaps.standard,
         }),
     };
     const singleFits = {
-        taproot: !fileMeta || fileMeta.bytes.length <= singleCaps.taproot,
-        standard: !fileMeta || fileMeta.bytes.length <= singleCaps.standard,
+        taproot: !fileMeta || fileMeta.size <= singleCaps.taproot,
+        standard: !fileMeta || fileMeta.size <= singleCaps.standard,
     };
     const multipartRate = feeEstimate?.unit
         ? displayRateToPerByte(feeEstimate.unit, Number(feeEstimate.rateValue)) || null
@@ -709,30 +711,33 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         ? ''
         : ' For larger artwork, put an image URL in the token\'s description instead.';
 
-    const acceptFile = useCallback((file, content) => {
-        const bytes = new Uint8Array(content);
+    const acceptFile = useCallback((file, content = null) => {
+        const bytes = content instanceof ArrayBuffer ? new Uint8Array(content) : null;
+        const byteLength = bytes?.length ?? file.size;
         setFileMeta(null);
         const { type, error: typeError } = artworkFileType(file);
         if (typeError) {
             setFormError(typeError);
             return;
         }
-        if (bytes.length === 0) {
+        if (byteLength === 0) {
             setFormError('That file is empty.');
             return;
         }
         const cap = attachmentLimitFor(file.name || 'file', type);
-        if (bytes.length > cap) {
+        if (byteLength > cap) {
             setFormError(
-                `That file is ${bytes.length.toLocaleString()} bytes; with this title and memo the on-chain ceiling is ${cap.toLocaleString()} bytes.${largerArtworkAdvice}`,
+                `That file is ${byteLength.toLocaleString()} bytes; with this title and memo the on-chain ceiling is ${cap.toLocaleString()} bytes.${largerArtworkAdvice}`,
             );
             return;
         }
-        if (!imagePreviewDataUrl(bytes)) setSetAsTokenInfo(false);
+        if (!bytes || !imagePreviewDataUrl(bytes)) setSetAsTokenInfo(false);
         setFormError(null);
         setFileMeta({
             name: file.name || 'file',
             type,
+            size: byteLength,
+            file,
             bytes,
         });
     }, [attachmentLimitFor, largerArtworkAdvice]);
@@ -753,6 +758,10 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             setFormError(typeError);
             return;
         }
+        if (file.size > selectedSingleCap) {
+            acceptFile(file);
+            return;
+        }
         const reader = new FileReader();
         reader.onload = () => {
             if (readId !== fileReadIdRef.current) return;
@@ -763,7 +772,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             if (readId === fileReadIdRef.current) setFormError('Could not read that file.');
         };
         reader.readAsArrayBuffer(file);
-    }, [acceptFile]);
+    }, [acceptFile, selectedSingleCap]);
 
     const drop = useDropZone({
         readAs: 'arrayBuffer',
@@ -780,6 +789,18 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             if (content instanceof ArrayBuffer) acceptFile(file, content);
         },
     });
+    const dropRootProps = {
+        ...drop.rootProps,
+        onDrop: (event) => {
+            const file = event.dataTransfer?.files?.[0];
+            if (!file || !selectedSupport.supported || file.size <= selectedSingleCap) {
+                drop.rootProps.onDrop(event);
+                return;
+            }
+            event.preventDefault();
+            acceptFile(file);
+        },
+    };
 
     async function handleReviewFile(event) {
         event.preventDefault();
@@ -804,12 +825,13 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         setStage('review-file');
     }
 
-    function pickedFileUpload() {
-        return fileUploadStart({
+    async function pickedFileUpload() {
+        let planned = fileUploadStart({
             walletId,
             chainId,
             from: uploadFrom,
-            bytes: fileMeta.bytes,
+            file: fileMeta.file,
+            fileRef: { kind: 'inline', blob: fileMeta.file },
             meta: {
                 name: fileMeta.name,
                 type: fileMeta.type,
@@ -821,6 +843,26 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             linkTarget: { tick, issueActionIndex },
             rate: multipartRate || undefined,
         });
+        if (planned.path !== 'multipart') return planned;
+        const fileRef = await fileRefFor(fileMeta.file, { key: randomUUID() });
+        planned = fileUploadStart({
+            walletId,
+            chainId,
+            from: uploadFrom,
+            file: fileMeta.file,
+            fileRef,
+            meta: {
+                name: fileMeta.name,
+                type: fileMeta.type,
+                title: title.trim(),
+                memo: memo.trim(),
+            },
+            singleTransactionCap: selectedSingleCap,
+            support: selectedSupport,
+            linkTarget: { tick, issueActionIndex },
+            rate: multipartRate || undefined,
+        });
+        return planned;
     }
 
     async function runMultipartUpload(planned) {
@@ -839,7 +881,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         if (submitting || multipartPanel.running || !fileMeta || !fileParams) return;
         if (!hw && (!signerReady && password.length === 0)) return;
         if (hw && hwStatus !== 'available') return;
-        const planned = pickedFileUpload();
+        const planned = await pickedFileUpload();
         if (planned.path === 'multipart') {
             await runMultipartUpload(planned);
             return;
@@ -848,7 +890,17 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             setSubmitError('This file does not fit the selected upload method. Choose another method or a smaller file.');
             return;
         }
-        const rawData = latin1Of(fileMeta.bytes);
+        let bytes = fileMeta.bytes;
+        if (!bytes) {
+            try {
+                bytes = new Uint8Array(await fileMeta.file.arrayBuffer());
+                setFileMeta({ ...fileMeta, bytes });
+            } catch {
+                setSubmitError('Could not read that file.');
+                return;
+            }
+        }
+        const rawData = latin1Of(bytes);
         await runLegThroughConfirm({
             // The same params flows/fileAction.js builds, so the previewed
             // and the submitted composition cannot drift (PC-28).
@@ -1431,7 +1483,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     <dt className={styles.detailsLabel}>Type</dt>
                     <dd className={styles.detailsValue}>{fileParams.TYPE}</dd>
                     <dt className={styles.detailsLabel}>Size</dt>
-                    <dd className={styles.detailsValue}>{fileMeta.bytes.length.toLocaleString()} bytes</dd>
+                    <dd className={styles.detailsValue}>{fileMeta.size.toLocaleString()} bytes</dd>
                     <UploadMethodReviewRows upload={upload} labelClassName={styles.detailsLabel} valueClassName={styles.detailsValue} />
                     {fileParams.TITLE ? (
                         <>
@@ -1586,7 +1638,9 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     variant="success"
                     icon={<Icon.UploadIcon />}
                     loading={genesisRefreshing}
-                    disabled={genesisRefreshing || !multipartMethod.ready || issuerEligibility.pending || !!issuerEligibility.error}
+                    disabled={genesisRefreshing
+                        || (!multipartMethod.ready && fileMeta?.bytes != null)
+                        || issuerEligibility.pending || !!issuerEligibility.error}
                 >
                     Attach artwork
                 </Button>
@@ -1641,7 +1695,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     />
                 </div>
                 <div
-                    {...drop.rootProps}
+                    {...dropRootProps}
                     role="group"
                     aria-labelledby={fileFieldLabelId}
                     aria-describedby={fileLimitId}
@@ -1674,7 +1728,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     <dt className={styles.detailsLabel}>Type</dt>
                     <dd className={styles.detailsValue}>{fileMeta.type}</dd>
                     <dt className={styles.detailsLabel}>Size</dt>
-                    <dd className={styles.detailsValue}>{(fileMeta.bytes.length / 1024).toFixed(1)} KB</dd>
+                    <dd className={styles.detailsValue}>{(fileMeta.size / 1024).toFixed(1)} KB</dd>
                 </dl>
             ) : null}
             {previewUrl ? (

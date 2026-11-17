@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { checkResumePick } from '../../flows/multipartResumePick.js';
+import { fileRefFor } from '../../flows/fileMultipartRequest.js';
+import { checkResumePickMeta } from '../../flows/multipartResumePick.js';
 
 function useReadGuard() {
     const readRef = useRef(0);
@@ -46,32 +47,48 @@ export function useResumeFilePick({ uploadById, chainId, sourceAddress, gated, o
         const requestedId = pendingRef.current;
         if (!requestedId || !file) return;
         const readId = ++readRef.current;
-        const reader = new FileReader();
         const current = () => mountedRef.current && readId === readRef.current;
-        reader.onerror = () => { if (current()) setReason('read_failed'); };
-        reader.onload = () => {
+        const entry = uploadById(requestedId);
+        if (!entry) { setReason('not_resumable'); return; }
+        if (!Number.isSafeInteger(file.size) || file.size <= 0) {
+            setReason('file_mismatch');
+            return;
+        }
+        let outcome;
+        try {
+            outcome = checkResumePickMeta({ entry, chainId, sourceAddress, gated });
+        } catch (error) {
+            if (error?.code !== 'FILE_RESUME_PICK_INVALID') throw error;
+            setReason('not_resumable');
+            return;
+        }
+        if (!outcome.ok) { setReason(outcome.reason); return; }
+        const finish = (fileRef) => {
             if (!current()) return;
-            if (!(reader.result instanceof ArrayBuffer)) { setReason('read_failed'); return; }
-            const bytes = new Uint8Array(reader.result);
-            const entry = uploadById(requestedId);
-            if (!entry) { setReason('not_resumable'); return; }
-            if (bytes.length === 0) { setReason('file_mismatch'); return; }
-            let outcome;
-            try {
-                outcome = checkResumePick({ entry, bytes, chainId, sourceAddress, gated });
-            } catch (error) {
-                if (error?.code !== 'FILE_RESUME_PICK_INVALID') throw error;
-                setReason('not_resumable');
-                return;
-            }
-            if (!outcome.ok) { setReason(outcome.reason); return; }
             readRef.current += 1;
             pendingRef.current = null;
             setPendingId(null);
             setReason(null);
-            onResume({ entry, bytes, resumeId: outcome.resumeId });
+            onResume({
+                entry,
+                bytes: {
+                    byteLength: Math.max(file.size, 390_001),
+                    file,
+                    fileRef,
+                    originalSha256: entry.originalSha256,
+                },
+                resumeId: entry.id,
+            });
         };
-        reader.readAsArrayBuffer(file);
+        const extension = globalThis.chrome?.runtime?.id
+            && typeof globalThis.chrome.runtime.sendMessage === 'function';
+        if (!extension) {
+            finish({ kind: 'inline', blob: file });
+            return;
+        }
+        fileRefFor(file, { key: entry.id }).then(finish, () => {
+            if (current()) setReason('read_failed');
+        });
     }, [chainId, gated, onResume, sourceAddress, uploadById]);
 
     return { inputRef, onInputChange, requestPick, pendingId, reason, clear };

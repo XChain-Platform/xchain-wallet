@@ -6,11 +6,20 @@ import { bytesToHex } from '@noble/hashes/utils';
 import { fileMultipartRequest } from './fileMultipartRequest.js';
 
 export function multipartStartArgs(args) {
-    const request = fileMultipartRequest(args);
+    const wrappedFile = args.bytes?.file;
+    const file = args.file ?? wrappedFile;
+    const normalized = file
+        ? { ...args, file, fileRef: args.fileRef ?? args.bytes?.fileRef, bytes: undefined }
+        : args;
+    const request = fileMultipartRequest(normalized);
+    const originalSha256 = file
+        ? (args.originalSha256 ?? args.bytes?.originalSha256 ?? request.fileRef?.key
+            ?? `inline:${file.name ?? ''}:${file.size}`)
+        : bytesToHex(sha256(args.bytes));
     const match = {
         chainId: args.chainId,
         sourceAddress: args.from.address,
-        originalSha256: bytesToHex(sha256(args.bytes)),
+        originalSha256,
     };
     return { request, match };
 }
