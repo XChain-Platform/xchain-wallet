@@ -12,6 +12,7 @@ import { selectOption } from '../../helpers/selectOption.js';
 import { MarketActivity } from '../../../packages/core/src/shared/routes/MarketActivity.jsx';
 import { userEvent } from '../../helpers/userEvent.js';
 import marketsStyles from '../../../packages/core/src/shared/routes/MarketsList.module.css';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 import { readFileSync } from 'node:fs';
 
 afterEach(() => {
@@ -51,8 +52,12 @@ describe('MarketsList narrow layout', () => {
         // The selector card names the chain (coordinator ruling) but never
         // the network kind.
         expect(selector).toHaveTextContent('Bitcoin');
+        expect(selector).toHaveClass(buttonStyles.rowAction);
+        expect(selector).not.toHaveClass(buttonStyles.primary);
         expect(selector.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
         expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
+        const css = readFileSync('packages/core/src/shared/routes/MarketsList.module.css', 'utf8');
+        expect(css).toMatch(/\.assetCard\.assetCard:hover:not\(:disabled\)\s*\{[^}]*background:\s*var\(--xc-row-hover-bg\);[^}]*border-color:\s*var\(--xc-border\);/s);
     });
 
     it('reaches and activates market actions in their visual order', async () => {

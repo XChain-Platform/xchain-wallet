@@ -449,6 +449,7 @@ export function MarketsList({
         <div style={{ width: '100%' }}>
             <Button
                 type="button"
+                variant="rowAction"
                 className={`${marketsStyles.assetCard} ${marketsStyles.assetButton}`}
                 icon={null}
                 onClick={onChangeAsset}

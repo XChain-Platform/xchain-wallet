@@ -133,6 +133,12 @@ td.splitPriceAsk {
     text-overflow: ellipsis;
 }
 
+@media (hover: hover) and (pointer: fine) {
+    .splitPick.splitPick:hover {
+        background: var(--xc-row-hover-bg);
+    }
+}
+
 .splitLast {
     max-width: none;
     display: flex;

@@ -128,7 +128,8 @@ describe('wide two-panel list rows', () => {
         expect(balances).toContain('data-xc-split-row={splitRow');
         expect(balanceCss).toMatch(/\.row\[data-xc-split-row\]\s*\{[^}]*width:\s*100%;[^}]*margin-inline:\s*0;[^}]*border-top-color:\s*transparent;[^}]*border-radius:\s*0;/s);
         expect(balances).toContain('data-xc-row-state={clickable');
-        expect(balanceCss).not.toMatch(/\[data-selected=['"]true['"]\]/);
+        expect(balanceCss).toMatch(/\.row\.row\[data-xc-row-state\]:hover\s*\{[^}]*background:\s*var\(--xc-row-hover-bg\)/s);
+        expect(balanceCss).toMatch(/\.row\.row > \.rowContent\.rowContent:is\([^}]*\[aria-current\][^}]*\)\s*\{[^}]*background:\s*transparent;[^}]*box-shadow:\s*none/s);
     });
 
     it('keeps Messaging framed with full-width hover and active fills', () => {

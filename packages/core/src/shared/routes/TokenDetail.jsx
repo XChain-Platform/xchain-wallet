@@ -18,6 +18,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { getDemoGatedGroupsForTick, isDemoGatedActionIndex } from '../../flows/demoGatedContent.js';
 import { StalenessLabel } from '../components/StalenessLabel.jsx';
 import { GatedFileViewer } from '../components/GatedFileViewer.jsx';
+import { ConfirmModal } from '../components/ConfirmModal.jsx';
 import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
 import { formatCompactChartValue, Sparkline, synthesizeTokenChart } from '../components/Sparkline.jsx';
 import { isDemoWallet } from '../../flows/demoMode.js';
@@ -80,6 +81,7 @@ import { ActionList, ActionListItem } from '../components/ActionList.jsx';
 import { buildActionEntries } from '../actionEntries.js';
 import { ENTRY_ICON } from './ActionsMenu.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/balances.js';
 import '../../i18n/locales/en/addressList.js';
@@ -218,6 +220,17 @@ function TokenDetailContent({
     const tabsId = useId();
     const [filterQuery, setFilterQuery] = useState('');
     const [revealedExtra, setRevealedExtra] = useState(null);
+    const externalLinkConfirm = useConfirmModal();
+    const openIssuerLink = useCallback(async (url) => {
+        const safeUrl = safeHttpUrl(url);
+        if (!safeUrl) return;
+        const confirmed = await externalLinkConfirm.confirm({
+            title: 'Open External Link?',
+            message: safeUrl,
+            confirmLabel: 'Open Link',
+        });
+        if (confirmed) globalThis.open?.(safeUrl, '_blank', 'noopener,noreferrer');
+    }, [externalLinkConfirm.confirm]);
     // The system Back from the Add Price Alert page returns to this page.
     useBackHandler(revealedExtra === 'price-alert' ? () => setRevealedExtra(null) : undefined, false, 'screen');
     const [resolvedQuantity, setResolvedQuantity] = useState(
@@ -525,7 +538,23 @@ function TokenDetailContent({
     // route after a reload, only stands in until that price answers, so the
     // hero never prices the holding at an older rate than the screen quotes.
     const liveNativeRate = isNative ? positiveFiniteNumber(nativePrice.entry?.priceFiat) : null;
-    const holdingFiatRate = liveNativeRate ?? displayFiatRate;
+    // A detail route can open before Home has attached its bulk token rate.
+    // Keep the carried row rate first, then use the same oracle-first,
+    // DEX-second lookup the amount fields use when that live answer lands.
+    const carriedTokenRate = !isNative ? positiveFiniteNumber(displayFiatRate) : null;
+    const liveTokenRate = !isNative ? positiveFiniteNumber(tokenAlertRate?.rate) : null;
+    const liveTokenSource = tokenAlertRate?.source || null;
+    const preferLiveTokenRate = liveTokenRate !== null && (
+        carriedTokenRate === null
+        || (liveTokenSource === 'oracle' && fiatRateSource !== 'oracle')
+        || (liveTokenSource === 'market' && fiatRateSource === 'dispenser')
+    );
+    const holdingFiatRate = isNative
+        ? (liveNativeRate ?? displayFiatRate)
+        : (preferLiveTokenRate ? liveTokenRate : carriedTokenRate);
+    const holdingFiatRateSource = isNative
+        ? fiatRateSource
+        : (preferLiveTokenRate ? liveTokenSource : fiatRateSource);
     const showStaleFiatRate = liveNativeRate === null && Number.isFinite(staleFiatRateAsOf);
     const fiat = useMemo(() => {
         if (typeof holdingFiatRate !== 'number' || !isFinite(holdingFiatRate)) return null;
@@ -659,10 +688,17 @@ function TokenDetailContent({
     // balance hero treatment). For BTC the code is the tick ticker;
     // for fiat the code is the wallet's preferred currency.
     const assetAmount = formatAmount(quantity, resolvedDivisibility);
-    const fiatAmount = fiatAvailable ? formatFiatNumber(fiat, fiatCurrency) : '-';
-    const showFiatPrimary = !assetUnit && fiatAvailable;
-    const primaryAmount = showFiatPrimary ? fiatAmount : assetAmount;
-    const primaryCode = showFiatPrimary ? fiatCurrency : tick;
+    const fiatAmount = fiatAvailable ? formatFiatNumber(fiat, fiatCurrency) : null;
+    // The stored choice owns the mode. Missing market data changes the Value
+    // contents, never the choice or the availability of the toggle.
+    const showFiatPrimary = !assetUnit;
+    const primaryAmount = showFiatPrimary ? (fiatAmount ?? 'No price yet') : assetAmount;
+    const primaryCode = showFiatPrimary && fiatAvailable ? fiatCurrency : (!showFiatPrimary ? tick : null);
+    const priceSourceLabel = showFiatPrimary && fiatAvailable
+        ? holdingFiatRateSource === 'market' ? 'Price from the exchange'
+            : holdingFiatRateSource === 'dispenser' ? 'Price from dispensers'
+                : null
+        : null;
     const atomicQuantity = parseAtomicQuantity(quantity);
     const holdingUnits = atomicQuantity != null && resolvedDivisibility != null
         ? Number(decimalFromBaseUnits(atomicQuantity, resolvedDivisibility))
@@ -742,6 +778,7 @@ function TokenDetailContent({
         tokenSeriesFor,
         tokenSeriesLoading: readsOwnHistory && (tokenHistoryEntries === null || (atomicQuantity == null && !balanceFailed)),
         showFiat: showFiatPrimary,
+        hasFiatPrice: fiatAvailable,
         nativeBalanceChart,
         enabled: fiatSupported,
         isNative,
@@ -750,8 +787,8 @@ function TokenDetailContent({
         assetInfo,
         tick,
         chainId,
-        fiatRate: displayFiatRate,
-        fiatRateSource,
+        fiatRate: holdingFiatRate,
+        fiatRateSource: holdingFiatRateSource,
         fiatCurrency,
         loading: metadataLoading,
         loadFailed,
@@ -1120,14 +1157,14 @@ function TokenDetailContent({
                             </span>
                             <div
                                 className={heroStyles.amount}
-                                aria-label={balanceHidden ? t('balances.balanceHidden') : `${primaryAmount} ${primaryCode}`}
+                                aria-label={balanceHidden ? t('balances.balanceHidden') : primaryCode ? `${primaryAmount} ${primaryCode}` : primaryAmount}
                             >
                                 {balanceHidden ? (
                                     <span className={heroStyles.hidden}>•••••</span>
                                 ) : (
                                     <>
-                                        <span className={heroStyles.amountValue}>{primaryAmount}</span>
-                                        <span className={heroStyles.amountCode}>{primaryCode}</span>
+                                        <span className={`${heroStyles.amountValue}${showFiatPrimary && !fiatAvailable ? ` ${styles.noPriceAmount}` : ''}`}>{primaryAmount}</span>
+                                        {primaryCode ? <span className={heroStyles.amountCode}>{primaryCode}</span> : null}
                                     </>
                                 )}
                             </div>
@@ -1149,7 +1186,6 @@ function TokenDetailContent({
                                     type="button"
                                     className={heroStyles.eye}
                                     onClick={toggleAssetUnit}
-                                    disabled={!fiatAvailable}
                                     aria-label={showFiatPrimary
                                         ? t('tokenDetail.hero.showBalance', { unit: tick })
                                         : t('tokenDetail.hero.showValue', { unit: fiatCurrency })}
@@ -1180,8 +1216,9 @@ function TokenDetailContent({
                             </span>
                         </div>
                         {/* The card shows only the preferred unit; the swap button flips it. */}
-                        {fiatAvailable && showStaleFiatRate ? (
+                        {priceSourceLabel || (fiatAvailable && showStaleFiatRate) ? (
                             <div className={styles.cardSecondary}>
+                                {priceSourceLabel ? <span>{priceSourceLabel}</span> : null}
                                 {showStaleFiatRate ? (
                                     <StalenessLabel
                                         lastSyncedAt={staleFiatRateAsOf}
@@ -1259,6 +1296,7 @@ function TokenDetailContent({
                                     divisibility={resolvedDivisibility}
                                     query={filterQuery}
                                     displayName={displayName || tick}
+                                    onOpenExternal={openIssuerLink}
                                 />
                             ) : (
                             <>
@@ -1273,6 +1311,7 @@ function TokenDetailContent({
                                     settings={settings}
                                     children={collectionChildren}
                                     query={filterQuery}
+                                    onOpenExternal={openIssuerLink}
                                 />
                             ) : null}
                             {/* Details is one list in the standard card (Card.module.css),
@@ -1360,6 +1399,13 @@ function TokenDetailContent({
                         </div>
 
             </ListPage>
+            {externalLinkConfirm.request ? (
+                <ConfirmModal
+                    {...externalLinkConfirm.request}
+                    onConfirm={externalLinkConfirm.onConfirm}
+                    onCancel={externalLinkConfirm.onCancel}
+                />
+            ) : null}
         </PageFrame>
     );
 }
@@ -1666,7 +1712,7 @@ const NO_PRICE_HISTORY = 'No price history yet';
  * then lazily request daily history for longer ranges. Demo wallets
  * synthesize every range without requesting history.
  */
-function useMarketData({ enabled, isNative, nativePrice, isDemo, assetInfo, tick, chainId, fiatRate, fiatRateSource, fiatCurrency, loading, loadFailed = false, tokenSeriesFor = null, tokenSeriesLoading = false, showFiat = true, nativeBalanceChart = false, holdingSeriesFor = null }) {
+function useMarketData({ enabled, isNative, nativePrice, isDemo, assetInfo, tick, chainId, fiatRate, fiatRateSource, fiatCurrency, loading, loadFailed = false, tokenSeriesFor = null, tokenSeriesLoading = false, showFiat = true, hasFiatPrice = true, nativeBalanceChart = false, holdingSeriesFor = null }) {
     const [rangeId, setRangeId] = useState(defaultRangeId());
     const range = CHART_RANGES.find((item) => item.id === rangeId) || CHART_RANGES[0];
     // Once a daily range has been picked the daily request stays armed, so
@@ -1857,6 +1903,19 @@ function useMarketData({ enabled, isNative, nativePrice, isDemo, assetInfo, tick
         }
     }
 
+    // Value remains a real mode for an asset with no market price. Its empty
+    // chart keeps the hero's shape, names the missing price, and leaves both
+    // the scale and change pill out until a source becomes available.
+    const noMarketPrice = showFiat && !hasFiatPrice;
+    if (noMarketPrice) {
+        holding = false;
+        chartBusy = false;
+        sparkline = null;
+        seriesKind = 'value';
+        note = `No market price for ${tick} yet`;
+        showRanges = false;
+    }
+
     return {
         range,
         setRangeId,
@@ -1865,6 +1924,7 @@ function useMarketData({ enabled, isNative, nativePrice, isDemo, assetInfo, tick
         holding,
         chartBusy,
         showRanges,
+        noMarketPrice,
         note,
         stats: { priceLabel, priceCell, marketCapCell, pct24h, pctLabel24h, pctTone24h },
     };
@@ -1892,13 +1952,13 @@ function multiplyAlignedSeries(balances, prices) {
  */
 function MarketPanel({ market, hidden, showFiat, currency, unit, locale }) {
     const panelId = useId();
-    const { range, setRangeId, sparkline, chartBusy, showRanges, seriesKind = 'price', holding = false, note = null } = market;
+    const { range, setRangeId, sparkline, chartBusy, showRanges, seriesKind = 'price', holding = false, noMarketPrice = false, note = null } = market;
     const formatChartAmount = (value) => formatCompactChartValue(value, showFiat
         ? { locale, currency }
         : { locale, unit });
     // Wide Home's holding line: with no price history the card says so where
     // the line would be.
-    const holdingNote = holding && !sparkline && !chartBusy && !hidden ? note : null;
+    const holdingNote = (noMarketPrice || holding) && !sparkline && !chartBusy && !hidden ? note : null;
     return (
         <section
             className={`${portfolioChartStyles.wrap} ${portfolioChartStyles.behind}${hidden ? ` ${portfolioChartStyles.behindHidden}` : ''}`}
@@ -1942,7 +2002,7 @@ function MarketPanel({ market, hidden, showFiat, currency, unit, locale }) {
                 room unseen so the card holds one height. */}
             <div className={portfolioChartStyles.foot}>
                 {holdingNote ? (
-                    <div className={portfolioChartStyles.tokenNote} data-chart-note="no-price-history">{holdingNote}</div>
+                    <div className={portfolioChartStyles.tokenNote} data-chart-note={noMarketPrice ? 'no-market-price' : 'no-price-history'}>{holdingNote}</div>
                 ) : null}
                 <ChartRangeTabs
                     panelId={panelId}
@@ -2114,7 +2174,7 @@ function tokenNameFromRow(row) {
     return row?.tick || row?.info?.tick || row?.name || row?.ticker || null;
 }
 
-function TokenProfile({ assetInfo, tick, chainId, loading, loadFailed, explorerUrl, settings, children, query }) {
+function TokenProfile({ assetInfo, tick, chainId, loading, loadFailed, explorerUrl, settings, children, query, onOpenExternal }) {
     if (loading) {
         return <div className={styles.profileCard} role="status" aria-label="Loading token profile"><Skeleton height={180} /></div>;
     }
@@ -2123,6 +2183,7 @@ function TokenProfile({ assetInfo, tick, chainId, loading, loadFailed, explorerU
     const childTicks = (Array.isArray(children) ? children : []).map(tokenNameFromRow).filter(Boolean);
     const parentTick = String(tick).includes('.') ? String(tick).split('.').slice(0, -1).join('.') : null;
     const hasInfo = Boolean(assetInfo?.tisAvailable
+        || assetInfo?.tisReadError
         || assetInfo?.name
         || assetInfo?.description
         || hasSupplementalTokenInfo(assetInfo)
@@ -2141,7 +2202,7 @@ function TokenProfile({ assetInfo, tick, chainId, loading, loadFailed, explorerU
     }
     const profileValues = [
         assetInfo?.name, assetInfo?.description, assetInfo?.owner, assetInfo?.contacts,
-        assetInfo?.categories, assetInfo?.dns, tokenLinkTargets(assetInfo), projects,
+        assetInfo?.categories, assetInfo?.dns, tokenPublishedLinks(assetInfo), projects,
         assetInfo?.registry, parentTick, childTicks,
     ];
     if (!matchesFilter(query, profileValues)) return null;
@@ -2150,11 +2211,18 @@ function TokenProfile({ assetInfo, tick, chainId, loading, loadFailed, explorerU
     const logo = images.find((image) => String(image?.type || '').toLowerCase() === 'icon' && safeImageSrc(image?.url)) || images.find((image) => safeImageSrc(image?.url));
     const hasOwner = Boolean(assetInfo?.owner && (assetInfo.owner.name || assetInfo.owner.title || assetInfo.owner.organization));
     const hasContacts = Array.isArray(assetInfo?.contacts) && assetInfo.contacts.length > 0;
-    const hasLinks = tokenLinkTargets(assetInfo).websites.length > 0 || tokenLinkTargets(assetInfo).socials.length > 0;
+    const publishedLinks = tokenPublishedLinks(assetInfo);
+    const hasLinks = publishedLinks.websites.length > 0 || publishedLinks.socials.length > 0;
     return (
         <section className={styles.profileCard} aria-label="Token information profile">
             {banner ? <img className={styles.profileBanner} src={banner.url} alt="" /> : null}
             <div className={styles.profileBody}>
+                {assetInfo?.tisReadError ? (
+                    <div className={styles.quietNote} role="note">
+                        <Icon.InfoIcon aria-hidden="true" />
+                        <span>The token information file couldn't be read</span>
+                    </div>
+                ) : null}
                 <div className={styles.profileIdentity}>
                     {logo ? <AssetArtwork src={logo.url} className={styles.profileLogo} fallbackClassName={styles.profileLogoFallback} fallbackText={tick} /> : null}
                     <span><strong>{assetInfo?.name || tick}</strong><small>{tick}</small></span>
@@ -2167,34 +2235,37 @@ function TokenProfile({ assetInfo, tick, chainId, loading, loadFailed, explorerU
                         <div className={styles.officialLine} key={`${project.project}:${project.linkActionIndex || ''}`}>
                             <Icon.CheckIcon aria-hidden="true" />
                             <span>Official: part of the <strong>{project.project}</strong> project</span>
-                            {proofUrl ? <a href={proofUrl} target="_blank" rel="noreferrer noopener">Proof</a> : null}
+                            {proofUrl ? <a href={proofUrl} target="_blank" rel="noreferrer noopener">Proof <Icon.ExternalLinkIcon aria-hidden="true" /></a> : null}
                         </div>
                     );
                 })}
                 {assetInfo?.description ? <p className={styles.profileDescription}>{assetInfo.description}</p> : null}
                 {Array.isArray(assetInfo?.categories) && assetInfo.categories.length > 0 ? (
                     <div className={styles.categoryChips} aria-label="Token categories">
-                        {assetInfo.categories.map((category, index) => <span key={`${category.type}:${index}`}>{category.value}</span>)}
+                        {assetInfo.categories.map((category, index) => <span key={`${category.type}:${index}`}>{capitalize(category.type)}: {category.value}</span>)}
                     </div>
                 ) : null}
-                {hasLinks ? <LinksAndFiles assetInfo={assetInfo} /> : null}
+                {hasLinks ? <LinksAndFiles assetInfo={assetInfo} onOpenExternal={onOpenExternal} /> : null}
                 {hasOwner ? <OwnerBlock owner={assetInfo.owner} /> : null}
-                {hasContacts ? <ContactsBlock contacts={assetInfo.contacts} /> : null}
+                {hasContacts ? <ContactsBlock contacts={assetInfo.contacts} onOpenExternal={onOpenExternal} /> : null}
                 {Array.isArray(assetInfo?.dns) && assetInfo.dns.length > 0 ? <DnsBlock dns={assetInfo.dns} /> : null}
+                {assetInfo?.packs && Object.keys(assetInfo.packs).length > 0 ? <PacksBlock packs={assetInfo.packs} /> : null}
                 {assetInfo?.registry ? (
                     <p className={styles.projectOwnership}>
                         This token owns the <strong>{tick}</strong> project:{' '}
-                        {explorerUrl ? <a href={explorerUrl} target="_blank" rel="noreferrer noopener">view its {formatWithThousands(String(assetInfo.registry.total))} official tokens</a> : `view its ${formatWithThousands(String(assetInfo.registry.total))} official tokens`}.
+                        {explorerUrl ? <a href={explorerUrl} target="_blank" rel="noreferrer noopener">view its {formatWithThousands(String(assetInfo.registry.total))} official tokens <Icon.ExternalLinkIcon aria-hidden="true" /></a> : `view its ${formatWithThousands(String(assetInfo.registry.total))} official tokens`}.
                     </p>
                 ) : null}
                 {parentTick ? (
-                    <p className={styles.collectionLine}>Parent token: <a href={explorerPageUrl({ chainId, kind: 'token', value: parentTick, settings }) || '#'} target="_blank" rel="noreferrer noopener">{parentTick}</a></p>
+                    <p className={styles.collectionLine}>Parent token: <a href={explorerPageUrl({ chainId, kind: 'token', value: parentTick, settings }) || '#'} target="_blank" rel="noreferrer noopener">{parentTick} <Icon.ExternalLinkIcon aria-hidden="true" /></a></p>
                 ) : null}
                 {childTicks.length > 0 ? (
-                    <div className={styles.collectionChildren}><strong>Child tokens</strong>{childTicks.map((child) => <a key={child} href={explorerPageUrl({ chainId, kind: 'token', value: child, settings }) || '#'} target="_blank" rel="noreferrer noopener">{child}</a>)}</div>
+                    <div className={styles.collectionChildren}><strong>Child tokens</strong>{childTicks.map((child) => <a key={child} href={explorerPageUrl({ chainId, kind: 'token', value: child, settings }) || '#'} target="_blank" rel="noreferrer noopener">{child} <Icon.ExternalLinkIcon aria-hidden="true" /></a>)}</div>
                 ) : null}
+                {/* Issuer HTML never enters the wallet DOM, even in a sandboxed
+                    iframe. The explorer owns the isolated presentation surface. */}
                 {assetInfo?.htmlAvailable && explorerUrl ? (
-                    <a className={styles.explorerInfoLink} href={explorerUrl} target="_blank" rel="noreferrer noopener">Open enhanced token information in explorer</a>
+                    <a className={styles.explorerInfoLink} href={explorerUrl} target="_blank" rel="noreferrer noopener">Interactive content: view on the explorer <Icon.ExternalLinkIcon aria-hidden="true" /></a>
                 ) : null}
             </div>
         </section>
@@ -2214,14 +2285,13 @@ function fileDisplayName(file, fallback = 'Untitled file') {
 function tokenFileEntries(assetInfo) {
     const out = [];
     const add = (kind, file, index) => {
-        if (!file || file.locked) return;
+        if (!file) return;
         const url = safeHttpUrl(file.url) || safeImageSrc(file.url);
-        if (!url) return;
         out.push({
             ...file,
             kind,
             url,
-            id: `${kind}:${file.dataRef || file.actionIndex || url}:${index}`,
+            id: `${kind}:${file.dataRef || file.actionIndex || url || file.source || 'entry'}:${index}`,
             displayName: fileDisplayName(file, `${kind} file`),
         });
     };
@@ -2235,28 +2305,57 @@ function tokenFileEntries(assetInfo) {
     }
     const seen = new Set();
     return out.filter((file) => {
-        const key = file.dataRef || file.actionIndex || file.url;
+        const key = file.dataRef || file.actionIndex || file.url || `${file.kind}:${file.source}:${file.id}`;
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
     });
 }
 
-function PublicFileTile({ file }) {
+function PublicFileTile({ file, onOpenExternal }) {
     const [imageFailed, setImageFailed] = useState(false);
-    const meta = [file.type || file.kind, file.size].filter(Boolean).join(', ');
-    return (
-        <a className={styles.fileTile} href={file.url} target="_blank" rel="noreferrer noopener" aria-label={`Open ${file.displayName}`}>
+    const canOpen = Boolean(file.url) && !file.locked;
+    const body = (
+        <>
             <span className={styles.fileTilePreview}>
-                {file.kind === 'image' && !imageFailed ? <img src={file.url} alt={file.displayName} loading="lazy" onError={() => setImageFailed(true)} /> : <Icon.FileTypeIcon type={file.type || file.kind} aria-label={imageFailed ? `${file.displayName} unavailable` : undefined} />}
+                {file.kind === 'image' && canOpen && safeImageSrc(file.url) && !imageFailed ? <img src={file.url} alt={file.displayName} loading="lazy" onError={() => setImageFailed(true)} /> : <Icon.FileTypeIcon type={file.type || file.kind} aria-label={imageFailed ? `${file.displayName} unavailable` : undefined} />}
                 {(file.kind === 'audio' || file.kind === 'video') ? <span className={styles.fileTilePlay}><Icon.PlayIcon /></span> : null}
             </span>
-            <span className={styles.fileTileBody}><strong>{file.displayName}</strong><small>{meta || 'File, size unavailable'}</small>{file.hash ? <small className={styles.fileHash}>SHA-256 {file.hash}</small> : null}</span>
+            <span className={styles.fileTileBody}>
+                <strong>{file.title || file.name || file.displayName}</strong>
+                {file.name ? <small>Name: {file.name}</small> : null}
+                {file.title ? <small>Title: {file.title}</small> : null}
+                <small>Type: {file.type || file.kind || 'Unknown'}</small>
+                {file.size ? <small>Size: {file.size}</small> : null}
+                {file.hash ? <small className={styles.fileHash}>Hash: {file.hash}</small> : null}
+                <small>Locked: {file.locked ? 'Yes' : 'No'}</small>
+                {file.packId ? <small>Pack ID: {file.packId}</small> : null}
+                {file.dataRef ? <small>Linked action: {file.dataRef}</small> : null}
+                {file.source ? <small>URL: {file.source}</small> : null}
+            </span>
+            {canOpen ? <Icon.ExternalLinkIcon aria-hidden="true" /> : null}
+        </>
+    );
+    if (!canOpen) return <div className={styles.fileTile}>{body}</div>;
+    return (
+        <a
+            className={styles.fileTile}
+            href={file.url}
+            target="_blank"
+            rel="noreferrer noopener"
+            aria-label={`Open ${file.displayName}`}
+            onClick={(event) => {
+                event.preventDefault();
+                onOpenExternal?.(file.url);
+            }}
+        >
+            {body}
+            <span className="sr-only" aria-hidden="true">↗</span>
         </a>
     );
 }
 
-function FilesPanel({ walletId, chainId, tick, assetInfo, loading, error, groups, messaging, quantity, divisibility, query, displayName }) {
+function FilesPanel({ walletId, chainId, tick, assetInfo, loading, error, groups, messaging, quantity, divisibility, query, displayName, onOpenExternal }) {
     const viewTabsId = useId();
     const [view, setView] = useState('all');
     const publicFiles = tokenFileEntries(assetInfo).filter((file) => matchesFilter(query, [file.displayName, file.title, file.name, file.type, file.hash]));
@@ -2277,7 +2376,7 @@ function FilesPanel({ walletId, chainId, tick, assetInfo, loading, error, groups
         <div className={styles.filesPanel}>
             <Tabs id={viewTabsId} className={styles.filesToggle} items={tabs} value={view} onChange={setView} panelId={`${viewTabsId}-panel`} aria-label="File visibility" />
             <div id={`${viewTabsId}-panel`} role="tabpanel" aria-labelledby={`${viewTabsId}-tab-${view}`}>
-                {(view === 'all' || view === 'public') && publicFiles.length > 0 ? <div className={styles.fileGrid}>{publicFiles.map((file) => <PublicFileTile key={file.id} file={file} />)}</div> : null}
+                {(view === 'all' || view === 'public') && publicFiles.length > 0 ? <div className={styles.fileGrid}>{publicFiles.map((file) => <PublicFileTile key={file.id} file={file} onOpenExternal={onOpenExternal} />)}</div> : null}
                 {showHolderSection && (holderCount > 0 || (loading && !groups) || error) ? (
                     <GatedContentPanel
                         walletId={walletId}
@@ -2294,79 +2393,12 @@ function FilesPanel({ walletId, chainId, tick, assetInfo, loading, error, groups
                         showSummary={view === 'holders'}
                     />
                 ) : null}
-                {totalCount === 0 && !loading && !error ? <EmptyState title="No files yet" body={query ? 'No files match this filter.' : 'Media and files published or attached on chain appear here.'} titleAs="p" /> : null}
+                {totalCount === 0 && !loading && !error ? (
+                    assetInfo?.tisReadError ? (
+                        <div className={styles.quietNote} role="note"><Icon.InfoIcon aria-hidden="true" /><span>The token information file couldn't be read</span></div>
+                    ) : <EmptyState title="No files yet" body={query ? 'No files match this filter.' : 'Media and files published or attached on chain appear here.'} titleAs="p" />
+                ) : null}
             </div>
-        </div>
-    );
-}
-
-// Supplemental TIS metadata selected from More info. The description stays
-// in Details so the primary page remains useful without opening this panel.
-function InfoPanel({ isNative, assetInfo, loading, loadFailed = false }) {
-    if (isNative) {
-        return (
-            <EmptyState
-                title="Native coin"
-                titleAs="p"
-                body="Token-information documents apply only to XChain-issued tokens."
-            />
-        );
-    }
-    if (loading) {
-        return (
-            <div className={styles.infoCard} role="status" aria-label="Loading token information" aria-busy="true">
-                <Skeleton.List rows={3} rowHeight={48} avatar={false} />
-            </div>
-        );
-    }
-    // The page-level notice already says the read failed; an empty-state here
-    // would claim the issuer published nothing.
-    if (loadFailed && (!assetInfo || assetInfo.loadError)) return null;
-    if (!assetInfo) {
-        return (
-            <EmptyState
-                title="No additional information"
-                body="Information published by the token issuer appears here."
-                titleAs="p"
-            />
-        );
-    }
-    const linkTargets = tokenLinkTargets(assetInfo);
-    const hasLinks = linkTargets.websites.length > 0 || linkTargets.socials.length > 0;
-    const hasOwner = Boolean(assetInfo.owner
-        && (assetInfo.owner.name || assetInfo.owner.title || assetInfo.owner.organization));
-    const hasContacts = Array.isArray(assetInfo.contacts) && assetInfo.contacts.length > 0;
-    const hasCategories = Array.isArray(assetInfo.categories) && assetInfo.categories.length > 0;
-    const hasPgpsig = Boolean(assetInfo.pgpsig);
-    const hasDns = Array.isArray(assetInfo.dns) && assetInfo.dns.length > 0;
-    const hasAbout = hasOwner
-        || hasContacts
-        || hasCategories
-        || hasLinks
-        || hasDns
-        || hasPgpsig;
-    if (!hasAbout) {
-        return (
-            <EmptyState
-                title="No additional information"
-                body="Information published by the token issuer appears here."
-                titleAs="p"
-            />
-        );
-    }
-    return (
-        <div className={`${styles.infoCard} ${styles.aboutCard}`}>
-            {hasOwner ? <OwnerBlock owner={assetInfo.owner} /> : null}
-            {hasCategories ? <CategoriesBlock categories={assetInfo.categories} /> : null}
-            {hasContacts ? <ContactsBlock contacts={assetInfo.contacts} /> : null}
-            {hasLinks ? (
-                <div className={styles.metaBlock}>
-                    <SectionHeader title="Links" />
-                    <LinksAndFiles assetInfo={assetInfo} />
-                </div>
-            ) : null}
-            {hasDns ? <DnsBlock dns={assetInfo.dns} /> : null}
-            {hasPgpsig ? <PgpsigBlock pgpsig={assetInfo.pgpsig} /> : null}
         </div>
     );
 }
@@ -2386,6 +2418,27 @@ function DnsBlock({ dns }) {
                             <td className={styles.dnsValueCell}>
                                 <div className={styles.dnsHost}>{r.host}</div>
                                 <div className={styles.dnsValue}>{r.value}</div>
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+}
+
+function PacksBlock({ packs }) {
+    return (
+        <div className={styles.metaBlock}>
+            <SectionHeader title="Packs" />
+            <table className={styles.metaTable} aria-label="Token content packs">
+                <tbody>
+                    {Object.entries(packs).map(([packId, pack]) => (
+                        <tr key={packId} className={styles.metaRow}>
+                            <th scope="row">{packId}</th>
+                            <td>
+                                {pack?.name ? <div>{pack.name}</div> : null}
+                                {pack?.description ? <div>{pack.description}</div> : null}
                             </td>
                         </tr>
                     ))}
@@ -2420,182 +2473,6 @@ function hasPublishedMedia(assetInfo) {
     return media.images.length > 0 || media.audio.length > 0 || media.video.length > 0 || media.files.length > 0;
 }
 
-// Images, audio, video, and files published with the token's TIS document,
-// selected from More info.
-function MediaPanel({ isNative, assetInfo, loading }) {
-    const tabsId = useId();
-    // Only large + hires images count toward the Image surface (icon
-    // and standard buckets render in the page header instead). We
-    // derive the buckets unconditionally so the React hook below can
-    // observe them, then decide what to render below based on
-    // isNative / assetInfo state.
-    const { images, audio, video, files } = tokenMediaBuckets(assetInfo);
-    const subtabs = [
-        images.length > 0 ? { id: 'image', label: images.length === 1 ? 'Image' : 'Images', icon: <Icon.ImageIcon /> } : null,
-        audio.length > 0 ? { id: 'audio', label: 'Audio', icon: <Icon.PlayIcon /> } : null,
-        video.length > 0 ? { id: 'video', label: video.length === 1 ? 'Video' : 'Videos', icon: <Icon.CameraIcon /> } : null,
-        files.length > 0 ? { id: 'files', label: files.length === 1 ? 'File' : 'Files', icon: <Icon.DocumentIcon /> } : null,
-    ].filter(Boolean);
-    const [activeSubtab, setActiveSubtab] = useState(/** @type {string | null} */ (null));
-    useEffect(() => {
-        // Sync the default subtab to the first populated bucket whenever
-        // the available subtab set changes (e.g. token info finishes
-        // loading after the panel mounted).
-        if (subtabs.length === 0) {
-            if (activeSubtab !== null) setActiveSubtab(null);
-            return;
-        }
-        if (!activeSubtab || !subtabs.some((t) => t.id === activeSubtab)) {
-            setActiveSubtab(subtabs[0].id);
-        }
-    }, [subtabs, activeSubtab]);
-    const selectedSubtab = subtabs.some((t) => t.id === activeSubtab)
-        ? activeSubtab
-        : subtabs[0]?.id;
-
-    if (isNative) {
-        return (
-            <EmptyState title="No attached media" titleAs="p" body="Native coins don't carry attached media." />
-        );
-    }
-    if (loading) {
-        return (
-            <div className={styles.infoCard} role="status" aria-label="Loading token media" aria-busy="true">
-                <Skeleton height={144} />
-            </div>
-        );
-    }
-    if (!assetInfo) {
-        return (
-            <EmptyState
-                title="No published media"
-                body="Images, audio, video, and files published for this token appear here."
-                titleAs="p"
-            />
-        );
-    }
-    if (subtabs.length === 0) {
-        return (
-            <EmptyState
-                title="No published media"
-                body="Images, audio, video, and files published for this token appear here."
-                titleAs="p"
-            />
-        );
-    }
-    // Single media type. No need for a subtab strip; render directly.
-    if (subtabs.length === 1) {
-        return <MediaSubpanel kind={subtabs[0].id} images={images} audio={audio} video={video} files={files} />;
-    }
-    return (
-        <div className={styles.mediaPanel}>
-            <Tabs
-                id={tabsId}
-                aria-label="Token media"
-                items={subtabs}
-                value={selectedSubtab}
-                onChange={setActiveSubtab}
-                panelId={`${tabsId}-panel`}
-            />
-            <div
-                id={`${tabsId}-panel`}
-                role="tabpanel"
-                aria-labelledby={`${tabsId}-tab-${selectedSubtab}`}
-            >
-                <MediaSubpanel kind={selectedSubtab} images={images} audio={audio} video={video} files={files} />
-            </div>
-        </div>
-    );
-}
-
-function MediaSubpanel({ kind, images, audio, video, files }) {
-    if (kind === 'image') {
-        // Dedup by URL so `large` and `hires` pointing at the same file
-        // don't render twice.
-        const seen = new Set();
-        const dedup = images.filter((img) => {
-            if (!img?.url || seen.has(img.url)) return false;
-            seen.add(img.url);
-            return true;
-        });
-        return (
-            <div className={styles.gallery}>
-                {dedup.map((img, i) => (
-                    <ImageHero key={`img:${img.url}:${i}`} img={img} />
-                ))}
-            </div>
-        );
-    }
-    if (kind === 'video') {
-        return (
-            <div className={styles.gallery}>
-                {video.map((v, i) => (
-                    <div key={`${v.url}:${i}`} className={styles.galleryMediaCard}>
-                        {v.name ? (
-                            <div className={styles.galleryMediaCaption}>{v.name}</div>
-                        ) : null}
-                        <video
-                            className={styles.galleryVideo}
-                            src={v.url}
-                            controls
-                            preload="metadata"
-                            playsInline
-                        />
-                    </div>
-                ))}
-            </div>
-        );
-    }
-    if (kind === 'audio') {
-        return (
-            <div className={styles.gallery}>
-                {audio.map((a, i) => (
-                    <div key={`${a.url}:${i}`} className={styles.galleryMediaCard}>
-                        {a.name ? (
-                            <div className={styles.galleryMediaCaption}>{a.name}</div>
-                        ) : null}
-                        <audio
-                            className={styles.galleryAudio}
-                            src={a.url}
-                            controls
-                            preload="metadata"
-                        />
-                    </div>
-                ))}
-            </div>
-        );
-    }
-    if (kind === 'files') {
-        return (
-            // The kit has no file-list primitive, so native list semantics group these file links.
-            <ul className={styles.filesList}>
-                {files.map((f, i) => (
-                    <li key={`${f.url}:${i}`}>
-                        <a
-                            href={f.url}
-                            target="_blank"
-                            rel="noreferrer noopener"
-                            className={styles.fileLink}
-                        >
-                            <span className={styles.fileLinkIcon} aria-hidden="true">
-                                <Icon.FileTypeIcon type={f.type} />
-                            </span>
-                            <span className={styles.fileLinkName}>
-                                {f.name || f.url}
-                            </span>
-                            {f.type ? (
-                                <span className={styles.fileLinkType}>{f.type}</span>
-                            ) : null}
-                            <span aria-hidden="true">↗</span>
-                        </a>
-                    </li>
-                ))}
-            </ul>
-        );
-    }
-    return null;
-}
-
 function OwnerBlock({ owner }) {
     return (
         <div className={styles.metaBlock}>
@@ -2626,9 +2503,6 @@ function OwnerBlock({ owner }) {
     );
 }
 
-// A plain address only: a query or fragment after it would add recipients or a body to the draft.
-const PLAIN_EMAIL = /^[^\s@?&#:,;<>()"']+@[^\s@?&#:,;<>()"']+\.[^\s@?&#:,;<>()"']+$/;
-
 const CONTACT_LABELS = {
     email: 'Email',
     phone: 'Phone',
@@ -2637,7 +2511,7 @@ const CONTACT_LABELS = {
     address: 'Address',
 };
 
-function ContactsBlock({ contacts }) {
+function ContactsBlock({ contacts, onOpenExternal }) {
     return (
         <div className={styles.metaBlock}>
             <SectionHeader title="Contact" />
@@ -2645,17 +2519,19 @@ function ContactsBlock({ contacts }) {
                 <tbody>
                     {contacts.map((c, i) => {
                         const label = CONTACT_LABELS[c.type] || (c.type.charAt(0).toUpperCase() + c.type.slice(1));
-                        const isMail = c.type === 'email' && PLAIN_EMAIL.test(c.value);
-                        const isPhone = c.type === 'phone';
-                        const safeUrl = safeHttpUrl(c.value);
+                        const safeUrl = c.type === 'url' ? safeHttpUrl(c.value) : null;
                         let display = c.value;
-                        if (isMail) {
-                            display = <a href={`mailto:${c.value}`}>{c.value}</a>;
-                        } else if (isPhone) {
-                            display = <a href={`tel:${c.value.replace(/[^+\d]/g, '')}`}>{c.value}</a>;
-                        } else if (safeUrl) {
+                        if (safeUrl) {
                             display = (
-                                <a href={safeUrl} target="_blank" rel="noreferrer noopener">
+                                <a
+                                    href={safeUrl}
+                                    target="_blank"
+                                    rel="noreferrer noopener"
+                                    onClick={(event) => {
+                                        event.preventDefault();
+                                        onOpenExternal?.(safeUrl);
+                                    }}
+                                >
                                     {c.value} <span aria-hidden="true">↗</span>
                                 </a>
                             );
@@ -2671,84 +2547,6 @@ function ContactsBlock({ contacts }) {
             </table>
         </div>
     );
-}
-
-const CATEGORY_LABELS = { main: 'Category', sub: 'Subcategory', other: 'Other' };
-
-function CategoriesBlock({ categories }) {
-    return (
-        <div className={styles.metaBlock}>
-            <SectionHeader title="Categories" />
-            <table className={styles.metaTable} aria-label="Token categories">
-                <tbody>
-                    {categories.map((c, i) => (
-                        <tr key={`${c.type}:${i}`} className={styles.metaRow}>
-                            <th scope="row">{CATEGORY_LABELS[c.type] || c.type}</th>
-                            <td>{c.value}</td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-        </div>
-    );
-}
-
-function PgpsigBlock({ pgpsig }) {
-    return (
-        <div className={styles.metaBlock}>
-            <SectionHeader title="PGP signature" />
-            <pre className={styles.pgpsigBlock} tabIndex={0}>{pgpsig}</pre>
-        </div>
-    );
-}
-
-function ImageHero({ img }) {
-    const [failedImageUrl, setFailedImageUrl] = useState(null);
-    const safeUrl = safeImageSrc(img.url);
-    const failed = !safeUrl || failedImageUrl === safeUrl;
-    const picture = safeUrl ? (
-        <img
-            src={safeUrl}
-            alt={img.name || ''}
-            className={styles.heroImage}
-            loading="lazy"
-            decoding="async"
-            style={{ aspectRatio: '1 / 1' }}
-            onError={() => setFailedImageUrl(safeUrl)}
-        />
-    ) : null;
-    // A picture carried as a data: URL (an on-chain image FILE) has no page
-    // to open, since browsers refuse to navigate to data: URLs.
-    const media = failed ? (
-        <div
-            className={styles.heroImageFallback}
-            role="img"
-            aria-label={`${img.name || 'Token media'} unavailable`}
-        >
-            Image unavailable
-        </div>
-    ) : !safeHttpUrl(safeUrl) ? picture : (
-        <a
-            href={safeUrl}
-            target="_blank"
-            rel="noreferrer noopener"
-            className={styles.heroImageLink}
-            aria-label={img.name ? `Open image ${img.name}` : 'Open token image'}
-            title={img.name || ''}
-        >
-            {picture}
-            <span aria-hidden="true">↗</span>
-        </a>
-    );
-    if (img.name) {
-        return (
-            <div className={styles.galleryMediaCard}>
-                <div className={styles.galleryMediaCaption}>{img.name}</div>
-                {media}
-            </div>
-        );
-    }
-    return media;
 }
 
 function AssetArtwork({ src, className, fallbackClassName, fallbackText }) {
@@ -2854,17 +2652,24 @@ function tokenLinkTargets(assetInfo) {
     return { websites, socials };
 }
 
-/** The host a link opens, as the browser resolves it (punycode exposes look-alike letters). */
-function linkHost(url) {
-    try {
-        return new URL(url).hostname;
-    } catch {
-        return '';
-    }
+function tokenPublishedLinks(assetInfo) {
+    const websiteCandidates = Array.isArray(assetInfo?.websites) && assetInfo.websites.length > 0
+        ? assetInfo.websites
+        : [assetInfo?.websiteText || assetInfo?.website].filter(Boolean);
+    const websites = websiteCandidates.flatMap((value) => typeof value === 'string'
+        ? [{ value, url: safeHttpUrl(value) }]
+        : []);
+    const socials = Array.isArray(assetInfo?.socials)
+        ? assetInfo.socials.flatMap((social) => {
+            const value = typeof social?.value === 'string' ? social.value : social?.url;
+            return typeof value === 'string' ? [{ ...social, value, url: safeHttpUrl(value) }] : [];
+        })
+        : [];
+    return { websites, socials };
 }
 
-function LinksAndFiles({ assetInfo }) {
-    const { websites, socials } = tokenLinkTargets(assetInfo);
+function LinksAndFiles({ assetInfo, onOpenExternal }) {
+    const { websites, socials } = tokenPublishedLinks(assetInfo);
     const hasAnything = websites.length > 0 || socials.length > 0;
     if (!hasAnything) return null;
     const multipleWebsites = websites.length > 1;
@@ -2872,41 +2677,44 @@ function LinksAndFiles({ assetInfo }) {
         <div className={styles.linksBlock}>
             {websites.length > 0 ? (
                 <div className={styles.socialsRow}>
-                    {websites.map((w, i) => (
-                        <a
-                            key={`${w}:${i}`}
-                            href={w}
-                            target="_blank"
-                            rel="noreferrer noopener"
-                            className={styles.socialChip}
-                            title={w}
-                        >
-                            <span className={styles.socialChipIcon} aria-hidden="true">
-                                <Icon.ExternalLinkIcon />
-                            </span>
-                            <span>
-                                {multipleWebsites ? `Website ${i + 1}` : 'Website'} · {linkHost(w)}
-                            </span>
-                        </a>
-                    ))}
+                    {websites.map((website, i) => {
+                        const content = <><span className={styles.socialChipIcon} aria-hidden="true"><Icon.ExternalLinkIcon /></span><span>{multipleWebsites ? `Website ${i + 1}` : 'Website'}: {website.value}</span></>;
+                        return website.url ? (
+                            <a
+                                key={`${website.value}:${i}`}
+                                href={website.url}
+                                target="_blank"
+                                rel="noreferrer noopener"
+                                className={styles.socialChip}
+                                title={website.value}
+                                onClick={(event) => {
+                                    event.preventDefault();
+                                    onOpenExternal?.(website.url);
+                                }}
+                            >{content}<span className="sr-only" aria-hidden="true">↗</span></a>
+                        ) : <span key={`${website.value}:${i}`} className={styles.socialChip}>{content}</span>;
+                    })}
                 </div>
             ) : null}
             {socials.length > 0 ? (
                 <div className={styles.socialsRow}>
-                    {socials.map((s, i) => (
-                        <a
-                            key={`${s.url}:${i}`}
-                            href={s.url}
-                            target="_blank"
-                            rel="noreferrer noopener"
-                            className={styles.socialChip}
-                            title={s.url}
-                        >
-                            <SocialIcon platform={s.platform} />
-                            {socialLabel(s.platform)} · {s.host}
-                            <span aria-hidden="true">↗</span>
-                        </a>
-                    ))}
+                    {socials.map((social, i) => {
+                        const content = <><SocialIcon platform={social.platform} />{socialLabel(social.platform)}: {social.value}{social.url ? <span aria-hidden="true">↗</span> : null}</>;
+                        return social.url ? (
+                            <a
+                                key={`${social.value}:${i}`}
+                                href={social.url}
+                                target="_blank"
+                                rel="noreferrer noopener"
+                                className={styles.socialChip}
+                                title={social.value}
+                                onClick={(event) => {
+                                    event.preventDefault();
+                                    onOpenExternal?.(social.url);
+                                }}
+                            >{content}<span className="sr-only" aria-hidden="true">↗</span></a>
+                        ) : <span key={`${social.value}:${i}`} className={styles.socialChip}>{content}</span>;
+                    })}
                 </div>
             ) : null}
         </div>

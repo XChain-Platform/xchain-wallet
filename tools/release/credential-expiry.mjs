@@ -129,14 +129,18 @@ export function readActualExpiry(file, { run = execFileSync, fingerprint, signin
     if (/\.(asc|gpg|pgp)$/.test(file)) return readOpenPgpExpiry(file, { run, fingerprint, signingSubkey });
 
     if (file.endsWith('.provisionprofile') || file.endsWith('.mobileprovision')) {
-        try {
-            const plist = run('security', ['cms', '-D', '-i', file], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-            const m = /<key>ExpirationDate<\/key>\s*<date>([^<]+)<\/date>/.exec(plist);
-            if (!m) return { date: null, reason: 'no ExpirationDate in the profile' };
-            return parsedExpiry(m[1]);
-        } catch {
-            return { date: null, reason: 'the profile could not be decoded (security cms failed)' };
+        for (const [command, args] of [
+            ['security', ['cms', '-D', '-i', file]],
+            ['openssl', ['cms', '-verify', '-noverify', '-inform', 'DER', '-in', file]],
+            ['openssl', ['smime', '-verify', '-noverify', '-inform', 'DER', '-in', file]],
+        ]) {
+            try {
+                const plist = run(command, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+                const m = /<key>ExpirationDate<\/key>\s*<date>([^<]+)<\/date>/.exec(plist);
+                if (m) return parsedExpiry(m[1]);
+            } catch { /* try the next CMS decoder */ }
         }
+        return { date: null, reason: 'the profile could not be decoded by security or openssl' };
     }
 
     // A .cer may be DER or PEM and openssl will not guess; try the declared

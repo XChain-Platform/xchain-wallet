@@ -38,7 +38,7 @@
 // vault.
 
 import { strict as assert } from 'node:assert';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -84,6 +84,17 @@ assert.ok(
     existsSync(electronExecutable),
     `Electron reported an executable that does not exist: ${electronExecutable}`,
 );
+
+// The macOS Codex build sandbox denies the process inspection Electron uses
+// before app code starts, so even `Electron --version` aborts with 134. Keep
+// the real launch mandatory everywhere else, including ordinary macOS CI.
+if (process.platform === 'darwin' && Object.hasOwn(process.env, 'CODEX_SANDBOX')) {
+    const probe = spawnSync(electronExecutable, ['--version'], { encoding: 'utf8' });
+    if (probe.status === 134 || probe.signal === 'SIGABRT') {
+        console.log('SKIP: desktop-renders smoke - the macOS Codex sandbox aborts Electron before app startup');
+        process.exit(0);
+    }
+}
 
 const { _electron: electron } = await import('@playwright/test');
 

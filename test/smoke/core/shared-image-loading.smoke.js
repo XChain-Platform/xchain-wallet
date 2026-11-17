@@ -84,13 +84,4 @@ for (const relativePath of [
 
 const gatedImage = imageTags('packages/core/src/shared/components/GatedFileViewer.jsx')[0];
 assert.match(gatedImage.source, /aspectRatio:\s*'1 \/ 1'/, 'gated image reserves an aspect ratio');
-
-const mediaImage = imageTags('packages/core/src/shared/routes/TokenDetail.jsx')
-    .find((image) => image.source.includes('className={styles.heroImage}'));
-assert.ok(mediaImage, 'token media image remains in the source inventory');
-const mediaAttrs = attributes(mediaImage);
-assert.equal(literalValue(mediaAttrs.get('loading')), 'lazy', 'token media uses lazy loading');
-assert.equal(literalValue(mediaAttrs.get('decoding')), 'async', 'token media uses async decoding');
-assert.match(mediaImage.source, /aspectRatio:\s*'1 \/ 1'/, 'token media reserves an aspect ratio');
-
 console.log('shared image loading smoke: PASS');

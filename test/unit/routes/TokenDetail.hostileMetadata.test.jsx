@@ -62,8 +62,8 @@ describe('TokenDetail issuer metadata', () => {
         await openDetails();
         const links = await screen.findAllByRole('link', { name: /Website/ });
         expect(links).toHaveLength(2);
-        expect(links[0].textContent).toContain('xchain.io.evil.example');
-        expect(links[1].textContent).toContain('xn--xchan-9ua.io');
+        expect(links[0].textContent).toContain('https://xchain.io.evil.example/claim');
+        expect(links[1].textContent).toContain('https://xn--xchan-9ua.io/');
     });
 
     it('links only real http(s) targets', async () => {
@@ -84,7 +84,7 @@ describe('TokenDetail issuer metadata', () => {
         expect(found).toContain('https://contact.example/');
     });
 
-    it('opens mail only for a plain address and shows anything else as text', async () => {
+    it('shows every email value as plain text', async () => {
         renderInfo({
             contacts: [
                 { type: 'email', value: 'help@issuer.example' },
@@ -94,7 +94,7 @@ describe('TokenDetail issuer metadata', () => {
         });
         await openDetails();
         await screen.findByText('help@issuer.example');
-        expect(hrefs().filter((h) => h.startsWith('mailto:'))).toEqual(['mailto:help@issuer.example']);
+        expect(hrefs().filter((h) => h.startsWith('mailto:'))).toEqual([]);
         expect(screen.getByText(/bcc=thief@evil\.example/)).toBeTruthy();
     });
 
@@ -114,7 +114,7 @@ describe('TokenDetail issuer metadata', () => {
     it('shows profile links for a token whose only supplemental metadata is a websites list', async () => {
         renderInfo({ websites: ['https://only-site.example/'] });
         await openDetails();
-        expect(await screen.findByRole('link', { name: 'Website · only-site.example' })).toBeTruthy();
+        expect(await screen.findByRole('link', { name: 'Website: https://only-site.example/' })).toBeTruthy();
         expect(screen.queryByText('No additional information')).toBeNull();
     });
 

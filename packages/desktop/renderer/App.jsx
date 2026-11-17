@@ -1942,6 +1942,7 @@ function AppInner() {
                         accountId={activeAccountId || undefined}
                         title={t('shell.markets.selectAsset')}
                         backLabel={t('shell.markets.back')}
+                        selectedKey={marketsAsset ? `${marketsAsset.chainId}:${marketsAsset.tick}` : null}
                         hideOwnFilter
                         onBack={goBack}
                         // A pick returns to Markets with the asset, never a second Markets.

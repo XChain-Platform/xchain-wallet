@@ -55,6 +55,7 @@ describe('shared route dark-mode colors', () => {
         // The send warnings are the shared warning message, so theirs is the
         // warning row's.
         const detail = readFileSync('packages/core/src/shared/routes/TokenDetail.jsx', 'utf8');
+        const detailStyles = routeCss('TokenDetail');
         const message = readFileSync('packages/core/src/ui/StatusMessage.module.css', 'utf8');
         expect(send).not.toMatch(/^\.warnings\s*\{/m);
         // Notice Standard (2026-11-15): a warning is the red danger look.
@@ -63,7 +64,8 @@ describe('shared route dark-mode colors', () => {
         // border is the info row's own.
         expect(send).not.toMatch(/\.testSendGate\s*\{/);
         expect(message).toMatch(/\.row\.info\s*\{[^}]*border:\s*1px solid var\(--xc-info/s);
-        expect(detail).toMatch(/<DetailRow label="Projects">/);
+        expect(detail).toMatch(/className=\{styles\.officialLine\}/);
+        expect(detailStyles).toMatch(/\.officialLine\s*\{[^}]*border:\s*1px solid var\(--xc-success\)/s);
         expect(detail).not.toMatch(/This token is an official token/);
         expect(message).toMatch(/\.row\.success\s*\{[^}]*border:\s*1px solid var\(--xc-success/s);
         expect(message).toMatch(/\.row\.success\s*\{[^}]*background:\s*var\(--xc-success-bg/s);

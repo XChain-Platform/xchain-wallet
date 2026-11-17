@@ -918,6 +918,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack, embedded = fa
                         type="button"
                         variant="ghost"
                         size="sm"
+                        icon={<Icon.CheckIcon />}
                         onClick={() => {
                             const choice = Number(shownWalletBallot?.rows?.[0]?.choice ?? shownWalletBallot?.rows?.[0]?.option_index);
                             if (shownWalletBallot && Number.isInteger(choice)) voteFor(choice);

@@ -45,6 +45,12 @@
     font-weight: inherit;
 }
 
+@media (hover: hover) and (pointer: fine) {
+    .interactive:is([aria-current]:not([aria-current='false']), [aria-selected='true']):hover:not(:disabled) {
+        background: var(--xc-row-hover-bg);
+    }
+}
+
 /* Wide list-and-detail rows keep the side-menu hover and active colours, but
    their fills run edge to edge inside the list card. The card clips only the
    first and last fills to its rounded outer corners. */
@@ -66,6 +72,12 @@
     background: var(--xc-row-active-bg);
     box-shadow: none;
     font-weight: inherit;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .interactive[data-xc-split-row]:is([aria-current]:not([aria-current='false']), [aria-selected='true']):hover:not(:disabled) {
+        background: var(--xc-row-hover-bg);
+    }
 }
 
 .interactive:disabled {

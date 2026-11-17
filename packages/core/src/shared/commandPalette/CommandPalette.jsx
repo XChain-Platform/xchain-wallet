@@ -109,6 +109,7 @@ export function CommandPalette({
 }) {
     const [query, setQuery] = useState('');
     const [activeIndex, setActiveIndex] = useState(0);
+    const [walletKeyboardFocus, setWalletKeyboardFocus] = useState(false);
     const [recentCommandIds, setRecentCommandIds] = useState(/** @type {string[]} */ ([]));
     // The system Back gesture closes this before it leaves the screen.
     useBackHandler(open ? onClose : undefined);
@@ -160,6 +161,7 @@ export function CommandPalette({
         if (!open) return;
         setQuery('');
         setActiveIndex(currentWalletIndexRef.current);
+        setWalletKeyboardFocus(false);
     }, [open]);
 
     useLayoutEffect(() => {
@@ -280,10 +282,12 @@ export function CommandPalette({
         switch (e.key) {
             case 'ArrowDown':
                 e.preventDefault();
+                setWalletKeyboardFocus(true);
                 setActiveIndex((i) => (selectionCount === 0 ? 0 : (i + 1) % selectionCount));
                 break;
             case 'ArrowUp':
                 e.preventDefault();
+                setWalletKeyboardFocus(true);
                 setActiveIndex((i) => (selectionCount === 0
                     ? 0
                     : (i <= 0 ? selectionCount - 1 : i - 1)));
@@ -296,6 +300,7 @@ export function CommandPalette({
                 const next = neighbourAcross(e.key === 'ArrowRight' ? 1 : -1);
                 if (next !== null) {
                     e.preventDefault();
+                    setWalletKeyboardFocus(true);
                     setActiveIndex(next);
                 }
                 break;
@@ -485,12 +490,15 @@ export function CommandPalette({
                                                         tabIndex={-1}
                                                         data-index={index}
                                                         data-wallet-menu-row={row.id}
-                                                        data-wallet-menu-focused={selected ? '' : undefined}
+                                                        data-wallet-menu-keyboard-focused={selected && walletKeyboardFocus ? '' : undefined}
                                                         className={`${walletButtonClass} ${styles.walletRow} ${current ? styles.walletRowActive : ''}`}
                                                         role="option"
                                                         aria-selected={selected}
                                                         aria-current={current ? 'page' : undefined}
-                                                        onMouseMove={() => setActiveIndex(index)}
+                                                        onMouseMove={() => {
+                                                            setWalletKeyboardFocus(false);
+                                                            setActiveIndex(index);
+                                                        }}
                                                         onClick={() => selectWalletRow(row)}
                                                     >
                                                         <span className={styles.walletRowIcon} aria-hidden="true">

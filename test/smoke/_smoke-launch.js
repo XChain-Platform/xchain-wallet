@@ -31,6 +31,8 @@ export const RAW_SOURCE_SMOKES = new Set([
     'ui/demo-disclosure-on-home.smoke.js',
     'ui/fee-selector.smoke.js',
     'ui/input-capslock-warning.smoke.js',
+    // Audits queued result copy keys before combining them with the English dictionary.
+    'ui/queued-broadcast-copy.smoke.js',
     'ui/reachability-banner.smoke.js',
     // Audits which locale key each Receive button label reads.
     'ui/receive-request-share.smoke.js',

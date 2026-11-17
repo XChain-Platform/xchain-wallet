@@ -203,6 +203,14 @@
             scrollbar-gutter: stable;
             margin-inline-end: calc(-1 * (var(--xc-space-2) - var(--xc-space-1) / 2));
         }
+        /* The detail panel too: a long page (XCHAIN with many actions) shows a
+           scrollbar and a short one (Bitcoin) does not, so the lane is always kept
+           and pushed into the page gutter; the content stays 8px from the edge
+           either way (operator 2026-11-16). */
+        .detailPanel.detailPanel {
+            scrollbar-gutter: stable;
+            margin-inline-end: calc(-1 * (var(--xc-space-2) - var(--xc-space-1) / 2));
+        }
     }
 }
 

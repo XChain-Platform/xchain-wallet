@@ -170,11 +170,14 @@ describe('TokenDetail action list render (G101)', () => {
         expect(screen.queryByRole('button', { name: 'More info' })).toBeNull();
         expect(screen.queryByRole('menu')).toBeNull();
         expect(within(screen.getByRole('tablist', { name: 'Coin or token view' })).getAllByRole('tab').map((tab) => tab.textContent))
-            .toEqual(['Actions', 'Details', 'History']);
+            .toEqual(['Actions', 'Details', 'Files', 'History']);
 
         fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
-        expect(await screen.findByRole('button', { name: 'Gated content' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Holders' })).toBeTruthy();
+        expect(await screen.findByRole('region', { name: 'Token details' })).toBeTruthy();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Files' }));
+        expect(within(await screen.findByRole('tablist', { name: 'File visibility' })).getAllByRole('tab').map((tab) => tab.textContent.trim()))
+            .toEqual(['All', 'Public', 'Holders']);
     });
 
     it('keeps a blocked Send as a disabled row that says why', async () => {

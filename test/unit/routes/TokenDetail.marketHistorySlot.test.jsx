@@ -38,7 +38,7 @@ beforeAll(() => {
 });
 afterAll(() => { globalThis.ResizeObserver = savedResizeObserver; });
 
-beforeEach(() => window.localStorage.removeItem('xc:assetBalanceUnit'));
+beforeEach(() => window.localStorage.setItem('xc:assetBalanceUnit', 'asset'));
 
 afterEach(() => {
     cleanup();

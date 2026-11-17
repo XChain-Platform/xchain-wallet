@@ -73,7 +73,7 @@ function mount(Component, props, messaging = messagingWith()) {
 }
 
 describe('primary actions explain missing form input', () => {
-    it('BetFeedDetail needs no outcome prompt: each outcome is its own enabled action', async () => {
+    it('BetFeedDetail chooses an outcome before the single Buy action', async () => {
         mount(BetFeedDetail, { walletId: 'wallet-1', chainId: BTC, feedIndex: '123', onBack() {} });
         // The outcome rows are on the Bet tab.
         fireEvent.click(await screen.findByRole('tab', { name: 'Buy' }));
@@ -82,7 +82,7 @@ describe('primary actions explain missing form input', () => {
 
         expect(sides.length).toBeGreaterThan(0);
         sides.forEach((side) => expect(side).toBeEnabled());
-        expect(screen.queryByRole('button', { name: 'Buy' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'Buy' })).toBeEnabled();
         fireEvent.click(sides[0]);
 
         expect(await screen.findByRole('form', { name: 'Buy a position' })).toBeTruthy();

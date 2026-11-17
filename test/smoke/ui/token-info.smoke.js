@@ -159,10 +159,10 @@ for (const label of ['Creator', 'Total supply', 'Status']) {
         `TokenDetail renders the "${label}" row/card`,
     );
 }
-// The description stays on the primary Details surface as escaped React text.
-assert.ok(/<DetailRow label="Description">[\s\S]*?detailText\(assetInfo\.description\)/.test(td),
-    'TokenDetail renders the description in its Details row');
-assert.ok(/socialLabel\(s\.platform\)[\s\S]*?s\.host/.test(td),
+// The description stays on the primary Details profile as escaped React text.
+assert.ok(/className=\{styles\.profileDescription\}>\{assetInfo\.description\}/.test(td),
+    'TokenDetail renders the description in its Details profile');
+assert.ok(/socialLabel\(social\.platform\)[\s\S]*?social\.value/.test(td),
     'TokenDetail shows the actual destination host beside each social label');
 
 // --- 7. Locked / Mutable status copy ------------------------------------
@@ -327,9 +327,10 @@ assert.ok(/src=\{effectiveImageUrl\}/.test(cv),
     const mockResp = {
         ok: true,
         text: async () => JSON.stringify({
-            token: 'MOCK',
+            tick: 'MOCK',
+            name: 'Mock token',
             description: 'Mock body',
-            image: 'https://example.com/mock.png',
+            images: [{ type: 'icon', data: 'https://example.com/mock.png' }],
         }),
     };
     const fetchedBundle = await mod.fetchTisBundle({

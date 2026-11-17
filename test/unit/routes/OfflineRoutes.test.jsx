@@ -311,9 +311,11 @@ describe('offline route behavior from reachability', () => {
             />
         ));
 
-        // The blue card is captioned with the asset; the Actions tab (selected first) holds the tiles.
+        // Value stays selected even without a cached price. The user can switch
+        // to the cached balance explicitly, while Actions remains selected.
         const balance = await screen.findByRole('region', { name: /CACHE/ });
-        expect(balance).toHaveTextContent('10');
+        expect(balance).toHaveTextContent('No price yet');
+        expect(screen.getByRole('button', { name: 'Show balance in CACHE' })).toBeInTheDocument();
         expectOneOfflineNotice();
         const actions = within(screen.getByRole('list', { name: 'Actions for CACHE' }));
         const send = actions.getByRole('button', { name: /^Send\b/ });

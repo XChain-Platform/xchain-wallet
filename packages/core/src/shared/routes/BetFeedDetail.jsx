@@ -1048,7 +1048,7 @@ export function BetFeedDetail({
                                     {payout !== null ? <span>Potential payout {withTick(payout)}</span> : null}
                                 </div>
                                 {canBuyPositions ? (
-                                    <Button type="button" size="sm" variant="secondary" onClick={() => openPlaceBet(i)}>
+                                    <Button type="button" size="sm" variant="secondary" icon={<Icon.MarketIcon />} onClick={() => openPlaceBet(i)}>
                                         Buy More
                                     </Button>
                                 ) : null}
@@ -1060,7 +1060,7 @@ export function BetFeedDetail({
                 <div className={local.positionEmpty}>
                     <p className={local.positionQuiet}>You have no position in this market</p>
                     {canBuyPositions ? (
-                        <Button type="button" size="sm" variant="secondary" onClick={() => setTab('bet')}>
+                        <Button type="button" size="sm" variant="secondary" icon={<Icon.MarketIcon />} onClick={() => setTab('bet')}>
                             Buy
                         </Button>
                     ) : null}

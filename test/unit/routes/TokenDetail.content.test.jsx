@@ -107,7 +107,7 @@ describe('TokenDetail linked content design', () => {
         fireEvent.click(screen.getByRole('tab', { name: 'Files' }));
         expect(await screen.findByRole('tab', { name: /Public/ })).toBeInTheDocument();
         expect(screen.getByRole('link', { name: 'Open Whitepaper' })).toBeInTheDocument();
-        expect(screen.getAllByText(`SHA-256 ${HASH}`).length).toBeGreaterThan(0);
+        expect(screen.getAllByText(`Hash: ${HASH}`).length).toBeGreaterThan(0);
         expect(await screen.findByRole('button', { name: 'Locked: purchase required to access one.zip' })).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('tab', { name: /Public/ }));
@@ -173,7 +173,7 @@ describe('TokenDetail linked content design', () => {
         expect(screen.getByRole('link', { name: 'view its 12,000 official tokens' })).toBeInTheDocument();
         expect(screen.getByRole('link', { name: 'RAREPEPE' })).toBeInTheDocument();
         expect(screen.getByRole('link', { name: 'RAREPEPE.CARD.CHILD' })).toBeInTheDocument();
-        expect(screen.getByRole('link', { name: 'Open enhanced token information in explorer' })).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: 'Interactive content: view on the explorer' })).toBeInTheDocument();
         expect(document.querySelector('script')).toBeNull();
     });
 });

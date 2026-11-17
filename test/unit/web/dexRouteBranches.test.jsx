@@ -59,6 +59,7 @@ describe('DEX route branches', () => {
 
         const picker = renderDexRoute('markets-picker', ctx);
         expect(picker.props.accountId).toBeUndefined();
+        expect(picker.props.selectedKey).toBe('bitcoin-mainnet:BTC');
         picker.props.onSelect({ chainId: 'dogecoin-mainnet', tick: 'DOGE', displayName: 'Dogecoin', kind: 'native' });
         // A pick unwinds to the Markets page that opened the picker.
         expect(ctx.landView).toHaveBeenCalledWith('markets');

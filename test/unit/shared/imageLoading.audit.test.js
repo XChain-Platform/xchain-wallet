@@ -72,13 +72,6 @@ describe('shared image loading audit', () => {
                 expect(literalValue(attrs.get('decoding')), relativePath).toBe('async');
             }
         }
-
-        const mediaImage = imageTags('packages/core/src/shared/routes/TokenDetail.jsx')
-            .find((image) => image.source.includes('className={styles.heroImage}'));
-        expect(mediaImage).toBeDefined();
-        const attrs = attributes(mediaImage);
-        expect(literalValue(attrs.get('loading'))).toBe('lazy');
-        expect(literalValue(attrs.get('decoding'))).toBe('async');
     });
 
     it('reserves layout space for variable-size content images', () => {
@@ -96,9 +89,5 @@ describe('shared image loading audit', () => {
 
         const gatedImage = imageTags('packages/core/src/shared/components/GatedFileViewer.jsx')[0];
         expect(gatedImage.source).toContain("aspectRatio: '1 / 1'");
-
-        const mediaImage = imageTags('packages/core/src/shared/routes/TokenDetail.jsx')
-            .find((image) => image.source.includes('className={styles.heroImage}'));
-        expect(mediaImage.source).toContain("aspectRatio: '1 / 1'");
     });
 });

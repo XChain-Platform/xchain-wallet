@@ -180,6 +180,20 @@ describe('market data table semantics', () => {
         expect(css).toMatch(/content: attr\(data-label\)/);
     });
 
+    it('uses the standard row hover fill for every clickable price cell', () => {
+        const tableCss = readFileSync(
+            'packages/core/src/shared/components/DataTable.module.css',
+            'utf8',
+        );
+        const marketCss = readFileSync(
+            'packages/core/src/shared/components/MarketTrading.module.css',
+            'utf8',
+        );
+
+        expect(tableCss).toMatch(/\.cellButton:hover\s*\{[^}]*background:\s*var\(--xc-row-hover-bg\)/s);
+        expect(marketCss).toMatch(/\.splitPick\.splitPick:hover\s*\{[^}]*background:\s*var\(--xc-row-hover-bg\)/s);
+    });
+
     it('labels and aligns recent-trade columns', async () => {
         const getMarketHistory = vi.fn().mockResolvedValue([{
             action_index: 7,

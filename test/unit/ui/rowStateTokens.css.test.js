@@ -28,8 +28,17 @@ function cssModules(directory) {
     });
 }
 
+function jsxModules(directory) {
+    return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+        const path = join(directory, entry.name);
+        if (entry.isDirectory()) return jsxModules(path);
+        return entry.isFile() && entry.name.endsWith('.jsx') ? [path] : [];
+    });
+}
+
 const files = sourceRoots.flatMap(cssModules);
 files.push(join(root, 'packages', 'core', 'src', 'ui', 'tokens.css'));
+const jsxFiles = sourceRoots.flatMap(jsxModules);
 
 const hoverSelector = /:hover\b/;
 const selectedSelector = /aria-current|aria-selected=['"]true['"]|data-selected=['"]true['"]|\.(?:selectedRow|rowSelected|rowActive|itemActive|optionActive|entryActive|walletRowActive|chainPickerOptionActive|convItemActive)(?:\W|$)/;
@@ -69,13 +78,54 @@ function stateBackgroundFailures() {
             const positiveSelector = selector.replace(/:not\((?:[^()]|\([^()]*\))*\)/g, '');
             const selected = selectedSelector.test(positiveSelector);
             const hovered = hoverSelector.test(selector);
-            const state = selected ? 'selected' : hovered ? 'hover' : null;
+            const state = hovered ? 'hover' : selected ? 'selected' : null;
             if (!state || !isRowOrMenuState(file, positiveSelector, state)) return;
-            const expected = selected ? 'var(--xc-row-active-bg)' : 'var(--xc-row-hover-bg)';
+            const expected = state === 'hover'
+                ? 'var(--xc-row-hover-bg)'
+                : 'var(--xc-row-active-bg)';
             rule.walkDecls(/^background(?:-color)?$/, (decl) => {
                 const value = decl.value.trim();
                 if (value === expected || value === 'transparent' || ['Highlight', 'Canvas'].includes(value)) return;
                 failures.push(`${file}:${decl.source.start.line} ${selector} uses ${value}; expected ${expected}`);
+            });
+        });
+    }
+    return failures;
+}
+
+function triggerVariantFailures() {
+    const failures = [];
+    const triggerClass = /(?:assetCard|marketSelector|pickerTrigger|pickerButton|selectorCard|freeWalletButton)/;
+    for (const path of jsxFiles) {
+        const file = relative(root, path).split('\\').join('/');
+        const source = readFileSync(path, 'utf8');
+        for (const match of source.matchAll(/<Button\b[\s\S]*?>/g)) {
+            const tag = match[0];
+            if (!triggerClass.test(tag)) continue;
+            const variant = tag.match(/\bvariant=['"]([^'"]+)['"]/i)?.[1] || 'primary';
+            if (variant === 'primary') {
+                const line = source.slice(0, match.index).split('\n').length;
+                failures.push(`${file}:${line} list or picker trigger uses the primary Button variant`);
+            }
+        }
+    }
+    return failures;
+}
+
+function pointerOutlineFailures() {
+    const failures = [];
+    for (const path of files) {
+        const file = relative(root, path).split('\\').join('/');
+        const sheet = postcss.parse(readFileSync(path, 'utf8'), { from: path });
+        sheet.walkRules((rule) => {
+            const selector = rule.selector ?? '';
+            const pointerState = selector.includes(':hover')
+                || /\[data-[^\]]*(?:hover|focused)[^\]]*\]/i.test(selector);
+            const keyboardOnly = selector.includes(':focus-visible') || /keyboard/i.test(selector);
+            if (!pointerState || keyboardOnly) return;
+            rule.walkDecls(/^outline$/, (decl) => {
+                if (decl.value.trim() === 'none') return;
+                failures.push(`${file}:${decl.source.start.line} ${selector} draws ${decl.value} for a pointer state`);
             });
         });
     }
@@ -106,6 +156,11 @@ describe('list row and menu state tokens', () => {
             });
         }
         expect(failures).toEqual([]);
+    });
+
+    it('keeps list triggers neutral and pointer hover free of focus rings', () => {
+        expect(triggerVariantFailures()).toEqual([]);
+        expect(pointerOutlineFailures()).toEqual([]);
     });
 
     it('leaves toggle, tab and chip selections on the solid toggle token', () => {

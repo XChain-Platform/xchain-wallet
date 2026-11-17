@@ -467,8 +467,9 @@ describe('TokenDetail price history', () => {
         expect(balance.textContent).not.toContain('$');
         expect(balance.textContent).not.toContain('USD');
         expect(screen.queryByRole('img', { name: /^Price trend/ })).toBeNull();
-        // With no price history the hero draws the balance from the wallet's
-        // own rows (operator ruling 2026-11-15), so its range buttons show.
+        expect(within(balance).getByText('No price yet')).toBeTruthy();
+        fireEvent.click(within(balance).getByRole('button', { name: 'Show balance in PRICEPROBE' }));
+        // Balance mode draws the wallet's own rows, so its range buttons show.
         expect(await screen.findByRole('img', { name: /^Balance over 1W/ })).toBeTruthy();
         expect(screen.getByRole('tablist', { name: 'Chart range' }).className).not.toMatch(/rangesIdle/);
     });
@@ -488,6 +489,8 @@ describe('TokenDetail price history', () => {
 
     it('draws selectable synthesized ranges only for the demo wallet', async () => {
         renderDetail('demo-wallet');
+        const hero = await screen.findByRole('region', { name: 'PRICEPROBE' });
+        fireEvent.click(within(hero).getByRole('button', { name: 'Show balance in PRICEPROBE' }));
         const chart = await screen.findByRole('img', { name: /^Balance over 1W/ });
         expect(chart.querySelector('polyline').getAttribute('points').length).toBeGreaterThan(10);
         const ranges = screen.getByRole('tablist', { name: 'Chart range' });
@@ -503,11 +506,60 @@ describe('TokenDetail price history', () => {
         });
 
         fireEvent.click(await screen.findByRole('tab', { name: 'Details' }));
-        // 10 units at the carried DEX rate of $2.00. The page no longer prints
-        // a price-source label for a rate the oracle did not supply.
+        // 10 units at the carried DEX rate of $2.00, identified quietly in the
+        // hero because this value came from the exchange rather than an oracle.
+        const hero = await screen.findByRole('region', { name: 'PRICEPROBE' });
+        expect(within(hero).getByLabelText(/20\.00 USD/)).toBeTruthy();
+        expect(within(hero).getByText('Price from the exchange')).toBeTruthy();
         const estimate = (await screen.findByText('Estimated value')).closest('li');
         expect(estimate).toHaveTextContent('20.00');
         expect(screen.queryByText(/DEX price/)).toBeNull();
+    });
+
+    it('uses the live DEX-only lookup when the route did not receive a priced row', async () => {
+        tickFiatRate.current = { rate: 2, fiatCurrency: 'USD', source: 'market' };
+        const messaging = tokenAlertMessaging();
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <TokenDetail
+                    walletId="real-wallet"
+                    chainId={MAINNET_CHAIN}
+                    tick="DEXONLY"
+                    kind="token"
+                    quantity="10"
+                    divisibility={0}
+                    onBack={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        const hero = await screen.findByRole('region', { name: 'DEXONLY' });
+        expect(within(hero).getByLabelText(/20\.00 USD/)).toBeTruthy();
+        expect(within(hero).getByText('Price from the exchange')).toBeTruthy();
+    });
+
+    it('prefers a live oracle price over a carried DEX fallback', async () => {
+        tickFiatRate.current = { rate: 3, fiatCurrency: 'USD', source: 'oracle' };
+        const messaging = tokenAlertMessaging();
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <TokenDetail
+                    walletId="real-wallet"
+                    chainId={MAINNET_CHAIN}
+                    tick="ORACLEFIRST"
+                    kind="token"
+                    quantity="10"
+                    divisibility={0}
+                    fiatRate={2}
+                    fiatRateSource="market"
+                    onBack={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        const hero = await screen.findByRole('region', { name: 'ORACLEFIRST' });
+        expect(within(hero).getByLabelText(/30\.00 USD/)).toBeTruthy();
+        expect(within(hero).queryByText('Price from the exchange')).toBeNull();
     });
 
     it('does not show fiat from a balance snapshot on a real test-network wallet', async () => {
@@ -566,6 +618,9 @@ describe('TokenDetail price history', () => {
     it('keeps token details usable when the market panel throws and retries it inline', async () => {
         widgetFailure.current = 'market';
         renderDetail('demo-wallet');
+
+        const hero = await screen.findByRole('region', { name: 'PRICEPROBE' });
+        fireEvent.click(within(hero).getByRole('button', { name: 'Show balance in PRICEPROBE' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent('Couldn\'t load this section.');
         expect(screen.getByRole('list', { name: 'Actions for PRICEPROBE' })).toBeInTheDocument();

@@ -164,9 +164,9 @@ describe('TokenDetail collectible media', () => {
         } });
 
         openDetails();
-        expect(await screen.findByRole('link', { name: 'Website · issuer.example' }))
+        expect(await screen.findByRole('link', { name: 'Website 1: https://issuer.example/' }))
             .toHaveAttribute('href', 'https://issuer.example/');
-        expect(screen.getByRole('link', { name: /safe\.example/ }))
+        expect(screen.getByRole('link', { name: /http:\/\/safe\.example\/profile/ }))
             .toHaveAttribute('href', 'http://safe.example/profile');
         expect(screen.getByRole('link', { name: /https:\/\/contact\.example/ }))
             .toHaveAttribute('href', 'https://contact.example/');
@@ -177,7 +177,8 @@ describe('TokenDetail collectible media', () => {
         openFiles();
         expect(await screen.findByRole('link', { name: 'Open Safe file' }))
             .toHaveAttribute('href', 'https://files.example/readme.txt');
-        expect(screen.queryByText('Unsafe file')).toBeNull();
+        expect(screen.getByText('Unsafe file')).toBeInTheDocument();
+        expect(screen.queryByRole('link', { name: 'Open Unsafe file' })).toBeNull();
 
         for (const link of document.querySelectorAll('a[target="_blank"]')) {
             expect(link.getAttribute('rel')).toContain('noopener');

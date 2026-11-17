@@ -1,8 +1,8 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The manage-token route keeps the shared Actions, Details and History page,
-// but begins with a plain identity card instead of browse-only balance data.
+// The manage-token route keeps the shared token hero and the current
+// Actions, Details, Files and History page while adding issuer actions.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -18,6 +18,7 @@ const OWNER = 'bcrt1qownerownerownerownerownerowner000';
 const OTHER = 'bcrt1qotherotherotherotherotherother000';
 
 beforeEach(() => {
+    localStorage.removeItem('xc:assetBalanceUnit');
     Object.defineProperty(globalThis.navigator, 'clipboard', {
         value: { writeText: vi.fn().mockResolvedValue(undefined) },
         configurable: true,
@@ -27,6 +28,7 @@ beforeEach(() => {
 afterEach(() => {
     cleanup();
     __clearTokenInfoCache();
+    localStorage.removeItem('xc:assetBalanceUnit');
 });
 
 // The wallet holds 1 APPROVED, so the issuer's spending actions (Destroy,
@@ -84,19 +86,15 @@ function pageTabs() {
 }
 
 describe('ManageToken is the one asset page', () => {
-    it('opens with only the token identity card before the three page tabs', async () => {
+    it('opens with the standard token hero before the four page tabs', async () => {
         const messaging = mount();
-        const identity = await screen.findByRole('region', { name: 'Token identity' });
-        expect(within(identity).getByRole('img', { name: /APPROVED on Bitcoin/i })).toBeInTheDocument();
-        expect(within(identity).getByRole('heading', { name: 'APPROVED' })).toBeInTheDocument();
-        expect(within(identity).getByText('Approved token')).toBeInTheDocument();
-        expect(within(identity).queryByText('A useful token for its community.')).toBeNull();
-        expect(identity.closest('[class*="heroStack"]')).toBeNull();
-        expect(screen.queryByRole('tablist', { name: 'Chart range' })).toBeNull();
-        expect(screen.queryByRole('region', { name: /chart/i })).toBeNull();
-        expect(screen.queryByRole('group', { name: /balance summary/i })).toBeNull();
-        expect(screen.queryByRole('button', { name: /balance/i })).toBeNull();
-        expect(pageTabs().map((tab) => tab.textContent)).toEqual(['Actions', 'Details', 'History']);
+        const hero = await screen.findByRole('region', { name: 'APPROVED' });
+        expect(hero.closest('[class*="heroStack"]')).not.toBeNull();
+        expect(within(hero).queryByText('A useful token for its community.')).toBeNull();
+        expect(screen.getByRole('tablist', { name: 'Chart range' })).toBeInTheDocument();
+        expect(within(hero).getByRole('group', { name: /balance summary/i })).toBeInTheDocument();
+        expect(within(hero).getByRole('button', { name: /show balance/i })).toBeInTheDocument();
+        expect(pageTabs().map((tab) => tab.textContent)).toEqual(['Actions', 'Details', 'Files', 'History']);
 
         expect(messaging.getHoldersForToken).not.toHaveBeenCalled();
         expect(messaging.getDispensersForToken).not.toHaveBeenCalled();
@@ -112,7 +110,6 @@ describe('ManageToken is the one asset page', () => {
             mine: OTHER,
             handlers: { onMint, onIssueSubtoken, onDestroy: vi.fn() },
         });
-        await screen.findByRole('region', { name: 'Token identity' });
         await waitFor(() => expect(actionRow('mint')).not.toHaveAttribute('aria-disabled'));
 
         expect(actionRow('issue-subtoken')).not.toHaveAttribute('aria-disabled');

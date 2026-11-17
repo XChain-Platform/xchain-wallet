@@ -159,11 +159,14 @@ describe('test-network fiat suppression', () => {
         // no value" line belongs to Home's hero (checked above).
         const balance = await screen.findByRole('region', { name: 'BTC' });
         expect(balance).not.toHaveTextContent('$');
-        // The blue hero keeps its chart (G10), drawn from the coin's own balance,
-        // never a price; a balance line carries no change pill (G12, 2026-11-15).
-        expect(await screen.findByRole('region', { name: 'Balance chart' })).toBeInTheDocument();
+        // Value remains the selected mode when no market price exists. The
+        // current ruling keeps the unit toggle available and names that state
+        // instead of silently switching the hero back to Balance.
+        expect(balance).toHaveTextContent('No price yet');
+        expect(screen.getByRole('button', { name: 'Show balance in BTC' })).toBeInTheDocument();
+        expect(screen.queryByRole('region', { name: 'Balance chart' })).toBeNull();
         expect(screen.queryByRole('region', { name: 'Price chart' })).toBeNull();
-        expect(screen.queryByRole('region', { name: 'Value chart' })).toBeNull();
+        expect(screen.getByRole('region', { name: 'Value chart' })).toHaveTextContent('No market price for BTC yet');
         expect(screen.queryByLabelText(/ change\. /)).toBeNull();
         expect(screen.queryByRole('button', { name: /chart/i })).toBeNull();
         expect(screen.queryByRole('button', { name: /price alert/i })).toBeNull();

@@ -82,6 +82,7 @@ describe('<ListRow>', () => {
         expect(css).toMatch(/\.interactive:hover:not\(:disabled\)\s*\{[^}]*var\(--xc-row-hover-bg\)/s);
         expect(css).toMatch(/\.interactive:active:not\(:disabled\)\s*\{[^}]*var\(--xc-row-hover-bg\)[^}]*box-shadow:\s*none/s);
         expect(css).toMatch(/\.interactive:is\([^}]*var\(--xc-row-active-bg\)[^}]*box-shadow:\s*none/s);
+        expect(css).toMatch(/\.interactive:is\([^}]*\):hover:not\(:disabled\)\s*\{[^}]*background:\s*var\(--xc-row-hover-bg\)/s);
         expect(css).toMatch(/\.interactive:focus-visible\s*\{[^}]*var\(--xc-control-focus-ring\)/s);
         expect(css).toMatch(/\.interactive:disabled\s*\{[^}]*var\(--xc-control-disabled-bg\)/s);
         expect(css).toMatch(/\.interactive\[data-xc-split-row\]\s*\{[^}]*width:\s*100%;[^}]*margin-inline:\s*0;[^}]*border-radius:\s*0;/s);

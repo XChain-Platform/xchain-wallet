@@ -185,7 +185,8 @@ describe('Prediction markets My bets tab render', () => {
         expect(screen.getByRole('tab', { name: 'My predictions' })).toHaveAttribute('aria-selected', 'true');
         const card = await screen.findByRole('button', { name: 'Will it rain?' });
         expect(screen.queryByRole('button', { name: 'Will it snow?' })).toBeNull();
-        expect(card).toHaveTextContent('Your position: 12 XCHAIN on Yes');
+        expect(card).toHaveTextContent('12 XCHAIN');
+        expect(card).not.toHaveTextContent(/bet|Your position/i);
         fireEvent.click(card);
         expect(props.onOpenMarket).toHaveBeenCalledWith('bitcoin-mainnet', 7);
     });

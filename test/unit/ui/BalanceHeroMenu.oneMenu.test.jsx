@@ -175,17 +175,27 @@ describe.each(WIDTHS)('balance hero menu at %ipx', (width) => {
         expect(within(hero).getByText('Value')).toBeInTheDocument();
     });
 
-    it('keeps the swap button disabled without a price', async () => {
-        renderWith(tokenDetail({ fiatRate: null }));
-        const hero = tokenRegion();
-        expect(within(hero).getByRole('button', { name: /^Show (balance|value) in / })).toBeDisabled();
-    });
-
-    it('keeps the swap disabled and the eye working where fiat is unsupported', async () => {
+    it('keeps the swap enabled and shows the Value empty state without a price', async () => {
         renderWith(tokenDetail({ fiatRate: null, chainId: 'bitcoin-regtest' }), { activeNetwork: 'regtest' });
         const hero = tokenRegion();
         await act(async () => { await Promise.resolve(); });
-        expect(within(hero).getByRole('button', { name: /^Show (balance|value) in / })).toBeDisabled();
+        const showBalance = within(hero).getByRole('button', { name: `Show balance in ${TICK}` });
+        expect(showBalance).toBeEnabled();
+        expect(within(hero).getByText('Value')).toBeInTheDocument();
+        expect(within(hero).getByText('No price yet')).toBeInTheDocument();
+        expect(screen.getByText(`No market price for ${TICK} yet`)).toBeInTheDocument();
+        expect(screen.queryByLabelText(/^1W change\./)).toBeNull();
+        expect(document.querySelector('[data-chart-scale]')).toBeNull();
+
+        fireEvent.click(showBalance);
+        expect(within(hero).getByText('Balance')).toBeInTheDocument();
+        expect(within(hero).queryByText('No price yet')).toBeNull();
+        expect(within(hero).getByLabelText(`100 ${TICK}`)).toBeInTheDocument();
+        expect(window.localStorage.getItem('xc:assetBalanceUnit')).toBe('asset');
+
+        fireEvent.click(within(hero).getByRole('button', { name: 'Show value in USD' }));
+        expect(within(hero).getByText('No price yet')).toBeInTheDocument();
+        expect(window.localStorage.getItem('xc:assetBalanceUnit')).toBe('fiat');
         expect(eyeButton(hero)).toBeEnabled();
         expect(within(hero).queryByRole('button', { name: /chart/i })).toBeNull();
     });

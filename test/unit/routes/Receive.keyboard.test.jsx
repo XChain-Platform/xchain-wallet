@@ -98,6 +98,35 @@ afterEach(() => {
 });
 
 describe('Receive keyboard operation', () => {
+    it('marks the asset already shown on Receive when its picker opens', async () => {
+        renderReceive({
+            getWalletBalances: vi.fn().mockResolvedValue({
+                'bitcoin-regtest': [{
+                    address: ADDRESS.address,
+                    balances: { native: { tick: 'BTC', quantity: '1', divisibility: 8 }, tokens: [] },
+                }],
+            }),
+        });
+
+        fireEvent.click(await screen.findByRole('button', { name: /^Asset: BTC on / }));
+        expect(await screen.findByRole('button', { name: /^Select Bitcoin/ }))
+            .toHaveAttribute('aria-current', 'true');
+    });
+
+    it('marks the address already shown on Receive when its picker opens', async () => {
+        renderReceive({
+            listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'Wallet' }]),
+            listAccounts: vi.fn().mockResolvedValue([{ id: 'account-1', walletId: 'wallet-1', index: 0 }]),
+            getWalletBalances: vi.fn().mockResolvedValue({}),
+            getActiveAddresses: vi.fn().mockResolvedValue({}),
+            listMultisigReceiveAddresses: vi.fn().mockResolvedValue([]),
+        });
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Choose receive address' }));
+        expect(await screen.findByRole('button', { name: `View address ${ADDRESS.address}` }))
+            .toHaveAttribute('aria-current', 'true');
+    });
+
     it('selects a chain and token without leaving the keyboard', async () => {
         const user = userEvent.setup();
         const onSelect = vi.fn();

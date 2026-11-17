@@ -44,6 +44,7 @@ import '../../i18n/locales/en/routes.js';
  * @param {() => void} props.onBack
  * @param {Array<{ key: string, label: string, sublabel?: string, onSelect: () => void }>} [props.pickerActions]   extra rows above the list (see AddressList)
  * @param {Record<string, boolean>} [props.addressUsageByKey] chain-and-address keyed receive usage
+ * @param {any | null} [props.selectedAddress] address currently shown by the calling screen
  * @param {'small' | 'full'} [props.variant]  legacy, unused (AddressList derives its own)
  * @param {any[]} [props.addresses]           legacy, unused
  */
@@ -59,6 +60,7 @@ export function OwnAddressPickerScreen({
     onBack,
     pickerActions,
     addressUsageByKey,
+    selectedAddress,
 }) {
     // The picker opens over its form in place, so its Back (to the form)
     // shows even when the form is a root page.
@@ -76,6 +78,7 @@ export function OwnAddressPickerScreen({
                 }}
                 pickerActions={pickerActions}
                 addressUsageByKey={addressUsageByKey}
+                pickerSelectedAddress={selectedAddress}
                 networkFilter={chainId ? coinFromChainId(chainId) : 'all'}
                 networkLocked={Boolean((lockNetwork || typeof onChainChange !== 'function') && chainId)}
                 pickerUnavailableReason={unavailableReason}

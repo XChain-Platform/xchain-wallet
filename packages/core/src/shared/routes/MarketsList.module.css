@@ -46,8 +46,9 @@
     text-align: start;
 }
 
-.assetCard:hover {
-    border-color: var(--xc-border-strong);
+.assetCard.assetCard:hover:not(:disabled) {
+    background: var(--xc-row-hover-bg);
+    border-color: var(--xc-border);
 }
 
 .assetText {
@@ -244,3 +245,5 @@
 /* Rebuilt with PanelSplit.module.css 2026-11-16 (separator edges). */
 
 /* rebuild 2026-11-16b */
+
+/* rebuild 2026-11-16c */
