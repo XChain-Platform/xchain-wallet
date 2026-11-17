@@ -62,13 +62,13 @@ test.describe(`Publish file over 8 KB on ${REGTEST_CHAIN_LABEL}`, () => {
         const main = page.getByRole('main');
         await test.step('fill Publish file with a file the legacy cap refuses', async () => {
             await openPaletteCommand(page, 'Publish file');
-            await expect(main.getByRole('radiogroup', { name: 'Publish mode' })).toBeVisible({ timeout: 30_000 });
+            await expect(main.getByRole('radiogroup', { name: 'Publish as' })).toBeVisible({ timeout: 30_000 });
             await main.getByRole('radio', { name: /Public/ }).check();
             await selectVenueChain(main, 'Network');
             // The form offers the envelope ceiling on this chain and says why.
             await expect(main).toContainText('compact Taproot encoding', { timeout: 30_000 });
 
-            await main.getByLabel('Choose file to publish').setInputFiles({
+            await main.getByLabel(/^File \(up to /).setInputFiles({
                 name: FILE_NAME,
                 mimeType: 'application/octet-stream',
                 buffer: randomBytes(FILE_BYTES),
